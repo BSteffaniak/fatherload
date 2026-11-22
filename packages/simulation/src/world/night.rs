@@ -70,18 +70,6 @@ const SALT_NIGHT_SITE: u64 = 0x416E_0002;
 const SALT_RARE: u64 = 0x416E_0003;
 const SALT_PROWL: u64 = 0x416E_0004;
 
-/// The tile holding world pixel `(x, y)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "world pixels saturate into tile coordinates"
-)]
-fn tile_of(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
 impl WorldState {
     /// The world's night facts (WP-NIGHT): the night under way, its kills, kills by kind,
     /// nights survived and the last rare night. Story arcs (T26) read their night hooks here.
@@ -215,7 +203,7 @@ impl WorldState {
     /// nocturnal ore.
     pub(super) fn night_glow_at(&self, at: TilePosition) -> u16 {
         let mut light = 0;
-        let (cx, cy) = crate::enemy::tile_centre(at.x, at.y);
+        let (cx, cy) = self.frame().centre_of(at.x, at.y);
         for id in self.entities.ids_in_radius(
             cx,
             cy,
@@ -225,7 +213,7 @@ impl WorldState {
                 && state.kind == EnemyKind::WillOWisp
             {
                 light = light.max(falloff(
-                    tile_of(body.x, body.y),
+                    self.frame().tile_at(body.x, body.y),
                     at,
                     WISP_LIGHT_TILES,
                     WISP_LIGHT,
@@ -276,7 +264,7 @@ impl WorldState {
         reason = "a lure radius of a dozen tiles"
     )]
     fn lamp_near(&self, x: f32, y: f32) -> Option<(f32, f32)> {
-        let here = tile_of(x, y);
+        let here = self.frame().tile_at(x, y);
         let reach = MOTH_LURE_TILES as i32;
         self.bases
             .fixtures_in(
@@ -292,7 +280,7 @@ impl WorldState {
             .filter(|(_, fixtures)| {
                 matches!(fixtures.front, Some((crate::base::Fixture::Light, _)))
             })
-            .map(|(position, _)| crate::enemy::tile_centre(position.x, position.y))
+            .map(|(position, _)| self.frame().centre_of(position.x, position.y))
             .min_by(|a, b| {
                 let da = (a.0 - x).hypot(a.1 - y);
                 let db = (b.0 - x).hypot(b.1 - y);
@@ -322,7 +310,7 @@ impl WorldState {
     /// pixel)` of each live rig or pilot on foot that is awake and outside every safe place.
     fn exposed_actors(&self) -> Vec<(PlayerId, (f32, f32))> {
         self.awake_actors()
-            .filter(|(_, (x, y))| !self.night_safe_zone(tile_of(*x, *y)))
+            .filter(|(_, (x, y))| !self.night_safe_zone(self.frame().tile_at(*x, *y)))
             .collect()
     }
 
@@ -338,7 +326,7 @@ impl WorldState {
     fn surface_actors(&self) -> Vec<(PlayerId, (f32, f32))> {
         self.awake_actors()
             .filter(|(_, (x, y))| {
-                let tile = tile_of(*x, *y);
+                let tile = self.frame().tile_at(*x, *y);
                 let depth = tile.y - self.terrain.surface_row(tile.x);
                 (-NIGHT_SKY_ROWS..=NOCTURNAL_GLOW_DEPTH).contains(&depth)
             })
@@ -474,7 +462,10 @@ impl WorldState {
             .clamp(0.0, 1000.0) as u64;
         let cap = NIGHT_LOCAL_CAP + night::moon_extra_cap(moon) + difficulty.extra_cap() / 2;
         let seed = self.terrain.seed();
-        let views: Vec<TilePosition> = actors.iter().map(|(_, (x, y))| tile_of(*x, *y)).collect();
+        let views: Vec<TilePosition> = actors
+            .iter()
+            .map(|(_, (x, y))| self.frame().tile_at(*x, *y))
+            .collect();
         for (index, (player_id, (x, y))) in actors.iter().enumerate() {
             if self.entities.count_of(EntityKind::Enemy) >= MAX_ENEMIES
                 || self.night_monsters().count() >= MAX_NIGHT_MONSTERS
@@ -499,7 +490,7 @@ impl WorldState {
             if roll % 1000 >= chance {
                 continue;
             }
-            let here = tile_of(*x, *y);
+            let here = self.frame().tile_at(*x, *y);
             if let Some((kind, site)) = self.find_night_site(here, roll, &views, None) {
                 let count = night::pack_size(kind, roll >> 24);
                 self.raise_pack(kind, site, count);
@@ -615,7 +606,7 @@ impl WorldState {
             let Some(tile) = tile else {
                 continue;
             };
-            let point = Self::spawn_point(kind, tile);
+            let point = Self::spawn_point(self.frame(), kind, tile);
             ids.push(self.spawn_enemy_with(kind, point, tier, None, None));
         }
         ids
@@ -650,8 +641,11 @@ impl WorldState {
         else {
             return;
         };
-        let views: Vec<TilePosition> = actors.iter().map(|(_, (x, y))| tile_of(*x, *y)).collect();
-        let here = tile_of(*x, *y);
+        let views: Vec<TilePosition> = actors
+            .iter()
+            .map(|(_, (x, y))| self.frame().tile_at(*x, *y))
+            .collect();
+        let here = self.frame().tile_at(*x, *y);
         let Some((kind, site)) =
             self.find_night_site(here, roll, &views, Some(EnemyKind::UmbralAlpha))
         else {
@@ -717,8 +711,12 @@ impl WorldState {
             )
             .unwrap_or(0)
                 - 2;
-            let goal = tile_of(px, py);
-            let column = self.prowl_column(state.kind, tile_of(body.x, body.y).x, goal.x + jitter);
+            let goal = self.frame().tile_at(px, py);
+            let column = self.prowl_column(
+                state.kind,
+                self.frame().tile_at(body.x, body.y).x,
+                goal.x + jitter,
+            );
             let ground = self.terrain.surface_row(column);
             let home = match state.kind.stats().locomotion {
                 crate::enemy::Locomotion::Burrowing => (column, ground + 1),
@@ -764,7 +762,7 @@ impl WorldState {
     /// Shallow glowing ore near each exposed actor reveals itself on that player's map.
     fn reveal_nocturnal_ore(&mut self, actors: &[(PlayerId, (f32, f32))]) {
         for (player_id, (x, y)) in actors {
-            let here = tile_of(*x, *y);
+            let here = self.frame().tile_at(*x, *y);
             let mut found = Vec::new();
             for column in here.x - NOCTURNAL_REVEAL_TILES..=here.x + NOCTURNAL_REVEAL_TILES {
                 if !self.terrain.contains_column(column) {

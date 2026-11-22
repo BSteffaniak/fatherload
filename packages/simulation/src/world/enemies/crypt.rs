@@ -863,10 +863,10 @@ impl WorldState {
         }
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
         Some((
-            min.x as f32 * TILE_SIZE,
-            min.y as f32 * TILE_SIZE,
-            (max.x + 1) as f32 * TILE_SIZE,
-            (max.y + 1) as f32 * TILE_SIZE,
+            self.frame().rel_col(min.x) * TILE_SIZE,
+            self.frame().rel_row(min.y) * TILE_SIZE,
+            self.frame().rel_col(max.x + 1) * TILE_SIZE,
+            self.frame().rel_row(max.y + 1) * TILE_SIZE,
         ))
     }
 

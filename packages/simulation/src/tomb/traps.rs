@@ -27,6 +27,7 @@
 )]
 
 use crate::{
+    position::Frame,
     terrain::{TILE_SIZE, TilePosition},
     worldgen::{features::TileRect, noise::hash2},
 };
@@ -143,10 +144,10 @@ pub const BLADE_ROOM_ROWS: i32 = 5;
 
 /// Where a blade hangs from: the bottom middle of its pivot tile.
 #[must_use]
-pub fn blade_pivot(tile: TilePosition) -> (f32, f32) {
+pub fn blade_pivot(frame: Frame, tile: TilePosition) -> (f32, f32) {
     (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y + 1) as f32 * TILE_SIZE,
+        (frame.rel_col(tile.x) + 0.5) * TILE_SIZE,
+        frame.rel_row(tile.y + 1) * TILE_SIZE,
     )
 }
 
@@ -163,8 +164,8 @@ pub fn blade_angle(tile: TilePosition, millis: u64) -> f32 {
 
 /// The blade's centre at `millis`.
 #[must_use]
-pub fn blade_tip(tile: TilePosition, millis: u64) -> (f32, f32) {
-    let (px, py) = blade_pivot(tile);
+pub fn blade_tip(frame: Frame, tile: TilePosition, millis: u64) -> (f32, f32) {
+    let (px, py) = blade_pivot(frame, tile);
     let angle = blade_angle(tile, millis);
     (
         px + BLADE_LENGTH * sin_small(angle),
@@ -232,12 +233,17 @@ pub fn crusher_state(tile: TilePosition, millis: u64) -> (CrusherStage, f32) {
 /// The crusher block's box at extension `extension` for a housing at `tile` whose block falls
 /// `reach` rows.
 #[must_use]
-pub fn crusher_block(tile: TilePosition, reach: i32, extension: f32) -> Option<Bounds> {
+pub fn crusher_block(
+    frame: Frame,
+    tile: TilePosition,
+    reach: i32,
+    extension: f32,
+) -> Option<Bounds> {
     if extension <= 0.0 || reach <= 0 {
         return None;
     }
-    let left = tile.x as f32 * TILE_SIZE + 2.0;
-    let top = (tile.y + 1) as f32 * TILE_SIZE;
+    let left = frame.rel_col(tile.x) * TILE_SIZE + 2.0;
+    let top = frame.rel_row(tile.y + 1) * TILE_SIZE;
     let bottom = top + reach as f32 * TILE_SIZE * extension.min(1.0);
     Some(Bounds::new(left, top, left + TILE_SIZE - 4.0, bottom))
 }
@@ -278,6 +284,7 @@ pub fn dart_state(tile: TilePosition, millis: u64) -> (f32, Option<f32>) {
 /// darts fly `reach` tiles before they hit a wall.
 #[must_use]
 pub fn dart_position(
+    frame: Frame,
     tile: TilePosition,
     facing: i8,
     reach: i32,
@@ -289,13 +296,13 @@ pub fn dart_position(
         return None;
     }
     let face = if facing < 0 {
-        tile.x as f32 * TILE_SIZE
+        frame.rel_col(tile.x) * TILE_SIZE
     } else {
-        (tile.x + 1) as f32 * TILE_SIZE
+        frame.rel_col(tile.x + 1) * TILE_SIZE
     };
     Some((
         face + f32::from(facing) * flown,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
+        (frame.rel_row(tile.y) + 0.5) * TILE_SIZE,
     ))
 }
 
@@ -378,8 +385,8 @@ pub fn sand_state(room: TileRect, millis: u64) -> (SandStage, f32) {
 
 /// The surface of a sluice room's sand at `level` rows (world pixel row).
 #[must_use]
-pub fn sand_surface(room: TileRect, level: f32) -> f32 {
-    (room.max.y + 1) as f32 * TILE_SIZE - level * TILE_SIZE
+pub fn sand_surface(frame: Frame, room: TileRect, level: f32) -> f32 {
+    frame.rel_row(room.max.y + 1) * TILE_SIZE - level * TILE_SIZE
 }
 
 /// Milliseconds until a sluice room's sand next starts to rise (0 while it is up).
@@ -454,10 +461,10 @@ pub fn fog_state(tile: TilePosition, millis: u64) -> (FogStage, f32) {
 
 /// The middle of a vent's cloud.
 #[must_use]
-pub fn fog_centre(tile: TilePosition) -> (f32, f32) {
+pub fn fog_centre(frame: Frame, tile: TilePosition) -> (f32, f32) {
     (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        tile.y as f32 * TILE_SIZE - TILE_SIZE * 1.2,
+        (frame.rel_col(tile.x) + 0.5) * TILE_SIZE,
+        frame.rel_row(tile.y) * TILE_SIZE - TILE_SIZE * 1.2,
     )
 }
 
@@ -601,12 +608,12 @@ mod tests {
         let pivot = TilePosition { x: 10, y: 0 };
         let floor = (1 + BLADE_ROOM_ROWS) as f32 * TILE_SIZE;
         let body_at = |x: f32| Bounds::new(x - 12.5, floor - 50.0, x + 12.5, floor);
-        let (px, _) = blade_pivot(pivot);
-        let low = (px, blade_pivot(pivot).1 + BLADE_LENGTH);
+        let (px, _) = blade_pivot(Frame::FIXED, pivot);
+        let low = (px, blade_pivot(Frame::FIXED, pivot).1 + BLADE_LENGTH);
         assert!(body_at(px).touches_disc(low, BLADE_RADIUS));
         let high = (
             px + BLADE_LENGTH * sin_small(BLADE_SWING),
-            blade_pivot(pivot).1 + BLADE_LENGTH * cos_small(BLADE_SWING),
+            blade_pivot(Frame::FIXED, pivot).1 + BLADE_LENGTH * cos_small(BLADE_SWING),
         );
         assert!(!body_at(high.0).touches_disc(high, BLADE_RADIUS));
     }

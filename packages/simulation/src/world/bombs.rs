@@ -286,7 +286,7 @@ impl WorldState {
         output: &mut TickOutput,
         spawned: &mut Vec<PlacedBomb>,
     ) -> Option<PlacedBomb> {
-        let center = bomb_tile_position(bomb);
+        let center = bomb_tile_position(self.frame(), bomb);
         let schedule = |world: &Self, millis: u64| {
             SimulationTick::new(
                 next_tick
@@ -415,7 +415,7 @@ impl WorldState {
     /// One ring of an incendiary's fire: dirt, clay, gas and sky-island turf, soil and roots at
     /// Manhattan distance `radius` burn away (baked into blocks that drop); explosive pockets it reaches go off.
     fn burn_ring(&mut self, bomb: &PlacedBomb, radius: i32, output: &mut TickOutput) {
-        let center = bomb_tile_position(*bomb);
+        let center = bomb_tile_position(self.frame(), *bomb);
         let mut changed = Vec::new();
         let mut broken = Vec::new();
         for y in center.y - radius..=center.y + radius {

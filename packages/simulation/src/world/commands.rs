@@ -179,7 +179,7 @@ impl WorldState {
             drill_down,
             thrust: thrust && player.fuel > 0.0,
         };
-        let mut chosen = authoritative_mine_target(player, intent, contact);
+        let mut chosen = authoritative_mine_target(self.terrain.frame(), player, intent, contact);
         if chosen.is_some_and(|(target, direction)| {
             direction.is_sideways()
                 && self
@@ -190,6 +190,7 @@ impl WorldState {
             // Steering past open air: a crown bore pressed into the ceiling still bores upward
             // (an analog stick is rarely dead centre while thrusting).
             chosen = authoritative_mine_target(
+                self.terrain.frame(),
                 player,
                 DrillIntent {
                     horizontal: 0.0,
@@ -273,6 +274,7 @@ impl WorldState {
         player_id: PlayerId,
         command: &PlayerCommand,
     ) -> PlayerScopedCommandOutcome {
+        let frame = self.frame();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -331,7 +333,7 @@ impl WorldState {
                 );
                 self.scanner_cooldowns.insert(player_id, 1.0);
                 self.scanner_cooldown_deadlines.insert(player_id, deadline);
-                let center = player.tile_position(TILE_SIZE);
+                let center = player.tile_in(frame);
                 let _revealed = self.reveal_scanner_area(player_id, center, 4);
                 let _contacts = self.ping_pois(player_id, center);
                 PlayerScopedCommandOutcome::Applied
@@ -387,7 +389,7 @@ impl WorldState {
                 }
                 self.infrastructure.push(PlacedInfrastructure {
                     kind,
-                    position: player.tile_position(TILE_SIZE),
+                    position: player.tile_in(frame),
                     durability: 100,
                 });
                 PlayerScopedCommandOutcome::Applied
@@ -488,11 +490,12 @@ const CONTACT_PROBE: f32 = 2.0;
 /// rig has the gimbal mount; up needs the crown bore and a ceiling the rig is thrusting into.
 #[must_use]
 pub fn authoritative_mine_target(
+    frame: crate::position::Frame,
     player: &Player,
     intent: DrillIntent,
     contact: DrillContact,
 ) -> Option<(TilePosition, DrillDirection)> {
-    let current_tile = player.tile_position(TILE_SIZE);
+    let current_tile = player.tile_in(frame);
     let at = |dx: i32, dy: i32| TilePosition {
         x: current_tile.x + dx,
         y: current_tile.y + dy,
@@ -629,15 +632,12 @@ pub(super) const fn authoritative_drill_state(
     }
 }
 
-pub(super) const fn bomb_tile_position(bomb: PlacedBomb) -> TilePosition {
+pub(super) fn bomb_tile_position(frame: crate::position::Frame, bomb: PlacedBomb) -> TilePosition {
     #[allow(
         clippy::cast_possible_truncation,
         reason = "bomb world positions intentionally convert to terrain tile coordinates"
     )]
-    let position = TilePosition {
-        x: (bomb.x / TILE_SIZE).floor() as i32,
-        y: (bomb.y / TILE_SIZE).floor() as i32,
-    };
+    let position = frame.tile_at(bomb.x, bomb.y);
     position
 }
 

@@ -65,7 +65,7 @@ impl WorldState {
         };
         // World-event hazards strike underground only: within three rows of the local surface
         // (a mountain slope, a lake bed) a rig is still out in the open.
-        let tile = player.tile_position(TILE_SIZE);
+        let tile = player.tile_in(self.frame());
         if tile.y < self.terrain.surface_row(tile.x) + 3 {
             return;
         }
@@ -108,7 +108,7 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
-        let band = self.terrain.band_at(player.tile_position(TILE_SIZE));
+        let band = self.terrain.band_at(player.tile_in(self.frame()));
         let rare_cargo = player
             .cargo_bay
             .minerals()
@@ -250,7 +250,7 @@ impl WorldState {
     /// A random cave-in over `(x, y)` (collapse surges, deep-run pressure, earthquakes): only
     /// underground on unsettled ground. Returns whether any boulder came loose.
     pub(super) fn try_cave_in(&mut self, x: f32, y: f32) -> bool {
-        if !self.loosen_ground(tile_at(x, y)) {
+        if !self.loosen_ground(self.frame().tile_at(x, y)) {
             return false;
         }
         self.spawn_cave_in(x, y)
@@ -262,17 +262,18 @@ impl WorldState {
     /// whose tile at `y` is solid, or with no such room (a one-tile-high tunnel), gets none.
     /// Settles the ground there. Returns whether any boulder came loose.
     pub(super) fn spawn_cave_in(&mut self, x: f32, y: f32) -> bool {
-        self.settle_ground(tile_at(x, y));
+        self.settle_ground(self.frame().tile_at(x, y));
         let mut spawned = false;
         for offset in -1_i16..=1 {
             let column_x = f32::from(offset).mul_add(TILE_SIZE, x);
-            let Some(hang) = self.boulder_hang_tile(tile_at(column_x, y), CAVE_IN_RISE_ROWS, true)
+            let Some(hang) =
+                self.boulder_hang_tile(self.frame().tile_at(column_x, y), CAVE_IN_RISE_ROWS, true)
             else {
                 continue;
             };
             self.spawn_falling_boulder(
                 column_x,
-                hanging_y(hang),
+                hanging_y(self.frame(), hang),
                 AUTHORITATIVE_CAVE_IN_WARNING_MILLIS
                     + u64::from(offset.unsigned_abs()) * AUTHORITATIVE_CAVE_IN_WARNING_STEP_MILLIS,
                 AUTHORITATIVE_CAVE_IN_LIFE_MILLIS,
@@ -297,10 +298,10 @@ impl WorldState {
             return false;
         }
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let x = (hang.x as f32 + 0.5) * TILE_SIZE;
+        let x = (self.frame().rel_col(hang.x) + 0.5) * TILE_SIZE;
         self.spawn_falling_boulder(
             x,
-            hanging_y(hang),
+            hanging_y(self.frame(), hang),
             AUTHORITATIVE_BOULDER_WARNING_MILLIS,
             AUTHORITATIVE_BOULDER_LIFE_MILLIS,
         );
@@ -344,20 +345,8 @@ pub(super) fn mining_boulder_roll(seed: u64, target: TilePosition, chance: u64) 
     value.is_multiple_of(chance.max(1))
 }
 
-/// The tile holding the point `(x, y)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world coordinates intentionally map to terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
 /// The centre height of a boulder hanging under the top of `tile`.
 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-const fn hanging_y(tile: TilePosition) -> f32 {
-    (tile.y as f32).mul_add(TILE_SIZE, BOULDER_RADIUS)
+fn hanging_y(frame: crate::position::Frame, tile: TilePosition) -> f32 {
+    (frame.rel_row(tile.y)).mul_add(TILE_SIZE, BOULDER_RADIUS)
 }

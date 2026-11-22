@@ -138,8 +138,8 @@ impl WorldState {
         }
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
         let (x, y) = (
-            (target.x as f32 + 0.5) * TILE_SIZE,
-            (target.y as f32 + 0.5) * TILE_SIZE,
+            (self.frame().rel_col(target.x) + 0.5) * TILE_SIZE,
+            (self.frame().rel_row(target.y) + 0.5) * TILE_SIZE,
         );
         for (index, stack) in loot.items.iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a handful of stacks")]
@@ -161,7 +161,7 @@ impl WorldState {
             return None;
         }
         let bands = settings.generator.sky_bands()?;
-        let rig = self.players.get(&player_id)?.tile_position(TILE_SIZE);
+        let rig = self.players.get(&player_id)?.tile_in(self.frame());
         if -rig.y < bands.low_isles - 8 {
             return None;
         }
@@ -274,7 +274,7 @@ impl WorldState {
         // Islands near any rig, in id order.
         let mut near: Vec<SkyLand> = Vec::new();
         for player in self.players.values() {
-            let rig = player.tile_position(TILE_SIZE);
+            let rig = player.tile_in(self.frame());
             if -rig.y < bands.low_isles - COLLAPSE_REACH.1 {
                 continue;
             }
@@ -344,8 +344,8 @@ impl WorldState {
             {
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
                 let (x, y) = (
-                    (position.x as f32 + 0.5) * TILE_SIZE,
-                    (position.y as f32 + 0.5) * TILE_SIZE,
+                    (self.frame().rel_col(position.x) + 0.5) * TILE_SIZE,
+                    (self.frame().rel_row(position.y) + 0.5) * TILE_SIZE,
                 );
                 for stack in sky_cache_loot(&settings, *position, *tile).items {
                     let _ = self.spawn_loot(x, y, (0.0, 40.0), stack, None);
@@ -367,8 +367,8 @@ impl WorldState {
             {
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
                 let (x, y) = (
-                    (position.x as f32 + 0.5) * TILE_SIZE,
-                    (position.y as f32 + 0.5) * TILE_SIZE,
+                    (self.frame().rel_col(position.x) + 0.5) * TILE_SIZE,
+                    (self.frame().rel_row(position.y) + 0.5) * TILE_SIZE,
                 );
                 self.spawn_falling_boulder(x, y, 0, ROCK_LIFE_MILLIS);
                 rocks += 1;

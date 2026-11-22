@@ -846,7 +846,8 @@ impl WorldState {
     }
 }
 
-/// The world pixel of a tile's centre (scene and test helpers).
+/// The world pixel of a tile's centre in the origin frame (scene and test helpers on fixed-frame
+/// worlds; gameplay uses the world's frame, `Frame::tile_center`).
 #[must_use]
 pub fn tile_center_px(tile: TilePosition) -> (f32, f32) {
     #[allow(

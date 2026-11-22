@@ -109,7 +109,7 @@ fn enter(world: &mut WorldState, party: &[PlayerId], site: &TombSite, run: u32) 
     for player in party {
         kit(world, *player);
     }
-    let (x, feet) = WorldState::outside_spot(site, 0);
+    let (x, feet) = WorldState::outside_spot(world.frame(), site, 0);
     let _ = world.place_pilot(party[0], x, feet);
     world.scenario_next_tomb_run(site.id, run);
     let _ = world.scenario_enter_tomb(site, party);
@@ -257,7 +257,7 @@ fn entrance_scene(stage: &mut SceneStage<'_>, setting: SiteSetting) {
             return;
         };
         kit(world, player);
-        let (x, feet) = WorldState::outside_spot(&site, 0);
+        let (x, feet) = WorldState::outside_spot(world.frame(), &site, 0);
         if let Some(rig) = world.player_mut(player) {
             let outward = if site.mirrored { 1.0 } else { -1.0 };
             rig.x = (outward * TILE_SIZE).mul_add(4.0, x);

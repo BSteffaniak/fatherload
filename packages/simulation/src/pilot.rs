@@ -978,6 +978,11 @@ pub trait PilotTerrain {
         let _ = (x, y);
         GRAVITY
     }
+    /// The local pixel frame positions are measured in (F7, [`crate::position::Frame`]): the
+    /// fixed origin frame by default; the world answers its own.
+    fn frame(&self) -> crate::position::Frame {
+        crate::position::Frame::FIXED
+    }
 }
 
 /// Whether a solid tile of `kind` lets a pilot through: vent grates (a crawlway's covers) are
@@ -1066,27 +1071,33 @@ const INSET: f32 = 0.1;
 /// Longest swept piece of one step (px).
 const SWEEP: f32 = 6.0;
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_of(value: f32) -> i32 {
-    (value / TILE_SIZE).floor() as i32
+/// The tile column under local pixel `x` (the world's frame, F7).
+fn col(world: &impl PilotTerrain, x: f32) -> i32 {
+    world.frame().col(x)
 }
 
-/// The world pixel of a tile boundary.
-#[allow(clippy::cast_precision_loss, reason = "tile indices are small")]
-fn edge(tile: i32) -> f32 {
-    tile as f32 * TILE_SIZE
+/// The tile row under local pixel `y`.
+fn row(world: &impl PilotTerrain, y: f32) -> i32 {
+    world.frame().row(y)
+}
+
+/// The local pixel of a column boundary.
+fn edge_x(world: &impl PilotTerrain, column: i32) -> f32 {
+    world.frame().col_px(column)
+}
+
+/// The local pixel of a row boundary.
+fn edge_y(world: &impl PilotTerrain, row: i32) -> f32 {
+    world.frame().row_px(row)
 }
 
 /// Whether a box with feet at `(x, feet)` and `height` overlaps anything that blocks a pilot.
 #[must_use]
 pub fn box_blocked(world: &impl PilotTerrain, x: f32, feet: f32, height: f32) -> bool {
-    let left = tile_of(x - PILOT_HALF_WIDTH + INSET);
-    let right = tile_of(x + PILOT_HALF_WIDTH - INSET);
-    let top = tile_of(feet - height + INSET);
-    let bottom = tile_of(feet - INSET);
+    let left = col(world, x - PILOT_HALF_WIDTH + INSET);
+    let right = col(world, x + PILOT_HALF_WIDTH - INSET);
+    let top = row(world, feet - height + INSET);
+    let bottom = row(world, feet - INSET);
     (top..=bottom).any(|ty| (left..=right).any(|tx| world.blocks(TilePosition { x: tx, y: ty })))
 }
 
@@ -1103,9 +1114,9 @@ fn grounded(world: &impl PilotTerrain, body: &Body, height: f32) -> bool {
 }
 
 fn climbable_here(world: &impl PilotTerrain, body: &Body, height: f32) -> bool {
-    let column = tile_of(body.x);
-    let middle = tile_of(height.mul_add(-0.5, body.y));
-    let feet = tile_of(body.y - 2.0);
+    let column = col(world, body.x);
+    let middle = row(world, height.mul_add(-0.5, body.y));
+    let feet = row(world, body.y - 2.0);
     world.climbable(TilePosition {
         x: column,
         y: middle,
@@ -1114,15 +1125,15 @@ fn climbable_here(world: &impl PilotTerrain, body: &Body, height: f32) -> bool {
 
 fn climbable_below(world: &impl PilotTerrain, body: &Body) -> bool {
     world.climbable(TilePosition {
-        x: tile_of(body.x),
-        y: tile_of(body.y + 2.0),
+        x: col(world, body.x),
+        y: row(world, body.y + 2.0),
     })
 }
 
 fn in_water(world: &impl PilotTerrain, body: &Body, height: f32) -> bool {
     world.water(TilePosition {
-        x: tile_of(body.x),
-        y: tile_of(height.mul_add(-0.5, body.y)),
+        x: col(world, body.x),
+        y: row(world, height.mul_add(-0.5, body.y)),
     })
 }
 
@@ -1478,9 +1489,13 @@ fn step_once(
         let next = body.x + part;
         if box_blocked(world, next, body.y, height) {
             let flush = if part > 0.0 {
-                edge(tile_of(next + PILOT_HALF_WIDTH - INSET)) - PILOT_HALF_WIDTH - FLUSH
+                edge_x(world, col(world, next + PILOT_HALF_WIDTH - INSET))
+                    - PILOT_HALF_WIDTH
+                    - FLUSH
             } else {
-                edge(tile_of(next - PILOT_HALF_WIDTH + INSET) + 1) + PILOT_HALF_WIDTH + FLUSH
+                edge_x(world, col(world, next - PILOT_HALF_WIDTH + INSET) + 1)
+                    + PILOT_HALF_WIDTH
+                    + FLUSH
             };
             if !box_blocked(world, flush, body.y, height) && (flush - body.x) * part >= 0.0 {
                 body.x = flush;
@@ -1537,13 +1552,13 @@ fn step_once(
         }
         if box_blocked(world, body.x, next, height) {
             if part > 0.0 {
-                let flush = edge(tile_of(next - INSET)) - FLUSH;
+                let flush = edge_y(world, row(world, next - INSET)) - FLUSH;
                 if !box_blocked(world, body.x, flush, height) && flush >= body.y - 0.01 {
                     body.y = flush;
                 }
                 landed = true;
             } else {
-                let flush = edge(tile_of(next - height + INSET) + 1) + height + FLUSH;
+                let flush = edge_y(world, row(world, next - height + INSET) + 1) + height + FLUSH;
                 if !box_blocked(world, body.x, flush, height) && flush <= body.y + 0.01 {
                     body.y = flush;
                 }
@@ -1606,18 +1621,18 @@ fn step_once(
 /// height is solid, the two tiles above it are open (room to stand), and hanging there fits.
 fn ledge_top(world: &impl PilotTerrain, body: &Body, wall: i8) -> Option<f32> {
     let column = if wall > 0 {
-        tile_of(body.x + PILOT_HALF_WIDTH + FLUSH + 1.0)
+        col(world, body.x + PILOT_HALF_WIDTH + FLUSH + 1.0)
     } else {
-        tile_of(body.x - PILOT_HALF_WIDTH - FLUSH - 1.0)
+        col(world, body.x - PILOT_HALF_WIDTH - FLUSH - 1.0)
     };
     let hands = body.y - PILOT_STAND_HEIGHT;
-    let row = tile_of(hands + 14.0);
+    let row = row(world, hands + 14.0);
     let solid = |y: i32| world.blocks(TilePosition { x: column, y });
     if !solid(row) || solid(row - 1) || solid(row - 2) {
         return None;
     }
     #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
-    let top = row as f32 * TILE_SIZE;
+    let top = world.frame().row_px(row);
     if top < hands - 6.0 || top > hands + 18.0 {
         return None;
     }
@@ -1630,16 +1645,22 @@ fn finish_ledge_climb(body: &mut Body, state: &mut PilotState, world: &impl Pilo
     state.mode = PilotMode::Free;
     state.ledge_timer = 0.0;
     let column = if state.ledge_side > 0 {
-        tile_of(body.x + PILOT_HALF_WIDTH + FLUSH + 1.0)
+        col(world, body.x + PILOT_HALF_WIDTH + FLUSH + 1.0)
     } else {
-        tile_of(body.x - PILOT_HALF_WIDTH - FLUSH - 1.0)
+        col(world, body.x - PILOT_HALF_WIDTH - FLUSH - 1.0)
     };
     let top = (body.y - PILOT_STAND_HEIGHT + 8.0).round();
     #[allow(clippy::cast_precision_loss, reason = "tile columns are small")]
     let x = if state.ledge_side > 0 {
-        (column as f32).mul_add(TILE_SIZE, PILOT_HALF_WIDTH + 2.0)
+        world
+            .frame()
+            .rel_col(column)
+            .mul_add(TILE_SIZE, PILOT_HALF_WIDTH + 2.0)
     } else {
-        ((column + 1) as f32).mul_add(TILE_SIZE, -PILOT_HALF_WIDTH - 2.0)
+        world
+            .frame()
+            .rel_col(column + 1)
+            .mul_add(TILE_SIZE, -PILOT_HALF_WIDTH - 2.0)
     };
     let feet = top - FLUSH;
     if !box_blocked(world, x, feet, PILOT_STAND_HEIGHT) {

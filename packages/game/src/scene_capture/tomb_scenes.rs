@@ -58,7 +58,7 @@ fn kit(world: &mut WorldState, player: PlayerId) {
 /// The pilot out in front of `site`'s door, the rig parked beside it, everything revealed.
 fn at_door(world: &mut WorldState, player: PlayerId, site: &TombSite) {
     kit(world, player);
-    let (x, feet) = WorldState::outside_spot(site, 0);
+    let (x, feet) = WorldState::outside_spot(world.frame(), site, 0);
     if let Some(rig) = world.player_mut(player) {
         let outward = if site.mirrored { 1.0 } else { -1.0 };
         rig.x = outward * TILE_SIZE * 4.0 + x;

@@ -36,7 +36,7 @@ use crate::{
     item::BlockKind,
     physics::{line_clear, solid_at},
     quantize::quantize_simulation_scalar as quantize,
-    terrain::{TILE_SIZE, TileKind, TilePosition, is_indestructible, tile_hardness},
+    terrain::{TILE_SIZE, TileKind, is_indestructible, tile_hardness},
     weapon::{MUZZLE_REACH, Tether, WeaponKind, WeaponStats},
 };
 
@@ -65,17 +65,6 @@ const THROW_STUN_MILLIS: u64 = 600;
 )]
 const fn px(value: f32) -> i32 {
     value.round() as i32
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
 }
 
 /// Whether a gravity gun can rip `kind` out of the rock: plain soft ground that breaks into a
@@ -322,12 +311,12 @@ impl WorldState {
             if !solid_at(&self.terrain, x, y) {
                 continue;
             }
-            let tile = tile_at(x, y);
+            let tile = self.frame().tile_at(x, y);
             let Some(kind) = self.terrain.tile(tile).map(|tile| tile.kind) else {
                 return;
             };
             if loose(kind) && self.terrain.set_kind(tile, TileKind::Air) {
-                let (cx, cy) = crate::enemy::tile_centre(tile.x, tile.y);
+                let (cx, cy) = self.frame().centre_of(tile.x, tile.y);
                 let (dx, dy) = (hold.0 - cx, hold.1 - cy);
                 let distance = dx.hypot(dy).max(1.0);
                 let _ = self.spawn_tile_drop(
@@ -544,7 +533,13 @@ impl WorldState {
         body.previous_x = body.x;
         body.previous_y = body.y;
         let gravity = spec.gravity
-            * crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+            * crate::environment::environment_in(
+                self.terrain.settings(),
+                self.frame(),
+                body.x,
+                body.y,
+            )
+            .gravity;
         body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y));
         let speed = body.velocity_x.hypot(body.velocity_y);
         #[allow(

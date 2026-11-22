@@ -89,8 +89,8 @@ enum Step {
     Land,
 }
 
-fn centre(col: i32) -> f32 {
-    (col as f32 + 0.5) * TILE_SIZE
+fn centre(frame: crate::position::Frame, col: i32) -> f32 {
+    (frame.rel_col(col) + 0.5) * TILE_SIZE
 }
 
 fn steer(dx: f32) -> f32 {
@@ -154,13 +154,14 @@ fn shaft_column(world: &mut WorldState) -> Option<i32> {
 #[allow(clippy::too_many_lines, reason = "one scripted trip, phase by phase")]
 pub fn everyday_trip(seed: u64, tank: u8, tick_rate_hz: u32) -> Option<TripResult> {
     let mut world: WorldState = new_world(seed, tick_rate_hz);
+    let frame = world.frame();
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     let col = shaft_column(&mut world)?;
     let surface = world.terrain().surface_row(col);
     let capacity = fuel_capacity_for_level(tank);
     {
         let rig = world.player_mut(BOT_PLAYER)?;
-        rig.x = centre(col);
+        rig.x = centre(frame, col);
         rig.y = surface as f32 * TILE_SIZE - 11.0;
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
@@ -189,7 +190,7 @@ pub fn everyday_trip(seed: u64, tank: u8, tick_rate_hz: u32) -> Option<TripResul
     let mut climb_progress = (i32::MAX, 0.0_f32);
     loop {
         let rig = world.player(BOT_PLAYER)?;
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         let grounded = DrillContact::of(world.terrain(), rig).grounded;
         let below = TilePosition {
             x: tile.x,
@@ -224,7 +225,9 @@ pub fn everyday_trip(seed: u64, tank: u8, tick_rate_hz: u32) -> Option<TripResul
                 // The tunnel's end, rock too hard or a hazard ahead, or a drop: drive back.
                 Some(Step::Back(dir))
             }
-            Step::Back(dir) if (tile.x == col && (rig.x - centre(col)).abs() < 3.0) || stale => {
+            Step::Back(dir)
+                if (tile.x == col && (rig.x - centre(frame, col)).abs() < 3.0) || stale =>
+            {
                 Some(if dir < 0 {
                     Step::Out(1)
                 } else {
@@ -275,7 +278,7 @@ pub fn everyday_trip(seed: u64, tank: u8, tick_rate_hz: u32) -> Option<TripResul
                 rig.x, rig.fuel, rig.velocity_y
             );
         }
-        let to_shaft = steer(centre(col) - rig.x);
+        let to_shaft = steer(centre(frame, col) - rig.x);
         let controls = match step {
             Step::Dig | Step::Deeper(_) => ControlState::new(to_shaft * 0.6, hopping, !hopping),
             Step::Out(dir) => ControlState::new(dir as f32, hopping, false),
@@ -283,9 +286,10 @@ pub fn everyday_trip(seed: u64, tank: u8, tick_rate_hz: u32) -> Option<TripResul
             Step::Climb => ControlState::new(to_shaft * 0.6, true, false),
             Step::Land => {
                 // Hover over beside the shaft's mouth, then settle onto the ground there.
-                let pad = centre(col + LANDING_OFFSET);
+                let pad = centre(frame, col + LANDING_OFFSET);
                 let over = (rig.x - pad).abs() < TILE_SIZE * 0.3;
-                let hold = rig.y > (surface - 2) as f32 * TILE_SIZE || rig.velocity_y > 40.0;
+                let hold =
+                    rig.y > world.frame().rel_row(surface - 2) * TILE_SIZE || rig.velocity_y > 40.0;
                 ControlState::new(
                     steer(pad - rig.x),
                     if over { rig.velocity_y > 120.0 } else { hold },

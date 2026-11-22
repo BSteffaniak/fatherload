@@ -256,6 +256,15 @@ impl Player {
         self.cosmetic_unlocks.unlock(item)
     }
 
+    /// The tile the rig is in, for a world in `frame` (F7: the rig's position is relative to
+    /// its world's frame).
+    #[must_use]
+    pub fn tile_in(&self, frame: crate::position::Frame) -> TilePosition {
+        frame.tile_at(self.x, self.y)
+    }
+
+    /// The tile the rig is in, reading its position as plain world pixels (the origin frame:
+    /// tests and fixed-frame worlds). Gameplay uses [`Self::tile_in`].
     #[must_use]
     pub fn tile_position(&self, tile_size: f32) -> TilePosition {
         TilePosition {

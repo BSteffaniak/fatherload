@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
     ids::PlayerId,
-    terrain::{CHUNK_SIZE_TILES, ChunkPosition, TILE_SIZE, Terrain, TilePosition},
+    terrain::{CHUNK_SIZE_TILES, ChunkPosition, Terrain, TilePosition},
 };
 
 use super::WorldState;
@@ -272,10 +272,7 @@ fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, (x, y): (f
         clippy::cast_possible_truncation,
         reason = "world positions are converted to terrain tile coordinates"
     )]
-    let center = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
+    let center = terrain.frame().tile_at(x, y);
     let (radius_x, radius_y) = REVEAL_RADIUS_TILES;
     let x_range =
         (center.x - radius_x).max(terrain.min_x())..=(center.x + radius_x).min(terrain.max_x());

@@ -34,9 +34,10 @@ impl WorldState {
             .cloned()
             .unwrap_or_default();
         // A home point (WP-BASE bed or homestead) replaces the town drop.
+        let frame = self.frame();
         let (home_x, home_y) = self
             .rescue_home(player_id)
-            .unwrap_or((12.0 * TILE_SIZE, 4.0 * TILE_SIZE));
+            .unwrap_or_else(|| frame.from_legacy_px(12.0 * TILE_SIZE, 4.0 * TILE_SIZE));
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -49,7 +50,7 @@ impl WorldState {
             clippy::cast_sign_loss,
             reason = "nonnegative bounded world depth intentionally converts to rescue fee units"
         )]
-        let depth = (player.y / TILE_SIZE).max(0.0) as u32;
+        let depth = (frame.legacy_y(player.y) / TILE_SIZE).max(0.0) as u32;
         let base_fee = 50_u32.saturating_add(depth.saturating_mul(3));
         let discount_percent = relay_count.saturating_mul(10).min(50);
         let relayed_fee = base_fee.saturating_mul(100 - discount_percent) / 100;

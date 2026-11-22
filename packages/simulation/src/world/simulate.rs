@@ -12,8 +12,7 @@ use crate::{
     rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
     terrain::{
-        ArtifactKind, MineResult, MineralKind, StrategicResourceKind, TILE_SIZE, TileKind,
-        TilePosition,
+        ArtifactKind, MineResult, MineralKind, StrategicResourceKind, TileKind, TilePosition,
     },
 };
 
@@ -263,10 +262,7 @@ impl WorldState {
                 clippy::cast_possible_truncation,
                 reason = "bounded player coordinates intentionally map to terrain tiles"
             )]
-            let center = TilePosition {
-                x: (player_x / TILE_SIZE).floor() as i32,
-                y: (player_y / TILE_SIZE).floor() as i32,
-            };
+            let center = self.frame().tile_at(player_x, player_y);
             // The pressure hull pays off in the deep strata, wherever this world's wavy
             // boundary puts them.
             if parts.contains(&RigPartKind::PressureHull)
@@ -313,9 +309,13 @@ impl WorldState {
                 0.0
             };
             // Altitude cold (F6, V8 skies): the reverse of band heat, covered by the de-icer.
-            let cold =
-                crate::environment::environment_at(self.terrain.settings(), player_x, player_y)
-                    .cold;
+            let cold = crate::environment::environment_in(
+                self.terrain.settings(),
+                self.frame(),
+                player_x,
+                player_y,
+            )
+            .cold;
             let cold_excess = gear.cold_excess(cold);
             let cold_damage = if cold_excess > 0 {
                 crate::environment::COLD_DAMAGE_PER_EXCESS_LEVEL
@@ -490,17 +490,17 @@ impl WorldState {
         let mut centers: Vec<TilePosition> = self
             .players
             .values()
-            .map(|player| player.tile_position(TILE_SIZE))
+            .map(|player| player.tile_in(self.frame()))
             .collect();
         // A pilot walking away from its rig keeps its own surroundings loaded.
         #[allow(
             clippy::cast_possible_truncation,
             reason = "bounded world pixels address terrain tiles"
         )]
-        centers.extend(self.pilots().map(|(_, body, _)| TilePosition {
-            x: (body.x / TILE_SIZE).floor() as i32,
-            y: (body.y / TILE_SIZE).floor() as i32,
-        }));
+        centers.extend(
+            self.pilots()
+                .map(|(_, body, _)| self.frame().tile_at(body.x, body.y)),
+        );
         self.terrain.stream_around(&centers);
     }
 
@@ -525,13 +525,14 @@ impl WorldState {
         depth: i32,
         output: &mut TickOutput,
     ) {
+        let frame = self.frame();
         use crate::LegendaryBlueprint;
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
         let position = TilePosition {
             x: player
-                .tile_position(TILE_SIZE)
+                .tile_in(frame)
                 .x
                 .saturating_add(2)
                 .clamp(self.terrain.min_x() + 1, self.terrain.max_x() - 1),
@@ -597,7 +598,7 @@ impl WorldState {
         let player_depths = self
             .players
             .iter()
-            .map(|(player_id, player)| (*player_id, player.tile_position(TILE_SIZE).y))
+            .map(|(player_id, player)| (*player_id, player.tile_in(self.frame()).y))
             .collect::<Vec<_>>();
         for (player_id, depth) in player_depths {
             self.progression.deepest_tile_reached =

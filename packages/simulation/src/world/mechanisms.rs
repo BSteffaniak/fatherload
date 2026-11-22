@@ -29,32 +29,13 @@ use super::{WorldState, movement::AUTHORITATIVE_PLAYER_RADIUS};
 /// Keycard doors this tall (tiles) or less open together.
 const MAX_KEYCARD_DOOR_TILES: usize = 8;
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-#[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-fn tile_centre(tile: TilePosition) -> (f32, f32) {
-    (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
-    )
-}
-
 impl WorldState {
     /// The nearest thing `player_id`'s pilot could use now: `(tile, what)`.
     #[must_use]
     pub fn pilot_usable(&self, player_id: PlayerId) -> Option<(TilePosition, Usable)> {
         let (_, body, state) = self.pilot_of(player_id)?;
         let (mx, my) = state.middle(body);
-        let centre = tile_at(mx, my);
+        let centre = self.frame().tile_at(mx, my);
         let mut best: Option<(f32, TilePosition, Usable)> = None;
         for dy in -2..=2 {
             for dx in -2..=2 {
@@ -69,7 +50,7 @@ impl WorldState {
                 else {
                     continue;
                 };
-                let (tx, ty) = tile_centre(tile);
+                let (tx, ty) = self.frame().tile_center(tile);
                 let distance = (tx - mx).hypot(ty - my);
                 if distance <= USE_REACH && best.is_none_or(|(nearest, ..)| distance < nearest) {
                     best = Some((distance, tile, usable));
@@ -97,7 +78,7 @@ impl WorldState {
             return true;
         };
         let (mx, my) = state.middle(body);
-        let (tx, ty) = tile_centre(tile);
+        let (tx, ty) = self.frame().tile_center(tile);
         (tx - mx).hypot(ty - my) < (player.x - mx).hypot(player.y - my)
     }
 
@@ -241,7 +222,10 @@ impl WorldState {
     /// Whether a pilot or a rig overlaps `tile`.
     fn body_in_tile(&self, tile: TilePosition) -> bool {
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let (left, top) = (tile.x as f32 * TILE_SIZE, tile.y as f32 * TILE_SIZE);
+        let (left, top) = (
+            self.frame().rel_col(tile.x) * TILE_SIZE,
+            self.frame().rel_row(tile.y) * TILE_SIZE,
+        );
         let (right, bottom) = (left + TILE_SIZE, top + TILE_SIZE);
         let pilots = self.pilots().any(|(_, body, state)| {
             body.x + PILOT_HALF_WIDTH > left
@@ -310,7 +294,7 @@ impl WorldState {
                 card: None,
             }),
         );
-        let (x, y) = tile_centre(tile);
+        let (x, y) = self.frame().tile_center(tile);
         let seed = self.terrain.settings().seed;
         let mut loot = chest_loot(seed, tile);
         if let Some(color) = card {
@@ -367,8 +351,8 @@ impl WorldState {
             .flat_map(|(_, body, _)| {
                 let feet = body.y + 1.5;
                 [
-                    tile_at(body.x - PILOT_HALF_WIDTH + 2.0, feet),
-                    tile_at(body.x + PILOT_HALF_WIDTH - 2.0, feet),
+                    self.frame().tile_at(body.x - PILOT_HALF_WIDTH + 2.0, feet),
+                    self.frame().tile_at(body.x + PILOT_HALF_WIDTH - 2.0, feet),
                 ]
             })
             .collect();
@@ -376,7 +360,10 @@ impl WorldState {
             self.players
                 .values()
                 .filter(|player| player.hull > 0.0)
-                .map(|player| tile_at(player.x, player.y + AUTHORITATIVE_PLAYER_RADIUS + 2.0)),
+                .map(|player| {
+                    self.frame()
+                        .tile_at(player.x, player.y + AUTHORITATIVE_PLAYER_RADIUS + 2.0)
+                }),
         );
         weights.sort();
         weights.dedup();

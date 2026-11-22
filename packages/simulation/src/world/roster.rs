@@ -14,7 +14,7 @@
 use crate::{
     ids::PlayerId,
     player::Player,
-    terrain::{TILE_SIZE, TileKind, TilePosition},
+    terrain::{TILE_SIZE, TileKind},
 };
 
 use super::{
@@ -154,11 +154,13 @@ impl WorldState {
         let base_x = clamp_authoritative_player_x(&self.terrain, base_x);
         let max_x = clamp_authoritative_player_x(&self.terrain, f32::MAX);
         let right = slot_count(max_x - base_x);
-        let left = slot_count(base_x).saturating_sub(1);
+        let frame = self.frame();
+        let left = slot_count(frame.legacy_x(base_x)).saturating_sub(1);
         // Rows of slots stacked up into the sky above the spawn point (the sky has no ceiling,
         // so the search height is fixed).
-        let rows = slot_count(SPAWN_SKY_ROWS_TILES * TILE_SIZE)
-            .min(slot_count(base_y - AUTHORITATIVE_MIN_PLAYER_Y));
+        let rows = slot_count(SPAWN_SKY_ROWS_TILES * TILE_SIZE).min(slot_count(
+            frame.legacy_y(base_y) - AUTHORITATIVE_MIN_PLAYER_Y,
+        ));
         let mut best = (base_x, base_y);
         let mut best_clearance = f32::NEG_INFINITY;
         for row in 0..rows {
@@ -192,10 +194,7 @@ impl WorldState {
             clippy::cast_possible_truncation,
             reason = "world positions are converted to terrain tile coordinates"
         )]
-        let tile = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
-            y: (y / TILE_SIZE).floor() as i32,
-        };
+        let tile = self.frame().tile_at(x, y);
         self.terrain
             .tile(tile)
             .is_some_and(|tile| tile.kind != TileKind::Air)
@@ -252,7 +251,9 @@ mod tests {
                 f64::from(world.terrain().max_x() + 1) * f64::from(TILE_SIZE),
             );
             assert!(f64::from(first.x) >= left && f64::from(first.x) <= right);
-            let tile = world.terrain().tile(first.tile_position(TILE_SIZE));
+            let tile = world
+                .terrain()
+                .tile(first.tile_in(crate::position::Frame::FIXED));
             assert!(
                 tile.is_none_or(|tile| tile.kind == TileKind::Air),
                 "rig at ({}, {}) spawned inside {tile:?}",
@@ -300,7 +301,9 @@ mod tests {
     #[test]
     fn slots_inside_solid_terrain_are_skipped() {
         let mut world = WorldState::new_game(PlayerId::new(0));
-        let spawn = world.player_template().tile_position(TILE_SIZE);
+        let spawn = world
+            .player_template()
+            .tile_in(crate::position::Frame::FIXED);
         // Bury the first two slots right of the spawn point.
         for offset in [2, 4] {
             let tile = crate::terrain::TilePosition {

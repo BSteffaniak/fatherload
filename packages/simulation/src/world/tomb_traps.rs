@@ -67,13 +67,6 @@ struct Walker {
     grounded: bool,
 }
 
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
 impl WorldState {
     /// Side-view run `id`'s tick (see the module docs).
     pub(super) fn advance_side_view_run(
@@ -195,8 +188,8 @@ impl WorldState {
         let mut shoves: Vec<(EntityId, f32)> = Vec::new();
         for walker in walkers {
             let (mut blade, mut crusher, mut dart, mut fog, mut sand) = (0.0, 0.0, 0.0, 0.0, 0.0);
-            let head = tile_at(walker.feet.0, walker.bounds.top);
-            let foot = tile_at(walker.feet.0, walker.feet.1 - 1.0);
+            let head = self.frame().tile_at(walker.feet.0, walker.bounds.top);
+            let foot = self.frame().tile_at(walker.feet.0, walker.feet.1 - 1.0);
             for y in head.y - SCAN_ROWS_ABOVE..=foot.y + SCAN_ROWS_BELOW {
                 for x in foot.x - SCAN_COLUMNS..=foot.x + SCAN_COLUMNS {
                     let tile = TilePosition { x, y };
@@ -207,7 +200,7 @@ impl WorldState {
                         TrapKind::Blade => {
                             if walker
                                 .bounds
-                                .touches_disc(blade_tip(tile, now), BLADE_RADIUS)
+                                .touches_disc(blade_tip(self.frame(), tile, now), BLADE_RADIUS)
                             {
                                 blade = BLADE_DPS;
                             }
@@ -215,13 +208,13 @@ impl WorldState {
                             let swept =
                                 (blade_angle(tile, before) < 0.0) != (blade_angle(tile, now) < 0.0);
                             if swept && sprung.insert(tile) {
-                                events.push((kind, blade_tip(tile, now)));
+                                events.push((kind, blade_tip(self.frame(), tile, now)));
                             }
                         }
                         TrapKind::Crusher => {
                             let reach = self.crusher_reach(tile);
                             let (stage, extension) = crusher_state(tile, now);
-                            if let Some(block) = crusher_block(tile, reach, extension)
+                            if let Some(block) = crusher_block(self.frame(), tile, reach, extension)
                                 && block.overlaps(&walker.bounds)
                             {
                                 crusher = CRUSHER_DPS;
@@ -241,8 +234,8 @@ impl WorldState {
                                 events.push((
                                     kind,
                                     (
-                                        (tile.x as f32 + 0.5) * TILE_SIZE,
-                                        (tile.y + 1 + reach) as f32 * TILE_SIZE,
+                                        (self.frame().rel_col(tile.x) + 0.5) * TILE_SIZE,
+                                        self.frame().rel_row(tile.y + 1 + reach) * TILE_SIZE,
                                     ),
                                 ));
                             }
@@ -250,7 +243,7 @@ impl WorldState {
                         TrapKind::DartWall => {
                             let facing = dart_facing(hidden);
                             let reach = self.dart_reach(tile, facing);
-                            if let Some(at) = dart_position(tile, facing, reach, now)
+                            if let Some(at) = dart_position(self.frame(), tile, facing, reach, now)
                                 && dart_bounds(at).overlaps(&walker.bounds)
                             {
                                 dart = DART_DPS;
@@ -262,15 +255,17 @@ impl WorldState {
                                 events.push((
                                     kind,
                                     (
-                                        (tile.x as f32 + 0.5) * TILE_SIZE,
-                                        (tile.y as f32 + 0.5) * TILE_SIZE,
+                                        (self.frame().rel_col(tile.x) + 0.5) * TILE_SIZE,
+                                        (self.frame().rel_row(tile.y) + 0.5) * TILE_SIZE,
                                     ),
                                 ));
                             }
                         }
                         TrapKind::FogVent => {
                             if let Some(radius) = fog_hurts(tile, now)
-                                && walker.bounds.touches_disc(fog_centre(tile), radius)
+                                && walker
+                                    .bounds
+                                    .touches_disc(fog_centre(self.frame(), tile), radius)
                             {
                                 fog = FOG_DPS;
                             }
@@ -278,7 +273,7 @@ impl WorldState {
                                 && fog_state(tile, before).0 != FogStage::Burst
                                 && sprung.insert(tile)
                             {
-                                events.push((kind, fog_centre(tile)));
+                                events.push((kind, fog_centre(self.frame(), tile)));
                             }
                         }
                         TrapKind::Spikes
@@ -293,7 +288,9 @@ impl WorldState {
                 && self.sluice_room(*room)
             {
                 let (stage, level) = sand_state(*room, now);
-                if level > 0.0 && walker.feet.1 > sand_surface(*room, level) + SAND_WADE_PIXELS {
+                if level > 0.0
+                    && walker.feet.1 > sand_surface(self.frame(), *room, level) + SAND_WADE_PIXELS
+                {
                     sand = SAND_DPS;
                 }
                 if stage == SandStage::Rising
@@ -304,7 +301,7 @@ impl WorldState {
                         TrapKind::SandSluice,
                         (
                             (room.min.x + room.max.x + 1) as f32 * 0.5 * TILE_SIZE,
-                            (room.max.y + 1) as f32 * TILE_SIZE,
+                            self.frame().rel_row(room.max.y + 1) * TILE_SIZE,
                         ),
                     ));
                 }
@@ -352,10 +349,11 @@ impl WorldState {
         else {
             return false;
         };
-        let rows = tile_at(x, body.y - height + 1.0).y..=tile_at(x, body.y - 1.0).y;
+        let rows = self.frame().tile_at(x, body.y - height + 1.0).y
+            ..=self.frame().tile_at(x, body.y - 1.0).y;
         let columns = [
-            tile_at(x - PILOT_HALF_WIDTH + 1.0, body.y).x,
-            tile_at(x + PILOT_HALF_WIDTH - 1.0, body.y).x,
+            self.frame().tile_at(x - PILOT_HALF_WIDTH + 1.0, body.y).x,
+            self.frame().tile_at(x + PILOT_HALF_WIDTH - 1.0, body.y).x,
         ];
         rows.into_iter().all(|y| {
             columns
@@ -374,10 +372,10 @@ impl WorldState {
         // Slabs under grounded feet start to crumble.
         let mut stepped: Vec<(TilePosition, bool)> = Vec::new();
         for walker in walkers.iter().filter(|walker| walker.grounded) {
-            let row = tile_at(walker.feet.0, walker.feet.1 + 1.0).y;
+            let row = self.frame().tile_at(walker.feet.0, walker.feet.1 + 1.0).y;
             for x in [
-                tile_at(walker.bounds.left + 1.0, 0.0).x,
-                tile_at(walker.bounds.right - 1.0, 0.0).x,
+                self.frame().tile_at(walker.bounds.left + 1.0, 0.0).x,
+                self.frame().tile_at(walker.bounds.right - 1.0, 0.0).x,
             ] {
                 let tile = TilePosition { x, y: row };
                 if let Some((TrapKind::Crumble, hidden)) = self.trap_tile(tile)
@@ -419,14 +417,14 @@ impl WorldState {
             let _ = self.terrain.set_kind_by_rule(tile, TileKind::Air);
             output.push_event(GameplayEventKind::TombTrapSprung {
                 kind: TrapKind::Crumble,
-                x: ((tile.x as f32 + 0.5) * TILE_SIZE) as i32,
-                y: ((tile.y as f32 + 0.5) * TILE_SIZE) as i32,
+                x: ((self.frame().rel_col(tile.x) + 0.5) * TILE_SIZE) as i32,
+                y: ((self.frame().rel_row(tile.y) + 0.5) * TILE_SIZE) as i32,
             });
         }
         for slab in reforms {
             // Never set a slab inside someone standing in the hole.
-            let left = slab.tile.x as f32 * TILE_SIZE;
-            let top = slab.tile.y as f32 * TILE_SIZE;
+            let left = self.frame().rel_col(slab.tile.x) * TILE_SIZE;
+            let top = self.frame().rel_row(slab.tile.y) * TILE_SIZE;
             let cell = Bounds::new(left, top, left + TILE_SIZE, top + TILE_SIZE);
             let occupied = self.pilots().any(|(_, body, state)| {
                 cell.overlaps(&Bounds::new(
@@ -538,8 +536,8 @@ impl WorldState {
             self.entities.despawn(EntityId(old));
         }
         let at = (
-            (spawn.at.x as f32 + 0.5) * TILE_SIZE,
-            (spawn.at.y as f32 + 0.5) * TILE_SIZE,
+            (self.frame().rel_col(spawn.at.x) + 0.5) * TILE_SIZE,
+            (self.frame().rel_row(spawn.at.y) + 0.5) * TILE_SIZE,
         );
         let enemy = self.spawn_enemy_with(kind, at, tier, None, None);
         self.entities.update(enemy, |entity| {

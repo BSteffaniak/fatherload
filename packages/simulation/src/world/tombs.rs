@@ -107,25 +107,6 @@ pub const fn chest_holds_tomb_key(seed: u64, tile: TilePosition) -> bool {
 
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-#[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-fn tile_centre(tile: TilePosition) -> (f32, f32) {
-    (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
-    )
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
     reason = "event positions are whole world pixels"
 )]
 const fn px(value: f32) -> i32 {
@@ -357,7 +338,7 @@ impl WorldState {
             return;
         }
         for blast in blasts {
-            let centre = tile_at(blast.x, blast.y);
+            let centre = self.frame().tile_at(blast.x, blast.y);
             let reach = 3;
             let mut doors = Vec::new();
             for dy in -reach..=reach {
@@ -366,7 +347,7 @@ impl WorldState {
                         x: centre.x + dx,
                         y: centre.y + dy,
                     };
-                    let (tx, ty) = tile_centre(tile);
+                    let (tx, ty) = self.frame().tile_center(tile);
                     if (tx - blast.x).hypot(ty - blast.y) > SEAL_BLAST_REACH {
                         continue;
                     }
@@ -406,7 +387,7 @@ impl WorldState {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
         // The party: the opener first, then crewmates on foot near the door, in id order.
-        let (dx, dy) = tile_centre(door);
+        let (dx, dy) = self.frame().tile_center(door);
         let mut party = vec![player];
         let others: Vec<PlayerId> = self
             .pilots()
@@ -536,14 +517,15 @@ impl WorldState {
                 u32::try_from(hash2(seed, SALT_CACHE, guard.at.x, index as i32) & 0xFFFF)
                     .unwrap_or(0),
             );
-            let _ = self.spawn_enemy_with(kind, tile_centre(guard.at), tier, None, None);
+            let _ =
+                self.spawn_enemy_with(kind, self.frame().tile_center(guard.at), tier, None, None);
         }
         for (index, member) in members.iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a handful of members")]
             let shift = (index as f32) * 18.0;
-            let (x, _) = tile_centre(start);
+            let (x, _) = self.frame().tile_center(start);
             #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
-            let feet = (start.y + 1) as f32 * TILE_SIZE - 0.25;
+            let feet = self.frame().rel_row(start.y + 1) * TILE_SIZE - 0.25;
             self.move_pilot_to(*member, x + shift, feet);
             self.revive_if_downed(*member, None);
         }
@@ -558,7 +540,10 @@ impl WorldState {
     fn clear_slot_entities(&mut self, slot: u8) {
         let origin = tomb_sites::slot_origin(slot);
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let (left, top) = (origin.x as f32 * TILE_SIZE, origin.y as f32 * TILE_SIZE);
+        let (left, top) = (
+            self.frame().rel_col(origin.x) * TILE_SIZE,
+            self.frame().rel_row(origin.y) * TILE_SIZE,
+        );
         #[allow(clippy::cast_precision_loss, reason = "slot sizes are small")]
         let (right, bottom) = (
             left + tomb_sites::SLOT_SIZE.0 as f32 * TILE_SIZE,
@@ -998,7 +983,7 @@ impl WorldState {
                 continue;
             };
             let (x, y) = state.middle(body);
-            let tile = tile_at(x, y);
+            let tile = self.frame().tile_at(x, y);
             if let Some(room) = run.rooms.iter().find(|room| room.interior.contains(tile)) {
                 // The walls around, and the pits under the floor.
                 let mut rect = room.interior.expanded(1);
@@ -1030,7 +1015,7 @@ impl WorldState {
             .filter_map(|member| self.pilot_of(member.player))
             .map(|(_, body, state)| {
                 let (x, y) = state.middle(body);
-                tile_at(x, y)
+                self.frame().tile_at(x, y)
             })
             .collect();
         let mut sprung = Vec::new();
@@ -1073,7 +1058,7 @@ impl WorldState {
                 u32::try_from(hash2(seed, SALT_KEY, spawn.at.x, index as i32) & 0xFFFF)
                     .unwrap_or(0),
             );
-            let (x, y) = tile_centre(spawn.at);
+            let (x, y) = self.frame().tile_center(spawn.at);
             let enemy = self.spawn_enemy_with(kind, (x, y), tier, None, None);
             if spawn.role == SpawnRole::Boss {
                 self.entities.update(enemy, |entity| {
@@ -1139,10 +1124,19 @@ impl WorldState {
             let Some((pilot, body, state)) = self.pilot_of(member.player) else {
                 continue;
             };
-            let left = tile_at(body.x - crate::pilot::PILOT_HALF_WIDTH + 1.0, body.y).x;
-            let right = tile_at(body.x + crate::pilot::PILOT_HALF_WIDTH - 1.0, body.y).x;
-            let top = tile_at(body.x, body.y - state.height() + 1.0).y;
-            let bottom = tile_at(body.x, body.y - 1.0).y;
+            let left = self
+                .frame()
+                .tile_at(body.x - crate::pilot::PILOT_HALF_WIDTH + 1.0, body.y)
+                .x;
+            let right = self
+                .frame()
+                .tile_at(body.x + crate::pilot::PILOT_HALF_WIDTH - 1.0, body.y)
+                .x;
+            let top = self
+                .frame()
+                .tile_at(body.x, body.y - state.height() + 1.0)
+                .y;
+            let bottom = self.frame().tile_at(body.x, body.y - 1.0).y;
             let mut worst = 0.0_f32;
             for y in top..=bottom {
                 for x in left..=right {
@@ -1357,7 +1351,7 @@ impl WorldState {
             },
         );
         // Back outside, in front of the door.
-        let (x, feet) = Self::outside_spot(site, index);
+        let (x, feet) = Self::outside_spot(self.frame(), site, index);
         if self.players.contains_key(&player) {
             self.move_pilot_to(player, x, feet);
             if let Some((pilot, _, _)) = self.pilot_of(player) {
@@ -1385,20 +1379,24 @@ impl WorldState {
 
     /// Where member `index` stands outside `site` after a run: `(x, feet)`.
     #[must_use]
-    pub fn outside_spot(site: &TombSite, index: usize) -> (f32, f32) {
-        let (door_x, _) = tile_centre(site.door);
+    pub fn outside_spot(
+        frame: crate::position::Frame,
+        site: &TombSite,
+        index: usize,
+    ) -> (f32, f32) {
+        let (door_x, _) = frame.tile_center(site.door);
         #[allow(clippy::cast_precision_loss, reason = "a handful of members")]
         let step = index as f32 * 20.0;
         match site.style {
             SiteStyle::SideView => {
                 let outward: f32 = if site.mirrored { 1.0 } else { -1.0 };
                 #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
-                let feet = (site.door.y + 2) as f32 * TILE_SIZE - 0.25;
+                let feet = frame.rel_row(site.door.y + 2) * TILE_SIZE - 0.25;
                 (outward.mul_add(TILE_SIZE * 1.3 + step, door_x), feet)
             }
             SiteStyle::TopDown => {
                 #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
-                let feet = site.door.y as f32 * TILE_SIZE - 0.25;
+                let feet = frame.rel_row(site.door.y) * TILE_SIZE - 0.25;
                 let outward: f32 = if index.is_multiple_of(2) { 1.0 } else { -1.0 };
                 (outward.mul_add(step, door_x), feet)
             }
@@ -1423,7 +1421,10 @@ impl WorldState {
         if state.bounces >= bounces {
             return false;
         }
-        let (from, to) = (tile_at(last.0, last.1), tile_at(body.x, body.y));
+        let (from, to) = (
+            self.frame().tile_at(last.0, last.1),
+            self.frame().tile_at(body.x, body.y),
+        );
         let crossed_x = from.x != to.x
             && self
                 .terrain
@@ -1479,7 +1480,7 @@ impl WorldState {
         let mut output = TickOutput::default();
         let _ = self.unseal_tomb_site(site, None, &mut output);
         for (index, player) in party.iter().enumerate() {
-            let (x, feet) = Self::outside_spot(site, index);
+            let (x, feet) = Self::outside_spot(self.frame(), site, index);
             self.move_pilot_to(*player, x, feet);
         }
         let first = *party.first()?;

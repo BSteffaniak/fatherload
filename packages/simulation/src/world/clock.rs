@@ -10,7 +10,7 @@ use crate::{
     event::{GameplayEventKind, TickOutput},
     ids::{PlayerId, SimulationTick},
     summary::PlayerScopedCommandOutcome,
-    terrain::{TILE_SIZE, TileKind, TilePosition},
+    terrain::{TileKind, TilePosition},
 };
 
 use super::WorldState;
@@ -181,7 +181,7 @@ impl WorldState {
             if self.clock.sleepers.contains_key(player_id) {
                 continue;
             }
-            let rig = player.tile_position(TILE_SIZE);
+            let rig = player.tile_in(self.frame());
             light = light.max(falloff(rig, at, RIG_LIGHT_TILES, RIG_LIGHT));
         }
         // Helmet lamps of pilots on foot (WP-NIGHT open item).
@@ -191,7 +191,7 @@ impl WorldState {
             }
             let (px, py) = pilot.middle(body);
             light = light.max(falloff(
-                tile_from_pixels(px, py),
+                tile_from_pixels(self.frame(), px, py),
                 at,
                 crate::night::PILOT_LIGHT_TILES,
                 crate::night::PILOT_LIGHT,
@@ -414,11 +414,8 @@ impl WorldState {
     clippy::cast_possible_truncation,
     reason = "bounded world pixels address terrain tiles"
 )]
-fn tile_from_pixels(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
+fn tile_from_pixels(frame: crate::position::Frame, x: f32, y: f32) -> TilePosition {
+    frame.tile_at(x, y)
 }
 
 /// `level` at `source`, falling off linearly to nothing `reach` tiles away (integer).

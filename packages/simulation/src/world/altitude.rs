@@ -6,33 +6,14 @@
 //! step, so they replicate, predict and replay like any other event and need no saved state.
 
 use crate::{
-    environment::{environment_at, jet_stream_in_air},
+    environment::jet_stream_in_air,
     event::{GameplayEventKind, TickOutput},
     ids::PlayerId,
     sky::SkyBand,
-    terrain::TILE_SIZE,
     worldgen::sky::{updraft_at, vent_updraft_at},
 };
 
 use super::WorldState;
-
-/// The tile row of world pixel y `y`.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "pixel positions map to tiles"
-)]
-fn row(y: f32) -> i32 {
-    (y / TILE_SIZE).floor() as i32
-}
-
-/// The tile column of world pixel x `x`.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "pixel positions map to tiles"
-)]
-fn column(x: f32) -> i32 {
-    (x / TILE_SIZE).floor() as i32
-}
 
 impl WorldState {
     /// Pushes the altitude events of `player_id`'s move from `before` (world pixels) to where
@@ -52,6 +33,8 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
+        let frame = self.frame();
+        let (row, column) = (|y: f32| frame.row(y), |x: f32| frame.col(x));
         let (from_row, to_row) = (row(before.1), row(player.y));
         if from_row == to_row && column(before.0) == column(player.x) {
             return;
@@ -88,8 +71,11 @@ impl WorldState {
             output.push_event(GameplayEventKind::JetStreamCaught { player_id });
         }
         let gear = player.hazard_gear;
-        let cold_before = environment_at(settings, before.0, before.1).cold;
-        let cold_after = environment_at(settings, player.x, player.y).cold;
+        let frame = self.frame();
+        let cold_before =
+            crate::environment::environment_in(settings, frame, before.0, before.1).cold;
+        let cold_after =
+            crate::environment::environment_in(settings, frame, player.x, player.y).cold;
         if gear.cold_excess(cold_before) == 0 && gear.cold_excess(cold_after) > 0 {
             output.push_event(GameplayEventKind::RigIcing { player_id });
         }

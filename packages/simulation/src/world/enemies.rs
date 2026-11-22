@@ -49,7 +49,7 @@ use crate::{
     enemy::{
         AttackStyle, Damage, DamageKind, DamageOutcome, DamageSource, EnemyDifficulty,
         EnemyDirector, EnemyKind, EnemyMode, EnemyShotState, EnemyState, Locomotion, ShotKind,
-        band_roster, hazard_density, lair_occupant, loot, tier_scale, tile_centre,
+        band_roster, hazard_density, lair_occupant, loot, tier_scale,
     },
     entity::{Body, Entity, EntityId, EntityKind, EntityState},
     event::{GameplayEventKind, TickOutput},
@@ -213,18 +213,6 @@ const SALT_SEED: u64 = 0xE7E1_0006;
 struct Intent {
     goal: Option<(f32, f32)>,
     speed: f32,
-}
-
-/// The tile holding world pixel `(x, y)`.
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "world pixels saturate into tile coordinates"
-)]
-fn tile_of(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
 }
 
 /// Unit vector from `from` to `to` and the distance (straight up for coincident points).
@@ -395,7 +383,7 @@ impl WorldState {
     /// Spawns an enemy of `kind` centred at world pixel `(x, y)`, at the depth tier of that
     /// spot (scenario setup and tests; gameplay spawns through the director).
     pub fn spawn_enemy(&mut self, kind: EnemyKind, x: f32, y: f32) -> EntityId {
-        let tier = self.tier_at(tile_of(x, y));
+        let tier = self.tier_at(self.frame().tile_at(x, y));
         self.spawn_enemy_with(kind, (x, y), tier, None, None)
     }
 
@@ -440,7 +428,7 @@ impl WorldState {
                 })
                 .unwrap_or((x, y))
         };
-        let home = tile_of(x, y);
+        let home = self.frame().tile_at(x, y);
         let seed = u32::try_from(
             hash2(
                 self.terrain.seed(),
@@ -476,7 +464,7 @@ impl WorldState {
     fn rig_tiles(&self) -> Vec<(PlayerId, TilePosition)> {
         self.players
             .iter()
-            .map(|(id, player)| (*id, tile_of(player.x, player.y)))
+            .map(|(id, player)| (*id, self.frame().tile_at(player.x, player.y)))
             .collect()
     }
 
@@ -530,7 +518,7 @@ impl WorldState {
             // A tomb floor's creatures (WP-TOMBS) stay however far the party walks: the floor
             // is wider than the despawn reach, and a guardian that vanished would count as
             // felled. Floors clear their own slot when they change or the run ends.
-            .filter(|entity| !self.in_run_space(tile_of(entity.body.x, entity.body.y)))
+            .filter(|entity| !self.in_run_space(self.frame().tile_at(entity.body.x, entity.body.y)))
             .map(|entity| entity.id)
             .collect();
         if !far.is_empty() {
@@ -559,7 +547,7 @@ impl WorldState {
                 continue;
             }
             let tier = self.tier_at(*tile);
-            let (cx, cy) = tile_centre(tile.x, tile.y);
+            let (cx, cy) = self.frame().centre_of(tile.x, tile.y);
             let local = self
                 .enemies_near(cx, cy, LOCAL_RADIUS_TILES * TILE_SIZE)
                 .len();
@@ -653,7 +641,7 @@ impl WorldState {
     /// open space there (nothing spawns inside rock; a burrower digs its den out of the soft
     /// tile it appears in, see [`Self::spawn_enemy_with`]).
     pub(super) fn site_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
-        let (x, y) = Self::spawn_point(kind, tile);
+        let (x, y) = Self::spawn_point(self.frame(), kind, tile);
         self.habitat_fits(kind, tile)
             && (matches!(kind.stats().locomotion, Locomotion::Burrowing)
                 || !physics::collides(&self.terrain, x, y, kind.stats().radius))
@@ -785,13 +773,17 @@ impl WorldState {
     }
 
     /// The body centre of an enemy of `kind` standing in (or swimming through) `tile`.
-    pub(super) fn spawn_point(kind: EnemyKind, tile: TilePosition) -> (f32, f32) {
+    pub(super) fn spawn_point(
+        frame: crate::position::Frame,
+        kind: EnemyKind,
+        tile: TilePosition,
+    ) -> (f32, f32) {
         let spec = kind.stats();
-        let (x, y) = tile_centre(tile.x, tile.y);
+        let (x, y) = frame.centre_of(tile.x, tile.y);
         match spec.locomotion {
             Locomotion::Walking | Locomotion::Stationary => {
                 #[allow(clippy::cast_precision_loss, reason = "tile rows are small")]
-                let floor = (tile.y + 1) as f32 * TILE_SIZE;
+                let floor = frame.rel_row(tile.y + 1) * TILE_SIZE;
                 (x, floor - spec.radius - 1.0)
             }
             Locomotion::Flying | Locomotion::Burrowing => (x, y),
@@ -816,7 +808,7 @@ impl WorldState {
             } else {
                 site
             };
-            let point = Self::spawn_point(kind, tile);
+            let point = Self::spawn_point(self.frame(), kind, tile);
             let _id = self.spawn_enemy_with(kind, point, tier, None, None);
         }
     }
@@ -869,7 +861,7 @@ impl WorldState {
                     let tier = self.tier_at(site);
                     let _id = self.spawn_enemy_with(
                         kind,
-                        Self::spawn_point(kind, site),
+                        Self::spawn_point(self.frame(), kind, site),
                         tier,
                         Some(chunk),
                         None,
@@ -887,7 +879,7 @@ impl WorldState {
                                 y: site.y - 2,
                             };
                             let tile = if self.air(tile) { tile } else { site };
-                            let point = Self::spawn_point(escort, tile);
+                            let point = Self::spawn_point(self.frame(), escort, tile);
                             let _escort = self.spawn_enemy_with(escort, point, tier, None, None);
                         }
                     }
@@ -1032,7 +1024,7 @@ impl WorldState {
             if best.is_some_and(|(nearest, _)| nearest <= distance) {
                 continue;
             }
-            if self.hostile_safe_zone(Some(state.kind), tile_of(x, y)) {
+            if self.hostile_safe_zone(Some(state.kind), self.frame().tile_at(x, y)) {
                 continue;
             }
             let seen = distance <= sight
@@ -1062,8 +1054,8 @@ impl WorldState {
         let longest = (hearing_tiles * SOUND_PATH_STRETCH).ceil().max(1.0) as usize;
         physics::find_tile_path(
             &self.terrain,
-            tile_of(from.0, from.1),
-            tile_of(to.0, to.1),
+            self.frame().tile_at(from.0, from.1),
+            self.frame().tile_at(to.0, to.1),
             PATH_NODES,
         )
         .is_some_and(|path| path.len() <= longest)
@@ -1209,7 +1201,7 @@ impl WorldState {
         let spec = state.kind.stats();
         let noticed = self.perceive(body, state);
         let noticed = self.sky_notice(id, body, state, noticed, output);
-        let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
+        let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
         let leashed = spec.leash_tiles > 0.0
             && (body.x - home_x).hypot(body.y - home_y) > spec.leash_tiles * TILE_SIZE;
         match (state.mode, noticed) {
@@ -1229,7 +1221,9 @@ impl WorldState {
                 }
                 let target_safe = self
                     .rig_position(state.target, (body.x, body.y))
-                    .is_none_or(|(x, y)| self.hostile_safe_zone(Some(state.kind), tile_of(x, y)));
+                    .is_none_or(|(x, y)| {
+                        self.hostile_safe_zone(Some(state.kind), self.frame().tile_at(x, y))
+                    });
                 let forgotten = now.get().saturating_sub(state.last_seen.get())
                     > self.timing.ticks_for_millis(LOSE_TARGET_MILLIS);
                 if (leashed || target_safe || forgotten) && state.mode == EnemyMode::Chase {
@@ -1246,7 +1240,7 @@ impl WorldState {
         }
         // An enemy that strayed into a safe zone turns back.
         if state.mode == EnemyMode::Chase
-            && self.hostile_safe_zone(Some(state.kind), tile_of(body.x, body.y))
+            && self.hostile_safe_zone(Some(state.kind), self.frame().tile_at(body.x, body.y))
         {
             state.mode = EnemyMode::Return;
             state.target = None;
@@ -1264,7 +1258,7 @@ impl WorldState {
         output: &mut TickOutput,
     ) -> Intent {
         let spec = state.kind.stats();
-        let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
+        let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
         let target = self.rig_position(state.target, (body.x, body.y));
         let cooldown = self.attack_cooldown_millis(state.kind);
         match state.mode {
@@ -1537,7 +1531,7 @@ impl WorldState {
     /// Idle drifting near home (flyers and burrowers) or pacing (walkers).
     fn wander(&self, body: &Body, state: &mut EnemyState, now: SimulationTick) -> Intent {
         let spec = state.kind.stats();
-        let (home_x, home_y) = tile_centre(state.home.0, state.home.1);
+        let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
         let period = self.timing.ticks_for_millis(2_500).max(1);
         let phase = now.get() / period;
         let hash = hash2(
@@ -1639,12 +1633,12 @@ impl WorldState {
         }
         // Follow a waypoint until it is reached or goes stale (no line test per tick while
         // pathing).
-        let here = tile_of(body.x, body.y);
+        let here = self.frame().tile_at(body.x, body.y);
         if let Some(waypoint) = state.waypoint {
             if waypoint == (here.x, here.y) || now >= state.next_path {
                 state.waypoint = None;
             } else {
-                return tile_centre(waypoint.0, waypoint.1);
+                return self.frame().centre_of(waypoint.0, waypoint.1);
             }
         }
         if physics::line_clear(&self.terrain, body.x, body.y, goal.0, goal.1) {
@@ -1652,7 +1646,7 @@ impl WorldState {
         }
         if (now.get() + id.get()).is_multiple_of(PATH_SLOT_TICKS) && now >= state.next_path {
             state.next_path = self.after(now, PATH_RETRY_MILLIS);
-            let to = tile_of(goal.0, goal.1);
+            let to = self.frame().tile_at(goal.0, goal.1);
             if let Some(path) = physics::find_tile_path(&self.terrain, here, to, PATH_NODES) {
                 // Cut corners: the farthest of the next few path tiles in clear line.
                 let next = path
@@ -1660,13 +1654,13 @@ impl WorldState {
                     .take(8)
                     .rev()
                     .find(|tile| {
-                        let (x, y) = tile_centre(tile.x, tile.y);
+                        let (x, y) = self.frame().centre_of(tile.x, tile.y);
                         physics::line_clear(&self.terrain, body.x, body.y, x, y)
                     })
                     .or_else(|| path.first());
                 if let Some(next) = next {
                     state.waypoint = Some((next.x, next.y));
-                    return tile_centre(next.x, next.y);
+                    return self.frame().centre_of(next.x, next.y);
                 }
             }
         }
@@ -1750,7 +1744,9 @@ impl WorldState {
     /// ([`Self::bite_due`]).
     fn dig_ahead(&mut self, body: &Body, side: f32) {
         let radius = EnemyKind::RogueExcavator.stats().radius;
-        let ahead = tile_of(side.mul_add(radius + 6.0, body.x), body.y);
+        let ahead = self
+            .frame()
+            .tile_at(side.mul_add(radius + 6.0, body.x), body.y);
         for dy in [0, -1] {
             let position = TilePosition {
                 x: ahead.x,
@@ -1844,8 +1840,8 @@ impl WorldState {
         reason = "world pixels saturate into tile coordinates; tile coordinates are small"
     )]
     fn bite_box(&mut self, kind: EnemyKind, (x, y): (f32, f32), radius: f32) -> bool {
-        let low = tile_of(x - radius, y - radius);
-        let high = tile_of(x + radius, y + radius);
+        let low = self.frame().tile_at(x - radius, y - radius);
+        let high = self.frame().tile_at(x + radius, y + radius);
         let mut nearest: Option<(f32, TilePosition)> = None;
         for ty in low.y..=high.y {
             for tx in low.x..=high.x {
@@ -1858,7 +1854,7 @@ impl WorldState {
                 {
                     continue;
                 }
-                let (cx, cy) = tile_centre(tx, ty);
+                let (cx, cy) = self.frame().centre_of(tx, ty);
                 let distance = (cx - x).hypot(cy - y);
                 if nearest.is_none_or(|(best, _)| distance < best) {
                     nearest = Some((distance, position));
@@ -1876,8 +1872,8 @@ impl WorldState {
         reason = "world pixels saturate into tile coordinates"
     )]
     fn dig_box(&mut self, kind: EnemyKind, (x, y): (f32, f32), radius: f32) -> bool {
-        let low = tile_of(x - radius, y - radius);
-        let high = tile_of(x + radius, y + radius);
+        let low = self.frame().tile_at(x - radius, y - radius);
+        let high = self.frame().tile_at(x + radius, y + radius);
         let mut dug = false;
         for ty in low.y..=high.y {
             for tx in low.x..=high.x {
@@ -2102,7 +2098,9 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return false;
         };
-        if player.hull <= 0.0 || self.hostile_safe_zone(Some(kind), tile_of(player.x, player.y)) {
+        if player.hull <= 0.0
+            || self.hostile_safe_zone(Some(kind), self.frame().tile_at(player.x, player.y))
+        {
             return false;
         }
         let guard = self.after(now, RIG_GUARD_MILLIS);
@@ -2240,7 +2238,13 @@ impl WorldState {
         body.previous_x = body.x;
         body.previous_y = body.y;
         let gravity = shot.kind.gravity()
-            * crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+            * crate::environment::environment_in(
+                self.terrain.settings(),
+                self.frame(),
+                body.x,
+                body.y,
+            )
+            .gravity;
         body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y));
         // Substeps of at most four pixels so fast bolts never skip a thin wall or a rig.
         let travel = (body.velocity_x.abs().max(body.velocity_y.abs()) * dt).max(1.0);

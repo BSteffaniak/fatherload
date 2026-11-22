@@ -10,7 +10,6 @@ use crate::{
     item::ItemKind,
     milestone::{Milestone, MilestoneFacts},
     service::SessionServiceRequest,
-    terrain::TILE_SIZE,
 };
 
 use super::WorldState;
@@ -86,7 +85,7 @@ impl WorldState {
             let Some(player) = self.players.get(&player_id) else {
                 continue;
             };
-            let position = player.tile_position(TILE_SIZE);
+            let position = player.tile_in(self.frame());
             // The heightmap and band lookups run only when a record could move: a row deeper
             // than the depth record, or flight above the classic surface row (row 0, below
             // every mountain top) for the altitude record. Most ticks skip both.
@@ -170,7 +169,7 @@ mod tests {
             .expect("shop");
         let rig = world.player_mut(PLAYER).expect("player");
         #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-        let x = (building.tile_x as f32 + 2.5) * TILE_SIZE;
+        let x = (crate::position::Frame::FIXED.rel_col(building.tile_x) + 2.5) * TILE_SIZE;
         rig.x = x;
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
@@ -239,7 +238,7 @@ mod tests {
         let row = world.terrain().scaled_row(100);
         let rig = world.player_mut(PLAYER).expect("player");
         #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-        let y = (row as f32 + 0.5) * TILE_SIZE;
+        let y = (crate::position::Frame::FIXED.rel_row(row) + 0.5) * TILE_SIZE;
         rig.y = y;
         let events = idle(&mut world);
         let milestones = earned(&events);

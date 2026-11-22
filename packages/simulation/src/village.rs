@@ -135,19 +135,22 @@ impl Village {
     /// the lot's columns and standing (or hovering low) on the village ground.
     #[must_use]
     pub fn building_at_pixel(&self, x: f32, y: f32) -> Option<usize> {
-        #[allow(
-            clippy::cast_precision_loss,
-            reason = "village rows are small; the door band is a few tiles"
-        )]
-        let ground = self.ground_row as f32 * TILE_SIZE;
+        self.building_at_local(crate::position::Frame::FIXED, x, y)
+    }
+
+    /// [`Self::building_at_pixel`] for local pixel `(x, y)` of a world in `frame` (F7).
+    #[must_use]
+    pub fn building_at_local(
+        &self,
+        frame: crate::position::Frame,
+        x: f32,
+        y: f32,
+    ) -> Option<usize> {
+        let ground = frame.row_px(self.ground_row);
         if y > ground || y < DOOR_REACH_TILES.mul_add(-TILE_SIZE, ground) {
             return None;
         }
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "world pixel columns fit an i32 within the streamed limit"
-        )]
-        let column = (x / TILE_SIZE).floor() as i32;
+        let column = frame.col(x);
         self.buildings
             .iter()
             .position(|building| building.enterable() && building.contains_column(column))
@@ -308,16 +311,19 @@ pub fn village_at(settings: &WorldSettings, position: TilePosition) -> Option<Ar
 /// `(village, building index)`.
 #[must_use]
 pub fn building_at(settings: &WorldSettings, x: f32, y: f32) -> Option<(Arc<Village>, usize)> {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "world pixel positions fit an i32 tile within the streamed limit"
-    )]
-    let position = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
-    let village = village_at(settings, position)?;
-    let building = village.building_at_pixel(x, y)?;
+    building_in(settings, crate::position::Frame::FIXED, x, y)
+}
+
+/// [`building_at`] for local pixel `(x, y)` of a world in `frame` (F7).
+#[must_use]
+pub fn building_in(
+    settings: &WorldSettings,
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> Option<(Arc<Village>, usize)> {
+    let village = village_at(settings, frame.tile_at(x, y))?;
+    let building = village.building_at_local(frame, x, y)?;
     Some((village, building))
 }
 

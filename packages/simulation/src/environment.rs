@@ -453,6 +453,19 @@ pub(crate) fn with_still_air<T>(body: impl FnOnce() -> T) -> T {
     result
 }
 
+/// [`environment_at`] for local pixel `(x, y)` of a world in `frame` (F7: the world's
+/// positions are relative to its frame; the fields are a function of absolute place).
+#[must_use]
+pub fn environment_in(
+    settings: &WorldSettings,
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> Environment {
+    let (x, y) = frame.legacy_px(x, y);
+    environment_at(settings, x, y)
+}
+
 /// The environment at world pixel `(x, y)` (see the module docs). [`Environment::STANDARD`]
 /// on generators without a sky and below [`STANDARD_BELOW_ROWS`].
 #[must_use]

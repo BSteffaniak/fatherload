@@ -91,7 +91,7 @@ impl WorldState {
             let Some(tile) = self
                 .players
                 .get(&player_id)
-                .map(|player| player.tile_position(TILE_SIZE))
+                .map(|player| player.tile_in(self.frame()))
             else {
                 continue;
             };
@@ -102,7 +102,7 @@ impl WorldState {
                     y: tile.y - up,
                 })
                 .find(|candidate| {
-                    let (x, y) = tile_centre(*candidate);
+                    let (x, y) = self.frame().tile_center(*candidate);
                     !authoritative_player_collides(&self.terrain, x, y)
                 });
             let target = open.unwrap_or_else(|| {
@@ -119,8 +119,8 @@ impl WorldState {
                 target
             });
             self.set_active_drill(player_id, None);
+            let (x, y) = self.frame().tile_center(target);
             if let Some(player) = self.players.get_mut(&player_id) {
-                let (x, y) = tile_centre(target);
                 player.x = x;
                 player.x_remainder = 0.0;
                 player.y = y;
@@ -129,16 +129,4 @@ impl WorldState {
             }
         }
     }
-}
-
-/// The centre of `tile` in world pixels.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "small tile coordinates convert to pixels"
-)]
-fn tile_centre(tile: TilePosition) -> (f32, f32) {
-    (
-        TILE_SIZE.mul_add(tile.x as f32, TILE_SIZE * 0.5),
-        TILE_SIZE.mul_add(tile.y as f32, TILE_SIZE * 0.5),
-    )
 }

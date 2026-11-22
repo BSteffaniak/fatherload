@@ -83,6 +83,7 @@ impl BodyParams {
     /// [`Self::in_environment`] at world pixel `(x, y)` of `terrain`'s world.
     #[must_use]
     pub fn at(self, terrain: &Terrain, x: f32, y: f32) -> Self {
+        let (x, y) = terrain.frame().legacy_px(x, y);
         self.in_environment(&crate::environment::environment_at(
             terrain.settings(),
             x,
@@ -99,10 +100,7 @@ impl BodyParams {
     reason = "bounded world coordinates address terrain"
 )]
 pub fn solid_at(terrain: &Terrain, x: f32, y: f32) -> bool {
-    let position = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
+    let position = terrain.frame().tile_at(x, y);
     if !terrain.contains_column(position.x) || position.y >= terrain.height() {
         return true;
     }
@@ -420,25 +418,21 @@ fn ray_clear(
 ) -> bool {
     let distance = (end_x - x).hypot(end_y - y);
     let steps = (distance / 3.0).ceil().max(1.0) as u32;
-    let origin = (
-        (x / TILE_SIZE).floor() as i32,
-        (y / TILE_SIZE).floor() as i32,
-    );
-    let centre = |tile: i32| (tile as f32 + 0.5) * TILE_SIZE;
+    let frame = terrain.frame();
+    let origin = (frame.col(x), frame.row(y));
+    let centre_x = |tile: i32| (frame.rel_col(tile) + 0.5) * TILE_SIZE;
+    let centre_y = |tile: i32| (frame.rel_row(tile) + 0.5) * TILE_SIZE;
     let mut previous = origin;
     (1..=steps).all(|step| {
         let t = step as f32 / steps as f32;
         let px = (end_x - x).mul_add(t, x);
         let py = (end_y - y).mul_add(t, y);
-        let tile = (
-            (px / TILE_SIZE).floor() as i32,
-            (py / TILE_SIZE).floor() as i32,
-        );
+        let tile = (frame.col(px), frame.row(py));
         let squeezed = sealed_corners
             && tile.0 != previous.0
             && tile.1 != previous.1
-            && solid_at(terrain, centre(tile.0), centre(previous.1))
-            && solid_at(terrain, centre(previous.0), centre(tile.1));
+            && solid_at(terrain, centre_x(tile.0), centre_y(previous.1))
+            && solid_at(terrain, centre_x(previous.0), centre_y(tile.1));
         previous = tile;
         !squeezed && (tile == origin || !solid_at(terrain, px, py))
     })

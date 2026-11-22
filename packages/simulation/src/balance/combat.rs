@@ -216,9 +216,14 @@ fn top_up_hull(world: &mut WorldState) -> f32 {
 }
 
 /// Where an enemy of `kind` starts in the arena with floor row `floor` and centre `centre_x`.
-fn spawn_point(kind: EnemyKind, floor: i32, centre_x: i32) -> (f32, f32) {
+fn spawn_point(
+    frame: crate::position::Frame,
+    kind: EnemyKind,
+    floor: i32,
+    centre_x: i32,
+) -> (f32, f32) {
     let stats = kind.stats();
-    let x = (centre_x as f32 + 4.5) * TILE_SIZE;
+    let x = (frame.rel_col(centre_x) + 4.5) * TILE_SIZE;
     let floor_y = floor as f32 * TILE_SIZE;
     match stats.locomotion {
         Locomotion::Flying => (x, floor_y - 4.0 * TILE_SIZE),
@@ -252,7 +257,7 @@ pub fn duel(
             let _ = rig.stow(AmmoKind::Rocket.item(), 400);
         }
     }
-    let (x, y) = spawn_point(kind, floor, centre_x);
+    let (x, y) = spawn_point(world.frame(), kind, floor, centre_x);
     let id = world.spawn_enemy(kind, x, y);
     let health = enemy_health(&world, id).map_or(0.0, |(health, shield, _)| health + shield);
     let _ = top_up_hull(&mut world);
@@ -513,6 +518,7 @@ pub fn exposure(seed: u64, band: Band, seconds: u32, tick_rate_hz: u32) -> Optio
         &WorldSettings::new(seed),
         SimulationParams::new(tick_rate_hz),
     );
+    let frame = world.frame();
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
     let x = quiet_column(&world);
     let top = band_top(&world, x, band)? + 1;
@@ -528,8 +534,8 @@ pub fn exposure(seed: u64, band: Band, seconds: u32, tick_rate_hz: u32) -> Optio
     let (drill, hull_level) = band_gear(band);
     {
         let rig = world.player_mut(BOT_PLAYER)?;
-        rig.x = (x as f32 + 0.5) * TILE_SIZE;
-        rig.y = (top + 1) as f32 * TILE_SIZE - 11.0;
+        rig.x = (frame.rel_col(x) + 0.5) * TILE_SIZE;
+        rig.y = frame.rel_row(top + 1) * TILE_SIZE - 11.0;
         rig.fuel_capacity = 100_000.0;
         rig.fuel = 100_000.0;
         rig.cargo_capacity = 10_000;
@@ -547,7 +553,7 @@ pub fn exposure(seed: u64, band: Band, seconds: u32, tick_rate_hz: u32) -> Optio
         let Some(rig) = world.player(BOT_PLAYER) else {
             break;
         };
-        let column_x = (x as f32 + 0.5) * TILE_SIZE;
+        let column_x = (frame.rel_col(x) + 0.5) * TILE_SIZE;
         let grounded = DrillContact::of(world.terrain(), rig).grounded;
         let horizontal = ((column_x - rig.x) / (TILE_SIZE * 0.6)).clamp(-1.0, 1.0) * 0.4;
         let controls = ControlState::new(horizontal, rig.velocity_y > 230.0, grounded);
@@ -571,7 +577,7 @@ pub fn exposure(seed: u64, band: Band, seconds: u32, tick_rate_hz: u32) -> Optio
         } else {
             result.hazard += lost;
         }
-        result.rows = rig.tile_position(TILE_SIZE).y - top;
+        result.rows = rig.tile_in(world.frame()).y - top;
     }
     Some(result)
 }

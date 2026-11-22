@@ -467,6 +467,30 @@ pub fn vacuum_at(settings: &crate::worldgen::WorldSettings, x: f32, y: f32) -> b
         .is_some_and(|layout| layout.pressurized(tile_x, tile_y))
 }
 
+/// [`vacuum_at`] for local pixel `(x, y)` of a world in `frame` (F7).
+#[must_use]
+pub fn vacuum_in(
+    settings: &crate::worldgen::WorldSettings,
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> bool {
+    let (x, y) = frame.legacy_px(x, y);
+    vacuum_at(settings, x, y)
+}
+
+/// [`sheltered_at`] for local pixel `(x, y)` of a world in `frame` (F7).
+#[must_use]
+pub fn sheltered_in(
+    settings: &crate::worldgen::WorldSettings,
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> bool {
+    let (x, y) = frame.legacy_px(x, y);
+    sheltered_at(settings, x, y)
+}
+
 /// Whether world pixel `(x, y)` is sheltered from the cold of space.
 ///
 /// That is inside the lunar colony's pressurized, heated rooms or behind the alien facility's

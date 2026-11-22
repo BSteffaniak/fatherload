@@ -63,25 +63,6 @@ const PATH_START: u8 = 4;
 
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-#[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-fn tile_centre(tile: TilePosition) -> (f32, f32) {
-    (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
-    )
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
     reason = "bounded world positions become event pixels"
 )]
 const fn px(value: f32) -> i32 {
@@ -115,7 +96,7 @@ impl WorldState {
                 aim.0.mul_add(travelled, from.0),
                 aim.1.mul_add(travelled, from.1),
             );
-            let tile = tile_at(point.0, point.1);
+            let tile = self.frame().tile_at(point.0, point.1);
             if pilot_blocks(&self.terrain, tile) && self.terrain.tile(tile).is_some() {
                 return Some((quantize(last.0), quantize(last.1)));
             }
@@ -232,7 +213,7 @@ impl WorldState {
                 // The hook holds while the rock it bit (just beyond the anchor) stands.
                 let held = (-1..=1).any(|dy| {
                     (-1..=1).any(|dx| {
-                        let tile = tile_at(rope.anchor_x, rope.anchor_y);
+                        let tile = self.frame().tile_at(rope.anchor_x, rope.anchor_y);
                         self.terrain.is_solid_at(TilePosition {
                             x: tile.x + dx,
                             y: tile.y + dy,
@@ -268,8 +249,8 @@ impl WorldState {
         let (_, body, state) = self.pilot_of(player_id)?;
         let player = self.players.get(&player_id)?;
         let (mx, my) = state.middle(body);
-        let start = tile_at(player.x, player.y);
-        let goal = tile_at(mx, my);
+        let start = self.frame().tile_at(player.x, player.y);
+        let goal = self.frame().tile_at(mx, my);
         if (goal.x - start.x).abs() > RECALL_MAX_TILES
             || (goal.y - start.y).abs() > RECALL_MAX_TILES
         {
@@ -344,7 +325,7 @@ impl WorldState {
         if path.len() < 2 {
             return Some((mx, my));
         }
-        let here = tile_centre(start);
+        let here = self.frame().tile_center(start);
         let next = path[1];
         // Line up across the direction of travel first (centred in the corridor), so the rig
         // never clips a corner; along it, head straight for the next tile.
@@ -360,7 +341,7 @@ impl WorldState {
                 (here.0, player.y)
             });
         }
-        Some(tile_centre(next))
+        Some(self.frame().tile_center(next))
     }
 
     /// [`PilotAction::RecallRig`]: the rig flies itself over (or the recall is called off).
@@ -516,8 +497,8 @@ impl WorldState {
     #[must_use]
     pub fn pilot_sheltered(&self, x: f32, y: f32) -> bool {
         let settings = self.terrain.settings();
-        let tile = tile_at(x, y);
-        if crate::moon::sheltered_at(settings, x, y) || self.in_lunar_habitat(tile) {
+        let tile = self.frame().tile_at(x, y);
+        if crate::moon::sheltered_in(settings, self.frame(), x, y) || self.in_lunar_habitat(tile) {
             return true;
         }
         if tile.y >= 0 {
@@ -555,12 +536,12 @@ impl WorldState {
         let (mx, my) = state.middle(body);
         let sheltered = settings.generator.has_sky() && self.pilot_sheltered(mx, my);
         let cold = if settings.generator.has_sky() && !sheltered {
-            crate::environment::environment_at(settings, mx, my).cold
+            crate::environment::environment_in(settings, self.frame(), mx, my).cold
         } else {
             0
         };
         let cold_excess = cold.saturating_sub(state.gear.cold_cover());
-        let tile = tile_at(mx, my);
+        let tile = self.frame().tile_at(mx, my);
         // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault.
         let heat = if tile.y > 0 && !self.in_run_space(tile) {
             crate::protection::band_heat_level(crate::worldgen::band_at(settings, tile.x, tile.y))

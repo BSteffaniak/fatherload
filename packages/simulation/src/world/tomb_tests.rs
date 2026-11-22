@@ -82,7 +82,7 @@ fn use_button(world: &mut WorldState, player: PlayerId) -> Vec<GameplayEventKind
 
 /// Puts `player`'s pilot out in front of `site`'s door.
 fn at_the_door(world: &mut WorldState, player: PlayerId, site: &TombSite, index: usize) {
-    let (x, feet) = WorldState::outside_spot(site, index);
+    let (x, feet) = WorldState::outside_spot(world.frame(), site, index);
     if world.pilot_of(player).is_some() {
         let id = world.pilot_of(player).expect("pilot").0;
         world.edit_pilot(id, |body, _| {

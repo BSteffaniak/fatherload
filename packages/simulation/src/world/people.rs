@@ -207,11 +207,10 @@ impl WorldState {
             None => outdoor_reach(self.npc_body(entity.body, &state), x, y),
             Some(lot) => {
                 state.character.village != TOWN_VILLAGE
-                    && village::building_at(self.terrain.settings(), x, y).is_some_and(
-                        |(found, building)| {
+                    && village::building_in(self.terrain.settings(), self.frame(), x, y)
+                        .is_some_and(|(found, building)| {
                             found.id == state.character.village && building == usize::from(lot)
-                        },
-                    )
+                        })
             }
         }
     }
@@ -258,10 +257,7 @@ impl WorldState {
                 clippy::cast_possible_truncation,
                 reason = "world pixels fit tiles in i32 within the streamed limit"
             )]
-            let (column, row) = (
-                (x / TILE_SIZE).floor() as i32,
-                (y / TILE_SIZE).floor() as i32,
-            );
+            let (column, row) = (self.frame().col(x), self.frame().row(y));
             let reach = margin + 80;
             let mut ids: Vec<VillageId> =
                 village::villages_between(&settings, column - reach, column + reach)
@@ -359,10 +355,10 @@ impl WorldState {
                 let column = settlement.place_column(stop.place);
                 let spread = i32::try_from(index % 5).unwrap_or(0) - 2;
                 let (x, inside) = match stop.place {
-                    Place::Inside(lot) => (column_px(column), u8::try_from(lot).ok()),
+                    Place::Inside(lot) => (column_px(self.frame(), column), u8::try_from(lot).ok()),
                     Place::Outside { roam, .. } => {
                         let shift = spread * i32::from(roam.min(2));
-                        (column_px(column + shift), None)
+                        (column_px(self.frame(), column + shift), None)
                     }
                 };
                 let state = NpcState {
@@ -381,7 +377,7 @@ impl WorldState {
                     site: None,
                 };
                 self.spawn_entity(
-                    Body::at(x, ground_px(settlement.ground_row)),
+                    Body::at(x, ground_px(self.frame(), settlement.ground_row)),
                     EntityState::Npc(state),
                     None,
                 );
@@ -437,7 +433,7 @@ impl WorldState {
                 Place::Inside(lot) => u8::try_from(lot).ok(),
                 Place::Outside { .. } => None,
             };
-            let anchor = column_px(settlement.place_column(stop.place));
+            let anchor = column_px(self.frame(), settlement.place_column(stop.place));
             let roam = match stop.place {
                 Place::Outside { roam, .. } => f32::from(roam) * TILE_SIZE,
                 Place::Inside(_) => 0.0,
@@ -472,7 +468,7 @@ impl WorldState {
                     let door = settlement
                         .lots
                         .get(usize::from(inside))
-                        .map_or(anchor, |lot| column_px(lot.door_column()));
+                        .map_or(anchor, |lot| column_px(self.frame(), lot.door_column()));
                     next.inside = None;
                     next.going_inside = None;
                     next.stand(door, next_tick);
@@ -1252,14 +1248,14 @@ fn outdoor_reach(body: Body, x: f32, y: f32) -> bool {
     clippy::cast_precision_loss,
     reason = "columns fit f32 within the streamed limit"
 )]
-fn column_px(column: i32) -> f32 {
-    (column as f32 + 0.5) * TILE_SIZE
+fn column_px(frame: crate::position::Frame, column: i32) -> f32 {
+    (frame.rel_col(column) + 0.5) * TILE_SIZE
 }
 
 /// World pixel of the top of row `row` (where feet stand on the first solid row).
 #[allow(clippy::cast_precision_loss, reason = "rows are small")]
-fn ground_px(row: i32) -> f32 {
-    row as f32 * TILE_SIZE
+fn ground_px(frame: crate::position::Frame, row: i32) -> f32 {
+    frame.rel_row(row) * TILE_SIZE
 }
 
 /// A position rounded to whole pixels (strolls end on clean positions).

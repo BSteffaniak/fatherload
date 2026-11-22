@@ -134,7 +134,7 @@ impl WorldState {
                 if !self.terrain.set_kind(tile, TileKind::Air) {
                     return false;
                 }
-                let (x, y) = crate::enemy::tile_centre(tile.x, tile.y);
+                let (x, y) = self.frame().centre_of(tile.x, tile.y);
                 for (index, stack) in (0_u8..).zip(relic_loot(self.terrain.seed(), tile)) {
                     let spread = (f32::from(index % 4) - 1.5) * 40.0;
                     let _drop = self.spawn_loot(x, y, (spread, -140.0), stack, None);

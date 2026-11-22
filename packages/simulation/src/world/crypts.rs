@@ -54,24 +54,6 @@ pub const PIT_FALL_SHARE: f32 = 0.18;
 /// Most crypt boulders and arrows in flight at once.
 const MAX_CRYPT_SHOTS: usize = 40;
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-fn tile_centre(tile: TilePosition) -> (f32, f32) {
-    (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
-    )
-}
-
 /// A standing crypt member this tick.
 #[derive(Clone, Copy, Debug)]
 struct Walker {
@@ -159,15 +141,26 @@ impl WorldState {
             if state.view != PilotView::TopDown {
                 continue;
             }
-            let left = tile_at(body.x - PILOT_HALF_WIDTH + 1.0, body.y).x;
-            let right = tile_at(body.x + PILOT_HALF_WIDTH - 1.0, body.y).x;
-            let top = tile_at(body.x, body.y - TOP_DOWN_FOOTPRINT + 1.0).y;
-            let bottom = tile_at(body.x, body.y - 1.0).y;
+            let left = self
+                .frame()
+                .tile_at(body.x - PILOT_HALF_WIDTH + 1.0, body.y)
+                .x;
+            let right = self
+                .frame()
+                .tile_at(body.x + PILOT_HALF_WIDTH - 1.0, body.y)
+                .x;
+            let top = self
+                .frame()
+                .tile_at(body.x, body.y - TOP_DOWN_FOOTPRINT + 1.0)
+                .y;
+            let bottom = self.frame().tile_at(body.x, body.y - 1.0).y;
             walkers.push(Walker {
                 player: member.player,
                 pilot,
                 tiles: (left, top, right, bottom),
-                centre: tile_at(body.x, TOP_DOWN_FOOTPRINT.mul_add(-0.5, body.y)),
+                centre: self
+                    .frame()
+                    .tile_at(body.x, TOP_DOWN_FOOTPRINT.mul_add(-0.5, body.y)),
                 rolling: state.roll_guarded(),
                 max_health: state.max_health,
                 featherfall: state.boons.featherfall,
@@ -265,6 +258,7 @@ impl WorldState {
         let crumble = self.timing.ticks_for_millis(CRUMBLE_MILLIS).max(1);
         let mut arrows: Vec<((f32, f32), (f32, f32))> = Vec::new();
         let mut gave_way = Vec::new();
+        let frame = self.frame();
         if let Some(run) = self.tombs.runs.get_mut(&id) {
             let state = &mut run.crypt;
             for tile in pressed {
@@ -303,15 +297,15 @@ impl WorldState {
                     };
                     if let Some(room) = rooms.get(usize::from(trap.room)) {
                         let interior = room.interior;
-                        let (x, y) = tile_centre(*tile);
+                        let (x, y) = frame.tile_center(*tile);
                         if trap.dir.0 != 0 {
-                            let left = (interior.min.x as f32).mul_add(TILE_SIZE, 2.0);
-                            let right = ((interior.max.x + 1) as f32).mul_add(TILE_SIZE, -2.0);
+                            let left = frame.rel_col(interior.min.x).mul_add(TILE_SIZE, 2.0);
+                            let right = frame.rel_col(interior.max.x + 1).mul_add(TILE_SIZE, -2.0);
                             arrows.push(((left, y), (1.0, 0.0)));
                             arrows.push(((right, y), (-1.0, 0.0)));
                         } else {
-                            let top = (interior.min.y as f32).mul_add(TILE_SIZE, 2.0);
-                            let bottom = ((interior.max.y + 1) as f32).mul_add(TILE_SIZE, -2.0);
+                            let top = frame.rel_row(interior.min.y).mul_add(TILE_SIZE, 2.0);
+                            let bottom = frame.rel_row(interior.max.y + 1).mul_add(TILE_SIZE, -2.0);
                             arrows.push(((x, top), (0.0, 1.0)));
                             arrows.push(((x, bottom), (0.0, -1.0)));
                         }
@@ -355,7 +349,7 @@ impl WorldState {
             let _ = self.damage_pilot(pilot, amount, output);
         }
         for (tile, dir) in boulders {
-            let (x, y) = tile_centre(tile);
+            let (x, y) = self.frame().tile_center(tile);
             let unit = (f32::from(dir.0.signum()), f32::from(dir.1.signum()));
             self.spawn_crypt_shot(ShotKind::Boulder, (x, y), unit, scale);
         }
@@ -401,8 +395,8 @@ impl WorldState {
         let Some(safe) = self.crypt_safe_floor(id, walker.centre) else {
             return;
         };
-        let (x, _) = tile_centre(safe);
-        let feet = ((safe.y + 1) as f32).mul_add(TILE_SIZE, -3.5);
+        let (x, _) = self.frame().tile_center(safe);
+        let feet = (self.frame().rel_row(safe.y + 1)).mul_add(TILE_SIZE, -3.5);
         let (x, feet) = (quantize(x), quantize(feet));
         self.entities.update(walker.pilot, |entity| {
             entity.body.x = x;

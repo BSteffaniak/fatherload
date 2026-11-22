@@ -81,6 +81,7 @@ fn target(
 ) -> Option<(TilePosition, DrillDirection)> {
     let player = world.player(PLAYER).expect("player");
     authoritative_mine_target(
+        world.frame(),
         player,
         DrillIntent {
             horizontal,

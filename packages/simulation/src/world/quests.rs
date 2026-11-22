@@ -21,7 +21,7 @@ use crate::{
     },
     service::SessionServiceRequest,
     summary::PlayerScopedCommandOutcome,
-    terrain::{TILE_SIZE, TileKind, TilePosition},
+    terrain::{TileKind, TilePosition},
     worldgen::FeatureId,
 };
 
@@ -321,7 +321,7 @@ impl WorldState {
         let (targets, objectives) = bind_quest(
             def,
             &self.terrain,
-            player.tile_position(TILE_SIZE),
+            player.tile_in(self.frame()),
             &player.journal,
             salt,
             &taken,
@@ -648,12 +648,13 @@ impl WorldState {
 
     /// Keeps each player's deepest row and visited POI kinds (quest prerequisites).
     fn track_quest_history(&mut self) {
+        let frame = self.frame();
         let Self {
             players, terrain, ..
         } = self;
         let has_pois = terrain.settings().generator.has_points_of_interest();
         for player in players.values_mut() {
-            let row = player.tile_position(TILE_SIZE).y;
+            let row = player.tile_in(frame).y;
             if row > player.quests.deepest_row {
                 player.quests.deepest_row = row;
             }
@@ -712,7 +713,7 @@ impl WorldState {
         let Some(owner) = self.players.get(&quest.owner) else {
             return Ok(());
         };
-        let owner_tile = owner.tile_position(TILE_SIZE);
+        let owner_tile = owner.tile_in(self.frame());
         let owner_hull = hull_tenths(owner.hull);
         let twists = def.active_twists(quest.variant);
         let has_parcel = def
@@ -737,7 +738,7 @@ impl WorldState {
             .players
             .iter()
             .filter(|(id, _)| quest.crew || **id == quest.owner)
-            .map(|(id, player)| (*id, player.tile_position(TILE_SIZE)))
+            .map(|(id, player)| (*id, player.tile_in(self.frame())))
             .collect();
         let stage = usize::from(quest.stage);
         let Some(objectives) = def.stages.get(stage) else {
@@ -1486,7 +1487,10 @@ mod night_hook_tests {
     #[test]
     fn a_night_hunt_counts_the_owners_kills_of_night_monsters_only() {
         let mut world = world();
-        let tile = world.player(OWNER).expect("rig").tile_position(TILE_SIZE);
+        let tile = world
+            .player(OWNER)
+            .expect("rig")
+            .tile_in(crate::position::Frame::FIXED);
         let mut active = quest(tile);
         let mut progress = ObjectiveProgress::default();
         let rigs = vec![(OWNER, tile)];
@@ -1533,13 +1537,16 @@ mod night_hook_tests {
     #[allow(clippy::cast_precision_loss, reason = "small columns and rows")]
     fn a_dawn_watch_lands_when_the_night_ends_with_the_watcher_still_there() {
         let mut world = world();
-        let tile = world.player(OWNER).expect("rig").tile_position(TILE_SIZE);
+        let tile = world
+            .player(OWNER)
+            .expect("rig")
+            .tile_in(crate::position::Frame::FIXED);
         let dawn = Objective::Dawn { target: 0 };
         let step = |world: &mut WorldState, progress: &mut ObjectiveProgress, at: TilePosition| {
             // The rule reads where the actor really is: move the rig there.
             if let Some(rig) = world.player_mut(OWNER) {
-                rig.x = (at.x as f32 + 0.5) * TILE_SIZE;
-                rig.y = (at.y as f32 + 0.5) * TILE_SIZE;
+                rig.x = (crate::position::Frame::FIXED.rel_col(at.x) + 0.5) * TILE_SIZE;
+                rig.y = (crate::position::Frame::FIXED.rel_row(at.y) + 0.5) * TILE_SIZE;
             }
             let mut active = quest(tile);
             let tick = world.simulation_tick().get();

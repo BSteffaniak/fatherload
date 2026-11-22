@@ -129,7 +129,7 @@ impl WorldState {
             // The top of the topsoil is the surface: back to the spawn point.
             (self.player_template.x, self.player_template.y)
         } else {
-            let column = player.tile_position(TILE_SIZE).x;
+            let column = player.tile_in(self.frame()).x;
             let Some((column, top)) = self.warp_pocket_site(band, column) else {
                 return PlayerScopedCommandOutcome::IgnoredUnavailable;
             };
@@ -139,7 +139,7 @@ impl WorldState {
                 reason = "small tile coordinates convert to pixels"
             )]
             let position = (
-                TILE_SIZE.mul_add(column as f32, TILE_SIZE * 0.5),
+                TILE_SIZE.mul_add(self.frame().rel_col(column), TILE_SIZE * 0.5),
                 // Resting on the pocket floor.
                 TILE_SIZE.mul_add(
                     (top + POCKET_HEIGHT) as f32,

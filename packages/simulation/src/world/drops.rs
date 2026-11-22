@@ -198,8 +198,14 @@ pub const fn ore_survives_blast(
     clippy::cast_precision_loss,
     reason = "tile coordinates and small hash slices are exact in f32"
 )]
-pub fn blast_spray_velocity(x: f32, y: f32, position: TilePosition, seed: u64) -> (f32, f32) {
-    let (cx, cy) = tile_centre(position);
+pub fn blast_spray_velocity(
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+    position: TilePosition,
+    seed: u64,
+) -> (f32, f32) {
+    let (cx, cy) = frame.tile_center(position);
     let hash = tile_hash(seed, position, 0x0d0b);
     let wobble = ((hash & 0xff) as f32 / 255.0).mul_add(2.0, -1.0);
     let launch = (((hash >> 8) & 0xff) as f32 / 255.0).mul_add(110.0, 140.0);
@@ -214,18 +220,6 @@ pub fn blast_spray_velocity(x: f32, y: f32, position: TilePosition, seed: u64) -
         quantize(wobble.mul_add(40.0, nx * launch)),
         // A fountain: everything pops upward, so loot thrown at rock bounces out over the rim.
         quantize(ny.mul_add(launch, -210.0).max(-440.0)),
-    )
-}
-
-/// Centre of a tile in world pixels.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "tile coordinates are exact in f32"
-)]
-fn tile_centre(position: TilePosition) -> (f32, f32) {
-    (
-        (position.x as f32 + 0.5) * TILE_SIZE,
-        (position.y as f32 + 0.5) * TILE_SIZE,
     )
 }
 
@@ -246,7 +240,7 @@ impl WorldState {
         velocity: (f32, f32),
     ) -> Option<EntityId> {
         let item = ItemKind::from_tile(kind)?;
-        let (x, y) = tile_centre(position);
+        let (x, y) = self.frame().tile_center(position);
         self.spawn_loot(x, y, velocity, ItemStack::new(item, 1), None)
     }
 
@@ -383,7 +377,7 @@ impl WorldState {
         target: TilePosition,
         kind: TileKind,
     ) {
-        let (cx, cy) = tile_centre(target);
+        let (cx, cy) = self.frame().tile_center(target);
         let velocity = self.players.get(&player_id).map_or((0.0, 0.0), |player| {
             let (dx, dy) = (player.x - cx, player.y - cy);
             let distance = dx.hypot(dy).max(1.0);
@@ -426,7 +420,7 @@ impl WorldState {
                 });
                 continue;
             }
-            let velocity = blast_spray_velocity(x, y, *position, seed);
+            let velocity = blast_spray_velocity(self.frame(), x, y, *position, seed);
             if let Some(id) = self.spawn_tile_drop(*position, *tile, velocity) {
                 spawned.push((item, id));
             }

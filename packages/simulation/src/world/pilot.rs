@@ -117,8 +117,12 @@ impl PilotTerrain for PilotView<'_> {
     }
     fn gravity_at(&self, x: f32, y: f32) -> f32 {
         // Read at the feet: the fields are smooth over a pilot's height.
-        crate::environment::environment_at(self.world.terrain.settings(), x, y)
+        crate::environment::environment_in(self.world.terrain.settings(), self.world.frame(), x, y)
             .body_gravity(crate::pilot::GRAVITY)
+    }
+
+    fn frame(&self) -> crate::position::Frame {
+        self.world.frame()
     }
 }
 
@@ -132,17 +136,6 @@ pub fn pilot_blocks(terrain: &Terrain, tile: TilePosition) -> bool {
     terrain
         .tile(tile)
         .is_some_and(|found| found.kind != TileKind::Air && !pilot_passable(found.kind))
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
 }
 
 #[allow(
@@ -194,7 +187,8 @@ impl WorldState {
     /// reach from.
     #[must_use]
     pub fn actor_tile(&self, player_id: PlayerId) -> Option<TilePosition> {
-        self.actor_position(player_id).map(|(x, y)| tile_at(x, y))
+        self.actor_position(player_id)
+            .map(|(x, y)| self.frame().tile_at(x, y))
     }
 
     /// Whether `player_id`'s rig would let its pilot out now (slow enough, intact).
@@ -223,7 +217,7 @@ impl WorldState {
     /// [`THIN_AIR_ROW`].
     #[must_use]
     pub fn pilot_air_at(&self, x: f32, y: f32) -> PilotAir {
-        let tile = tile_at(x, y);
+        let tile = self.frame().tile_at(x, y);
         if self.terrain.water_at(tile) {
             return PilotAir::Water;
         }
@@ -249,7 +243,7 @@ impl WorldState {
         // vacuum in orbit and on the Moon); older worlds keep the fixed thin-air row.
         let settings = self.terrain.settings();
         let thin = if settings.generator.has_sky() {
-            crate::environment::environment_at(settings, x, y).breathable
+            crate::environment::environment_in(settings, self.frame(), x, y).breathable
                 < crate::pilot::PILOT_THIN_AIR_DENSITY
         } else {
             tile.y < THIN_AIR_ROW
@@ -780,10 +774,10 @@ impl WorldState {
     }
 
     fn touches_lava(&self, body: &Body, state: &PilotState) -> bool {
-        let left = tile_at(body.x - PILOT_HALF_WIDTH, body.y).x;
-        let right = tile_at(body.x + PILOT_HALF_WIDTH, body.y).x;
-        let top = tile_at(body.x, body.y - state.height()).y;
-        let bottom = tile_at(body.x, body.y + 1.0).y;
+        let left = self.frame().tile_at(body.x - PILOT_HALF_WIDTH, body.y).x;
+        let right = self.frame().tile_at(body.x + PILOT_HALF_WIDTH, body.y).x;
+        let top = self.frame().tile_at(body.x, body.y - state.height()).y;
+        let bottom = self.frame().tile_at(body.x, body.y + 1.0).y;
         (top..=bottom)
             .any(|y| (left..=right).any(|x| self.terrain.is_lava_at(TilePosition { x, y })))
     }
@@ -815,7 +809,9 @@ impl WorldState {
         // Samples every 4 px out to the reach.
         (1..=PICK_SAMPLES).find_map(|step| {
             let travelled = f32::from(step) * 4.0;
-            let tile = tile_at(ax.mul_add(travelled, cx), ay.mul_add(travelled, cy));
+            let tile = self
+                .frame()
+                .tile_at(ax.mul_add(travelled, cx), ay.mul_add(travelled, cy));
             self.terrain.is_solid_at(tile).then_some(tile)
         })
     }
@@ -905,8 +901,8 @@ impl WorldState {
             let (mx, my) = state.middle(body);
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
             let (tx, ty) = (
-                (target.x as f32 + 0.5) * TILE_SIZE,
-                (target.y as f32 + 0.5) * TILE_SIZE,
+                (self.frame().rel_col(target.x) + 0.5) * TILE_SIZE,
+                (self.frame().rel_row(target.y) + 0.5) * TILE_SIZE,
             );
             let distance = (mx - tx).hypot(my - ty).max(1.0);
             let velocity = (
@@ -1023,7 +1019,7 @@ impl WorldState {
         let (mx, my) = state.middle(&body);
         if state.hurt > 0.0
             || state.roll_guarded()
-            || self.hostile_safe_zone(attacker, tile_at(mx, my))
+            || self.hostile_safe_zone(attacker, self.frame().tile_at(mx, my))
         {
             return false;
         }

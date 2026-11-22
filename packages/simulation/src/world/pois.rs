@@ -16,7 +16,7 @@ use crate::{
     },
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
-    terrain::{TILE_SIZE, TileKind, TilePosition},
+    terrain::{TileKind, TilePosition},
     worldgen::{FeatureId, TileRect, WorldFeature},
 };
 
@@ -320,6 +320,7 @@ impl WorldState {
 
     /// Marks POIs each rig is inside as visited.
     pub(super) fn track_poi_visits(&mut self, output: &mut TickOutput) {
+        let frame = self.frame();
         if !self.terrain.settings().generator.has_points_of_interest() {
             return;
         }
@@ -327,7 +328,7 @@ impl WorldState {
             players, terrain, ..
         } = self;
         for (player_id, player) in players.iter_mut() {
-            let tile = player.tile_position(TILE_SIZE);
+            let tile = player.tile_in(frame);
             let nearby = terrain.pois_touching(&TileRect::around(tile, VISIT_MARGIN, VISIT_MARGIN));
             for feature in &nearby {
                 if !feature.bounds.expanded(VISIT_MARGIN).contains(tile) {

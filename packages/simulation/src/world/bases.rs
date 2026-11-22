@@ -59,7 +59,7 @@ impl WorldState {
         // On foot the pilot builds and uses modules from where it stands (Part II F5).
         let rig = self
             .actor_tile(player_id)
-            .unwrap_or_else(|| player.tile_position(TILE_SIZE));
+            .unwrap_or_else(|| player.tile_in(self.frame()));
         match *command {
             BuildCommand::Place { item, at, .. } => {
                 self.check_place(player_id, player, rig, item, at)
@@ -118,18 +118,18 @@ impl WorldState {
         // A contractor-built home with a bed the player made theirs comes first (WP-HOME).
         if let Some(plot) = self.homes.home_point_of(player_id) {
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-            let x = (plot.door_column() as f32 + 0.5) * TILE_SIZE;
+            let x = (self.frame().rel_col(plot.door_column()) + 0.5) * TILE_SIZE;
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-            let y = (plot.site.ground_row as f32 - 0.5) * TILE_SIZE;
+            let y = (self.frame().rel_row(plot.site.ground_row) - 0.5) * TILE_SIZE;
             return Some((x, y));
         }
         let home = self.bases.home_of(player_id)?;
         let (width, _) = home.kind.footprint();
         let anchor = home.anchor();
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let x = (width as f32).mul_add(0.5, anchor.x as f32) * TILE_SIZE;
+        let x = (width as f32).mul_add(0.5, self.frame().rel_col(anchor.x)) * TILE_SIZE;
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-        let y = (anchor.y as f32 + 0.5) * TILE_SIZE;
+        let y = (self.frame().rel_row(anchor.y) + 0.5) * TILE_SIZE;
         Some((x, y))
     }
 
@@ -147,24 +147,16 @@ impl WorldState {
 
     fn rig_overlaps(&self, tile: TilePosition) -> bool {
         let radius = super::movement::AUTHORITATIVE_PLAYER_RADIUS;
+        let frame = self.frame();
         self.players.values().any(|player| {
-            #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
-            let span = |center: f32| {
-                (
-                    ((center - radius) / TILE_SIZE).floor() as i32,
-                    ((center + radius) / TILE_SIZE).floor() as i32,
-                )
-            };
-            let (left, right) = span(player.x);
-            let (top, bottom) = span(player.y);
+            let (left, right) = (frame.col(player.x - radius), frame.col(player.x + radius));
+            let (top, bottom) = (frame.row(player.y - radius), frame.row(player.y + radius));
             (left..=right).contains(&tile.x) && (top..=bottom).contains(&tile.y)
         }) || self.pilots().any(|(_, body, state)| {
             // Never wall a pilot in either.
-            #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
-            let cell = |value: f32| (value / TILE_SIZE).floor() as i32;
             let half = crate::pilot::PILOT_HALF_WIDTH;
-            (cell(body.x - half)..=cell(body.x + half)).contains(&tile.x)
-                && (cell(body.y - state.height())..=cell(body.y - 0.5)).contains(&tile.y)
+            (frame.col(body.x - half)..=frame.col(body.x + half)).contains(&tile.x)
+                && (frame.row(body.y - state.height())..=frame.row(body.y - 0.5)).contains(&tile.y)
         })
     }
 
@@ -708,8 +700,8 @@ impl WorldState {
         }
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
         let (x, y) = (
-            (at.x as f32 + 0.5) * TILE_SIZE,
-            (at.y as f32 + 0.5) * TILE_SIZE,
+            (self.frame().rel_col(at.x) + 0.5) * TILE_SIZE,
+            (self.frame().rel_row(at.y) + 0.5) * TILE_SIZE,
         );
         for stack in spilled {
             let _drop = self.spawn_item_drop(x, y, (0.0, -60.0), stack, None);
@@ -785,6 +777,7 @@ impl WorldState {
             _ => {}
         }
         let sky = self.terrain.settings().generator.sky_bands();
+        let frame = self.frame();
         let (Some(player), Some(module)) = (
             self.players.get_mut(&player_id),
             self.bases.module_mut(structure),
@@ -800,7 +793,7 @@ impl WorldState {
                     clippy::cast_possible_truncation,
                     reason = "altitudes are a few thousand rows"
                 )]
-                let altitude = (-player.y / TILE_SIZE).floor() as i32;
+                let altitude = (-frame.legacy_y(player.y) / TILE_SIZE).floor() as i32;
                 let level = crate::milestone::sky_refuel_level(player, altitude, sky.as_ref());
                 let missing = (level - player.fuel).floor().max(0.0);
                 #[allow(
@@ -931,7 +924,7 @@ impl WorldState {
         let Some(tile) = self
             .players
             .get(&player_id)
-            .map(|player| player.tile_position(TILE_SIZE))
+            .map(|player| player.tile_in(self.frame()))
         else {
             return;
         };

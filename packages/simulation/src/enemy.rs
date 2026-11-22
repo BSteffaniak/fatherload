@@ -2174,7 +2174,8 @@ pub const fn lunar_roster(in_forest: bool, near_habitat: bool) -> &'static [(Ene
 /// The depth tier Moon enemies scale at (between the deep strata and the mantle).
 pub const LUNAR_TIER: u8 = 7;
 
-/// Tiles to world pixels (centre of the tile).
+/// Tiles to world pixels (centre of the tile) in the origin frame: test scenes and tools on
+/// fixed-frame worlds. Gameplay uses the world's frame (`Frame::centre_of`, F7).
 #[must_use]
 #[allow(
     clippy::cast_precision_loss,

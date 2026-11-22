@@ -60,22 +60,11 @@ const LUNAR_LOCAL_CAP: usize = 5;
 /// Spawn chance per actor per director check, per mille.
 const LUNAR_SPAWN_PER_MILLE: u64 = 260;
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "bounded world pixels address terrain tiles"
-)]
-fn tile_of(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-fn centre(tile: TilePosition) -> (f32, f32) {
+fn centre(frame: crate::position::Frame, tile: TilePosition) -> (f32, f32) {
     (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
+        (frame.rel_col(tile.x) + 0.5) * TILE_SIZE,
+        (frame.rel_row(tile.y) + 0.5) * TILE_SIZE,
     )
 }
 
@@ -92,7 +81,7 @@ impl WorldState {
     /// colony's pressurized rooms).
     #[must_use]
     pub fn in_vacuum(&self, x: f32, y: f32) -> bool {
-        crate::moon::vacuum_at(self.terrain.settings(), x, y)
+        crate::moon::vacuum_in(self.terrain.settings(), self.frame(), x, y)
     }
 
     /// Whether `tile` is inside the lunar colony's area (its counter works and enemies stay
@@ -134,7 +123,7 @@ impl WorldState {
             return false;
         };
         let (first, last, _) = layout.pad();
-        (first..=last).contains(&tile_of(player.x, player.y).x)
+        (first..=last).contains(&self.frame().tile_at(player.x, player.y).x)
     }
 
     /// Whether a pilot of `owner` at world pixel `(x, y)` has air on the Moon (or anywhere the
@@ -142,7 +131,7 @@ impl WorldState {
     /// within its rig's life-support air line.
     #[must_use]
     pub fn lunar_air(&self, owner: PlayerId, x: f32, y: f32) -> bool {
-        let tile = tile_of(x, y);
+        let tile = self.frame().tile_at(x, y);
         if self
             .moon_layout()
             .is_some_and(|layout| layout.pressurized(tile.x, tile.y))
@@ -217,11 +206,11 @@ impl WorldState {
         let Some(layout) = self.moon_layout() else {
             return;
         };
-        let tile = tile_of(x, y);
+        let tile = self.frame().tile_at(x, y);
         let Some(surface) = layout.surface_row(tile.x) else {
             return;
         };
-        let below = tile_of(
+        let below = self.frame().tile_at(
             x,
             TILE_SIZE.mul_add(0.25, y + super::movement::AUTHORITATIVE_PLAYER_RADIUS),
         );
@@ -519,7 +508,7 @@ impl WorldState {
             && !self.warden_awake()
         {
             if self.enemies.difficulty.hostile() {
-                let (x, y) = centre(plan.arena_center());
+                let (x, y) = centre(self.frame(), plan.arena_center());
                 let id = self.spawn_enemy_with(EnemyKind::Warden, (x, y), 0, None, None);
                 // Its shield runs on the conduits still standing.
                 let standing = plan
@@ -590,12 +579,15 @@ impl WorldState {
                 let anchor = module.anchor();
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
                 Some((
-                    (width as f32).mul_add(0.5, anchor.x as f32) * TILE_SIZE,
-                    (anchor.y as f32 + 0.5) * TILE_SIZE,
+                    (width as f32).mul_add(0.5, self.frame().rel_col(anchor.x)) * TILE_SIZE,
+                    (self.frame().rel_row(anchor.y) + 0.5) * TILE_SIZE,
                 ))
             }
             // Home from the Moon: the town's landing spot (the rescue crew's drop).
-            None if up_there => Some((12.0 * TILE_SIZE, 4.0 * TILE_SIZE)),
+            None if up_there => Some(
+                self.frame()
+                    .from_legacy_px(12.0 * TILE_SIZE, 4.0 * TILE_SIZE),
+            ),
             None => None,
         }
     }
@@ -636,7 +628,7 @@ impl WorldState {
         let player = self.players.get(&player_id)?;
         Some(GameplayEventKind::UplinkBeamed {
             player_id,
-            to_moon: self.on_moon(tile_of(player.x, player.y)),
+            to_moon: self.on_moon(self.frame().tile_at(player.x, player.y)),
         })
     }
 
@@ -691,7 +683,7 @@ impl WorldState {
             if self.entities.count_of(EntityKind::Enemy) >= super::enemies::MAX_ENEMIES {
                 break;
             }
-            let (cx, cy) = centre(tile);
+            let (cx, cy) = centre(self.frame(), tile);
             let near = self
                 .enemies()
                 .filter(|(entity, state)| {
@@ -748,7 +740,7 @@ impl WorldState {
                     x: site.x + i32::try_from(offset % 2).unwrap_or(0),
                     y: site.y - i32::try_from(offset / 2).unwrap_or(0),
                 };
-                let point = Self::spawn_point(kind, spot);
+                let point = Self::spawn_point(self.frame(), kind, spot);
                 let _ = self.spawn_enemy_with(kind, point, LUNAR_TIER, None, None);
             }
         }

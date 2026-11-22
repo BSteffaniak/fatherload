@@ -31,7 +31,7 @@ use crate::{
     item::{BlockKind, ItemKind, ItemStack},
     physics::{self, Blast},
     quantize::quantize_simulation_scalar,
-    terrain::{TILE_SIZE, TileChange, TilePosition},
+    terrain::{TILE_SIZE, TileChange},
 };
 
 use super::{
@@ -264,8 +264,13 @@ impl WorldState {
         }
         if next_tick >= state.warning_deadline {
             // Gravity fields (F6): exactly 1.0 underground, where boulders hang.
-            let field =
-                crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+            let field = crate::environment::environment_in(
+                self.terrain.settings(),
+                self.frame(),
+                body.x,
+                body.y,
+            )
+            .gravity;
             body.velocity_y = quantize_simulation_scalar(
                 (AUTHORITATIVE_GRAVITY * 0.8 * field)
                     .mul_add(timing.delta_seconds, body.velocity_y)
@@ -291,16 +296,13 @@ impl WorldState {
                 clippy::cast_possible_truncation,
                 reason = "bounded boulder coordinates intentionally map to terrain tiles"
             )]
-            let tile = TilePosition {
-                x: (body.x / TILE_SIZE).floor() as i32,
-                y: ((body.y + BOULDER_RADIUS) / TILE_SIZE).floor() as i32,
-            };
+            let tile = self.frame().tile_at(body.x, body.y + BOULDER_RADIUS);
             if self.terrain.is_solid_at(tile) {
                 // Its lower edge meets the ground: it shatters there, leaving a stone block of
                 // rubble (WP-DROPS) on top of what it hit.
                 self.entities.despawn(id);
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-                let ground = tile.y as f32 * TILE_SIZE;
+                let ground = self.frame().rel_row(tile.y) * TILE_SIZE;
                 let _rubble = self.spawn_loot(
                     body.x,
                     (ground - BOULDER_RADIUS).min(body.y),
@@ -346,8 +348,8 @@ impl WorldState {
         for change in changes {
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
             let (x, y) = (
-                (change.position.x as f32 + 0.5) * TILE_SIZE,
-                (change.position.y as f32 + 0.5) * TILE_SIZE,
+                (self.frame().rel_col(change.position.x) + 0.5) * TILE_SIZE,
+                (self.frame().rel_row(change.position.y) + 0.5) * TILE_SIZE,
             );
             self.entities.wake_around(x, y, TERRAIN_WAKE_REACH);
         }

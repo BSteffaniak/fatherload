@@ -1270,8 +1270,11 @@ impl WorldState {
             HomeCommand::Hatch { plot } => {
                 if let Some(found) = self.homes.plot(plot) {
                     let (first, _) = cellar_columns(found);
-                    let x = (first as f32 + 1.5) * TILE_SIZE;
-                    let y = (found.site.ground_row + CELLAR_ROWS + 1) as f32 * TILE_SIZE;
+                    let x = (self.frame().rel_col(first) + 1.5) * TILE_SIZE;
+                    let y = self
+                        .frame()
+                        .rel_row(found.site.ground_row + CELLAR_ROWS + 1)
+                        * TILE_SIZE;
                     self.move_pilot(player_id, x, y);
                 }
             }
@@ -1415,12 +1418,12 @@ impl WorldState {
             let Some(claim) = self.lift_claim(&found, found.deed.owner) else {
                 return;
             };
-            let x = (claim.center.x as f32 + 0.5) * TILE_SIZE;
-            let y = (claim.center.y + 1) as f32 * TILE_SIZE;
+            let x = (self.frame().rel_col(claim.center.x) + 0.5) * TILE_SIZE;
+            let y = self.frame().rel_row(claim.center.y + 1) * TILE_SIZE;
             self.move_pilot(player_id, x, y);
         } else {
-            let x = (found.door_column() as f32 + 0.5) * TILE_SIZE;
-            let y = found.site.ground_row as f32 * TILE_SIZE;
+            let x = (self.frame().rel_col(found.door_column()) + 0.5) * TILE_SIZE;
+            let y = self.frame().rel_row(found.site.ground_row) * TILE_SIZE;
             self.move_pilot(player_id, x, y);
         }
     }
@@ -1812,7 +1815,7 @@ impl WorldState {
             let Some(plot) = self.homes.plot(plot_id) else {
                 continue;
             };
-            let x = crew_station_px(plot, slot, 0);
+            let x = crew_station_px(self.frame(), plot, slot, 0);
             let state = NpcState {
                 character,
                 activity: Activity::Working,
@@ -1829,7 +1832,7 @@ impl WorldState {
                 site: Some(plot_id.0),
             };
             #[allow(clippy::cast_precision_loss, reason = "rows are small")]
-            let y = plot.site.ground_row as f32 * TILE_SIZE;
+            let y = self.frame().rel_row(plot.site.ground_row) * TILE_SIZE;
             let _ = self.spawn_entity(Body::at(x, y), EntityState::Npc(state), None);
             present.insert(character);
         }
@@ -1898,7 +1901,7 @@ impl WorldState {
                 0,
             );
             let station = usize::try_from(roll % 5).unwrap_or(0);
-            let to = crew_station_px(plot, station, roll);
+            let to = crew_station_px(self.frame(), plot, station, roll);
             let mut next = state;
             let x = state.x_at(next_tick, 0.0);
             next.walk(x, to, TILE_SIZE * 1.6, next_tick, self.timing.rate.hz());
@@ -1936,10 +1939,7 @@ impl WorldState {
                 if speed > 2.0 || rig.hull <= 0.0 {
                     return false;
                 }
-                let tile = TilePosition {
-                    x: (rig.x / TILE_SIZE).floor() as i32,
-                    y: (rig.y / TILE_SIZE).floor() as i32,
-                };
+                let tile = self.frame().tile_at(rig.x, rig.y);
                 self.homes.plot_at(tile).is_some_and(|plot| {
                     plot.deed.may_enter(**id)
                         && plot
@@ -2105,14 +2105,14 @@ fn cellar_columns(plot: &Plot) -> (i32, i32) {
 }
 
 /// A worker's station `slot` along the house (world pixel column), jittered by `roll`.
-fn crew_station_px(plot: &Plot, slot: usize, roll: u64) -> f32 {
+fn crew_station_px(frame: crate::position::Frame, plot: &Plot, slot: usize, roll: u64) -> f32 {
     let width = plot.planned_footprint().map_or(7, |(width, _)| width);
     let left = plot.house_left(width);
     let stations = [-1, width / 4, width / 2, width * 3 / 4, width];
     let column = left + stations[slot % stations.len()];
     let jitter = i32::try_from(roll % 3).unwrap_or(0) - 1;
     #[allow(clippy::cast_precision_loss, reason = "columns are small")]
-    let x = ((column + jitter) as f32 + 0.5) * TILE_SIZE;
+    let x = (frame.rel_col(column + jitter) + 0.5) * TILE_SIZE;
     x.round()
 }
 

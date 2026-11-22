@@ -46,17 +46,14 @@ pub struct CryptBot {
     given_up: BTreeSet<TilePosition>,
 }
 
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
+fn tile_at(frame: crate::position::Frame, x: f32, y: f32) -> TilePosition {
+    frame.tile_at(x, y)
 }
 
-fn centre(tile: TilePosition) -> (f32, f32) {
+fn centre(frame: crate::position::Frame, tile: TilePosition) -> (f32, f32) {
     (
-        (tile.x as f32 + 0.5) * TILE_SIZE,
-        (tile.y as f32 + 0.5) * TILE_SIZE,
+        (frame.rel_col(tile.x) + 0.5) * TILE_SIZE,
+        (frame.rel_row(tile.y) + 0.5) * TILE_SIZE,
     )
 }
 
@@ -86,7 +83,7 @@ impl CryptBot {
         };
         let (x, feet) = (body.x, body.y);
         let middle = (x, feet - TOP_DOWN_FOOTPRINT * 0.5);
-        let here = tile_at(middle.0, middle.1);
+        let here = tile_at(world.frame(), middle.0, middle.1);
         self.use_cooldown = self.use_cooldown.saturating_sub(1);
         if (x - self.last.0).hypot(feet - self.last.1) < 0.5 {
             self.stall += 1;
@@ -204,25 +201,24 @@ impl CryptBot {
                 .or_else(|| goal(&caches))
                 .or_else(|| {
                     if fighting_boss {
-                        boss.map(|(bx, by)| (tile_at(bx, by), (bx, by))).and_then(
-                            |(tile, (bx, by))| {
+                        boss.map(|(bx, by)| (tile_at(world.frame(), bx, by), (bx, by)))
+                            .and_then(|(tile, (bx, by))| {
                                 // A spot about six tiles off the lord with a clear shot.
                                 field
                                     .iter()
                                     .filter(|(stand, _)| {
-                                        let (sx, sy) = centre(**stand);
+                                        let (sx, sy) = centre(world.frame(), **stand);
                                         crate::physics::line_clear(terrain, sx, sy, bx, by)
                                     })
                                     .min_by_key(|(stand, cost)| {
-                                        let (sx, sy) = centre(**stand);
+                                        let (sx, sy) = centre(world.frame(), **stand);
                                         let off =
                                             ((sx - bx).hypot(sy - by) / TILE_SIZE - 6.0).abs();
                                         ((off * 2.0) as u32, **cost)
                                     })
                                     .map(|(stand, _)| *stand)
                                     .or(Some(tile))
-                            },
-                        )
+                            })
                     } else {
                         None
                     }
@@ -243,7 +239,7 @@ impl CryptBot {
                 path.get(1).or_else(|| path.first())
             };
             if let Some(next) = next {
-                let (tx, ty) = centre(*next);
+                let (tx, ty) = centre(world.frame(), *next);
                 let dx = tx - middle.0;
                 let dy = ty - middle.1;
                 if dx.abs() > 3.0 {
@@ -326,7 +322,7 @@ impl CryptBot {
                 let mut landing = here;
                 for step in 1..=10 {
                     let reach = step as f32 * TILE_SIZE * 0.5;
-                    let tile = tile_at(middle.0 + ux * reach, middle.1 + uy * reach);
+                    let tile = tile_at(world.frame(), middle.0 + ux * reach, middle.1 + uy * reach);
                     if blocked(tile) {
                         break;
                     }

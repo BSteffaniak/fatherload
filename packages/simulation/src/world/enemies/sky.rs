@@ -35,7 +35,7 @@
 use crate::{
     enemy::{
         AttackStyle, EnemyKind, EnemyMode, EnemyState, SkyEnemyAction, hazard_density, sky_roster,
-        sky_tier, tier_scale, tile_centre,
+        sky_tier, tier_scale,
     },
     entity::{Body, EntityId, EntityKind, EntityState},
     event::{GameplayEventKind, TickOutput},
@@ -47,7 +47,7 @@ use crate::{
     worldgen::{TileRect, noise::hash2, sky::continent},
 };
 
-use super::{BASE_SAFE_TILES, Intent, MAX_ENEMIES, RING, WorldState, direction, tile_of};
+use super::{BASE_SAFE_TILES, Intent, MAX_ENEMIES, RING, WorldState, direction};
 
 /// Tiles around a sky city's area that stay safe.
 pub const SKY_CITY_SAFE_TILES: i32 = 12;
@@ -133,7 +133,7 @@ impl WorldState {
             if roster.is_empty() {
                 continue;
             }
-            let (cx, cy) = tile_centre(tile.x, tile.y);
+            let (cx, cy) = self.frame().centre_of(tile.x, tile.y);
             let local = self.enemies_near(cx, cy, SKY_LOCAL_TILES * TILE_SIZE).len();
             let cap = 2 + usize::from(band.code()) + difficulty.extra_cap();
             if local >= cap {
@@ -225,7 +225,7 @@ impl WorldState {
 
     /// Spawns `kind` at `site` (an airship with its turrets).
     fn spawn_sky_group(&mut self, kind: EnemyKind, site: TilePosition, tier: u8) -> EntityId {
-        let point = tile_centre(site.x, site.y);
+        let point = self.frame().centre_of(site.x, site.y);
         let id = self.spawn_enemy_with(kind, point, tier, None, None);
         if kind == EnemyKind::PirateAirship {
             self.mount_turrets(id, point, tier);
@@ -253,7 +253,10 @@ impl WorldState {
     /// of that sky band (scenes and tests; gameplay spawns through the director). Returns the
     /// hull.
     pub fn spawn_airship(&mut self, x: f32, y: f32) -> EntityId {
-        let tier = sky_tier(SkyBand::at_row_of(self.terrain.settings(), tile_of(x, y).y));
+        let tier = sky_tier(SkyBand::at_row_of(
+            self.terrain.settings(),
+            self.frame().tile_at(x, y).y,
+        ));
         let id = self.spawn_enemy_with(EnemyKind::PirateAirship, (x, y), tier, None, None);
         self.mount_turrets(id, (x, y), tier);
         id
@@ -319,7 +322,7 @@ impl WorldState {
                     continue;
                 }
                 let tier = sky_tier(SkyBand::at_row_of(self.terrain.settings(), post.y));
-                let point = Self::spawn_point(kind, post);
+                let point = Self::spawn_point(self.frame(), kind, post);
                 let _id = self.spawn_enemy_with(kind, point, tier, Some(lair), None);
             }
         }
@@ -603,7 +606,7 @@ impl WorldState {
         }
         let player = noticed?;
         let enraged = !self.nest_has_eggs(state.home);
-        let (nx, ny) = tile_centre(state.home.0, state.home.1);
+        let (nx, ny) = self.frame().centre_of(state.home.0, state.home.1);
         let near_nest = self
             .rig_position(Some(player), (body.x, body.y))
             .is_some_and(|(x, y)| (x - nx).hypot(y - ny) <= NEST_GUARD_TILES * TILE_SIZE);

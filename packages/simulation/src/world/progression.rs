@@ -11,9 +11,7 @@ use crate::{
     rig::RigPartKind,
     service::{PlayerServiceTransaction, PlayerTransactionKind},
     summary::PlayerScopedCommandOutcome,
-    terrain::{
-        ArtifactKind, MineralKind, StrategicResourceKind, TILE_SIZE, TileKind, TilePosition,
-    },
+    terrain::{ArtifactKind, MineralKind, StrategicResourceKind, TILE_SIZE, TileKind},
 };
 
 use super::{
@@ -622,6 +620,7 @@ impl WorldState {
         player_id: PlayerId,
         request: crate::SessionServiceRequest,
     ) -> Option<PlayerScopedCommandOutcome> {
+        let frame = self.frame();
         let player = self.players.get_mut(&player_id)?;
         let credits_before = player.credits;
         let cargo_before = player.cargo_used();
@@ -727,10 +726,7 @@ impl WorldState {
                             clippy::cast_possible_truncation,
                             reason = "bounded salvage site coordinates intentionally map to terrain tiles"
                         )]
-                        let position = TilePosition {
-                            x: (site.x / TILE_SIZE).floor() as i32,
-                            y: (site.y / TILE_SIZE).floor() as i32,
-                        };
+                        let position = frame.tile_at(site.x, site.y);
                         self.infrastructure.push(PlacedInfrastructure {
                             kind: InfrastructureKind::SurveyDrone,
                             position,

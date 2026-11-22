@@ -438,7 +438,7 @@ mod tests {
             .expect("building exists");
         let rig = world.player_mut(PLAYER).expect("player");
         #[allow(clippy::cast_precision_loss, reason = "small tile coordinate")]
-        let x = (building.tile_x as f32 + 2.5) * TILE_SIZE;
+        let x = (crate::position::Frame::FIXED.rel_col(building.tile_x) + 2.5) * TILE_SIZE;
         rig.x = x;
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
@@ -616,7 +616,7 @@ mod tests {
         let tile = world
             .player(PLAYER)
             .expect("player")
-            .tile_position(TILE_SIZE);
+            .tile_in(crate::position::Frame::FIXED);
         assert_eq!(world.discovered_tile_count(PLAYER), 0);
         let tick = world.simulation_tick();
         let _output = world.simulate_tick(tick, &TickInputs::default());

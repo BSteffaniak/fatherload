@@ -65,6 +65,7 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
     let import = WorldImport::new_game(BOT_PLAYER);
     let mut world =
         WorldState::from_import_with_params(&import, SimulationParams::new(tick_rate_hz));
+    let frame = world.frame();
     let top = band_top(&world, CAVERN_X, BUILD_BAND)? + 4;
     let floor = top + 6;
     for y in top - 1..=floor + 1 {
@@ -87,7 +88,7 @@ pub fn run_building(tick_rate_hz: u32) -> Option<BuildingRun> {
     // Reaching the band unlocks its modules and claims; the rig walks there in the tick.
     let park = |world: &mut WorldState, tile_x: i32| {
         if let Some(rig) = world.player_mut(BOT_PLAYER) {
-            rig.x = (tile_x as f32 + 0.5) * TILE_SIZE;
+            rig.x = (frame.rel_col(tile_x) + 0.5) * TILE_SIZE;
             rig.y = floor as f32 * TILE_SIZE - 11.0;
             rig.velocity_x = 0.0;
             rig.velocity_y = 0.0;

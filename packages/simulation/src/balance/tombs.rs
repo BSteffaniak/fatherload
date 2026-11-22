@@ -123,7 +123,7 @@ impl TombBot {
         } else {
             self.stall += 1;
         }
-        let column = ((x + PILOT_HALF_WIDTH + 6.0) / TILE_SIZE).floor() as i32;
+        let column = world.frame().col(x + PILOT_HALF_WIDTH + 6.0);
         let mut controls = if state.view == PilotView::TopDown {
             Self::top_down(world, run, x, feet, column)
         } else if let Some(lever) = super::tomb_side::SideBot::lever_behind(world, run, (x, feet))
@@ -131,8 +131,8 @@ impl TombBot {
         {
             // T28: the gate ahead is shut and its lever is behind: go back up for it.
             let side = (lever - x).signum();
-            let feet_row = ((feet - 4.0) / TILE_SIZE).floor() as i32;
-            let ahead = ((x + side * (PILOT_HALF_WIDTH + 6.0)) / TILE_SIZE).floor() as i32;
+            let feet_row = world.frame().row(feet - 4.0);
+            let ahead = world.frame().col(x + side * (PILOT_HALF_WIDTH + 6.0));
             let blocked = Self::solid(
                 world,
                 TilePosition {
@@ -148,7 +148,7 @@ impl TombBot {
             self.stall = 0;
             ControlState::new(side, false, false).with_jump(jumping)
         } else {
-            let feet_row = ((feet - 4.0) / TILE_SIZE).floor() as i32;
+            let feet_row = world.frame().row(feet - 4.0);
             let blocked = Self::solid(
                 world,
                 TilePosition {
@@ -186,7 +186,7 @@ impl TombBot {
             // Stop once the whole body hangs over the plate pit (it drops onto a plate).
             let over_plate = [x - PILOT_HALF_WIDTH + 1.0, x + PILOT_HALF_WIDTH - 1.0]
                 .into_iter()
-                .map(|edge| (edge / TILE_SIZE).floor() as i32)
+                .map(|edge| world.frame().col(edge))
                 .all(|here| {
                     !Self::solid(
                         world,
@@ -283,17 +283,17 @@ impl TombBot {
     }
 
     fn top_down(world: &WorldState, run: &TombRun, x: f32, feet: f32, column: i32) -> ControlState {
-        let head_row = ((feet - 49.95) / TILE_SIZE).floor() as i32;
-        let feet_row = ((feet - 0.05) / TILE_SIZE).floor() as i32;
+        let head_row = world.frame().row(feet - 49.95);
+        let feet_row = world.frame().row(feet - 0.05);
         let here = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
+            x: world.frame().col(x),
             y: feet_row,
         };
         let room = run.rooms.iter().find(|room| room.interior.contains(here));
         let mid = room.map_or(feet_row, |room| {
             i32::midpoint(room.interior.min.y, room.interior.max.y)
         });
-        let target_feet = |row: i32| (row as f32 + 1.0) * TILE_SIZE - 6.0;
+        let target_feet = |row: i32| (world.frame().rel_row(row) + 1.0) * TILE_SIZE - 6.0;
         // A closed gate on the room's east doorway: go to the room's lever.
         if let Some(room) = room
             && matches!(
@@ -317,7 +317,7 @@ impl TombBot {
                     )
                 });
             if let Some(lever) = lever {
-                let target_x = (lever.x as f32 - 0.5) * TILE_SIZE;
+                let target_x = (world.frame().rel_col(lever.x) - 0.5) * TILE_SIZE;
                 let dx = target_x - x;
                 let dy = target_feet(lever.y) - feet;
                 return ControlState::new(
@@ -484,10 +484,7 @@ fn room_of(world: &WorldState, player: PlayerId) -> Option<(u8, crate::tomb::Roo
     let run = world.tomb_run_of(player)?;
     let (_, body, state) = world.pilot_of(player)?;
     let (x, y) = state.middle(body);
-    let tile = TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    };
+    let tile = world.frame().tile_at(x, y);
     let room = run.rooms.iter().find(|room| room.interior.contains(tile))?;
     Some((run.floor, room.kind))
 }
@@ -848,10 +845,9 @@ mod tests {
                         hurts.push(format!("t{tick} -{amount} near {near:?}"));
                     }
                     GameplayEventKind::TombMemberDowned { revived: false, .. } => {
-                        let tile = world.pilot_of(player).map(|(_, body, _)| TilePosition {
-                            x: (body.x / TILE_SIZE).floor() as i32,
-                            y: ((body.y - 12.5) / TILE_SIZE).floor() as i32,
-                        });
+                        let tile = world
+                            .pilot_of(player)
+                            .map(|(_, body, _)| world.frame().tile_at(body.x, body.y - 12.5));
                         println!(
                             "downed at tick {tick} floor {}\nlast hurts: {:?}\n{}",
                             run.floor,
@@ -872,10 +868,7 @@ mod tests {
             }
             last = (body.x, body.y);
             if still == 300 {
-                let tile = TilePosition {
-                    x: (body.x / TILE_SIZE).floor() as i32,
-                    y: ((body.y - 12.5) / TILE_SIZE).floor() as i32,
-                };
+                let tile = world.frame().tile_at(body.x, body.y - 12.5);
                 println!(
                     "stalled at tick {tick} floor {} phase {:?} boss {:?} defeated {}\n{}",
                     run.floor,

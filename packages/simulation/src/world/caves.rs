@@ -56,11 +56,12 @@ pub const fn stalactite_is_loose(seed: u64, tile: TilePosition) -> bool {
 impl WorldState {
     /// Records caves rigs enter for the first time ("Found: Crystal Geode").
     pub(super) fn track_cave_discoveries(&mut self, output: &mut TickOutput) {
+        let frame = self.frame();
         if !self.terrain.settings().generator.has_cave_biomes() {
             return;
         }
         for (player_id, player) in &mut self.players {
-            let tile = player.tile_position(TILE_SIZE);
+            let tile = player.tile_in(frame);
             let Some(sample) = self.terrain.cave_at(tile) else {
                 continue;
             };
@@ -86,7 +87,7 @@ impl WorldState {
         let rigs: Vec<TilePosition> = self
             .players
             .values()
-            .map(|player| player.tile_position(TILE_SIZE))
+            .map(|player| player.tile_in(self.frame()))
             .collect();
         let seed = self.terrain.seed();
         let mut loosened = BTreeSet::new();
@@ -120,8 +121,8 @@ impl WorldState {
             }
             #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
             let (x, y) = (
-                (tile.x as f32 + 0.5) * TILE_SIZE,
-                (tile.y as f32 + 0.5) * TILE_SIZE,
+                (self.frame().rel_col(tile.x) + 0.5) * TILE_SIZE,
+                (self.frame().rel_row(tile.y) + 0.5) * TILE_SIZE,
             );
             let rate = self.timing.rate;
             let warning = rate.ticks_for_millis(STALACTITE_WARNING_MILLIS);
@@ -162,8 +163,8 @@ impl WorldState {
         }
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
         let (x, y) = (
-            (target.x as f32 + 0.5) * TILE_SIZE,
-            (target.y as f32 + 0.5) * TILE_SIZE,
+            (self.frame().rel_col(target.x) + 0.5) * TILE_SIZE,
+            (self.frame().rel_row(target.y) + 0.5) * TILE_SIZE,
         );
         for (index, stack) in loot.items.iter().enumerate() {
             #[allow(clippy::cast_precision_loss, reason = "a handful of stacks")]
@@ -227,7 +228,7 @@ impl WorldState {
         let mut caves: BTreeMap<FeatureId, std::sync::Arc<crate::worldgen::streamed::CaveRegion>> =
             BTreeMap::new();
         for player in self.players.values() {
-            let tile = player.tile_position(TILE_SIZE);
+            let tile = player.tile_in(self.frame());
             let rect = TileRect::around(tile, CRITTER_SPAWN_RANGE.0, CRITTER_SPAWN_RANGE.1);
             for region in self.terrain.caves_touching(&rect) {
                 if let Some(biome) = region.biome.as_ref() {
@@ -267,8 +268,8 @@ impl WorldState {
                 }
                 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
                 let (x, y) = (
-                    (home.x as f32 + 0.5) * TILE_SIZE,
-                    (home.y as f32 + 0.5) * TILE_SIZE,
+                    (self.frame().rel_col(home.x) + 0.5) * TILE_SIZE,
+                    (self.frame().rel_row(home.y) + 0.5) * TILE_SIZE,
                 );
                 let state = CritterState {
                     kind,

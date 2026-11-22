@@ -42,7 +42,7 @@ impl WorldState {
     #[must_use]
     pub fn player_village(&self, player_id: PlayerId) -> Option<Arc<Village>> {
         let player = self.players.get(&player_id)?;
-        village::village_at(self.terrain.settings(), player.tile_position(TILE_SIZE))
+        village::village_at(self.terrain.settings(), player.tile_in(self.frame()))
     }
 
     /// The village building whose door `player_id`'s rig stands at: `(village, building)`.
@@ -51,7 +51,7 @@ impl WorldState {
     pub fn player_village_building(&self, player_id: PlayerId) -> Option<(Arc<Village>, usize)> {
         // On foot the pilot is the one at the door (Part II F5).
         let (x, y) = self.actor_position(player_id)?;
-        village::building_at(self.terrain.settings(), x, y)
+        village::building_in(self.terrain.settings(), self.frame(), x, y)
     }
 
     /// The blessing on `player_id`'s rig right now, if any.
@@ -65,13 +65,13 @@ impl WorldState {
 
     /// Records every rig's first visit to the village it is in (once per tick).
     pub(super) fn discover_villages(&mut self, output: &mut TickOutput) {
+        let frame = self.frame();
         if !self.terrain.settings().generator.has_villages() {
             return;
         }
         let settings = *self.terrain.settings();
         for (player_id, player) in &mut self.players {
-            let Some(found) = village::village_at(&settings, player.tile_position(TILE_SIZE))
-            else {
+            let Some(found) = village::village_at(&settings, player.tile_in(frame)) else {
                 continue;
             };
             if player.villages.visited.insert(found.id) {
@@ -388,6 +388,7 @@ impl WorldState {
 
     fn village_refuel(&mut self, player_id: PlayerId, percent: u32) -> PlayerScopedCommandOutcome {
         let sky = self.terrain.settings().generator.sky_bands();
+        let frame = self.frame();
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -397,7 +398,7 @@ impl WorldState {
             clippy::cast_possible_truncation,
             reason = "altitudes are a few thousand rows"
         )]
-        let altitude = (-player.y / TILE_SIZE).floor() as i32;
+        let altitude = (-frame.legacy_y(player.y) / TILE_SIZE).floor() as i32;
         let level = crate::milestone::sky_refuel_level(player, altitude, sky.as_ref());
         let missing = (level - player.fuel).ceil().max(0.0);
         #[allow(

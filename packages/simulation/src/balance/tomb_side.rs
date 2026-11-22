@@ -64,6 +64,8 @@ pub struct SideBot {
     key: Option<(u32, u8)>,
     traps: Vec<Seen>,
     sluices: Vec<TileRect>,
+    /// The world's frame at the last look (F7: trap positions are frame-relative).
+    frame: crate::position::Frame,
 }
 
 fn blocks(world: &WorldState, tile: TilePosition) -> bool {
@@ -77,12 +79,14 @@ impl SideBot {
             key: None,
             traps: Vec::new(),
             sluices: Vec::new(),
+            frame: crate::position::Frame::FIXED,
         }
     }
 
     /// Reads the floor once per floor (traps do not move; their reach is the open run in front
     /// of them).
     fn refresh(&mut self, world: &WorldState, run: &TombRun) {
+        self.frame = world.frame();
         let key = (run.id, run.floor);
         if self.key == Some(key) {
             return;
@@ -141,9 +145,11 @@ impl SideBot {
         }
     }
 
-    fn hits(seen: &Seen, millis: u64, body: &Bounds) -> bool {
+    fn hits(frame: crate::position::Frame, seen: &Seen, millis: u64, body: &Bounds) -> bool {
         match seen.kind {
-            TrapKind::Blade => body.touches_disc(blade_tip(seen.tile, millis), BLADE_RADIUS + 4.0),
+            TrapKind::Blade => {
+                body.touches_disc(blade_tip(frame, seen.tile, millis), BLADE_RADIUS + 4.0)
+            }
             TrapKind::Crusher => {
                 // A shaking crusher counts as down already: never step under one.
                 let (stage, extension) = crusher_state(seen.tile, millis);
@@ -152,13 +158,14 @@ impl SideBot {
                 } else {
                     extension
                 };
-                crusher_block(seen.tile, seen.reach, extension)
+                crusher_block(frame, seen.tile, seen.reach, extension)
                     .is_some_and(|block| block.overlaps(body))
             }
-            TrapKind::DartWall => dart_position(seen.tile, seen.facing, seen.reach, millis)
+            TrapKind::DartWall => dart_position(frame, seen.tile, seen.facing, seen.reach, millis)
                 .is_some_and(|at| dart_bounds(at).overlaps(body)),
-            TrapKind::FogVent => fog_hurts(seen.tile, millis)
-                .is_some_and(|radius| body.touches_disc(fog_centre(seen.tile), radius + 6.0)),
+            TrapKind::FogVent => fog_hurts(seen.tile, millis).is_some_and(|radius| {
+                body.touches_disc(fog_centre(frame, seen.tile), radius + 6.0)
+            }),
             _ => false,
         }
     }
@@ -170,7 +177,7 @@ impl SideBot {
             .traps
             .iter()
             .filter(|seen| {
-                let x = (seen.tile.x as f32 + 0.5) * TILE_SIZE;
+                let x = (self.frame.rel_col(seen.tile.x) + 0.5) * TILE_SIZE;
                 (x - (start.left + start.right) * 0.5).abs() < TILE_SIZE * 18.0
             })
             .collect();
@@ -185,7 +192,8 @@ impl SideBot {
                 start.right + shift,
                 start.bottom,
             );
-            near.iter().any(|seen| Self::hits(seen, now + ahead, &body))
+            near.iter()
+                .any(|seen| Self::hits(self.frame, seen, now + ahead, &body))
         })
     }
 
@@ -193,10 +201,7 @@ impl SideBot {
     /// shut (it goes back for it).
     #[must_use]
     pub fn lever_behind(world: &WorldState, run: &TombRun, (x, feet): (f32, f32)) -> Option<f32> {
-        let here = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
-            y: ((feet - 4.0) / TILE_SIZE).floor() as i32,
-        };
+        let here = world.frame().tile_at(x, feet - 4.0);
         let room = run.rooms.iter().find(|room| {
             let mut reach = room.interior;
             reach.max.x += 1;
@@ -226,7 +231,7 @@ impl SideBot {
                     Some(TileKind::Built(BuiltTile::Lever { on: false, .. }))
                 )
             })
-            .map(|(x, _)| (x as f32 + 0.5) * TILE_SIZE)
+            .map(|(x, _)| (world.frame().rel_col(x) + 0.5) * TILE_SIZE)
     }
 
     /// What to do this tick, for a pilot with feet at `(x, feet)` and body `height` tall that
@@ -243,10 +248,7 @@ impl SideBot {
         self.refresh(world, run);
         let now = world_millis(world.simulation_tick().get(), world.tick_rate_hz());
         // Never linger on a crumbling slab.
-        let under = TilePosition {
-            x: (x / TILE_SIZE).floor() as i32,
-            y: ((feet + 1.0) / TILE_SIZE).floor() as i32,
-        };
+        let under = world.frame().tile_at(x, feet + 1.0);
         if matches!(
             world.terrain().tile(under).map(|found| found.kind),
             Some(TileKind::Built(BuiltTile::TombTrap { kind, .. }))
@@ -255,8 +257,8 @@ impl SideBot {
             return Advice::Go;
         }
         // A sluice basin ahead: wait on its edge for a long dry spell.
-        let column = (x / TILE_SIZE).floor() as i32;
-        let row = ((feet - 1.0) / TILE_SIZE).floor() as i32;
+        let column = world.frame().col(x);
+        let row = world.frame().row(feet - 1.0);
         if let Some(room) = self
             .sluices
             .iter()
@@ -467,10 +469,7 @@ mod tests {
                     let floor = run.floor;
                     let room = world.pilot_of(player).and_then(|(_, body, state)| {
                         let (x, y) = state.middle(body);
-                        let tile = TilePosition {
-                            x: (x / TILE_SIZE).floor() as i32,
-                            y: (y / TILE_SIZE).floor() as i32,
-                        };
+                        let tile = world.frame().tile_at(x, y);
                         run.rooms
                             .iter()
                             .find(|room| room.interior.contains(tile))

@@ -389,6 +389,12 @@ impl Frame {
         )
     }
 
+    /// Local pixel of the centre of tile `(column, row)` ([`Self::tile_center`] for a pair).
+    #[must_use]
+    pub fn centre_of(self, column: i32, row: i32) -> (f32, f32) {
+        self.tile_center(TilePosition { x: column, y: row })
+    }
+
     /// The absolute position of local pixel `(x, y)`.
     #[must_use]
     pub fn world(self, x: f32, y: f32) -> WorldPos {

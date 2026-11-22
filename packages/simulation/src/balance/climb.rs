@@ -51,7 +51,7 @@ pub struct ClimbResult {
 
 /// Tiles above the surface row of `world`'s climb column for a rig at `y` (pixels).
 fn tiles_above(world: &WorldState, y: f32) -> i32 {
-    world.terrain().surface_row(CLIMB_COLUMN) - (y / TILE_SIZE).floor() as i32
+    world.terrain().surface_row(CLIMB_COLUMN) - world.frame().row(y)
 }
 
 /// Climbs a rig with fuel tank `tank` and engine `engine` straight up from the surface of
@@ -59,12 +59,13 @@ fn tiles_above(world: &WorldState, y: f32) -> i32 {
 #[must_use]
 pub fn climb(seed: u64, tank: u8, engine: u8, tick_rate_hz: u32) -> Option<ClimbResult> {
     let mut world = new_world(seed, tick_rate_hz);
+    let frame = world.frame();
     world.set_enemy_difficulty(crate::EnemyDifficulty::Peaceful);
     let surface = world.terrain().surface_row(CLIMB_COLUMN);
     let fuel = fuel_capacity_for_level(tank);
     {
         let rig = world.player_mut(BOT_PLAYER)?;
-        rig.x = (CLIMB_COLUMN as f32 + 0.5) * TILE_SIZE;
+        rig.x = (frame.rel_col(CLIMB_COLUMN) + 0.5) * TILE_SIZE;
         rig.y = surface as f32 * TILE_SIZE - 11.0;
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
@@ -74,7 +75,7 @@ pub fn climb(seed: u64, tank: u8, engine: u8, tick_rate_hz: u32) -> Option<Climb
         rig.engine_level = engine;
     }
     let hz = world.tick_rate_hz();
-    let column_x = (CLIMB_COLUMN as f32 + 0.5) * TILE_SIZE;
+    let column_x = (frame.rel_col(CLIMB_COLUMN) + 0.5) * TILE_SIZE;
     let mut apex = world.player(BOT_PLAYER)?.y;
     let mut apex_tick = 0;
     let mut turn_back = None;

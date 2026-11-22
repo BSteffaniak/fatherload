@@ -83,6 +83,7 @@ pub fn night_exposure(
         &WorldSettings::new(seed),
         SimulationParams::new(hz),
     );
+    let frame = world.frame();
     let Some(column) = exposed_column(&world) else {
         return NightResult::default();
     };
@@ -91,7 +92,7 @@ pub fn night_exposure(
         if let Some(rig) = world.player_mut(PLAYER) {
             #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
             {
-                rig.x = (x as f32 + 0.5) * TILE_SIZE;
+                rig.x = (frame.rel_col(x) + 0.5) * TILE_SIZE;
                 rig.y = (row as f32 - 0.5) * TILE_SIZE;
             }
             rig.velocity_x = 0.0;

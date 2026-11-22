@@ -132,17 +132,6 @@ const fn breakable_by_weapons(kind: TileKind) -> bool {
 
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "world pixels address terrain tiles"
-)]
-fn tile_at(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
     reason = "bounded world positions become event pixels"
 )]
 const fn px(value: f32) -> i32 {
@@ -494,7 +483,13 @@ impl WorldState {
         body.previous_y = body.y;
         // Arcing shots feel the sky's gravity fields (exactly 1.0 on the ground).
         let gravity = spec.gravity
-            * crate::environment::environment_at(self.terrain.settings(), body.x, body.y).gravity;
+            * crate::environment::environment_in(
+                self.terrain.settings(),
+                self.frame(),
+                body.x,
+                body.y,
+            )
+            .gravity;
         body.velocity_y = quantize(gravity.mul_add(dt, body.velocity_y));
         let speed = body.velocity_x.hypot(body.velocity_y);
         #[allow(
@@ -587,7 +582,7 @@ impl WorldState {
         if let Some(blast) = spec.blast {
             self.spawn_warhead(blast, state.owner, before, next_tick);
         } else if spec.terrain_bite > 0 {
-            let _ = self.weapon_broke_tile(tile_at(at.0, at.1), spec.terrain_bite);
+            let _ = self.weapon_broke_tile(self.frame().tile_at(at.0, at.1), spec.terrain_bite);
         }
         output.push_event(GameplayEventKind::ProjectileImpact {
             weapon: state.weapon,
@@ -902,7 +897,7 @@ impl WorldState {
                 aim.1.mul_add(along, muzzle.1),
             );
             end = point;
-            let tile = tile_at(point.0, point.1);
+            let tile = self.frame().tile_at(point.0, point.1);
             if solid_at(&self.terrain, point.0, point.1) {
                 if current_tunnel == Some(tile) {
                     continue;

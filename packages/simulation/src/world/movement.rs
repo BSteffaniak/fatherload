@@ -112,7 +112,7 @@ pub const MUSHROOM_BOUNCE_SPEED: f32 = 300.0;
 
 /// Whether a rig at `(x, y)` would rest on a mushroom cap (either bottom corner).
 fn lands_on_mushroom(terrain: &Terrain, x: f32, y: f32) -> bool {
-    let points = authoritative_collision_points(x, y);
+    let points = authoritative_collision_points(terrain.frame(), x, y);
     points[2..].iter().any(|position| {
         terrain
             .tile(*position)
@@ -156,7 +156,9 @@ impl WorldState {
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
         // Altitude physics (F6): thin air, wind, updrafts and gravity fields. Standard (and
         // so the classic path, bit for bit) everywhere but a V8 world's sky.
-        let mut environment = crate::environment::environment_at(&settings, player.x, player.y);
+        let frame = self.terrain.frame();
+        let mut environment =
+            crate::environment::environment_in(&settings, frame, player.x, player.y);
         // Free lift is rationed like sky fuel (`milestone::free_lift_share`): a laden rig
         // that cannot cross the dead-air gap is too heavy for the updraft.
         if environment.updraft > 0.0
@@ -166,7 +168,7 @@ impl WorldState {
                 clippy::cast_possible_truncation,
                 reason = "altitudes are a few thousand rows"
             )]
-            let altitude = (-player.y / TILE_SIZE).floor() as i32;
+            let altitude = (-frame.legacy_y(player.y) / TILE_SIZE).floor() as i32;
             environment.updraft *= crate::milestone::free_lift_share(player, altitude, &bands);
         }
         let thin_air = !environment.is_standard();
@@ -256,8 +258,8 @@ impl WorldState {
             )]
             let jet = crate::environment::jet_stream_in_air(
                 &settings,
-                (player.x / TILE_SIZE).floor() as i32,
-                (player.y / TILE_SIZE).floor() as i32,
+                frame.col(player.x),
+                frame.row(player.y),
             );
             if jet == 0.0 {
                 driven
@@ -325,7 +327,7 @@ impl WorldState {
         // swims rather than flies. `1 / (1 + k dt)` keeps the step exact in plain arithmetic.
         if self
             .terrain
-            .water_at(authoritative_point_to_tile(player.x, player.y))
+            .water_at(authoritative_point_to_tile(frame, player.x, player.y))
         {
             let drag = 1.0 / WATER_DRAG_PER_SECOND.mul_add(delta_seconds, 1.0);
             player.velocity_x = quantize_simulation_scalar(player.velocity_x * drag);
@@ -503,42 +505,47 @@ pub fn collision_steps(delta_x: f32, delta_y: f32) -> u32 {
 }
 
 pub(super) fn authoritative_player_collides(terrain: &Terrain, x: f32, y: f32) -> bool {
-    authoritative_collision_points(x, y)
+    authoritative_collision_points(terrain.frame(), x, y)
         .iter()
         .any(|position| terrain.is_solid_at(*position))
 }
 
-pub(super) fn authoritative_collision_points(x: f32, y: f32) -> [TilePosition; 4] {
+pub(super) fn authoritative_collision_points(
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> [TilePosition; 4] {
     [
         authoritative_point_to_tile(
+            frame,
             x - AUTHORITATIVE_PLAYER_RADIUS,
             y - AUTHORITATIVE_PLAYER_RADIUS,
         ),
         authoritative_point_to_tile(
+            frame,
             x + AUTHORITATIVE_PLAYER_RADIUS,
             y - AUTHORITATIVE_PLAYER_RADIUS,
         ),
         authoritative_point_to_tile(
+            frame,
             x - AUTHORITATIVE_PLAYER_RADIUS,
             y + AUTHORITATIVE_PLAYER_RADIUS,
         ),
         authoritative_point_to_tile(
+            frame,
             x + AUTHORITATIVE_PLAYER_RADIUS,
             y + AUTHORITATIVE_PLAYER_RADIUS,
         ),
     ]
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    reason = "authoritative collision bridges floating player coordinates to integer terrain tiles"
-)]
-pub(super) fn authoritative_point_to_tile(x: f32, y: f32) -> TilePosition {
-    TilePosition {
-        x: (x / TILE_SIZE).floor() as i32,
-        y: (y / TILE_SIZE).floor() as i32,
-    }
+/// The tile under local pixel `(x, y)` of a world in `frame`.
+pub(super) fn authoritative_point_to_tile(
+    frame: crate::position::Frame,
+    x: f32,
+    y: f32,
+) -> TilePosition {
+    frame.tile_at(x, y)
 }
 
 #[allow(
@@ -546,10 +553,8 @@ pub(super) fn authoritative_point_to_tile(x: f32, y: f32) -> TilePosition {
     reason = "authoritative movement clamps integer terrain bounds in floating player space"
 )]
 pub(super) fn clamp_authoritative_player_x(terrain: &Terrain, x: f32) -> f32 {
-    x.clamp(
-        terrain.min_x() as f32 * TILE_SIZE,
-        terrain.max_x() as f32 * TILE_SIZE,
-    )
+    let frame = terrain.frame();
+    x.clamp(frame.col_px(terrain.min_x()), frame.col_px(terrain.max_x()))
 }
 
 #[allow(
@@ -557,8 +562,12 @@ pub(super) fn clamp_authoritative_player_x(terrain: &Terrain, x: f32) -> f32 {
     reason = "authoritative movement clamps integer terrain bounds in floating player space"
 )]
 pub(super) fn clamp_authoritative_player_y(terrain: &Terrain, y: f32) -> f32 {
-    y.clamp(
-        AUTHORITATIVE_MIN_PLAYER_Y,
-        (terrain.height() as f32 - 1.0) * TILE_SIZE,
-    )
+    let frame = terrain.frame();
+    // The flight ceiling is a place (absolute rows), like the floor.
+    let ceiling = if frame.at_origin() {
+        AUTHORITATIVE_MIN_PLAYER_Y
+    } else {
+        frame.from_legacy_px(0.0, AUTHORITATIVE_MIN_PLAYER_Y).1
+    };
+    y.clamp(ceiling, frame.row_px(terrain.height() - 1))
 }

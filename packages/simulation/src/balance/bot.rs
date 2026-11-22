@@ -352,7 +352,7 @@ impl MinerBot {
             }
             return (ControlState::default(), actions);
         }
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         if tile != self.last_tile {
             self.last_tile = tile;
             self.last_move = self.clock;
@@ -371,7 +371,7 @@ impl MinerBot {
             Phase::Descend(index) => self.descend(world, rig, index),
             Phase::Mine => self.mine(world, rig, &mut actions),
             Phase::Spur { target, row, back } => self.spur(world, rig, target, row, back),
-            Phase::Sidestep { target, row } => self.sidestep(rig, target, row),
+            Phase::Sidestep { target, row } => self.sidestep(world.frame(), rig, target, row),
             Phase::Blast { row, until } => self.blast(world, rig, row, until),
             Phase::Ascend(index) => self.ascend(world, rig, index),
             Phase::Town(index) => self.town(world, rig, index, &mut actions),
@@ -408,7 +408,7 @@ impl MinerBot {
                 if std::env::var_os("BALANCE_TRACE_HAZARD").is_some() {
                     eprintln!(
                         "hazard {lost:.1} at {:?} {:?}: {:?}",
-                        rig.tile_position(TILE_SIZE),
+                        rig.tile_in(world.frame()),
                         self.phase,
                         output.events.iter().map(|e| &e.kind).collect::<Vec<_>>()
                     );
@@ -418,7 +418,7 @@ impl MinerBot {
         if self.pending_sale {
             self.pending_sale = false;
         }
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         self.stats.deepest_row = self.stats.deepest_row.max(tile.y);
         if let Some((_, deepest)) = &mut self.trip_fuel {
             *deepest = (*deepest).max(tile.y);
@@ -471,7 +471,7 @@ impl MinerBot {
     }
 
     fn surface_y(world: &WorldState, col: i32) -> f32 {
-        world.terrain().surface_row(col) as f32 * TILE_SIZE
+        world.frame().rel_row(world.terrain().surface_row(col)) * TILE_SIZE
     }
 
     fn new_shaft(&mut self, world: &WorldState) {
@@ -512,11 +512,11 @@ impl MinerBot {
         }
         self.new_shaft(world);
         let col = self.route[0].col;
-        let target_x = centre(col);
+        let target_x = centre(world.frame(), col);
         let dx = target_x - rig.x;
         if dx.abs() < TILE_SIZE * 0.12 && rig.velocity_x.abs() < TILE_SIZE * 0.3 {
             self.trip_started = self.clock;
-            self.trip_fuel = Some((rig.fuel, rig.tile_position(TILE_SIZE).y));
+            self.trip_fuel = Some((rig.fuel, rig.tile_in(world.frame()).y));
             self.trip_end = TripEnd::ShaftDone;
             self.enter(Phase::Descend(0));
             return ControlState::new(0.0, false, false);
@@ -533,7 +533,7 @@ impl MinerBot {
             self.enter(Phase::Mine);
             return ControlState::default();
         };
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         let last = index + 1 == self.route.len();
         let grounded = DrillContact::of(world.terrain(), rig).grounded;
         if last {
@@ -542,17 +542,21 @@ impl MinerBot {
                 self.enter(Phase::Mine);
                 return ControlState::default();
             }
-            return fall(rig, segment.col);
+            return fall(world.frame(), rig, segment.col);
         }
         if tile.y < segment.bottom {
-            return fall(rig, segment.col);
+            return fall(world.frame(), rig, segment.col);
         }
         // At the knee: shift to the next segment's column on this row.
         let next = self.route[index + 1];
-        if tile.x == next.col && (rig.x - centre(next.col)).abs() < TILE_SIZE * 0.2 {
+        if tile.x == next.col && (rig.x - centre(world.frame(), next.col)).abs() < TILE_SIZE * 0.2 {
             self.enter(Phase::Descend(index + 1));
         }
-        hover_to(rig, centre(next.col), row_centre(segment.bottom))
+        hover_to(
+            rig,
+            centre(world.frame(), next.col),
+            row_centre(world.frame(), segment.bottom),
+        )
     }
 
     fn mine(
@@ -562,7 +566,7 @@ impl MinerBot {
         actions: &mut Vec<PlayerCommand>,
     ) -> ControlState {
         let terrain = world.terrain();
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         let Some(segment) = self.route.last().copied() else {
             self.enter(Phase::Ascend(0));
             return ControlState::default();
@@ -570,18 +574,22 @@ impl MinerBot {
         let contact = DrillContact::of(terrain, rig);
         if !contact.grounded {
             // Falling (into a cave, or after a blast): keep over the column.
-            return fall(rig, segment.col);
+            return fall(world.frame(), rig, segment.col);
         }
         if let Some(last) = self.route.last_mut() {
             last.bottom = last.bottom.max(tile.y);
         }
         if let Some(end) = self.go_home_reason(world, rig, tile) {
             self.trip_end = end;
-            return self.start_ascent(rig);
+            return self.start_ascent(world.frame(), rig);
         }
         if tile.x != segment.col {
             // Knocked off the column: walk back.
-            return ControlState::new(steer(centre(segment.col) - rig.x), false, false);
+            return ControlState::new(
+                steer(centre(world.frame(), segment.col) - rig.x),
+                false,
+                false,
+            );
         }
         if self.planned_row != Some(tile.y) {
             self.planned_row = Some(tile.y);
@@ -601,7 +609,7 @@ impl MinerBot {
                 row: tile.y,
                 back: false,
             });
-            return ControlState::new(steer(centre(target) - rig.x), false, false);
+            return ControlState::new(steer(centre(world.frame(), target) - rig.x), false, false);
         }
         let below = TilePosition {
             x: tile.x,
@@ -609,17 +617,17 @@ impl MinerBot {
         };
         let Some(below_tile) = terrain.tile(below) else {
             self.shaft_done = true;
-            return self.start_ascent(rig);
+            return self.start_ascent(world.frame(), rig);
         };
         if terrain.is_indestructible_at(below) {
             self.shaft_done = true;
-            return self.start_ascent(rig);
+            return self.start_ascent(world.frame(), rig);
         }
         let band = terrain.band_at(below);
         if heat_excess(band, rig.radiator_level, rig.hazard_gear.heat_shield) > 0 {
             self.wants_cooling = true;
             self.shaft_done = true;
-            return self.start_ascent(rig);
+            return self.start_ascent(world.frame(), rig);
         }
         let too_hard = !is_hazard(below_tile.kind) && !diggable(world, rig, below);
         if too_hard {
@@ -640,10 +648,10 @@ impl MinerBot {
                     target: side,
                     row: tile.y,
                 });
-                return ControlState::new(steer(centre(side) - rig.x), false, false);
+                return ControlState::new(steer(centre(world.frame(), side) - rig.x), false, false);
             }
             self.shaft_done = true;
-            return self.start_ascent(rig);
+            return self.start_ascent(world.frame(), rig);
         }
         // Drill down; watch for rock the drill cannot keep up with.
         match self.drill_tile {
@@ -651,12 +659,12 @@ impl MinerBot {
                 if self.clock - since > SLOW_TILE_SECONDS {
                     self.wants_drill = true;
                     self.shaft_done = true;
-                    return self.start_ascent(rig);
+                    return self.start_ascent(world.frame(), rig);
                 }
             }
             _ => self.drill_tile = Some((below, self.clock)),
         }
-        let horizontal = steer(centre(segment.col) - rig.x) * 0.3;
+        let horizontal = steer(centre(world.frame(), segment.col) - rig.x) * 0.3;
         ControlState::new(horizontal, false, true)
     }
 
@@ -680,8 +688,8 @@ impl MinerBot {
         (rig.fuel < rows * self.fuel_per_row * 1.35 + 12.0).then_some(TripEnd::Fuel)
     }
 
-    fn start_ascent(&mut self, rig: &Player) -> ControlState {
-        let tile = rig.tile_position(TILE_SIZE);
+    fn start_ascent(&mut self, frame: crate::position::Frame, rig: &Player) -> ControlState {
+        let tile = rig.tile_in(frame);
         self.climb_from = Some((rig.fuel, tile.y));
         let last = self.route.len().saturating_sub(1);
         self.enter(Phase::Ascend(last));
@@ -738,7 +746,7 @@ impl MinerBot {
         row: i32,
         back: bool,
     ) -> ControlState {
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         let col = self.route.last().map_or(target, |segment| segment.col);
         if tile.y != row {
             // Fell or was knocked out of the tunnel: give up on it, go home from here if the
@@ -747,7 +755,11 @@ impl MinerBot {
                 self.enter(Phase::Mine);
                 return ControlState::default();
             }
-            return hover_to(rig, centre(col), row_centre(row));
+            return hover_to(
+                rig,
+                centre(world.frame(), col),
+                row_centre(world.frame(), row),
+            );
         }
         if !rig.has_cargo_space() && !back {
             self.enter(Phase::Spur {
@@ -757,18 +769,18 @@ impl MinerBot {
             });
         }
         if back {
-            if tile.x == col && (rig.x - centre(col)).abs() < TILE_SIZE * 0.15 {
+            if tile.x == col && (rig.x - centre(world.frame(), col)).abs() < TILE_SIZE * 0.15 {
                 self.enter(Phase::Mine);
                 return ControlState::default();
             }
-            return ControlState::new(steer(centre(col) - rig.x), false, false);
+            return ControlState::new(steer(centre(world.frame(), col) - rig.x), false, false);
         }
         let reached = tile.x == target
             || world
                 .terrain()
                 .tile(TilePosition { x: target, y: row })
                 .is_none_or(|here| here.kind == TileKind::Air)
-                && (rig.x - centre(target)).abs() < TILE_SIZE * 0.6;
+                && (rig.x - centre(world.frame(), target)).abs() < TILE_SIZE * 0.6;
         if reached {
             self.enter(Phase::Spur {
                 target,
@@ -776,12 +788,22 @@ impl MinerBot {
                 back: true,
             });
         }
-        ControlState::new(steer(centre(target) - rig.x).signum(), false, false)
+        ControlState::new(
+            steer(centre(world.frame(), target) - rig.x).signum(),
+            false,
+            false,
+        )
     }
 
-    fn sidestep(&mut self, rig: &Player, target: i32, row: i32) -> ControlState {
-        let tile = rig.tile_position(TILE_SIZE);
-        if tile.x == target && (rig.x - centre(target)).abs() < TILE_SIZE * 0.15 {
+    fn sidestep(
+        &mut self,
+        frame: crate::position::Frame,
+        rig: &Player,
+        target: i32,
+        row: i32,
+    ) -> ControlState {
+        let tile = rig.tile_in(frame);
+        if tile.x == target && (rig.x - centre(frame, target)).abs() < TILE_SIZE * 0.15 {
             self.planned_row = None;
             self.enter(Phase::Mine);
             return ControlState::default();
@@ -790,7 +812,7 @@ impl MinerBot {
             self.enter(Phase::Mine);
             return ControlState::default();
         }
-        ControlState::new(steer(centre(target) - rig.x), false, false)
+        ControlState::new(steer(centre(frame, target) - rig.x), false, false)
     }
 
     /// The column beside `tile` the shaft can move to around a hazard below.
@@ -877,14 +899,18 @@ impl MinerBot {
             // Back down into the crater; the magnet hoovers the loot on the way.
             self.planned_row = None;
             self.enter(Phase::Mine);
-            return fall(rig, col);
+            return fall(world.frame(), rig, col);
         }
         let _ = world;
-        hover_to(rig, centre(col), row_centre(row))
+        hover_to(
+            rig,
+            centre(world.frame(), col),
+            row_centre(world.frame(), row),
+        )
     }
 
     fn ascend(&mut self, world: &WorldState, rig: &Player, index: usize) -> ControlState {
-        let tile = rig.tile_position(TILE_SIZE);
+        let tile = rig.tile_in(world.frame());
         let Some(segment) = self.route.get(index).copied() else {
             return self.arrive_in_town(world, rig);
         };
@@ -893,21 +919,27 @@ impl MinerBot {
             if rig.y < surface - TILE_SIZE * 0.9 {
                 return self.arrive_in_town(world, rig);
             }
-            return climb(rig, segment.col);
+            return climb(world.frame(), rig, segment.col);
         }
         if tile.y > segment.top {
-            return climb(rig, segment.col);
+            return climb(world.frame(), rig, segment.col);
         }
         let previous = self.route[index - 1];
-        if tile.x == previous.col && (rig.x - centre(previous.col)).abs() < TILE_SIZE * 0.2 {
+        if tile.x == previous.col
+            && (rig.x - centre(world.frame(), previous.col)).abs() < TILE_SIZE * 0.2
+        {
             self.enter(Phase::Ascend(index - 1));
         }
-        hover_to(rig, centre(previous.col), row_centre(segment.top))
+        hover_to(
+            rig,
+            centre(world.frame(), previous.col),
+            row_centre(world.frame(), segment.top),
+        )
     }
 
     fn arrive_in_town(&mut self, world: &WorldState, rig: &Player) -> ControlState {
         if let Some((fuel, row)) = self.climb_from.take() {
-            let surface = world.terrain().surface_row(rig.tile_position(TILE_SIZE).x);
+            let surface = world.terrain().surface_row(rig.tile_in(world.frame()).x);
             let rows = (row - surface).max(1) as f32;
             if rows >= 8.0 {
                 let per_row = ((fuel - rig.fuel) / rows).max(0.0);
@@ -916,7 +948,7 @@ impl MinerBot {
         }
         self.stats.trips += 1;
         if let Some((fuel, deepest)) = self.trip_fuel.take() {
-            let surface = world.terrain().surface_row(rig.tile_position(TILE_SIZE).x);
+            let surface = world.terrain().surface_row(rig.tile_in(world.frame()).x);
             self.stats.trip_log.push(TripRecord {
                 end_seconds: self.clock,
                 seconds: self.clock - self.trip_started,
@@ -954,7 +986,7 @@ impl MinerBot {
                 self.enter(Phase::Town(index + 1));
                 return ControlState::default();
             };
-            centre(col)
+            centre(world.frame(), col)
         } else {
             let Some(building) = SURFACE_BUILDINGS.iter().find(|b| b.zone == stop.zone()) else {
                 self.enter(Phase::Town(index + 1));
@@ -1397,13 +1429,13 @@ const fn is_hazard(kind: TileKind) -> bool {
 }
 
 /// Pixel x of column `col`'s centre.
-fn centre(col: i32) -> f32 {
-    (col as f32 + 0.5) * TILE_SIZE
+fn centre(frame: crate::position::Frame, col: i32) -> f32 {
+    (frame.rel_col(col) + 0.5) * TILE_SIZE
 }
 
 /// Pixel y of a rig resting on the floor of row `row`.
-fn row_centre(row: i32) -> f32 {
-    (row as f32 + 0.5) * TILE_SIZE
+fn row_centre(frame: crate::position::Frame, row: i32) -> f32 {
+    (frame.rel_row(row) + 0.5) * TILE_SIZE
 }
 
 /// Proportional horizontal steering toward `dx` pixels away.
@@ -1421,34 +1453,34 @@ fn travel(world: &WorldState, rig: &Player, target_x: f32) -> ControlState {
     let terrain = world.terrain();
     let dx = target_x - rig.x;
     let dir = if dx < 0.0 { -1 } else { 1 };
-    let col = (rig.x / TILE_SIZE).floor() as i32;
+    let col = world.frame().col(rig.x);
     let ground = |x: i32| terrain.surface_row(x);
     let hole = (0..=2).any(|step| {
         let x = col + dir * step;
         !terrain.is_solid_at(TilePosition { x, y: ground(x) })
     });
-    let sunk = rig.y > (ground(col) as f32 + 0.1) * TILE_SIZE;
-    let climbing = rig.y > (ground(col + dir) as f32 - 0.4) * TILE_SIZE
+    let sunk = rig.y > (world.frame().rel_row(ground(col)) + 0.1) * TILE_SIZE;
+    let climbing = rig.y > (world.frame().rel_row(ground(col + dir)) - 0.4) * TILE_SIZE
         && terrain.is_solid_at(TilePosition {
             x: col + dir,
-            y: (rig.y / TILE_SIZE).floor() as i32,
+            y: world.frame().row(rig.y),
         });
     let thrust = hole || sunk || climbing;
     ControlState::new(steer(dx), thrust || rig.velocity_y > BRAKE_SPEED, false)
 }
 
 /// Falling down column `col`, braking when too fast.
-fn fall(rig: &Player, col: i32) -> ControlState {
+fn fall(frame: crate::position::Frame, rig: &Player, col: i32) -> ControlState {
     ControlState::new(
-        steer(centre(col) - rig.x) * 0.6,
+        steer(centre(frame, col) - rig.x) * 0.6,
         rig.velocity_y > BRAKE_SPEED,
         false,
     )
 }
 
 /// Climbing column `col`.
-fn climb(rig: &Player, col: i32) -> ControlState {
-    ControlState::new(steer(centre(col) - rig.x) * 0.6, true, false)
+fn climb(frame: crate::position::Frame, rig: &Player, col: i32) -> ControlState {
+    ControlState::new(steer(centre(frame, col) - rig.x) * 0.6, true, false)
 }
 
 /// Holding height at `y` while moving to `x` (shaft knees, retreats).
