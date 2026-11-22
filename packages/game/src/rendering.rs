@@ -20,6 +20,7 @@ use fatherload_simulation::{
 mod build;
 mod counters;
 mod crypt_map;
+mod descent_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
@@ -574,6 +575,13 @@ impl GameRenderer {
                 && let Some(banner) = &seat.village.banner
             {
                 village_hud::draw_village_banner(draw, banner, shell.update_ticks);
+            }
+            if !shell.global_overlay()
+                && !in_room
+                && seat.modal.is_none()
+                && let Some(banner) = &seat.descent.banner
+            {
+                descent_hud::draw_stratum_banner(draw, banner, shell.update_ticks);
             }
             if !shell.global_overlay()
                 && let Some(fanfare) = &seat.fanfare

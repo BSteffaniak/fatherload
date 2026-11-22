@@ -1225,7 +1225,8 @@ pub(super) fn draw_depth_ruler_for_view(
     let step = match max_depth {
         0..=180 => 20,
         181..=500 => 50,
-        _ => 100,
+        501..=2_000 => 100,
+        _ => 1_000,
     };
     for marker in (0..=max_depth).step_by(usize::try_from(step).unwrap_or(20)) {
         let y = top + marker * (height - 1) / max_depth;
@@ -1243,10 +1244,12 @@ pub(super) fn draw_depth_ruler_for_view(
     draw.draw_rectangle(x - 4, marker_y - 3, 11, 7, INK);
     draw.draw_rectangle(x - 3, marker_y - 2, 9, 5, body);
     draw.draw_rectangle(x - 3, marker_y + 1, 9, 1, shade);
+    super::descent_hud::draw_ruler_label(draw, terrain, view, (x, marker_y));
 }
 
-/// Tints the depth ruler's well with the band colours of the rig's own column, so the wavy
-/// layer boundaries of this world show where the next layer starts.
+/// Tints the depth ruler's well with the layer colours of the rig's own column (a Deep Descent
+/// world's strata, an older world's bands), so the wavy boundaries show where the next layer
+/// starts.
 fn draw_ruler_strata(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &Terrain,
@@ -1258,7 +1261,7 @@ fn draw_ruler_strata(
     let band_at_row = |row: i32| {
         let tile_y = row * max_depth / (height - 1).max(1);
         (tile_y > super::terrain::tile_art::SKY_MAX_TILE_Y).then(|| {
-            terrain.band_at(TilePosition {
+            terrain.stratum_at(TilePosition {
                 x: column,
                 y: tile_y,
             })
@@ -1271,8 +1274,8 @@ fn draw_ruler_strata(
         if band == current && row < height {
             continue;
         }
-        if let Some(band) = current {
-            let color = super::terrain::tile_art::material_color(band.soft_material(), band);
+        if let Some(stratum) = current {
+            let color = super::terrain::tile_art::stratum_rock_color(stratum);
             draw.draw_rectangle(x + 1, top + start, 4, row - start, color.alpha(0.75));
         }
         start = row;
@@ -1745,10 +1748,18 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
         || format!("Depth {} m", hud.depth),
         |altitude| format!("Altitude {altitude} m"),
     );
-    let layer = ui
-        .snapshot
-        .terrain
-        .band_at(ui.player.tile_in(crate::view_frame::frame()));
+    let tile = ui.player.tile_position(TILE_SIZE);
+    let layer = if ui.snapshot.terrain.settings().generator.has_descents() {
+        let stratum = ui.snapshot.terrain.stratum_at(tile);
+        format!(
+            "{} {}: {}",
+            stratum.descent().numeral(),
+            stratum.descent().name(),
+            stratum.name()
+        )
+    } else {
+        ui.snapshot.terrain.layer_name(tile).to_owned()
+    };
     let terrain = ui.snapshot.terrain;
     let column = crate::view_frame::frame().legacy_x(ui.player.x) / TILE_SIZE;
     let across = if terrain.is_streamed() {
@@ -1758,8 +1769,7 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
         format!("{column:.0} m from the west edge")
     };
     format!(
-        "{height} ({}) | deepest {} m | {across}",
-        layer.name(),
+        "{height} ({layer}) | deepest {} m | {across}",
         ui.snapshot.progression.deepest_tile_reached,
     )
 }

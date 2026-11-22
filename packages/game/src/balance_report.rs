@@ -1,5 +1,5 @@
 //! `fatherload --balance-report [--seeds N] [--minutes M] [--hz H] [--only a,b]
-//! [--strategies a,b]` runs the balance harness (`fatherload_simulation::balance`): bot players
+//! [--strategies a,b] [--generator v11]` runs the balance harness (`fatherload_simulation::balance`): bot players
 //! on fresh worlds across seeds, duels, exposure runs, the building probe and the climb bot,
 //! and prints the Markdown report. Use a release build; runs are spread over every CPU core.
 
@@ -79,6 +79,13 @@ pub fn parse_args(args: &[String]) -> Result<Option<BalanceReportOptions>, Strin
                     })
                     .collect::<Result<_, _>>()?;
             }
+            "--generator" => {
+                let name = iter.next().ok_or("--generator needs a version, e.g. v11")?;
+                config.generator = fatherload_simulation::worldgen::GeneratorVersion::ALL
+                    .into_iter()
+                    .find(|generator| generator.name() == name)
+                    .ok_or_else(|| format!("unknown generator {name}"))?;
+            }
             "--threads" => {
                 config.threads = iter
                     .next()
@@ -152,5 +159,14 @@ mod tests {
         assert!(parse_args(&args("--balance-report --seeds 0")).is_err());
         assert!(parse_args(&args("--balance-report --only nonsense")).is_err());
         assert!(parse_args(&args("--balance-report --bogus")).is_err());
+        // The Deep Descent preview is selectable.
+        let deep = parse_args(&args("--balance-report --generator v11"))
+            .expect("valid")
+            .expect("present");
+        assert_eq!(
+            deep.config.generator,
+            fatherload_simulation::worldgen::GeneratorVersion::DEEP_DESCENT
+        );
+        assert!(parse_args(&args("--balance-report --generator v99")).is_err());
     }
 }

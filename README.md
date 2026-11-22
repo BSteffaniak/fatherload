@@ -961,6 +961,31 @@ beside a cracked seal, or a **story** seen through.
   13,000-15,000 at tier 3, 35,000-42,000 at tier 4 and 70,000-90,000 at tier 5 (8-29 caches
   over 3 to 6 floors).
 
+### The Deep Descent (preview, generator V11)
+
+The **World** row of the new-game dialog switches between the classic dig and the **Deep
+Descent (preview)**: a world about **13,000 rows** deep (15 times a V10 world) in **eight
+Descents** (the Crust, the Old Deep, the Living Dark, the Drowned and Frozen, the Hollow World,
+the Strange Layers, the Ancients and the Heart) and **41 strata**. The classic dig (generator
+V10) stays the default until Wave 8 fills Descents I to III. `--deep-descent` makes the
+preview the dialog's default; the tools take `--generator v11` (`--worldgen-report`,
+`--worldgen-preview`, `--balance-report`), and the screenshot scenes `descent_1_crust` to
+`descent_8_heart`, `descent_5_hollow_world` and `descent_outpost` show it.
+
+- Descents I and II are the twelve classic layers, stretched to about 2,700 rows. Every stratum
+  below is a **placeholder**: its own rock colours, ores and hazards from the stratum registry,
+  creatures borrowed from the classic roster, and the rules of the classic layer it stands in
+  for. Strata meet in ragged transition zones, wider between Descents.
+- Each Descent has a placeholder **outpost** hall a short way off the spawn column and a
+  **gate chamber** at its end (the gates are open while they are placeholders). Descent V
+  breaks into the **Hollow World**: a cavern hundreds of rows tall with floating stones. The
+  Strange Layers hold crystal-lined **anomaly rooms**.
+- The depth ruler names the Descent and stratum beside its marker, the mine map's footer names
+  them too, and an **"entering <stratum>"** banner slides in at each new stratum (a new
+  Descent shows its number).
+- Saves pack a streamed world's dug chunks into one compressed stream (save format 13); a V11
+  world explored to the bottom holds about 20 MiB of simulation heap.
+
 ### Art and audio pass (wave 6)
 
 A polish pass over everything from waves 3-5, presentation only (no gameplay, save, protocol or

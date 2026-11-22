@@ -18,6 +18,7 @@
 )]
 
 use fatherload_simulation::{
+    descent::Stratum,
     terrain::{DeepStratum, SurfaceMaterial, Terrain, TileKind, TilePosition},
     worldgen::{
         Band, HazardKind,
@@ -258,6 +259,118 @@ pub const fn strata_for(band: Band) -> Strata {
         Band::Basalt => BASALT_BAND,
         Band::Deep(stratum) => deep_strata(stratum),
     }
+}
+
+/// The palette entry nearest `color` (weighted RGB distance).
+fn nearest_index(color: (f32, f32, f32)) -> PaletteIndex {
+    let mut best = (f32::MAX, 0);
+    for (index, (_, entry)) in PALETTE.iter().enumerate() {
+        let (dr, dg, db) = (
+            f32::from(entry.r) - color.0,
+            f32::from(entry.g) - color.1,
+            f32::from(entry.b) - color.2,
+        );
+        let distance = (dr * dr).mul_add(2.0, (dg * dg).mul_add(4.0, db * db * 3.0));
+        if distance < best.0 {
+            best = (distance, index);
+        }
+    }
+    PaletteIndex::try_from(best.1).unwrap_or(0)
+}
+
+/// A four-step ramp (deepest shade, shade, body, highlight) around a registry colour.
+fn ramp_around(color: fatherload_simulation::descent::Rgb) -> Ramp {
+    let (r, g, b) = (f32::from(color.0), f32::from(color.1), f32::from(color.2));
+    let scaled = |factor: f32| (r * factor, g * factor, b * factor);
+    let lifted = |share: f32| {
+        (
+            (255.0 - r).mul_add(share, r),
+            (255.0 - g).mul_add(share, g),
+            (255.0 - b).mul_add(share, b),
+        )
+    };
+    let mut ramp = [
+        nearest_index(scaled(0.3)),
+        nearest_index(scaled(0.6)),
+        nearest_index(scaled(1.0)),
+        nearest_index(lifted(0.35)),
+    ];
+    // Keep the shades apart where the palette folds two steps onto one colour.
+    if ramp[1] == ramp[2] {
+        ramp[1] = crate::rendering::pixel_art::shade::darker(ramp[2]);
+    }
+    if ramp[0] == ramp[1] {
+        ramp[0] = crate::rendering::pixel_art::shade::darker(ramp[1]);
+    }
+    ramp
+}
+
+/// The palettes of a placeholder stratum (Descents III to VIII), built from its registry
+/// colours ([`fatherload_simulation::descent::StratumPalette`]) once per process.
+#[must_use]
+pub fn stratum_strata(stratum: Stratum) -> Strata {
+    static TABLE: std::sync::OnceLock<Vec<Strata>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        Stratum::ALL
+            .iter()
+            .map(|stratum| {
+                let def = stratum.def();
+                let palette = def.palette;
+                let rock = ramp_around(palette.rock);
+                let back = ramp_around(palette.back);
+                // The stratum's common rock wears its rock colour, its tough rock the hard one,
+                // whichever tile kinds the registry gives them.
+                let mut strata = Strata {
+                    dirt: rock,
+                    clay: rock,
+                    stone: rock,
+                    hard: rock,
+                    back: [back[2], back[1]],
+                    accent: palette.accent.map(|accent| ramp_around(accent)[2]),
+                };
+                if def.hard != def.soft {
+                    let hard = ramp_around(palette.hard);
+                    match def.hard {
+                        TileKind::Dirt => strata.dirt = hard,
+                        TileKind::Clay => strata.clay = hard,
+                        TileKind::HardRock => strata.hard = hard,
+                        _ => strata.stone = hard,
+                    }
+                }
+                strata
+            })
+            .collect()
+    })[stratum.index()]
+}
+
+/// The palettes at `position` of `terrain`: the classic band art, or a Deep Descent world's
+/// placeholder stratum colours below Descent II.
+#[must_use]
+pub fn strata_at(terrain: &Terrain, position: TilePosition) -> Strata {
+    if terrain.settings().generator.has_descents() {
+        let stratum = terrain.stratum_at(position);
+        if !stratum.is_classic() {
+            return stratum_strata(stratum);
+        }
+    }
+    strata_for(terrain.band_at(position))
+}
+
+/// The body colour of `stratum`'s common rock as drawn (depth ruler, map legends).
+#[must_use]
+pub fn stratum_rock_color(stratum: Stratum) -> Color {
+    let strata = if stratum.is_classic() {
+        strata_for(stratum.host_band())
+    } else {
+        stratum_strata(stratum)
+    };
+    let index = match stratum.def().soft {
+        TileKind::Dirt => strata.dirt[2],
+        TileKind::Clay => strata.clay[2],
+        TileKind::HardRock => strata.hard[2],
+        _ => strata.stone[2],
+    };
+    crate::rendering::pixel_art::shade::color_at(index)
 }
 
 /// The plain rock an ore, artifact or pocket in `band` is embedded in.
@@ -633,7 +746,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         .map_or(TileKind::Air, |tile| tile.kind);
     let band = terrain.band_at(position);
     let ground = biome::ground_material(terrain.settings(), position.x, position.y);
-    let mut strata = strata_for(band);
+    let mut strata = strata_at(terrain, position);
     // Caves and tunnels in a biome's own rock show that rock's back wall.
     match ground {
         Some(TileKind::Surface(SurfaceMaterial::Granite) | TileKind::Stone) => {

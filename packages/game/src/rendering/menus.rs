@@ -462,6 +462,7 @@ fn cycler(value: &str) -> String {
     format!("\u{2190} {value} \u{2192}")
 }
 
+#[allow(clippy::too_many_lines, reason = "one entry per dialog row")]
 pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let Some(setup) = ui.shell.world_setup.as_ref() else {
         return;
@@ -533,6 +534,24 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
         Entry::new(&icons::SUN, "Day Length")
             .detail(setup.day_length.description())
             .value(cycler(setup.day_length.name()), GOLD),
+        Entry::new(&menu_icons::GLOBE, "World")
+            .detail(if setup.deep_descent() {
+                "Preview: 8 Descents, 41 strata, 13,000 rows"
+            } else {
+                "The classic dig"
+            })
+            .value(
+                cycler(if setup.deep_descent() {
+                    "Deep Descent (preview)"
+                } else {
+                    "Classic"
+                }),
+                if setup.deep_descent() {
+                    LAVENDER
+                } else {
+                    SKY_LIGHT
+                },
+            ),
         Entry::new(&menu_icons::ROCKET, "Test Mode")
             .detail(if setup.test_mode {
                 "Maxed rig, warps, god toggles; no records"

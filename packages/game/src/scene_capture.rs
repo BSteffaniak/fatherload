@@ -388,6 +388,7 @@ fn save_framebuffer(
 mod base_scenes;
 mod cave_scenes;
 mod crypt_scenes;
+mod descent_scenes;
 mod drop_scenes;
 mod explosive_scenes;
 mod home_scenes;
@@ -533,6 +534,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(story_scenes::STORY_SCENES)
         .chain(second_act_scenes::SECOND_ACT_SCENES)
         .chain(wave6_scenes::WAVE6_SCENES)
+        .chain(descent_scenes::DESCENT_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

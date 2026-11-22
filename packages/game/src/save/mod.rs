@@ -100,6 +100,9 @@ const SAVE_SLOTS: usize = 3;
 ///   column limit (`terrain.column_limit`). A file without them is a fixed frame at the
 ///   origin: its `f32` world pixels load as the same positions, bit for bit
 ///   (`WorldPos::from_legacy_px` of each is exact).
+/// * W7 strata (F8): `GeneratorVersion::V11` worlds (the Deep Descent, about 13,000 rows), and
+///   a streamed world's edited chunks compressed into one packed stream (`terrain.packed`,
+///   base64 text of runs of equal tiles; older files' `terrain.chunks` lists still load).
 pub const SAVE_VERSION: u32 = 13;
 
 /// Persisted user settings.
@@ -363,7 +366,7 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 to 11 files have the current layout minus serde-defaulted wave 3 to 6
+        // Version 8 to 12 files have the current layout minus serde-defaulted wave 3 to 7
         // fields.
         8..=12 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)

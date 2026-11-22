@@ -135,6 +135,9 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   replica before the frame's records) and in the terrain snapshot of keyframes, with a far
 ///   test world's column limit; `Pose::origin` and `Relevance::origin` (positions relative to
 ///   the frame's origin tile, compared through exact origin deltas).
+/// * W7 strata (F8): `GeneratorVersion::V11` (the Deep Descent) in the session settings, and
+///   the terrain keyframe's streamed edits as one packed byte stream
+///   (`TerrainSnapshot::packed`, runs of equal tiles) instead of nested lists of tile codes.
 pub const PROTOCOL_VERSION: u8 = 15;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -28,6 +28,7 @@ pub mod arms;
 mod build;
 mod colony;
 mod crew;
+mod descent;
 mod garage;
 pub mod homes;
 pub mod hopper;
@@ -59,6 +60,7 @@ pub use village::{
     keeper_inside, room_residents, talk_choices, talk_target,
 };
 
+pub use descent::{STRATUM_BANNER_TICKS, StratumBanner};
 pub use world_setup::{SetupOutcome, SetupPurpose, WorldSetup, random_world_seed};
 
 /// Row index of "Start" in the world setup dialog.
@@ -1060,6 +1062,8 @@ pub struct SeatUi {
     pub explosives: crate::input_mapping::ExplosiveSelection,
     /// The village building the seat is inside, its conversation and arrival banner.
     pub village: SeatVillage,
+    /// The Deep Descent stratum the seat's rig is in and its "entering" banner.
+    pub descent: descent::SeatDescent,
     /// Build mode (WP-BASE): the selected piece and cursor while it is on.
     pub build: Option<BuildDraft>,
     /// The draft build mode had when it was last left (reopens where it was).
@@ -1122,6 +1126,7 @@ impl SeatUi {
             garage: None,
             explosives: crate::input_mapping::ExplosiveSelection::new(),
             village: SeatVillage::new(),
+            descent: descent::SeatDescent::new(),
             build: None,
             last_build: None,
             base_module: None,
@@ -2488,6 +2493,7 @@ impl ShellState {
                     let input = inputs.get(seat).copied().unwrap_or_default();
                     let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
                     self.seats[seat].track_village(seat_ctx, self.update_ticks);
+                    self.seats[seat].track_stratum(seat_ctx, self.update_ticks);
                     let paused = self.seats[seat].update(
                         input,
                         delta_seconds,
@@ -2860,7 +2866,11 @@ impl ShellState {
 
     /// Opens the world setup dialog with a fresh random seed.
     pub fn open_world_setup(&mut self, purpose: SetupPurpose) {
-        self.world_setup = Some(WorldSetup::new(purpose, random_world_seed()));
+        let mut setup = WorldSetup::new(purpose, random_world_seed());
+        if world_setup::deep_descent_requested() {
+            setup.toggle_deep_descent();
+        }
+        self.world_setup = Some(setup);
         self.open_modal(ModalScreen::WorldSetup);
     }
 

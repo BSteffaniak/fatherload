@@ -190,7 +190,13 @@ fn parse_generator(text: &str) -> Result<GeneratorVersion, String> {
     GeneratorVersion::ALL
         .into_iter()
         .find(|generator| generator.name().eq_ignore_ascii_case(text))
-        .ok_or_else(|| format!("unknown generator {text} (legacy, v1, v2, v3, v4, v5, v6)"))
+        .ok_or_else(|| {
+            let names: Vec<&str> = GeneratorVersion::ALL
+                .iter()
+                .map(|each| each.name())
+                .collect();
+            format!("unknown generator {text} ({})", names.join(", "))
+        })
 }
 
 fn parse_size(text: &str) -> Result<WorldSize, String> {

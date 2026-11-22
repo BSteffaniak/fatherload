@@ -1,13 +1,15 @@
 //! The world setup dialog shown before a new world starts (title "New Game", "Local
 //! Split-Screen" and "Host Online Game"): seed (random by default, re-roll, type or paste),
 //! world size, resource richness, hazard intensity, enemies (peaceful / normal / hard), day
-//! length (24 / 48 / 72 real minutes, see `fatherload_simulation::clock`) and test mode.
+//! length (24 / 48 / 72 real minutes, see `fatherload_simulation::clock`), the world type
+//! (the classic dig or the Deep Descent preview, generator V11) and test mode.
 
 use fatherload_simulation::{
     EnemyDifficulty,
     clock::DayLength,
     worldgen::{
-        HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed, parse_seed,
+        GeneratorVersion, HazardIntensity, ResourceRichness, WorldSettings, WorldSize, format_seed,
+        parse_seed,
     },
 };
 
@@ -43,10 +45,13 @@ pub enum SetupRow {
     TestMode,
     Start,
     Back,
+    /// The world type: the classic dig ([`GeneratorVersion::CURRENT`]) or the Deep Descent
+    /// preview ([`GeneratorVersion::DEEP_DESCENT`], 41 strata about 13,000 rows deep).
+    World,
 }
 
 impl SetupRow {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Seed,
         Self::Reroll,
         Self::Size,
@@ -54,6 +59,7 @@ impl SetupRow {
         Self::Hazards,
         Self::Enemies,
         Self::DayLength,
+        Self::World,
         Self::TestMode,
         Self::Start,
         Self::Back,
@@ -99,6 +105,13 @@ pub fn random_world_seed() -> u64 {
     crate::online::random_token_seed() & ((1 << RANDOM_SEED_BITS) - 1)
 }
 
+/// Whether new worlds should default to the Deep Descent preview (`--deep-descent`, a
+/// development flag; the dialog's World row switches it either way).
+#[must_use]
+pub fn deep_descent_requested() -> bool {
+    std::env::args().any(|argument| argument == "--deep-descent")
+}
+
 /// Steps through `options` from `current` by `step` (wrapping).
 fn cycle<T: Copy + PartialEq>(options: &[T], current: T, step: isize) -> T {
     let index = options
@@ -123,6 +136,21 @@ impl WorldSetup {
             selected: 0,
             seed_edit: None,
         }
+    }
+
+    /// Whether the new world is a Deep Descent preview world.
+    #[must_use]
+    pub const fn deep_descent(&self) -> bool {
+        self.settings.generator.has_descents()
+    }
+
+    /// Switches between the classic dig and the Deep Descent preview.
+    pub const fn toggle_deep_descent(&mut self) {
+        self.settings.generator = if self.deep_descent() {
+            GeneratorVersion::CURRENT
+        } else {
+            GeneratorVersion::DEEP_DESCENT
+        };
     }
 
     /// The highlighted row.
@@ -194,6 +222,7 @@ impl WorldSetup {
             SetupRow::DayLength if step != 0 => {
                 self.day_length = cycle(&DayLength::ALL, self.day_length, step);
             }
+            SetupRow::World if step != 0 => self.toggle_deep_descent(),
             SetupRow::TestMode if step != 0 => self.test_mode = !self.test_mode,
             SetupRow::Seed if input.confirm => self.seed_edit = Some(String::new()),
             SetupRow::Reroll if input.confirm => self.settings.seed = reroll(),
