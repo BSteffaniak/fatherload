@@ -48,6 +48,7 @@ mod lighting;
 mod logistics;
 mod lunar;
 mod night;
+mod old_deep;
 mod pilot;
 mod quest_marks;
 mod rig;
@@ -199,6 +200,9 @@ pub(super) struct WorldScene<'a> {
     pub logistics: &'a fatherload_simulation::logistics::Logistics,
     /// The authored Crust (Wave 8): the Sinkhole collapse.
     pub crust: &'a fatherload_simulation::crust::CrustState,
+    /// Descent II's live state and set pieces (Wave 8).
+    pub old_deep: &'a fatherload_simulation::old_deep::OldDeep,
+    pub deep_sites: &'a crate::render_snapshot::DeepSites,
 }
 
 impl WorldScene<'_> {
@@ -345,6 +349,38 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     crust::draw_crust_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     lunar::draw_lunar_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     lunar::draw_colony_props(draw, scene.terrain, scene.visible, seconds);
+    // Descent II, the Old Deep (Wave 8): glows, jets, rams, belts, valves and the core.
+    let deep_scene = old_deep::DeepScene {
+        terrain: scene.terrain,
+        old_deep: scene.old_deep,
+        visible: scene.visible,
+        world_tick: scene.world_tick,
+        tick_rate_hz: scene.tick_rate_hz,
+        world_millis: scene.world_millis,
+        seconds,
+        local: scene.local,
+        cathedral: scene.deep_sites.cathedral.as_ref(),
+        arena: scene.deep_sites.arena.as_ref(),
+    };
+    old_deep::draw_deep_world(draw, &deep_scene);
+    let refraction = old_deep::local_refraction(&deep_scene);
+    let beam_lights: Vec<(f32, f32, f32)> = refraction
+        .beams
+        .iter()
+        .flat_map(|beam| {
+            let frame = crate::view_frame::frame();
+            let (fx, fy) = frame.tile_center(beam.from);
+            let (tx, ty) = frame.tile_center(beam.to);
+            (0..=4).map(move |step| {
+                let t = step as f32 / 4.0;
+                (
+                    (tx - fx).mul_add(t, fx),
+                    (ty - fy).mul_add(t, fy),
+                    TILE_SIZE * 2.2,
+                )
+            })
+        })
+        .collect();
     caves::draw_critters(draw, scene.critters, scene.players, scene.visible, seconds);
     fx::draw_infrastructure(draw, scene.infrastructure, seconds);
     if let Some(drill) = scene.active_drill {
@@ -538,7 +574,20 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             explosions: scene.explosions,
             critters: scene.critters,
             seconds,
+            beam_lights: &beam_lights,
         },
+    );
+    // The refracted headlamp cuts through the dark; embers ride a heat storm (Wave 8).
+    old_deep::draw_refraction(draw, &deep_scene, &refraction);
+    old_deep::draw_storm_air(
+        draw,
+        &deep_scene,
+        scene.local.is_some_and(|local| {
+            scene
+                .terrain
+                .stratum_at(crate::view_frame::frame().tile_at(local.x, local.y))
+                == fatherload_simulation::descent::Stratum::MantleStormZone
+        }),
     );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);

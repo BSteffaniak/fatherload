@@ -25,7 +25,7 @@ use crate::rendering::pixel_art::shade::{PaletteIndex, index_of};
 
 use super::{
     Edges, Ramp, Strata, TILE_ART, TileCanvas, base_pixel, cobble_level, hash, noise, paint_edges,
-    ramp, slab_level,
+    ramp, slab_level, worley,
 };
 
 const CRYSTAL: Ramp = ramp([DEEP_BLUE, OCEAN, SKY, ICE]);
@@ -86,25 +86,31 @@ pub const fn deep_color(tile: DeepTile) -> raylib::prelude::Color {
     }
 }
 
+/// Faceted crystal: Voronoi facets with dark seams, each facet shaded by which way it faces
+/// (lit from the top-left), with rare white glints on the brightest faces.
+fn crystal_facet(ramp: Ramp, x: i32, y: i32, cell: i32, seed: u32) -> PaletteIndex {
+    let (near, second, dx, dy) = worley(x, y, cell, seed, false);
+    if second - near < 1.0 {
+        return ramp[0];
+    }
+    let facing = dx + dy;
+    if facing <= -4 && hash(x, y, seed + 1).is_multiple_of(9) {
+        return index_of(BONE);
+    }
+    ramp[if facing <= -3 {
+        3
+    } else if facing <= 0 {
+        2
+    } else {
+        1
+    }]
+}
+
 /// The body pattern of `tile` at art pixel `(x, y)` (global coordinates).
 #[allow(clippy::too_many_lines, reason = "one pattern per Old Deep material")]
 fn body_pixel(tile: DeepTile, strata: &Strata, x: i32, y: i32) -> PaletteIndex {
     match tile {
-        DeepTile::ResonantCrystal => {
-            // Long diagonal facets with bright edges and rare white glints.
-            let facet = (x + y * 2 + (noise(x, y, 6, 801) * 6.0) as i32).rem_euclid(7);
-            if hash(x, y, 802).is_multiple_of(37) {
-                index_of(BONE)
-            } else if facet == 0 {
-                CRYSTAL[3]
-            } else if facet < 3 {
-                CRYSTAL[2]
-            } else if facet < 5 {
-                CRYSTAL[1]
-            } else {
-                CRYSTAL[0]
-            }
-        }
+        DeepTile::ResonantCrystal => crystal_facet(CRYSTAL, x, y, 6, 801),
         DeepTile::Prism => PRISM[slab_level(x, y).min(3)],
         DeepTile::LatentGem | DeepTile::Shale | DeepTile::FossilBone => {
             if tile == DeepTile::LatentGem {
@@ -193,19 +199,7 @@ fn body_pixel(tile: DeepTile, strata: &Strata, x: i32, y: i32) -> PaletteIndex {
                 BRONZE[1]
             }
         }
-        DeepTile::GeodeShell => {
-            let facet = (x * 3 - y * 2 + (noise(x, y, 5, 813) * 8.0) as i32).rem_euclid(9);
-            if hash(x, y, 814).is_multiple_of(29) {
-                index_of(PINK)
-            } else {
-                VOID[match facet {
-                    0 => 3,
-                    1..=3 => 2,
-                    4..=6 => 1,
-                    _ => 0,
-                }]
-            }
-        }
+        DeepTile::GeodeShell => crystal_facet(VOID, x, y, 7, 813),
         DeepTile::VoidBloom => BLOOM[((noise(x, y, 3, 815) * 3.9) as usize).min(3)],
         DeepTile::StormVent | DeepTile::CinderRock => {
             let h = hash(x, y, 816);

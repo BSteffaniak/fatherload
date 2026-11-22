@@ -787,6 +787,17 @@ pub struct RenderSnapshot<'w> {
     pub moon: fatherload_simulation::clock::MoonAnchor,
     /// The screen effects accessibility setting (F9; set by the game from its settings).
     pub effects: crate::screen_fx::EffectsIntensity,
+    /// Descent II's live state (Wave 8): dose meters, mutations, halls, the set pieces' fights.
+    pub old_deep: &'w fatherload_simulation::old_deep::OldDeep,
+    /// Where Descent II's set pieces stand in this world.
+    pub deep_sites: DeepSites,
+}
+
+/// Where Descent II's set pieces stand (Wave 8; `None` in worlds without them).
+#[derive(Clone, Debug, Default)]
+pub struct DeepSites {
+    pub cathedral: Option<fatherload_simulation::old_deep::sites::CathedralSite>,
+    pub arena: Option<fatherload_simulation::old_deep::sites::ArenaSite>,
 }
 
 impl<'w> RenderSnapshot<'w> {
@@ -898,6 +909,11 @@ impl<'w> RenderSnapshot<'w> {
             tombs: world.tombs(),
             logistics: world.logistics(),
             crust: world.crust(),
+            old_deep: world.old_deep(),
+            deep_sites: DeepSites {
+                cathedral: world.cathedral_site(),
+                arena: world.star_core_arena(),
+            },
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()
@@ -1095,7 +1111,11 @@ fn view_snapshot(
     )]
     let tile = crate::view_frame::frame().tile_at(focus_x, focus_y);
     let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
-    let fields = world.fields_at(focus_x, focus_y);
+    let fields = crate::rendering::old_deep_hud::deep_screen(
+        world,
+        player_id,
+        world.fields_at(focus_x, focus_y),
+    );
     let roll = if pilot.is_some() {
         0.0
     } else {

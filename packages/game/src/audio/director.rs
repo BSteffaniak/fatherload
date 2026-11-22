@@ -244,10 +244,22 @@ enum SeatLoop {
     CrustBed,
     /// The Sinkhole chase while its collapse climbs (Wave 8).
     Sinkhole,
+    /// Descent II, the Old Deep (Wave 8): each stratum's own music bed.
+    DeepCrystal,
+    DeepFossil,
+    DeepCathedral,
+    DeepHollow,
+    DeepMachine,
+    DeepGeode,
+    DeepMantle,
+    /// The Star Core's theme while it fights.
+    StarCore,
+    /// The dose meter's crackle.
+    Geiger,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
-const SEAT_LOOP_SLOTS: u32 = 32;
+const SEAT_LOOP_SLOTS: u32 = 48;
 
 /// Seconds for an environment's ambience to crossfade in or out (Wave 6), so walking into a
 /// town, a tomb or the colony blends the beds instead of cutting them.
@@ -868,6 +880,7 @@ impl Director {
         self.tomb_music(live, listener, snapshot.tombs);
         self.crypt_music(live, listener, snapshot.tombs);
         self.crust_music(live, listener, snapshot, ambience);
+        self.old_deep_music(live, listener, terrain, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1351,6 +1364,94 @@ impl Director {
             SeatLoop::TombBoss,
             Patch::TombBossLoop,
             (if boss { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// Descent II's music (Wave 8): the bed of the stratum the seat is in (the Star Core's
+    /// theme instead while it fights near the seat), and the geiger crackle of the dose meter.
+    fn old_deep_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        terrain: &fatherload_simulation::terrain::Terrain,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::{descent::Stratum, old_deep::CorePhase};
+        let deep = terrain.settings().generator.has_descents();
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let stratum = deep.then(|| terrain.stratum_at(tile));
+        let fight =
+            deep && matches!(
+                snapshot.old_deep.core.phase,
+                CorePhase::Shielded | CorePhase::Exposed
+            ) && snapshot
+                .deep_sites
+                .arena
+                .as_ref()
+                .is_some_and(|arena| (tile.y - arena.floor()).abs() < 40);
+        let beds = [
+            (
+                Stratum::CrystalFaults,
+                SeatLoop::DeepCrystal,
+                Patch::CrystalLoop,
+            ),
+            (
+                Stratum::FossilOceans,
+                SeatLoop::DeepFossil,
+                Patch::FossilLoop,
+            ),
+            (
+                Stratum::PressureCathedrals,
+                SeatLoop::DeepCathedral,
+                Patch::CathedralLoop,
+            ),
+            (
+                Stratum::RadioactiveHollow,
+                SeatLoop::DeepHollow,
+                Patch::HollowLoop,
+            ),
+            (
+                Stratum::AncientMachineLayer,
+                SeatLoop::DeepMachine,
+                Patch::MachineLoop,
+            ),
+            (
+                Stratum::VoidGeodeFields,
+                SeatLoop::DeepGeode,
+                Patch::GeodeLoop,
+            ),
+            (
+                Stratum::MantleStormZone,
+                SeatLoop::DeepMantle,
+                Patch::MantleLoop,
+            ),
+        ];
+        for (bed_stratum, key, patch) in beds {
+            let gain = if !fight && stratum == Some(bed_stratum) {
+                0.3
+            } else {
+                0.0
+            };
+            self.loop_command(live, listener, key, patch, (gain, 0.0, 1.0, OPEN_CUTOFF));
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::StarCore,
+            Patch::StarCoreLoop,
+            (if fight { 0.45 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        let dose = if deep {
+            snapshot.old_deep.dose(listener.player_id).fraction()
+        } else {
+            0.0
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Geiger,
+            Patch::GeigerLoop,
+            (dose * 0.55, 0.0, 0.8 + dose * 0.6, OPEN_CUTOFF),
         );
     }
 

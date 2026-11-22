@@ -836,3 +836,51 @@ fn the_geode_field_pulls_out_to_the_shell_in_the_world() {
     let outside = world.fields_at(TILE_SIZE.mul_add(geode.radius as f32 + 3.0, cx), cy);
     assert!(outside.gravity_x.abs() < 0.01);
 }
+
+#[test]
+fn the_descent_probe_paces_the_old_deep_like_the_plan() {
+    use crate::balance::descent::{DescentConfig, RegistryStrata, StratumRegistry, run_descent};
+    let registry = RegistryStrata::default_world();
+    let old_deep = registry
+        .strata()
+        .iter()
+        .filter(|stratum| stratum.descent <= 1)
+        .count();
+    let run = run_descent(
+        &registry,
+        &DescentConfig {
+            strata_limit: Some(old_deep),
+            calibrate: false,
+            tick_rate_hz: 60,
+        },
+    );
+    let crust_end = run
+        .strata
+        .iter()
+        .filter(|stratum| stratum.stratum.descent == 0)
+        .map(|stratum| stratum.end_hours)
+        .fold(0.0, f64::max);
+    let old_deep_end = run.strata.last().map_or(0.0, |stratum| stratum.end_hours);
+    let span = old_deep_end - crust_end;
+    // §14: Descent II is about nine hours of play (7 h to 16 h). With the Crust's own re-paced
+    // seven hours in front of it, it ends 13-18 h in.
+    assert!((6.0..=11.0).contains(&span), "Descent II took {span:.1} h");
+    assert!(
+        (13.0..=18.0).contains(&(7.0 + span)),
+        "Descent II ends {:.1} h in after a 7 h Crust",
+        7.0 + span
+    );
+    // Something new every 20-40 minutes: no Old Deep stratum leaves a longer gap.
+    for stratum in run
+        .strata
+        .iter()
+        .filter(|stratum| stratum.stratum.descent == 1)
+    {
+        assert!(
+            stratum.longest_gap_minutes <= 40.0,
+            "{}: {:.0} min",
+            stratum.stratum.name,
+            stratum.longest_gap_minutes
+        );
+    }
+}

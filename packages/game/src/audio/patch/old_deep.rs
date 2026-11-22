@@ -49,9 +49,9 @@ pub(super) fn valve_turn(rng: &mut Rng) -> Vec<f32> {
         FilterMode::HighPass,
         2_500.0,
         0.7,
-        1.2,
+        0.9,
     );
-    mix_into(&mut out, &hiss, 0.85, 0.35);
+    mix_into(&mut out, &hiss, 0.8, 0.35);
     out
 }
 
@@ -101,8 +101,8 @@ pub(super) fn storm_siren(rng: &mut Rng) -> Vec<f32> {
     let mut horn_filter = Svf::new(FilterMode::LowPass, 600.0, 1.2);
     let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
     let mut rumble_filter = Svf::new(FilterMode::LowPass, 220.0, 0.7);
-    render(2.4, |t| {
-        let swell = segments(t, &[(0.0, 0.0), (0.6, 0.8), (1.8, 1.0), (2.4, 0.0)]);
+    render(1.9, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (0.5, 0.8), (1.4, 1.0), (1.9, 0.0)]);
         let pitch = glide(t, 82.5, 123.75, 0.9);
         let voice: f32 = horn
             .iter_mut()
@@ -137,8 +137,8 @@ pub(super) fn core_wake(rng: &mut Rng) -> Vec<f32> {
         Osc::new(Wave::Saw),
     ];
     let mut filter = Svf::new(FilterMode::LowPass, 400.0, 0.9);
-    let mut out = render(3.2, |t| {
-        let swell = segments(t, &[(0.0, 0.0), (1.6, 1.0), (2.6, 0.8), (3.2, 0.0)]);
+    let mut out = render(2.4, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (1.1, 1.0), (1.9, 0.8), (2.4, 0.0)]);
         let chord: f32 = voices
             .iter_mut()
             .zip([55.0_f32, 82.5, 130.75])
@@ -148,10 +148,10 @@ pub(super) fn core_wake(rng: &mut Rng) -> Vec<f32> {
         filter.run(chord, 200.0 + 900.0 * swell, 0.9) * swell * 0.7
     });
     for toll in 0..3 {
-        let at = 0.4 + toll as f32 * 0.9;
+        let at = 0.2 + toll as f32 * 0.5;
         mix_into(
             &mut out,
-            &bell(220.0 * rng.jitter(0.01), 1.41, 3.0, 2.0),
+            &bell(220.0 * rng.jitter(0.01), 1.41, 3.0, 1.1),
             at,
             0.3,
         );
@@ -161,17 +161,17 @@ pub(super) fn core_wake(rng: &mut Rng) -> Vec<f32> {
 
 /// A story log found: a soft music-box motif (four notes, a falling answer) with a warm pad.
 pub(super) fn deep_log(rng: &mut Rng) -> Vec<f32> {
-    let mut out = render(2.2, |_| 0.0);
+    let mut out = render(1.7, |_| 0.0);
     for (index, note) in [659.25_f32, 783.99, 987.77, 880.0, 739.99]
         .into_iter()
         .enumerate()
     {
-        let at = index as f32 * 0.22;
-        mix_into(&mut out, &bell(note, 4.0, 0.6, 1.2), at, 0.25);
+        let at = index as f32 * 0.16;
+        mix_into(&mut out, &bell(note, 4.0, 0.6, 0.9), at, 0.25);
     }
     let mut pad = [Osc::new(Wave::Triangle), Osc::new(Wave::Triangle)];
-    let warm = render(2.0, |t| {
-        let swell = segments(t, &[(0.0, 0.0), (0.6, 1.0), (2.0, 0.0)]);
+    let warm = render(1.6, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (0.5, 1.0), (1.6, 0.0)]);
         pad.iter_mut()
             .zip([329.63_f32, 493.88])
             .map(|(osc, note)| osc.next(note))
@@ -484,9 +484,9 @@ pub(super) fn geiger_loop(rng: &mut Rng) -> Vec<f32> {
         let click = burst(
             rng.next_u64(),
             NoiseColor::White,
-            FilterMode::HighPass,
-            3_200.0,
-            0.7,
+            FilterMode::BandPass,
+            2_000.0,
+            0.9,
             0.003,
         );
         mix_into(&mut out, &click, time, rng.range(0.3, 0.7));

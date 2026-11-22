@@ -822,6 +822,36 @@ impl OldDeep {
     }
 }
 
+/// What the Old Deep authored in `stratum` beyond its registry entry, for the descent harness.
+///
+/// `balance::descent::RegistryStrata` counts its signature mechanics and its set pieces (each
+/// stratum's Fathers' camp; the Cathedral Lift, the Glowmother and the Star Core).
+#[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "one row per stratum, with what it holds"
+)]
+pub const fn authored_content(stratum: crate::descent::Stratum) -> (u8, u8) {
+    use crate::descent::Stratum;
+    match stratum {
+        // Resonance chains and refraction.
+        Stratum::CrystalFaults => (2, 1),
+        // Gas tides, amber and skeleton digs.
+        Stratum::FossilOceans => (3, 1),
+        // Pressure jets; the Cathedral Lift.
+        Stratum::PressureCathedrals => (1, 2),
+        // The dose meter and mutations; the Glowmother.
+        Stratum::RadioactiveHollow => (2, 2),
+        // Conveyors and pistons (and the builder tablets).
+        Stratum::AncientMachineLayer => (2, 1),
+        // Geode gravity.
+        Stratum::VoidGeodeFields => (1, 1),
+        // Heat storms and storm vents; the Star Core.
+        Stratum::MantleStormZone => (2, 2),
+        _ => (0, 0),
+    }
+}
+
 /// The story logs of the Old Deep: the Fathers' expedition (one per stratum, top to bottom),
 /// then the builder tablets, then the Star Core's revelation.
 pub const LOG_EXPEDITION_FIRST: u8 = 0;

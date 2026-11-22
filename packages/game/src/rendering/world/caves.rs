@@ -103,6 +103,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Crust(tile) => tile.light_radius() as f32 * 1.1,
         // The Moon's blooms, glyphs, veils and core (WP-MOON).
         TileKind::Lunar(tile) => super::lunar::lunar_light(tile),
+        // The Old Deep's glowing rock, crystal, vents and the core (Wave 8).
+        TileKind::Deep(tile) => super::old_deep::deep_light(tile),
         _ => 0.0,
     }
 }
@@ -320,6 +322,7 @@ fn pilot_lamps(pilots: &[crate::render_snapshot::PilotPresentation], lights: &mu
 
 /// The lights in view: rig lamps (with a forward beam), pilots' lamps, flares, blasts,
 /// glowing tiles and glowing critters.
+#[allow(clippy::too_many_lines, reason = "one block per kind of light")]
 fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
     let DarknessScene {
         terrain,
@@ -330,9 +333,18 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
         explosions,
         critters,
         seconds,
+        beam_lights,
         ..
     } = *scene;
     let mut lights = Vec::new();
+    for &(x, y, radius) in beam_lights {
+        lights.push(Light {
+            x,
+            y,
+            radius,
+            strength: 0.8,
+        });
+    }
     for player in players {
         let lamp = (f32::from(player.scanner_level) * RIG_LAMP_TILES_PER_SCANNER + RIG_LAMP_TILES)
             * TILE_SIZE
@@ -455,6 +467,8 @@ pub(super) struct DarknessScene<'a> {
     pub explosions: &'a [Explosion],
     pub critters: &'a [CritterPresentation],
     pub seconds: f32,
+    /// Extra lights `(x, y, radius)` in local pixels: the refracted headlamp's beams (Wave 8).
+    pub beam_lights: &'a [(f32, f32, f32)],
 }
 
 /// Darkens the cave parts of the view, cut back by every light (see the module docs).

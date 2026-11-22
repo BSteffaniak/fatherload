@@ -366,12 +366,17 @@ impl StratumRegistry for RegistryStrata {
                         .count(),
                 )
                 .unwrap_or(u8::MAX);
+                // Wave 8: the Old Deep's authored mechanics and set pieces count too.
+                let (authored_mechanics, authored_pieces) =
+                    crate::old_deep::authored_content(*stratum);
+                let set_pieces = set_pieces.saturating_add(authored_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(
                     !def.field.is_neutral()
                         || !def.fluids.is_empty()
                         || stratum.descent() == crate::descent::Descent::Crust,
-                );
+                )
+                .saturating_add(authored_mechanics);
                 // The radiator tier the stratum's own heat asks for (Wave 8: per stratum).
                 let heat = crate::crust::stratum_heat_units(*stratum);
                 let heat_tier = (1..=crate::depth_progression::DESCENT_MAX_UPGRADE_LEVEL)

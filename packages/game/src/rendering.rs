@@ -30,6 +30,7 @@ mod layout;
 mod logistics_hud;
 mod menus;
 mod moon_hud;
+pub mod old_deep_hud;
 mod people_art;
 mod pilot_art;
 pub mod pixel_art;
@@ -772,6 +773,8 @@ impl GameRenderer {
             tick_rate_hz: snapshot.tick_rate.hz(),
             logistics: snapshot.logistics,
             crust: snapshot.crust,
+            old_deep: snapshot.old_deep,
+            deep_sites: &snapshot.deep_sites,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

@@ -291,12 +291,12 @@ impl MachineHall {
         self.bounds.min.y
     }
 
-    /// The builder tablet in its left wall.
+    /// The builder tablet in its left wall, above the door.
     #[must_use]
     pub const fn tablet(&self) -> TilePosition {
         TilePosition {
             x: self.bounds.min.x,
-            y: self.bounds.max.y - 5,
+            y: self.bounds.max.y - 4,
         }
     }
 
@@ -374,9 +374,10 @@ pub fn machine_hall(
         region: (rx, ry),
         bounds: TileRect {
             min: TilePosition { x, y },
+            // Four rows inside: a slamming ram reaches a rig riding the belts.
             max: TilePosition {
                 x: x + width - 1,
-                y: y + 8,
+                y: y + 5,
             },
         },
     })

@@ -183,6 +183,8 @@ pub(super) fn draw_view_hud(
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
     // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
     super::moon_hud::draw_moon_hud(draw, shell, snapshot, view, rect, top + 124);
+    // Descent II, the Old Deep (Wave 8): dose, storms, tides, the valves and the Star Core.
+    super::old_deep_hud::draw_old_deep_hud(draw, snapshot, view, rect, top + 124);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.

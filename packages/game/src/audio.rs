@@ -237,7 +237,19 @@ mod tests {
                 | Patch::SinkholeRumble
                 | Patch::CrustBasaltLoop
                 | Patch::SinkholeLoop
-                | Patch::CartClunk => (40.0, 3_000.0),
+                | Patch::CartClunk
+                // The Old Deep (wave 8): pistons, the core's boom and wake, the storm horn,
+                // and the low beds (the dry sea, the hollow's throb, the works, the mantle,
+                // the core's drums).
+                | Patch::PistonSlam
+                | Patch::CoreStrike
+                | Patch::CoreWake
+                | Patch::StormSiren
+                | Patch::FossilLoop
+                | Patch::HollowLoop
+                | Patch::MachineLoop
+                | Patch::MantleLoop
+                | Patch::StarCoreLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }
