@@ -490,6 +490,9 @@ pub enum UpgradeLock {
     /// Descent worlds: an outpost's counter does not stock this tier (the town or a deeper
     /// outpost does, [`crate::depth_progression::outpost_stocks`]).
     NotStockedHere,
+    /// Descent worlds: a gate's reward, won from its boss and never sold (Wave 8: the Mycelial
+    /// Mind's Bio-Filter and Lamp II).
+    Boss(crate::descent::DescentBoss),
 }
 
 impl UpgradeLock {
@@ -505,6 +508,7 @@ impl UpgradeLock {
                 "Sky gear: this world has no sky to climb into (new worlds do)".to_owned()
             }
             Self::DescentOnly => "Deep Descent gear: only Deep Descent worlds sell it".to_owned(),
+            Self::Boss(boss) => format!("Won from {}, never sold", boss.name()),
             Self::Descent(index) => format!(
                 "Deep tier: on sale once anyone reaches Descent {}",
                 crate::depth_progression::numeral(index)
@@ -583,6 +587,9 @@ pub fn upgrade_lock_for(
     }
     let layout = crate::depth_progression::layout_for(settings);
     if let Some(system) = offer.kind.rig_system() {
+        if let Some(boss) = system.boss_reward() {
+            return Some(UpgradeLock::Boss(boss));
+        }
         let row = system.sold_from_row(&layout);
         if deepest_row < row {
             return Some(UpgradeLock::Depth {

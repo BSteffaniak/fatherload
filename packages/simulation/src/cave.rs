@@ -437,6 +437,10 @@ impl CaveTile {
 
     /// Drill strength needed (never above the band a cave of the kind generates in).
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Living Dark's tiles keep rows of their own"
+    )]
     pub const fn hardness(self) -> u8 {
         match self {
             Self::MushroomStem
@@ -463,6 +467,10 @@ impl CaveTile {
 
     /// Chips a fresh tile takes.
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Living Dark's tiles keep rows of their own"
+    )]
     pub const fn durability(self) -> u8 {
         match self {
             Self::MushroomCap | Self::GlowCap | Self::GlowAlgae | Self::Silt => 2,
@@ -481,6 +489,10 @@ impl CaveTile {
 
     /// Seconds per chip at the stock drill before drill bonuses (see the drill timing table).
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Living Dark's tiles keep rows of their own"
+    )]
     pub const fn base_chip_seconds(self) -> f32 {
         match self {
             Self::MushroomCap

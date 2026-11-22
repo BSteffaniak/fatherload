@@ -249,6 +249,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::CaveEcosystems
                     | LandmarkGenerator::Villages
                     | LandmarkGenerator::TombSites
+                    | LandmarkGenerator::LivingDark
             ));
         }
         let field = def.field;
@@ -266,6 +267,19 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                         | MusicCue::GreyStone
                         | MusicCue::SlateShelves
                         | MusicCue::BasaltColumns
+                ),
+                "{stratum:?}"
+            );
+        } else if def.descent == Descent::LivingDark {
+            // The Living Dark's strata have pieces of their own too (Wave 8).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::FungalForest
+                        | MusicCue::RootLabyrinth
+                        | MusicCue::Hive
+                        | MusicCue::FleshCaverns
+                        | MusicCue::GlowSea
                 ),
                 "{stratum:?}"
             );

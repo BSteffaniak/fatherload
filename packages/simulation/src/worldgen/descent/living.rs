@@ -148,7 +148,7 @@ const fn hive_side(settings: &WorldSettings) -> i32 {
 /// The Amber Court's hall: the friendly faction's settlement in the middle of the Hive (one per
 /// Deep Descent world).
 #[must_use]
-pub fn court_hall(settings: &WorldSettings, layout: &DescentLayout) -> Option<TileRect> {
+pub const fn court_hall(settings: &WorldSettings, layout: &DescentLayout) -> Option<TileRect> {
     if !has_living_dark(settings) {
         return None;
     }
@@ -400,7 +400,7 @@ pub fn stamp_tile(stamp: &LivingStamp, x: i32, y: i32, base: TileKind) -> Option
         LivingStampKind::BroodGallery | LivingStampKind::MatriarchGallery => {
             comb_gallery(stamp, x, y)
         }
-        LivingStampKind::Court => court(stamp, x, y),
+        LivingStampKind::Court => Some(court(stamp, x, y)),
         LivingStampKind::Gullet => gullet(stamp, x, y),
         LivingStampKind::AbyssHall => abyss_hall(stamp, x, y),
         LivingStampKind::MindHollow => mind_hollow_tile(stamp, x, y, base),
@@ -443,7 +443,7 @@ fn cap_grove(stamp: &LivingStamp, x: i32, y: i32) -> Option<TileKind> {
             return Some(TileKind::Cave(CaveTile::MushroomStem));
         }
         // Spore pods hang under the cap's ends.
-        if y == cap_y + 1 && (x - stem_x).abs() == half && roll % 3 != 0 {
+        if y == cap_y + 1 && (x - stem_x).abs() == half && !roll.is_multiple_of(3) {
             return Some(TileKind::Cave(CaveTile::SporePod));
         }
     }
@@ -520,7 +520,7 @@ fn comb_gallery(stamp: &LivingStamp, x: i32, y: i32) -> Option<TileKind> {
 
 /// The Amber Court: a great comb hall with arches, a royal larder of jelly cells along its
 /// ceiling and doors at both ends.
-fn court(stamp: &LivingStamp, x: i32, y: i32) -> Option<TileKind> {
+const fn court(stamp: &LivingStamp, x: i32, y: i32) -> TileKind {
     let bounds = stamp.bounds;
     let width = bounds.width();
     let height = bounds.height();
@@ -530,28 +530,28 @@ fn court(stamp: &LivingStamp, x: i32, y: i32) -> Option<TileKind> {
     // Doors four rows tall at the floor, both sides.
     let door = (column < 2 || column >= width - 2) && row >= height - 6 && row < height - 2;
     if door {
-        return Some(TileKind::Air);
+        return TileKind::Air;
     }
     if wall {
-        return Some(TileKind::Cave(CaveTile::Comb));
+        return TileKind::Cave(CaveTile::Comb);
     }
     // The larder: a row of jelly cells under the ceiling.
     if row == 2 && column % 3 != 0 {
-        return Some(TileKind::Cave(CaveTile::JellyCell));
+        return TileKind::Cave(CaveTile::JellyCell);
     }
     // Arches: comb pillars every twelve columns with a rounded crown.
     let bay = (column - 2).rem_euclid(12);
     if bay == 0 && row > 3 {
-        return Some(TileKind::Cave(CaveTile::Comb));
+        return TileKind::Cave(CaveTile::Comb);
     }
     let crown = (bay - 6).abs();
     if row == 3 && crown >= 4 {
-        return Some(TileKind::Cave(CaveTile::Comb));
+        return TileKind::Cave(CaveTile::Comb);
     }
     if row == 4 && crown >= 5 {
-        return Some(TileKind::Cave(CaveTile::Comb));
+        return TileKind::Cave(CaveTile::Comb);
     }
-    Some(TileKind::Air)
+    TileKind::Air
 }
 
 /// A gullet: a flesh chamber with an empty basin; its glands pump the acid tide.

@@ -256,6 +256,13 @@ enum SeatLoop {
     StarCore,
     /// The dose meter's crackle.
     Geiger,
+    // The Living Dark's music (Wave 8): one piece per stratum, the Mind's fight.
+    FungalMusic,
+    RootMusic,
+    HiveMusic,
+    HeartbeatMusic,
+    GlowSeaMusic,
+    MindMusic,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -881,6 +888,7 @@ impl Director {
         self.crypt_music(live, listener, snapshot.tombs);
         self.crust_music(live, listener, snapshot, ambience);
         self.old_deep_music(live, listener, terrain, snapshot);
+        self.living_dark_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1329,6 +1337,97 @@ impl Director {
                 (gain, 0.0, 1.0, OPEN_CUTOFF),
             );
         }
+    }
+
+    /// The Living Dark's music (Wave 8): each stratum's own piece while the seat is in it
+    /// (`descent::MusicCue`), the Flesh Caverns' heartbeat sped to the stratum's pulse
+    /// (`living_dark::heartbeat_bpm`: quicker deeper and while the acid tide rises), and the
+    /// Mycelial Mind's theme in place of the Glow Sea's while it fights near.
+    fn living_dark_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::{
+            descent::MusicCue,
+            enemy::EnemyKind,
+            entity::EntityState,
+            living_dark::{heartbeat_bpm, tide_at},
+        };
+        let terrain = snapshot.terrain;
+        let settings = terrain.settings();
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let (cue, along) = if settings.generator.has_descents() {
+            let layout = fatherload_simulation::descent::fields::cached_layout(settings);
+            let stratum = terrain.stratum_at(tile);
+            (Some(stratum.def().music), layout.along(tile.y))
+        } else {
+            (None, 0)
+        };
+        let reach = 30.0 * fatherload_simulation::terrain::TILE_SIZE;
+        let fighting = snapshot.enemies.iter().any(|entity| {
+            matches!(entity.state, EntityState::Enemy(state) if state.kind == EnemyKind::MycelialMind)
+                && (entity.body.x - listener.x).hypot(entity.body.y - listener.y) < reach
+        });
+        let millis =
+            snapshot.tick.saturating_mul(1_000) / u64::from(snapshot.tick_rate.hz().max(1));
+        #[allow(clippy::cast_precision_loss, reason = "beats a minute")]
+        let pulse = heartbeat_bpm(along, tide_at(millis).0) as f32 / 60.0;
+        let pieces = [
+            (
+                MusicCue::FungalForest,
+                SeatLoop::FungalMusic,
+                Patch::FungalLoop,
+                0.4,
+                1.0,
+            ),
+            (
+                MusicCue::RootLabyrinth,
+                SeatLoop::RootMusic,
+                Patch::RootLoop,
+                0.38,
+                1.0,
+            ),
+            (
+                MusicCue::Hive,
+                SeatLoop::HiveMusic,
+                Patch::HiveLoop,
+                0.36,
+                1.0,
+            ),
+            (
+                MusicCue::FleshCaverns,
+                SeatLoop::HeartbeatMusic,
+                Patch::HeartbeatLoop,
+                0.5,
+                pulse,
+            ),
+            (
+                MusicCue::GlowSea,
+                SeatLoop::GlowSeaMusic,
+                Patch::GlowSeaLoop,
+                0.4,
+                1.0,
+            ),
+        ];
+        for (piece, slot, patch, gain, rate) in pieces {
+            let playing = cue == Some(piece) && !(fighting && piece == MusicCue::GlowSea);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, rate, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::MindMusic,
+            Patch::MindLoop,
+            (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
     }
 
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores

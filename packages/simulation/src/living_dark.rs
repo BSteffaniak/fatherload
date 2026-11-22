@@ -1,7 +1,8 @@
 //! The Living Dark (expansion plan §14, Descent III; Wave 8): the rules that make its walls
-//! alive. Pure data and math; the tick lives in `world/living_dark.rs`, the creatures'
-//! behaviour in `world/enemies/living.rs`, the generated places in
-//! [`crate::worldgen::descent::living`].
+//! alive.
+//!
+//! Pure data and math; the tick lives in `world/living_dark.rs`, the creatures' behaviour in
+//! `world/enemies/living.rs`, the generated places in [`crate::worldgen::descent::living`].
 //!
 //! | Stratum | Signature rule | Counter-play |
 //! |---|---|---|
@@ -374,7 +375,7 @@ impl MindState {
 
     /// Whether its nodes still shield it.
     #[must_use]
-    pub fn shielded(&self) -> bool {
+    pub const fn shielded(&self) -> bool {
         !self.nodes.is_empty()
     }
 }

@@ -97,6 +97,7 @@ impl FieldPreset {
 
     /// The preset's field profile.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one block per preset")]
     pub const fn profile(self) -> FieldProfile {
         let neutral = FieldProfile::NEUTRAL;
         let none = ScreenEffects::NONE;

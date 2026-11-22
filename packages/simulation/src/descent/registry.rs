@@ -748,7 +748,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             FluidPocketRule::cave_pools(Water, 260),
             FluidPocketRule::sealed(Water, 60),
         ],
-        ..TEMPLATE
+        ore_density_permille: 1_000,
     },
     // --- Descent IV: The Drowned and Frozen ---------------------------------------------------
     StratumDef {

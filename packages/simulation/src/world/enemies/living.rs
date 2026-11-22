@@ -55,6 +55,10 @@ const NODE_SPREAD: [i32; MIND_NODES] = [-11, 0, 11];
 impl WorldState {
     /// The Living Dark's say on who `state`'s creature notices: `Some(answer)` overrides the
     /// generic perception (see the module docs), `None` leaves it.
+    #[allow(
+        clippy::option_option,
+        reason = "None leaves the generic perception; Some(None) notices nobody"
+    )]
     pub(in crate::world) fn living_notice(
         &self,
         body: &Body,
@@ -150,9 +154,21 @@ impl WorldState {
     }
 
     /// One tick of the Mycelial Mind's fight (see the module docs).
+    #[allow(clippy::too_many_lines, reason = "the fight's beats in order")]
     pub(in crate::world) fn advance_mind(&mut self, now: SimulationTick, output: &mut TickOutput) {
         self.advance_matriarch();
         if self.living_dark.mind.beaten {
+            // The gate stays open for the whole crew: a rig that joins later is fitted too.
+            for player in self.players.values_mut() {
+                for system in [
+                    crate::depth_progression::RigSystem::BioFilter,
+                    crate::depth_progression::RigSystem::LampII,
+                ] {
+                    if !player.hazard_gear.has_system(system) {
+                        crate::economy::grant_rig_system(player, system);
+                    }
+                }
+            }
             return;
         }
         let Some(hollow) = self.mind_hollow() else {
@@ -299,22 +315,23 @@ impl WorldState {
             .filter(|(distance, _)| *distance <= reach)
             .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
             .map(|(_, id)| id);
-        let possessed = if let Some(id) = target {
-            vec![id]
-        } else if thralls + 2 > MAX_THRALLS {
-            Vec::new()
-        } else {
-            let tier = self.tier_at(centre);
-            [(EnemyKind::CapCrawler, -9), (EnemyKind::SporePuffer, 9)]
-                .into_iter()
-                .map(|(kind, dx)| {
-                    let (x, y) = frame.tile_center(TilePosition {
-                        x: centre.x + dx,
-                        y: hollow.max.y - 4,
-                    });
-                    self.spawn_enemy_with(kind, (x, y), tier, None, None)
-                })
-                .collect()
+        let possessed = match target {
+            Some(id) => vec![id],
+            None if thralls + 2 > MAX_THRALLS => Vec::new(),
+            None => {
+                let tier = self.tier_at(centre);
+                let floor = crate::worldgen::descent::living::mind_floor_row(&hollow);
+                [(EnemyKind::CapCrawler, -9), (EnemyKind::SporePuffer, 9)]
+                    .into_iter()
+                    .map(|(kind, dx)| {
+                        let (x, y) = frame.tile_center(TilePosition {
+                            x: centre.x + dx,
+                            y: floor - 1,
+                        });
+                        self.spawn_enemy_with(kind, (x, y), tier, None, None)
+                    })
+                    .collect()
+            }
         };
         let now = self.simulation_tick;
         for id in possessed {

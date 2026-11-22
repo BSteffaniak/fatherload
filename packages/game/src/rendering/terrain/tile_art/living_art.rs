@@ -44,9 +44,7 @@ pub(super) fn back_pixel(stratum: Stratum, x: i32, y: i32) -> PaletteIndex {
                 index_of(LIME)
             } else if hash(x, y, 607).is_multiple_of(257) {
                 index_of(MINT)
-            } else if thread {
-                index_of(PLUM)
-            } else if noise(x, y, 10, 609) + f32::from(bayer4(x, y)) / 40.0 > 0.62 {
+            } else if thread || noise(x, y, 10, 609) + f32::from(bayer4(x, y)) / 40.0 > 0.62 {
                 index_of(PLUM)
             } else {
                 index_of(NIGHT)

@@ -1032,6 +1032,23 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 let (core, system) = lacks(&rig);
                 if let Some(system) = system
                     && core.is_empty()
+                    && system.boss_reward().is_some()
+                {
+                    // A boss's reward (Wave 8: the Mycelial Mind's Bio-Filter and Lamp II):
+                    // won by beating it, never bought.
+                    minutes += BOSS_FIGHT_MINUTES;
+                    rig.systems |= system.bit();
+                    for companion in [RigSystem::BioFilter, RigSystem::LampII] {
+                        if companion.boss_reward() == system.boss_reward() {
+                            rig.systems |= companion.bit();
+                        }
+                    }
+                    systems.push((system, (clock_minutes + minutes) / 60.0));
+                    purchases += 1;
+                    continue;
+                }
+                if let Some(system) = system
+                    && core.is_empty()
                 {
                     // Felt before it can be bought: a dip past the gate first.
                     if felt & system.bit() == 0 {
@@ -1238,6 +1255,12 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
 
 /// The Descents the pacing check covers (I-III: Wave 8's authored content).
 pub const PACING_DESCENTS: u8 = 3;
+
+/// Minutes a gate boss's fight takes the bot (Wave 8: the Mycelial Mind).
+///
+/// Its rewards are never sold. The bot test beats it in about four and a half minutes of game
+/// time; a player learning its nodes and storms takes several tries.
+pub const BOSS_FIGHT_MINUTES: f64 = 25.0;
 
 /// §14's target hours at the end of each Descent.
 pub const TARGET_HOURS: [(f64, f64); DESCENT_COUNT] = [
@@ -1515,6 +1538,45 @@ mod tests {
         let run = run_descent(&registry, &config);
         assert_eq!(run.strata.len(), 6);
         assert!(run.total_hours() > 1.0);
+    }
+
+    #[test]
+    fn the_living_dark_ends_on_the_plans_hours_and_its_gate_is_won_not_bought() {
+        // Through the Glow Sea, the registry's real Living Dark (Wave 8), and into Descent IV
+        // (whose gate the Mind's Bio-Filter opens).
+        let registry = RegistryStrata::default_world();
+        let glow_sea = crate::descent::Stratum::GlowSea.index() + 2;
+        let config = DescentConfig {
+            strata_limit: Some(glow_sea),
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&registry, &config);
+        let (low, high) = TARGET_HOURS[2];
+        let ends = run.descent_hours[2];
+        assert!(
+            (low..=high).contains(&ends),
+            "Descent III ends at {ends:.1} h"
+        );
+        // The Bio-Filter (and Lamp II with it) came from the Mind, at the Descent's end.
+        let won = run
+            .systems
+            .iter()
+            .find(|(system, _)| *system == RigSystem::BioFilter)
+            .map(|(_, hours)| *hours)
+            .expect("the Bio-Filter was won");
+        assert!(
+            won <= ends + 0.01 && won > run.descent_hours[1],
+            "won at {won:.1} h"
+        );
+        // Something new at least every 40 minutes through it.
+        let longest = run
+            .strata
+            .iter()
+            .filter(|stratum| stratum.stratum.descent == 2)
+            .map(|stratum| stratum.longest_gap_minutes)
+            .fold(0.0, f64::max);
+        assert!(longest <= 40.0, "longest gap {longest:.0} min");
     }
 
     #[test]

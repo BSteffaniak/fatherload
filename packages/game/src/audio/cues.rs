@@ -342,14 +342,13 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::Fireball | ShotKind::Wispfire => SoundCue::FireWhoosh,
         ShotKind::Bolt => SoundCue::MachineZap,
         ShotKind::Cannonball => SoundCue::CannonBoom,
-        ShotKind::Arrow => SoundCue::DartFire,
+        ShotKind::Arrow | ShotKind::Thorn => SoundCue::DartFire,
         ShotKind::Rubble => SoundCue::FloorCrumble,
         ShotKind::Hex => SoundCue::FogBurst,
         ShotKind::CryptHex => SoundCue::HexBolt,
         ShotKind::CryptArrow => SoundCue::ArrowTwang,
         ShotKind::Boulder => SoundCue::GateRumble,
         ShotKind::Spore | ShotKind::MindSpore => SoundCue::SporePuff,
-        ShotKind::Thorn => SoundCue::DartFire,
     }
 }
 

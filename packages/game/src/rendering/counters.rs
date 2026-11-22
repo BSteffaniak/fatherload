@@ -384,6 +384,7 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                     UpgradeLock::Unfelt(_) => "UNFELT",
                     UpgradeLock::NoSky => "NO SKY",
                     UpgradeLock::DescentOnly => "DEEP",
+                    UpgradeLock::Boss(_) => "BOSS",
                 };
                 return Offer::new(icon, offer.name, tier)
                     .tag(tag, RED)

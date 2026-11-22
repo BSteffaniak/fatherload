@@ -406,6 +406,7 @@ fn kill(world: &mut WorldState, id: EntityId) {
 }
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "one story of the Hive, start to end")]
 fn the_hive_remembers_the_crews_choices_and_replicates_them() {
     let mut world = world_at(30);
     let settings = settings();
@@ -713,7 +714,7 @@ fn bot_controls(world: &WorldState, target: (f32, f32), tick: u64) -> ControlSta
     // Close in to within railgun reach, then weave to dodge the Mind's orbs.
     let strafe = if dx.abs() > TILE_SIZE * 9.0 {
         dx.signum()
-    } else if (tick / 45) % 2 == 0 {
+    } else if (tick / 45).is_multiple_of(2) {
         0.6
     } else {
         -0.6
@@ -730,6 +731,7 @@ fn bot_controls(world: &WorldState, target: (f32, f32), tick: u64) -> ControlSta
 }
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "the whole fight, start to end")]
 fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() {
     let hz = 30;
     let mut world = world_at(hz);
@@ -889,5 +891,4 @@ fn the_living_dark_is_deterministic_and_leaves_older_worlds_alone() {
     let _ = ticks(&mut world, 30);
     assert!(world.living_dark().is_empty());
     assert!(world.descent_strata_layout().is_none());
-    assert!(TILE_SIZE > 0.0);
 }

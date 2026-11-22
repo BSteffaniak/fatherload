@@ -562,9 +562,9 @@ fn v11_generation_is_pinned() {
 }
 
 /// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
-/// pockets, the outposts on the builders' cable and the ancient lifts' carve).
-// Wave 8 (the Old Deep): Descent II's features, set pieces and the Cathedral Lift.
-const GOLDEN_V11_DIGEST: u64 = 0x9d46_6c10_1878_1ace;
+/// pockets, the outposts on the builders' cable and the ancient lifts' carve; Wave 8: the
+/// Living Dark's authored strata, set pieces and living rock).
+const GOLDEN_V11_DIGEST: u64 = 0xf7eb_a7d0_2a09_fff0;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]

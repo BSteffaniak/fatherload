@@ -81,6 +81,10 @@ pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
 
 /// Representative colour of a cave tile (drill dust, the minimap, world previews).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "the Living Dark's tiles keep rows of their own"
+)]
 pub const fn cave_color(tile: CaveTile, band: Band) -> Color {
     match tile {
         CaveTile::Crystal => match cave_glow(tile, band) {
@@ -491,7 +495,7 @@ fn flesh_pixel(x: i32, y: i32) -> PaletteIndex {
 }
 
 /// Honeycomb: hexagonal wax cells, amber walls round dark honeyed hollows.
-fn comb_pixel(x: i32, y: i32, filled: bool) -> PaletteIndex {
+const fn comb_pixel(x: i32, y: i32, filled: bool) -> PaletteIndex {
     // A hex lattice: rows of cells 6 wide and 5 tall, alternate rows offset by half a cell.
     let row = y.div_euclid(5);
     let shift = if row.rem_euclid(2) == 0 { 0 } else { 3 };

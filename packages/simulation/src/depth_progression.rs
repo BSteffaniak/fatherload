@@ -461,6 +461,16 @@ impl RigSystem {
         }
     }
 
+    /// The boss that hands this system out, if it is a gate's reward and never sold (Wave 8:
+    /// the Mycelial Mind's Bio-Filter and Lamp II).
+    #[must_use]
+    pub const fn boss_reward(self) -> Option<crate::descent::DescentBoss> {
+        match self {
+            Self::BioFilter | Self::LampII => Some(crate::descent::DescentBoss::MycelialMind),
+            _ => None,
+        }
+    }
+
     /// The Descent this system opens (entering it without the system hurts, see
     /// [`descent_gate`]), or `None` for the companion systems.
     #[must_use]

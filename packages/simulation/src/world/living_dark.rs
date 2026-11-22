@@ -408,7 +408,10 @@ impl WorldState {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = player.max_hull();
                     player.fuel = quantize(
-                        (player.fuel + player.fuel_capacity * 0.25).min(player.fuel_capacity),
+                        player
+                            .fuel_capacity
+                            .mul_add(0.25, player.fuel)
+                            .min(player.fuel_capacity),
                     );
                 }
                 output.push_event(living_dark_event(
@@ -733,7 +736,7 @@ impl WorldState {
                     crate::worldgen::descent::stratum_in(&settings, layout, position.x, position.y);
                 if let Some((kind, millis)) = regrowth_of(stratum, layout.along(position.y))
                     && !self.living_schedule.scorched.contains_key(&position)
-                    && !self.logistics.outpost_at(position).is_some()
+                    && self.logistics.outpost_at(position).is_none()
                 {
                     // A little jitter so a tunnel closes tile by tile, not all at once.
                     let jitter = hash2(settings.seed, SALT_REGROW, position.x, position.y) % 400;

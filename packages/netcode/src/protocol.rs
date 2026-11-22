@@ -167,6 +167,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `MagmaSalamander`) in entity records, the `OldDeep` world field and `SectionKey::OldDeep`
 ///   section (dose meters, mutations, woken machine halls, skeleton digs, the Cathedral Lift,
 ///   the Star Core fight, the Glowmother, story logs read) and the Old Deep events 420-438.
+/// * The Living Dark (Descent III): the seven Living Dark `CaveTile`s
+///   (roots, flesh, comb, jelly cells, spore pods, acid glands, charred roots) in terrain ops and
+///   keyframes, eighteen appended `EnemyKind`s and three `ShotKind`s, `ScreenEffect::Blur`
+///   (`ScreenEffects::levels` sent as a list), `FieldPreset::Spores`, the `LivingDark` world
+///   field and `SectionKey::LivingDark` section (root axes, the Hive's standing, errands and
+///   Swarm, the Mycelial Mind's fight, the spore clouds' expiries),
+///   `LogisticsCommand::LivingDark` (root axes and the Amber Court's counter),
+///   `UpgradeLock::Boss` and the Living Dark events 440-459
+///   (`GameplayEventKind::LivingDark`).
 pub const PROTOCOL_VERSION: u8 = 16;
 
 /// One client input frame: the controls and actions for exactly one tick.

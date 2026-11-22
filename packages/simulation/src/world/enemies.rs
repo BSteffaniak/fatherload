@@ -2309,14 +2309,14 @@ impl WorldState {
             return;
         }
         let radius = spawner.stats().radius;
-        let spawned = self.spawn_enemy_with(
+        let hatchling = self.spawn_enemy_with(
             living::brood_of(spawner),
             (body.x, body.y - radius - 6.0),
             tier,
             None,
             Some(id),
         );
-        self.entities.update(spawned, |entity| {
+        self.entities.update(hatchling, |entity| {
             entity.body.velocity_y = -120.0;
         });
     }

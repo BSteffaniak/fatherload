@@ -364,6 +364,10 @@ impl ShotKind {
 
     /// Collision half-size, pixels.
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Wave 8 shots keep rows of their own"
+    )]
     pub const fn radius(self) -> f32 {
         match self {
             Self::Acid | Self::Bolt | Self::Arrow => 4.0,
@@ -379,6 +383,10 @@ impl ShotKind {
 
     /// Base hull damage of a hit (scaled by the shooter's depth tier and the difficulty).
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Wave 8 shots keep rows of their own"
+    )]
     pub const fn damage(self) -> f32 {
         match self {
             Self::Acid => 7.0,

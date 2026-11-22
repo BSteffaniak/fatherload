@@ -1080,18 +1080,15 @@ fn draw_shot(
     let sprite = shot_sprite(shot.kind);
     let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
     let glow = match shot.kind {
-        ShotKind::Acid => LIME,
+        ShotKind::Acid | ShotKind::Spore | ShotKind::MindSpore => LIME,
         ShotKind::Fireball | ShotKind::Cannonball => ORANGE,
         ShotKind::Bolt | ShotKind::Wispfire => MINT,
         // Tomb shots (T28): a faint glint on an arrow, dust round rubble, a hex's violet halo.
         ShotKind::Arrow => STEEL_LIGHT,
-        ShotKind::Rubble => SAND,
+        ShotKind::Rubble | ShotKind::Thorn => SAND,
         ShotKind::Hex => VIOLET,
         ShotKind::CryptHex => LAVENDER,
         ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
-        // The Living Dark (Wave 8): spores glow lime, thorns barely at all.
-        ShotKind::Spore | ShotKind::MindSpore => LIME,
-        ShotKind::Thorn => SAND,
     };
     disc(
         draw,
