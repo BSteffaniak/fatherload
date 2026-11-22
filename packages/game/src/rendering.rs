@@ -21,6 +21,8 @@ mod build;
 mod counters;
 mod crypt_map;
 mod descent_hud;
+mod expedition_card;
+mod expedition_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
@@ -780,6 +782,7 @@ impl GameRenderer {
                 crate::screen_fx::EffectsIntensity::Reduced => 0.45,
                 crate::screen_fx::EffectsIntensity::Off => 0.0,
             },
+            expedition: snapshot.expedition,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

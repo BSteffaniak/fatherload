@@ -1,0 +1,268 @@
+//! The Fathers' expedition scenes (Wave 8 story) in a Deep Descent world: a camp with its log
+//! canister waiting, the card when a log is read, the expedition journal, a radio echo and a
+//! ghost recording, and each kind of anomaly room with its rule on screen.
+//!
+//! The sites and rooms are the generator's own (the scene world is a real V11 world), and the
+//! cards come from real events through the fixed tick, so the scenes also prove the story
+//! pass, the journal rules and the announcements fit together.
+
+use fatherload_simulation::{
+    PlayerId, WorldState,
+    depth_progression::ProgressionRules,
+    descent::Stratum,
+    expedition::{
+        ECHOES, ExpeditionState,
+        anomaly::{AnomalyKind, AnomalyRoom, rooms_in},
+        sites::{self, ExpeditionSite},
+    },
+    terrain::{Terrain, TilePosition},
+    worldgen::{
+        GeneratorVersion, TileRect, WorldSettings,
+        descent::{self, landmarks},
+    },
+};
+
+use super::{Scene, SceneStage, carve, place_rig, reveal};
+use crate::shell::ModalScreen;
+
+/// Seed of every expedition scene world.
+const SCENE_SEED: u64 = 0x0D3E_9DE5;
+
+const fn settings() -> WorldSettings {
+    WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(SCENE_SEED)
+    }
+}
+
+pub const EXPEDITION_SCENES: &[Scene] = &[
+    Scene {
+        name: "expedition_camp",
+        summary: "The Fathers' first camp beside the builders' cable: tent, lamp, sled, stove and the cipher canister waiting on its crate",
+        setup: |stage| camp_scene(stage, 1, false),
+    },
+    Scene {
+        name: "expedition_log_read",
+        summary: "Reading a log: the rig at the Grey Stone wreck, the canister open and the expedition log card",
+        setup: |stage| camp_scene(stage, 6, true),
+    },
+    Scene {
+        name: "expedition_cairn",
+        summary: "A cairn with its flag and chalk arrow in the Slate Shelves, the canister still sealed (the log before is unread)",
+        setup: |stage| camp_scene(stage, 8, false),
+    },
+    Scene {
+        name: "expedition_journal",
+        summary: "The expedition journal: chapter I read with its revelation, chapter II under way, a log open under the list",
+        setup: journal_scene,
+    },
+    Scene {
+        name: "expedition_radio_echo",
+        summary: "A radio echo in the Topsoil: Dov Halloran on the drop line, static across the card",
+        setup: |stage| echo_scene(stage, 0),
+    },
+    Scene {
+        name: "expedition_ghost_recording",
+        summary: "A ghost recording in the Fungal Forest: Dov's tape, its reels turning on the card",
+        setup: |stage| echo_scene(stage, 7),
+    },
+    Scene {
+        name: "anomaly_gravity_flip",
+        summary: "An upturned anomaly room: gravity pulls up, rubble on the ceiling, the cache up there with it",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::GravityFlip),
+    },
+    Scene {
+        name: "anomaly_pixel_rot",
+        summary: "A rotten anomaly room: the picture in blocks and few colours, crystal walls",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::PixelRot),
+    },
+    Scene {
+        name: "anomaly_time_frozen",
+        summary: "A stopped anomaly room: drops hung mid-fall, a stopped clock, the relic cache floating",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::TimeFrozen),
+    },
+    Scene {
+        name: "anomaly_mirror",
+        summary: "A mirror anomaly room: the screen and controls mirrored, glass walls and twin caches",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::Mirror),
+    },
+];
+
+/// Swaps the staged world's terrain for the scene world, with its depth logistics and rules,
+/// and fits the rig for the deep.
+fn deep_world(world: &mut WorldState, player: PlayerId) {
+    *world.terrain_mut() = Terrain::generate(&settings());
+    world.set_progression_rules(ProgressionRules::Descent);
+    world.install_logistics_sites(&landmarks::logistics_sites(&settings()), false);
+    if let Some(rig) = world.player_mut(player) {
+        rig.fuel_tank_level = 14;
+        rig.fuel_capacity = fatherload_simulation::player::fuel_capacity_for_level(14);
+        rig.fuel = rig.fuel_capacity * 0.7;
+        rig.engine_level = 12;
+        rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
+        rig.radiator_level = 15;
+        rig.hull_level = 15;
+        rig.hull = rig.max_hull();
+    }
+}
+
+fn site(number: u8) -> ExpeditionSite {
+    sites::sites(&settings())[usize::from(number - 1)]
+}
+
+/// The journal of a crew that has read logs `1..=found` and heard `echoes` echoes.
+fn read_up_to(found: u8, echoes: u8) -> ExpeditionState {
+    ExpeditionState {
+        found,
+        echoes,
+        ..ExpeditionState::default()
+    }
+}
+
+/// The rig at log `number`'s site: inside it (`enter`: the canister opens through the tick)
+/// or in a tunnel dug up to its wall (the canister waits, or shows its seal).
+fn camp_scene(stage: &mut SceneStage<'_>, number: u8, enter: bool) {
+    let room = site(number);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        // Read up to the log before (a cairn scene leaves a gap, so its canister is sealed).
+        let before = if enter || number == 1 {
+            number - 1
+        } else {
+            number - 2
+        };
+        let mut journal = read_up_to(before, 0);
+        if !enter && number > 1 {
+            journal.sealed.insert(number);
+        }
+        // No echo interrupts these shots.
+        journal.echoes = u8::try_from(ECHOES.len()).unwrap_or(u8::MAX);
+        world.set_expedition(journal);
+        let inner = room.interior();
+        let floor = room.floor_row();
+        let side = sites::trail_side(&settings());
+        // A tunnel up to the room from the town's side, two tiles tall on the room's floor.
+        let (tunnel, rig_x) = if side > 0 {
+            (inner.min.x - 9..inner.min.x, inner.min.x - 3)
+        } else {
+            (inner.max.x + 1..inner.max.x + 10, inner.max.x + 3)
+        };
+        carve(world, tunnel, floor - 2..floor);
+        let x = if enter { room.canister().x - 2 } else { rig_x };
+        place_rig(world, player, x, floor - 1);
+        reveal(
+            world,
+            player,
+            inner.min.x - 30..inner.max.x + 30,
+            inner.min.y - 16..floor + 14,
+        );
+        world.stream_terrain_near_players();
+    });
+    // Past the stratum banner for a clear look at the site; a read log keeps its card up.
+    stage.settle(if enter { 30 } else { 330 });
+}
+
+fn journal_scene(stage: &mut SceneStage<'_>) {
+    let room = site(13);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(13, 5);
+        journal.anomaly_kinds = AnomalyKind::GravityFlip.bit() | AnomalyKind::Mirror.bit();
+        journal.anomalies.insert((0, 0));
+        journal.anomalies.insert((1, 4));
+        world.set_expedition(journal);
+        let floor = room.floor_row();
+        let x = room.bounds.min.x - 20;
+        carve(world, x - 6..x + 6, floor - 3..floor);
+        place_rig(world, player, x, floor - 1);
+        reveal(world, player, x - 30..x + 30, floor - 16..floor + 14);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::ExpeditionLog);
+    // The last log of the Crust, its chapter's revelation just above it.
+    seat.selected_menu_item = 9;
+    stage.settle(3);
+}
+
+/// The rig dug in just below echo `index`'s depth, every echo before it heard.
+fn echo_scene(stage: &mut SceneStage<'_>, index: usize) {
+    let echo = &ECHOES[index];
+    let layout = descent::layout(&settings());
+    let row = fatherload_simulation::world::expedition::echo_row(&layout, echo) + 3;
+    let column = site(1).bounds.min.x - 30;
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(0, u8::try_from(index).unwrap_or(0));
+        journal.found = if echo.stratum == Stratum::Topsoil {
+            0
+        } else {
+            21
+        };
+        world.set_expedition(journal);
+        carve(world, column - 12..column + 12, row - 2..row + 1);
+        place_rig(world, player, column, row);
+        reveal(world, player, column - 40..column + 40, row - 20..row + 16);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(40);
+}
+
+/// The first room of `kind` out from the scene column, through Descents I to III.
+fn room_of(kind: AnomalyKind) -> Option<AnomalyRoom> {
+    let layout = descent::layout(&settings());
+    let (_, bottom) = layout.descent_rows(fatherload_simulation::descent::Descent::LivingDark);
+    let area = TileRect {
+        min: TilePosition {
+            x: -900,
+            y: layout.tops[0],
+        },
+        max: TilePosition { x: 900, y: bottom },
+    };
+    let mut rooms: Vec<AnomalyRoom> = rooms_in(&settings(), &area)
+        .into_iter()
+        .filter(|room| room.kind == kind)
+        .collect();
+    rooms.sort_by_key(|room| (room.bounds.min.y, room.bounds.min.x.abs()));
+    rooms.into_iter().next()
+}
+
+fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
+    let Some(room) = room_of(kind) else {
+        return;
+    };
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(0, u8::try_from(ECHOES.len()).unwrap_or(u8::MAX));
+        journal.found = 0;
+        world.set_expedition(journal);
+        let inner = room.interior();
+        let centre = inner.center();
+        // A tunnel in through the left wall, the rig just inside.
+        carve(
+            world,
+            inner.min.x - 8..inner.min.x,
+            inner.max.y - 1..inner.max.y + 1,
+        );
+        let row = if kind == AnomalyKind::GravityFlip {
+            inner.min.y + 1
+        } else {
+            inner.max.y
+        };
+        place_rig(world, player, inner.min.x + 3, row);
+        reveal(
+            world,
+            player,
+            inner.min.x - 30..inner.max.x + 30,
+            centre.y - 18..centre.y + 18,
+        );
+        world.stream_terrain_near_players();
+    });
+    // Past the room's card and the stratum banner: the room and its rule on their own.
+    stage.settle(600);
+}

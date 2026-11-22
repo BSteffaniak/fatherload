@@ -546,7 +546,70 @@ impl LocalGame {
         self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_stories(&players);
+        self.announce_expedition(&players);
         self.announce_rewards(&players);
+    }
+
+    /// The Fathers' expedition for local seats (Wave 8 story). The crew shares one journal, so
+    /// a log read and an echo go up on every local seat's card; the finder's seat also hears
+    /// what the canister held (or that a chapter is complete). An anomaly room's card is for
+    /// the seat that stepped in (its rule is where that rig is); a sealed canister is a line.
+    fn announce_expedition(&mut self, players: &[PlayerId]) {
+        use crate::shell::expedition::{anomaly_words, echo_words, log_found_words, sealed_words};
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut moments: Vec<(usize, crate::shell::StoryMomentKind, String, String)> = Vec::new();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            match gameplay.kind {
+                GameplayEventKind::ExpeditionLogFound { player_id, log } => {
+                    if let Some((kind, title, text, message)) = log_found_words(log) {
+                        for seat in 0..players.len() {
+                            moments.push((seat, kind, title.clone(), text.clone()));
+                        }
+                        if let Some(seat) = seat_of(player_id) {
+                            messages.push((seat, message));
+                        }
+                    }
+                }
+                GameplayEventKind::ExpeditionLogSealed { player_id, log } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        messages.push((seat, sealed_words(log)));
+                    }
+                }
+                GameplayEventKind::ExpeditionEcho { echo, .. } => {
+                    if let Some((kind, title, text)) = echo_words(echo) {
+                        for seat in 0..players.len() {
+                            moments.push((seat, kind, title.clone(), text.clone()));
+                        }
+                    }
+                }
+                GameplayEventKind::AnomalyEntered {
+                    player_id,
+                    kind,
+                    first_of_kind,
+                } => {
+                    if let Some(seat) = seat_of(player_id) {
+                        if first_of_kind {
+                            let (moment, title, text) = anomaly_words(kind);
+                            moments.push((seat, moment, title, text));
+                        } else {
+                            messages
+                                .push((seat, format!("{}: the rules slip again.", kind.name())));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, kind, title, text) in moments {
+            self.shell.story_moment(seat, kind, title, text);
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
     }
 
     /// Story moments for local seats (WP-STORY): the card when a story is taken on, reaches
@@ -1758,6 +1821,7 @@ mod tests {
 
     mod base_tests;
     mod crew_tests;
+    mod expedition_tests;
     mod garage_tests;
     mod home_tests;
     mod logistics_tests;

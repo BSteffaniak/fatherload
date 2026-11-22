@@ -236,9 +236,18 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::Climax => ("THE STORY TURNS", VIOLET, PanelStyle::Accent),
         StoryMomentKind::Ended => ("STORY'S END", LIME, PanelStyle::Accent),
         StoryMomentKind::Lost => ("A STORY LET GO", FOG, PanelStyle::Standard),
+        StoryMomentKind::ExpeditionLog => ("EXPEDITION LOG", AMBER, PanelStyle::Accent),
+        StoryMomentKind::RadioEcho => ("A RADIO ECHO", SKY_LIGHT, PanelStyle::Standard),
+        StoryMomentKind::GhostRecording => ("A GHOST RECORDING", MIST, PanelStyle::Standard),
+        StoryMomentKind::Anomaly => ("AN ANOMALY", LAVENDER, PanelStyle::Accent),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
-    lines.truncate(6);
+    lines.truncate(match moment.kind {
+        StoryMomentKind::ExpeditionLog
+        | StoryMomentKind::RadioEcho
+        | StoryMomentKind::GhostRecording => 8,
+        _ => 6,
+    });
     let heading_y = 6;
     let title_y = heading_y + TextStyle::Body.line_height() + 2;
     let text_y = title_y + TextStyle::Title.line_height() + 4;
@@ -272,6 +281,7 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
             }
         }
     }
+    super::expedition_card::decorate(draw, moment.kind, (x, y, width, height), age, color);
     let centre = x + width / 2;
     ui_kit::text_centred(draw, heading, centre, y + heading_y, TextStyle::Body, color);
     ui_kit::text_centred(

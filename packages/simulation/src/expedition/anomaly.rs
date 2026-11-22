@@ -431,5 +431,71 @@ pub fn anomaly_field_source(
     }
     let base = crate::descent::fields::stratum_field_source(settings, frame, x, y)
         .unwrap_or(FieldProfile::NEUTRAL);
-    Some(base.lerp(&room.kind.profile(), weight))
+    Some(over(&base, &room.kind.profile(), weight))
+}
+
+/// `room`'s departures from the ordinary world laid over `base` with `weight` (`0..=1`).
+///
+/// What the room changes moves toward the room's value, what it leaves alone keeps the stratum's
+/// (a pixel-rot room in the Gravity Shear still turns gravity), switches turn on past half
+/// way, and screen effects keep the stronger of the two.
+#[must_use]
+#[allow(clippy::float_cmp, reason = "the neutral values are exact constants")]
+pub fn over(base: &FieldProfile, room: &FieldProfile, weight: f32) -> FieldProfile {
+    let t = weight.clamp(0.0, 1.0);
+    let neutral = FieldProfile::NEUTRAL;
+    let mix = |base: f32, room: f32, plain: f32| {
+        if room == plain {
+            base
+        } else {
+            (room - base).mul_add(t, base)
+        }
+    };
+    let gravity_departs =
+        room.gravity_x != neutral.gravity_x || room.gravity_y != neutral.gravity_y;
+    let mut result = *base;
+    if gravity_departs {
+        result.gravity_x = (room.gravity_x - base.gravity_x).mul_add(t, base.gravity_x);
+        result.gravity_y = (room.gravity_y - base.gravity_y).mul_add(t, base.gravity_y);
+    }
+    result.time_scale = mix(base.time_scale, room.time_scale, neutral.time_scale);
+    result.friction = mix(base.friction, room.friction, neutral.friction);
+    result.drag = mix(base.drag, room.drag, neutral.drag);
+    result.light = mix(base.light, room.light, neutral.light);
+    result.sound_occlusion = mix(
+        base.sound_occlusion,
+        room.sound_occlusion,
+        neutral.sound_occlusion,
+    );
+    result.mirror_controls = base.mirror_controls || (room.mirror_controls && t > 0.5);
+    result.free_rotation = base.free_rotation || (room.free_rotation && t > 0.5);
+    for (index, level) in result.screen.levels.iter_mut().enumerate() {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a weighted percent is a percent"
+        )]
+        let wanted = (f32::from(room.screen.levels[index]) * t).round() as u8;
+        *level = (*level).max(wanted);
+    }
+    let blend = |a: [u8; 3], b: [u8; 3]| -> [u8; 3] {
+        std::array::from_fn(|channel| {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a mix of two bytes is a byte"
+            )]
+            let value = (f32::from(b[channel]) - f32::from(a[channel]))
+                .mul_add(t, f32::from(a[channel]))
+                .round() as u8;
+            value
+        })
+    };
+    if room.screen.level(ScreenEffect::ColourGrade) > 0 {
+        result.screen.grade_rgb = blend(base.screen.grade_rgb, room.screen.grade_rgb);
+    }
+    if room.screen.level(ScreenEffect::Fog) > 0 {
+        result.screen.fog_rgb = blend(base.screen.fog_rgb, room.screen.fog_rgb);
+    }
+    result
 }

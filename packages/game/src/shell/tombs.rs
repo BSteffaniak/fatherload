@@ -149,7 +149,12 @@ impl SeatUi {
     }
 
     /// One frame of the tomb codex page: confirm turns to the map, back closes.
-    pub(super) fn handle_tomb_codex(&mut self, input: PlayerInput, cues: &mut Vec<SoundCue>) {
+    pub(super) fn handle_tomb_codex(
+        &mut self,
+        input: PlayerInput,
+        world: &fatherload_simulation::WorldState,
+        cues: &mut Vec<SoundCue>,
+    ) {
         if input.backs_out() {
             self.modal = None;
             cues.push(SoundCue::UiBack);
@@ -160,7 +165,12 @@ impl SeatUi {
             return;
         }
         if input.confirm || input.tab_next {
-            self.open_modal(ModalScreen::Map);
+            // The expedition journal (Wave 8 story) follows on Deep Descent worlds.
+            self.open_modal(if super::expedition::has_expedition_page(world) {
+                ModalScreen::ExpeditionLog
+            } else {
+                ModalScreen::Map
+            });
         }
     }
 }

@@ -77,7 +77,7 @@ impl ExpeditionSite {
         let interior = self.interior();
         let x = match self.kind {
             // Camps keep it on the crate by the tent's door; wrecks in the cab; cairns on top.
-            SiteKind::Camp => interior.min.x + (interior.max.x - interior.min.x) * 2 / 3,
+            SiteKind::Camp => interior.max.x - 2,
             SiteKind::Rig => interior.min.x + 2,
             SiteKind::Marker => i32::midpoint(interior.min.x, interior.max.x),
         };

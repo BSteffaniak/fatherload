@@ -402,6 +402,7 @@ mod crust_scenes;
 mod crypt_scenes;
 mod descent_scenes;
 mod drop_scenes;
+mod expedition_scenes;
 mod explosive_scenes;
 mod field_scenes;
 mod fluid_scenes;
@@ -558,6 +559,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(crust_scenes::CRUST_SCENES)
         .chain(old_deep_scenes::OLD_DEEP_SCENES)
         .chain(living_dark_scenes::LIVING_DARK_SCENES)
+        .chain(expedition_scenes::EXPEDITION_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

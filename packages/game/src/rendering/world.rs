@@ -40,6 +40,7 @@ pub(super) mod daylight;
 mod drops;
 pub(super) use drops::drop_sprite;
 mod enemies;
+mod expedition;
 mod explosives;
 mod fluids;
 mod fx;
@@ -207,6 +208,8 @@ pub(super) struct WorldScene<'a> {
     /// How much of the screen and world effects the accessibility setting lets through (the
     /// Flesh Caverns' pulse, Wave 8): 1 full, 0 off.
     pub effects_strength: f32,
+    /// The Fathers' expedition journal (Wave 8 story): which canisters are read or sealed.
+    pub expedition: &'a fatherload_simulation::expedition::ExpeditionState,
 }
 
 impl WorldScene<'_> {
@@ -445,6 +448,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         players: scene.players,
     };
     logistics::draw_logistics(draw, &logistics_scene);
+    // The Fathers' expedition (Wave 8 story): camps, wrecks, cairns and anomaly rooms.
+    let expedition_scene = expedition::ExpeditionScene {
+        settings: scene.terrain.settings(),
+        expedition: scene.expedition,
+        visible: scene.visible,
+        seconds,
+    };
+    expedition::draw_expedition(draw, &expedition_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
@@ -624,6 +635,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     }
     base::draw_base_lights(draw, &base_scene);
     logistics::draw_logistics_lights(draw, &logistics_scene);
+    expedition::draw_expedition_lights(draw, &expedition_scene);
     if let Some(preview) = scene.build_preview {
         base::draw_claims(draw, &base_scene, preview.claim.as_ref());
         base::draw_build_ghost(draw, &base_scene, preview);

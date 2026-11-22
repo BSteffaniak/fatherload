@@ -29,6 +29,7 @@ mod build;
 mod colony;
 mod crew;
 mod descent;
+pub mod expedition;
 mod garage;
 pub mod homes;
 pub mod hopper;
@@ -162,6 +163,10 @@ pub enum ModalScreen {
     /// a lift's stations, the travel network and the field kit; its rows are
     /// [`SeatUi::logistics`].
     Logistics,
+    /// The Fathers' expedition journal (Wave 8 story, `shell/expedition.rs`): the logs the crew
+    /// has read, chapter by chapter, and the trail's lead. After the tomb codex in the map's
+    /// page cycle on Deep Descent worlds.
+    ExpeditionLog,
 }
 
 impl ModalScreen {
@@ -1557,7 +1562,11 @@ impl SeatUi {
             return true;
         }
         if modal == ModalScreen::TombCodex {
-            self.handle_tomb_codex(input, cues);
+            self.handle_tomb_codex(input, ctx.world, cues);
+            return true;
+        }
+        if modal == ModalScreen::ExpeditionLog {
+            self.handle_expedition_log(input, ctx.world, cues);
             return true;
         }
         if modal == ModalScreen::Logistics {
@@ -1780,7 +1789,8 @@ impl SeatUi {
             | ModalScreen::RelicPick
             | ModalScreen::TombSummary
             | ModalScreen::TombCodex
-            | ModalScreen::Logistics => None,
+            | ModalScreen::Logistics
+            | ModalScreen::ExpeditionLog => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1

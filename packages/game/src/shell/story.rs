@@ -30,6 +30,14 @@ pub enum StoryMomentKind {
     Ended,
     /// A story given up (or lost to a twist).
     Lost,
+    /// An expedition log read (Wave 8 story).
+    ExpeditionLog,
+    /// One of Dov Halloran's radio echoes.
+    RadioEcho,
+    /// One of Dov's ghost recordings.
+    GhostRecording,
+    /// An anomaly room entered.
+    Anomaly,
 }
 
 /// A card across the seat's view telling a moment of a story.

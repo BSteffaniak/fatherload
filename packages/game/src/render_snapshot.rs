@@ -758,6 +758,10 @@ pub struct RenderSnapshot<'w> {
     pub logistics: &'w fatherload_simulation::logistics::Logistics,
     /// The authored Crust: the Sinkhole collapse, the Deep Claim, the logs read (Wave 8).
     pub crust: &'w fatherload_simulation::crust::CrustState,
+    /// The Fathers' expedition: logs read, sealed canisters, echoes, anomaly rooms (Wave 8).
+    pub expedition: &'w fatherload_simulation::expedition::ExpeditionState,
+    /// Where the expedition's next canister lies, in words (the journal's lead).
+    pub expedition_lead: String,
     /// The world day people live by (mood in the talk panel).
     pub people_day: u32,
     /// The base modules that have power this frame.
@@ -901,6 +905,8 @@ impl<'w> RenderSnapshot<'w> {
                 cathedral: world.cathedral_site(),
                 arena: world.star_core_arena(),
             },
+            expedition: world.expedition(),
+            expedition_lead: crate::shell::expedition::next_lead(world),
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()

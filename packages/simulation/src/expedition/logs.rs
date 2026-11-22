@@ -419,10 +419,10 @@ pub const LOGS: [ExpeditionLog; 30] = [
         author: Member::Ines,
         stratum: Stratum::GlowSea,
         site: SiteKind::Rig,
-        text: "The Hive's oldest queen showed us a carving: the cable running down to a great \
-               ball of light, and up to the Moon. Like the old tomb page: a cable from the deep \
-               core to the hanging stone. The ball is no core, she said. It is an engine, and \
-               it sleeps. Five of us left. Going down.",
+        text: "The Hive's oldest queen showed us a carving: the cable running down to a ball of \
+               light, and up to the Moon. Like the old tomb page: a cable from the deep core to \
+               the hanging stone. It is no core, she said. It is an engine, and it sleeps. Five \
+               of us left. Going down.",
     },
 ];
 
