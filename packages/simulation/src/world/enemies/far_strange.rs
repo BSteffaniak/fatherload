@@ -535,10 +535,12 @@ impl WorldState {
         }
         self.far_strange.glitch.rule = rule;
         if let Some(profile) = glitch_zone_profile(rule) {
-            let inside = arena_inside(arena);
+            // Over the whole hall, walls and floor included, so the rule holds at full strength
+            // up to every surface inside it (feathered from the hall's own edge, a rig resting
+            // on the floor or a wall felt only a fraction of it and never fell up or sideways).
             let zone = FieldZone::new(
-                (inside.min.x, inside.min.y),
-                (inside.max.x, inside.max.y),
+                (arena.min.x, arena.min.y),
+                (arena.max.x, arena.max.y),
                 1,
                 profile,
             );

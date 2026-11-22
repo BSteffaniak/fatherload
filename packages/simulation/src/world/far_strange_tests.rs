@@ -1029,12 +1029,23 @@ fn glitch_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState
     let length = dx.hypot(dy).max(1.0);
     #[allow(clippy::cast_possible_truncation, reason = "a unit vector times 127")]
     let aim = ((dx / length * 127.0) as i8, (dy / length * 127.0) as i8);
+    let fields = world.fields_at(rig.x, rig.y);
     // Mirrored controls: the bot reads the rule and steers the other way.
-    let mirrored = world.fields_at(rig.x, rig.y).mirror > 0.5;
+    let mirrored = fields.mirror > 0.5;
+    // The rotation thrusters, worked by hand like a player: keep the rig's feet towards
+    // whatever way gravity points now (the rules turn it), so the main thruster fights it.
+    let level = fields.down_angle().unwrap_or(0.0);
+    let lean = crate::field::trig::wrap_angle(rig.attitude.orientation - level);
+    let mut rotate = lean
+        .mul_add(-3.0, -rig.attitude.angular_velocity * 0.6)
+        .clamp(-1.0, 1.0);
+    // The stick drives along gravity's own horizontal.
+    let (sin_level, cos_level) = (level.sin(), level.cos());
+    let along = dx.mul_add(cos_level, dy * sin_level);
     let mut strafe = if length < TILE_SIZE * 6.0 {
-        -dx.signum()
+        -along.signum()
     } else if length > TILE_SIZE * 14.0 {
-        dx.signum()
+        along.signum()
     } else if (tick / 50).is_multiple_of(2) {
         0.5
     } else {
@@ -1042,14 +1053,17 @@ fn glitch_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState
     };
     if mirrored {
         strafe = -strafe;
+        rotate = -rotate;
     }
     let thrust = tick % 50 < 5;
-    ControlState::new(strafe, thrust, false).with_weapon(WeaponControl {
-        fire: tick % 6 < 3,
-        auto_aim: false,
-        aim_x: aim.0,
-        aim_y: aim.1,
-    })
+    ControlState::new(strafe, thrust, false)
+        .with_rotation(rotate)
+        .with_weapon(WeaponControl {
+            fire: tick % 6 < 3,
+            auto_aim: false,
+            aim_x: aim.0,
+            aim_y: aim.1,
+        })
 }
 
 #[test]
@@ -1176,6 +1190,42 @@ fn a_bot_with_descent_vi_kit_beats_the_glitch_through_every_rule_and_wins_the_ph
     // It stays beaten.
     let _ = ticks(&mut world, 30);
     assert!(!world.far_strange().glitch.awake());
+}
+
+#[test]
+fn every_rule_holds_at_full_strength_against_the_halls_floor_and_gravity_up_lifts_the_rig() {
+    let mut world = world_at(60);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    let arena = world.glitch_arena().expect("the arena");
+    let inside = sites::arena_inside(&arena);
+    let floor = TilePosition {
+        x: inside.center().x - 9,
+        y: inside.max.y,
+    };
+    put_rig(&mut world, floor);
+    let _ = ticks(&mut world, 60);
+    assert!(world.far_strange().glitch.awake());
+    let at_floor = |world: &WorldState| {
+        let (x, y) = world.frame().tile_center(floor);
+        world.fields_at(x, y)
+    };
+    world.stage_glitch_rule(GlitchRule::Mirrored, false);
+    assert!(at_floor(&world).mirror > 0.99);
+    world.stage_glitch_rule(GlitchRule::TimeWarp, false);
+    assert!((at_floor(&world).time_scale - crate::far_strange::GLITCH_TIME_WARP).abs() < 0.01);
+    world.stage_glitch_rule(GlitchRule::Sideways, false);
+    assert!(at_floor(&world).gravity_x > 0.99);
+    world.stage_glitch_rule(GlitchRule::GravityUp, false);
+    assert!(at_floor(&world).gravity_y < -0.99);
+    // A rig resting on the floor falls up to the ceiling.
+    let (_, start) = rig_xy(&world);
+    let _ = ticks(&mut world, 60 * 3);
+    let (_, end) = rig_xy(&world);
+    let rows = (start - end) / TILE_SIZE;
+    assert!(
+        rows > f32::from(u8::try_from(inside.height() - 3).unwrap_or(0)),
+        "fell up {rows} rows"
+    );
 }
 
 #[test]

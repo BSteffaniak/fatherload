@@ -379,7 +379,7 @@ pub const GLITCH_BLINK_TELL_MILLIS: u64 = 1_100;
 /// The Glitch sleeps (and heals) once no rig has been in its arena for this long.
 pub const GLITCH_SLEEP_MILLIS: u64 = 30_000;
 /// Most glitch shards about at once.
-pub const MAX_GLITCH_SHARDS: usize = 3;
+pub const MAX_GLITCH_SHARDS: usize = 2;
 /// How often The Glitch sheds shards (from its third phase).
 pub const GLITCH_SHARD_MILLIS: u64 = 11_000;
 /// The time scale of the time-warp rule.
