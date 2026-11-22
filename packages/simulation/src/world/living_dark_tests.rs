@@ -335,6 +335,49 @@ fn roots_grow_back_over_a_dug_tunnel_but_never_into_a_rig_and_never_where_axes_o
 }
 
 #[test]
+fn roots_never_close_a_lift_shaft() {
+    let hz = 10;
+    let mut world = world_at(hz);
+    let row = middle_row(Stratum::RootLabyrinth);
+    arena(&mut world, 60, row);
+    let column = TileRect {
+        min: TilePosition { x: 45, y: row - 8 },
+        max: TilePosition { x: 45, y: row + 8 },
+    };
+    fill(&mut world, column.expanded(2), TileKind::Stone);
+    let id = world.logistics.allocate_id();
+    world.logistics.lifts.insert(
+        id,
+        crate::logistics::LiftShaft {
+            id,
+            column: 45,
+            stations: [row - 8, row + 8].into_iter().collect(),
+            origin: crate::logistics::LiftOrigin::Built { owner: PLAYER },
+            restored: true,
+            cab_row: row + 8,
+        },
+    );
+    // The shaft and a side tunnel off it are dug the same moment: only the side tunnel closes.
+    let side = TilePosition { x: 46, y: row };
+    world.dig_living_tiles(column);
+    world.dig_living_tiles(TileRect {
+        min: side,
+        max: side,
+    });
+    let _ = ticks(&mut world, u64::from(hz) * 220);
+    assert!(
+        column
+            .positions()
+            .all(|tile| world.terrain().tile(tile).expect("tile").kind == TileKind::Air),
+        "the lift's shaft stays open"
+    );
+    assert_eq!(
+        world.terrain().tile(side).expect("tile").kind,
+        TileKind::Cave(CaveTile::Root)
+    );
+}
+
+#[test]
 fn fire_burns_roots_away_for_good() {
     let mut world = world_at(30);
     let row = middle_row(Stratum::RootLabyrinth);

@@ -737,6 +737,7 @@ impl WorldState {
                 if let Some((kind, millis)) = regrowth_of(stratum, layout.along(position.y))
                     && !self.living_schedule.scorched.contains_key(&position)
                     && self.logistics.outpost_at(position).is_none()
+                    && !self.in_lift_shaft(position)
                 {
                     // A little jitter so a tunnel closes tile by tile, not all at once.
                     let jitter = hash2(settings.seed, SALT_REGROW, position.x, position.y) % 400;
@@ -773,6 +774,17 @@ impl WorldState {
                 output.push_event(living_dark_event(LivingDarkEvent::CourtHostile, None, at));
             }
         }
+    }
+
+    /// Whether `tile` lies in a lift's shaft (its column, from a row above its top station to
+    /// a row below its bottom one): roots and flesh never close a lift's ride.
+    fn in_lift_shaft(&self, tile: TilePosition) -> bool {
+        self.logistics.lift_on_column(tile.x).is_some_and(|lift| {
+            match (lift.stations.first(), lift.stations.last()) {
+                (Some(top), Some(bottom)) => (top - 1..=bottom + 1).contains(&tile.y),
+                _ => false,
+            }
+        })
     }
 
     /// Whether any body (a rig, a pilot, a creature) overlaps `tile`.
@@ -828,8 +840,9 @@ impl WorldState {
                 .terrain
                 .tile(position)
                 .is_some_and(|tile| tile.kind == TileKind::Air);
-            if !open {
-                // Filled some other way (a block placed, fluid flowed in): nothing to grow.
+            if !open || self.in_lift_shaft(position) {
+                // Filled some other way (a block placed, fluid flowed in), or a lift was built
+                // through it since: nothing to grow.
                 continue;
             }
             if self.tile_occupied(position) {
