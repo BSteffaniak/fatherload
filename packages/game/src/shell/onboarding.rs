@@ -279,7 +279,12 @@ pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<Str
                  way back up."
                     .to_owned()
             }),
-        Hint::Glare => (fields.light > 1.3).then(|| {
+        // The sampled light stops at daylight (the glare is a screen exposure), so the inner
+        // sun's glare is read from the stratum's own light, as the descent probe reads it.
+        Hint::Glare => (stratum.descent().index() == 4
+            && stratum.def().field.light_permille
+                >= fatherload_simulation::balance::descent::mechanics::GLARE_LIGHT_PERMILLE)
+            .then(|| {
             "Tip: the inner sun's glare and heat. Hop between shadows; shade canopies and Heat \
              Shielding keep the rig cool."
                 .to_owned()
@@ -310,11 +315,16 @@ pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<Str
                 supply.stratum() == stratum && world.supplies_of(player, *supply) == 0
             })
             .map(|supply| {
+                let name = supply.name();
+                let article = if name.starts_with(['A', 'E', 'I', 'O', 'U']) {
+                    "an"
+                } else {
+                    "a"
+                };
                 format!(
-                    "Tip: {} asks for a {}. Deep counters sell them; workshops make them \
-                     from {}.",
+                    "Tip: {} asks for {article} {name}. Deep counters sell them; workshops make \
+                     them from {}.",
                     super::logistics::the_stratum(stratum),
-                    supply.name(),
                     stratum.def().layer_resource.name
                 )
             }),
@@ -467,6 +477,26 @@ mod tests {
                 assert!(!text.contains("press") && !text.contains("click"), "{text}");
             }
         }
+    }
+
+    #[test]
+    fn the_sunforge_warns_of_its_glare_and_names_supplies_with_the_right_article() {
+        use fatherload_simulation::descent::Stratum;
+        let (mut world, player) = deep_world();
+        let layout = world.descent_layout();
+        // The sampled light stops at daylight, so the glare reads the stratum's own light.
+        let forge = layout.strata()[Stratum::TheSunforge.index()];
+        park(&mut world, player, 40, forge.top + 40);
+        let glare = deep_hint(&world, player, Hint::Glare).expect("the Sunforge's glare");
+        assert!(glare.contains("glare"), "{glare}");
+        let sky = layout.strata()[Stratum::InnerSky.index()];
+        park(&mut world, player, 40, sky.top + 40);
+        assert_eq!(deep_hint(&world, player, Hint::Glare), None);
+        // "an Echo Charge", never "a Echo Charge".
+        let echo = layout.strata()[Stratum::EchoCaves.index()];
+        park(&mut world, player, 40, echo.top + 40);
+        let supplies = deep_hint(&world, player, Hint::Supplies).expect("echo charges");
+        assert!(supplies.contains("an Echo Charge"), "{supplies}");
     }
 
     #[test]
