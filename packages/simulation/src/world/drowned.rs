@@ -252,6 +252,17 @@ impl WorldState {
         let Some((x, y)) = self.players.get(&player_id).map(|p| (p.x, p.y)) else {
             return;
         };
+        // One ping a second at most (the scanner may be pressed on consecutive ticks).
+        let now = self.simulation_tick.get();
+        let gap = self.timing.ticks_for_millis(1_000);
+        if self
+            .drowned
+            .pings
+            .iter()
+            .any(|ping| ping.player_id == player_id && now.saturating_sub(ping.tick.get()) < gap)
+        {
+            return;
+        }
         if self
             .submersion(x, y, AUTHORITATIVE_PLAYER_RADIUS)
             .kind
@@ -505,7 +516,21 @@ impl WorldState {
         let neutral = AUTHORITATIVE_RIG_GRAVITY * (1.0 - kind.buoyancy()).max(0.0) * wet.share;
         let trim = BALLAST_ACCELERATION * f32::from(player.water.ballast) / f32::from(BALLAST_FULL);
         let vy = (-(neutral + trim)).mul_add(seconds, player.velocity_y);
-        player.velocity_y = quantize(vy);
+        // A sinking sub a few pixels off the bottom settles onto it and rests there, so its
+        // drill can bite. (The sweep stops a rig a step short of the floor; at a low tick rate
+        // the water's sink speed can keep that step longer than the gap, tick after tick.)
+        let settle = (vy > 0.0)
+            .then(|| settle_distance(&self.terrain, x, y))
+            .flatten();
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return;
+        };
+        if let Some(down) = settle {
+            player.y = quantize(y + down);
+            player.velocity_y = 0.0;
+        } else {
+            player.velocity_y = quantize(vy);
+        }
         // The current carries the submarine along (its drive brakes, the sea does not).
         let drift = CURRENT_DRIFT * wet.share * seconds;
         if current != (0.0, 0.0) {
@@ -1044,4 +1069,21 @@ impl WorldState {
             }
         }
     }
+}
+
+/// How far (px) above the bottom a sinking submarine settles onto it.
+const SETTLE_REACH: f32 = 4.0;
+
+/// How far a rig at `(x, y)` can sink before it touches the bottom, when that is within
+/// [`SETTLE_REACH`] (`None`: open water below). Searched in quarter pixels, so it is the same
+/// at every tick rate.
+fn settle_distance(terrain: &crate::terrain::Terrain, x: f32, y: f32) -> Option<f32> {
+    use super::movement::authoritative_player_collides as collides;
+    if !collides(terrain, x, y + SETTLE_REACH) || collides(terrain, x, y) {
+        return None;
+    }
+    (0_u8..16)
+        .rev()
+        .map(|quarter| f32::from(quarter) * 0.25)
+        .find(|down| !collides(terrain, x, y + down))
 }

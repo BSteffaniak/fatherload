@@ -149,6 +149,34 @@ fn older_worlds_have_none_of_the_drowned_and_frozen() {
 // --- The Underground Ocean: ballast, currents, sonar --------------------------------------------
 
 #[test]
+fn a_flooded_submarine_settles_on_the_bottom_and_drills_through_it() {
+    for hz in [20, 30, 60, 120] {
+        let mut world = world_at(hz);
+        world.enable_test_mode();
+        let centre = TilePosition {
+            x: FAR,
+            y: middle_row(Stratum::UndergroundOcean),
+        };
+        room(&mut world, centre, (4, 4), i32::MAX);
+        let floor = centre.y + 4;
+        let mut deepest = 0;
+        for _ in 0..hz * 8 {
+            let _ = step(&mut world, ControlState::new(0.0, false, true));
+            let tile = world.player(PLAYER).expect("rig").tile_in(world.frame());
+            deepest = deepest.max(tile.y);
+        }
+        let rig = world.player(PLAYER).expect("rig");
+        assert!(
+            deepest > floor + 2,
+            "{hz} Hz: stuck at row {deepest} (floor {floor}), y {} vy {} {:?}",
+            rig.y,
+            rig.velocity_y,
+            rig.water
+        );
+    }
+}
+
+#[test]
 fn ballast_trims_the_submarine_to_rise_hover_and_sink() {
     let mut world = world_at(30);
     let centre = TilePosition {
