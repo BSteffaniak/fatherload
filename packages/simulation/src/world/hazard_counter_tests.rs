@@ -102,7 +102,9 @@ fn every_upgrade_line_has_many_tiers_with_rising_prices() {
                 | UpgradeKind::DrillMount
                 | UpgradeKind::PressurizedHull
                 | UpgradeKind::LifeSupport
-        ) {
+        ) || kind.rig_system().is_some()
+        {
+            // One-tier lines: the Moon's seals and the Deep Descent's rig systems.
             continue;
         }
         let tiers = kind.max_level() - kind.starting_level();

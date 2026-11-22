@@ -706,6 +706,14 @@ fn preview_lines(
         | UpgradeKind::PhaseDrill
         | UpgradeKind::HeartKey => {
             // The shop appends the line's description, so these say what it unlocks.
+            bars.push(bar(
+                "Fitted",
+                f32::from(from),
+                f32::from(to),
+                f32::from(top),
+                "",
+                0,
+            ));
             if let Some(system) = kind.rig_system() {
                 if let Some(descent) = system.gates_descent() {
                     changes.push(format!(
