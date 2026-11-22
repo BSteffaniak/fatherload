@@ -116,7 +116,8 @@ impl WorldState {
     /// The brood matriarch in her gallery: she appears when a rig comes near it (once the Swarm
     /// is broken she is gone for good).
     pub(super) fn advance_matriarch(&mut self) {
-        if self.living_dark.hive.swarm == SwarmState::Broken {
+        // A peaceful world has no creatures (the director clears any that appear).
+        if self.living_dark.hive.swarm == SwarmState::Broken || !self.enemies.difficulty.hostile() {
             return;
         }
         let Some(gallery) = self.matriarch_gallery() else {
