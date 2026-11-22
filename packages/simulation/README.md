@@ -2963,6 +2963,151 @@ in that order.
   appended, still by row). The tomb balance (fixes) is unchanged by QA, whose timer audit made
   no simulation change.
 
+## Wave 7 positions: world positions without limits (F7, `src/position.rs`, `src/world/frame.rs`)
+
+Gameplay positions were plain `f32` world pixels, which resolve only 1/8 px at 2^20 px. F7
+splits a position in two:
+
+- **`WorldPos`** (`position.rs`): an exact absolute position, an `i64` sector per axis
+  (`SECTOR_TILES` = 512 tiles, `SECTOR_PX` = 2^14 px a side) plus an `f32` pixel offset inside
+  it. It reaches ±2^63 sectors (far past 10^12 tiles). Helpers: `from_legacy_px` (any finite
+  `f32` splits losslessly), `from_tile`, `tile_center`, `offset`, `delta` / `delta_f64`
+  (exact sector difference first), `distance`, `tile` (`i64` tiles), `tile_position` (`i32`,
+  `None` off the grid), `px_f64`, `to_legacy_px`.
+- **`Frame`**: the sector the world's **local pixel space** is centred on, held by the terrain
+  (`Terrain::frame`, saved in its snapshot, hashed only when it is not the fixed origin
+  frame). Every stored gameplay `f32` position (rigs, pilots and their ropes, creatures,
+  shots, drops, charges, boulders, gas, people's walking legs, tomb and crypt actors, lost
+  cargo, the tether hook, parked crews, the player template) is a pixel offset from it, so
+  every system runs the same `f32` code as before and collides in that local frame. Tile
+  coordinates stay absolute (`i32` `TilePosition`, ±2.1 x 10^9 columns): only conversions go
+  through the frame.
+- A **floating** frame re-centres on its anchor (the first player's actor) as the last step of
+  `simulate_tick` (`WorldState::recentre_frame`) once the anchor is more than one sector
+  (`RECENTRE_SECTORS`) off on an axis; only that axis moves, by whole sectors, so the anchor's
+  local position always stays inside ±2^14 px where `f32` holds the 1/1024 px simulation grid
+  exactly. `WorldState::move_frame` shifts every local position (`Reframe`), nothing moves in
+  absolute terms. A **fixed** frame never moves: it stays at sector (0, 0), so its local pixels
+  are the old world pixels bit for bit.
+
+### The choice and the numbers
+
+`position_cost_report` (`cargo test -p fatherload_simulation --release position_cost_report --
+--ignored --nocapture`; a V5 arena with 4,000 drops, 600 ticks at 60 Hz, best of three
+alternating runs on a loaded machine):
+
+| Measure | Result |
+|---|---|
+| Busy tick, fixed frame | 714 µs |
+| Busy tick, floating frame (no move) | 721 µs (same within noise: the frame costs nothing per tick) |
+| Moving the frame of the world with 4,000 entities | 0.48 ms (once per 512 tiles of travel) |
+| Synthetic body step (integrate, quantize, 3 tile lookups), `f32` frame-local | 1.4 ns |
+| ... `i64` fixed-point sub-pixels, converted for the `f32` physics | 1.1 ns |
+| ... a `WorldPos` (sector + `f32`) per body, normalized each move | 12-128 ns |
+
+Per-body sectors cost 10-100x per step and would make every distance between two bodies a
+sector subtraction; `i64` fixed point is as cheap per step but every `f32` physics site would
+need a conversion in and out (thousands of sites, while four other tracks write new code
+against the `f32` API). The shared floating frame costs nothing per tick, keeps every system's
+code (and every V1-V10 result) unchanged, and pays a sub-millisecond shift once per sector of
+travel. Chosen: **`i64` sector + `f32` local offset, with the sector shared per frame**. F11's
+"many places at once" generalizes it to one frame per simulated region (the `Reframe` machinery
+is what moves state between them).
+
+### Generator policy and seams
+
+- `GeneratorVersion::floating_frame()` (exhaustive): V1-V10 answer `false` (fixed frame; their
+  positions, saves, hashes and replays are unchanged). **V11 must answer `true`**; a new world
+  then starts with `Frame::FLOATING` (`Frame::for_generator`).
+- `GeneratorVersion::column_limit()` (exhaustive): V5-V10 keep `STREAMED_COLUMN_LIMIT`
+  (131,072; their village, sky town and continent placement is sized to it). V11 may raise it
+  to at least 10^9; positions are exact out to `i32::MAX` columns. `Terrain::column_limit()`
+  reads it; `Terrain::set_column_limit_for_tests` raises it for far test and tool worlds (saved
+  in the snapshot as `column_limit`).
+- `WorldState::{frame, world_pos, local_pos, actor_world_pos}`; `set_floating_frame(bool)` and
+  `teleport_rig_to(player, WorldPos)` for tests, tools and new-game options;
+  `relocate_frame(Frame)` (doc-hidden) re-expresses a world in another frame (the screenshot
+  `--frame-shift` check).
+- **New state with positions** implements `position::Reframe` and is moved in
+  `WorldState::reframe_positions`, which destructures every `WorldState` field (the compiler
+  asks); per-kind entity state is matched exhaustively in `EntityState::reframe`.
+
+### Porting code (for the other wave 7 tracks and later waves)
+
+| Old (world pixels) | New (frame-relative) |
+|---|---|
+| `(x / TILE_SIZE).floor() as i32` | `frame.col(x)` / `frame.row(y)`; `.ceil()`: `col_ceil` / `row_ceil` |
+| `TilePosition { x: (x / T).floor() .., y: .. }` | `frame.tile_at(x, y)` |
+| `tile.x as f32 * TILE_SIZE` | `frame.rel_col(tile.x) * TILE_SIZE` or `frame.col_px(tile.x)` |
+| `(tile.x as f32 + 0.5) * TILE_SIZE, ..` | `frame.tile_center(tile)` / `frame.centre_of(x, y)` |
+| `player.tile_position(TILE_SIZE)` | `player.tile_in(frame)` |
+| `environment_at(settings, x, y)` | `environment_in(settings, frame, x, y)` (also `moon::vacuum_in`, `moon::sheltered_in`, `village::building_in`) |
+| a pure function of absolute place given `(x, y)` | `frame.legacy_px(x, y)` (exact at the origin, tile-scale far out) |
+| a constant authored in world pixels (`12.0 * TILE_SIZE`, a spawn point) | `frame.from_legacy_px(x, y)` |
+| altitude `(-y / TILE_SIZE)` | `(-frame.legacy_y(y) / TILE_SIZE)` |
+
+`frame` is `self.frame()` in `WorldState` methods (bind `let frame = self.frame();` before a
+mutable borrow), `terrain.frame()` where a `&Terrain` is at hand, `world.pilot.frame()` through
+`PilotTerrain::frame` (default: the fixed frame). Every helper is the exact expression it
+replaces in the origin frame, which is why V1-V10 results are bit for bit unchanged.
+`Player::tile_position`, `world::tile_center_px` and `enemy::tile_centre` keep their old
+meaning (the origin frame) for tests and fixed-frame scenes. The tomb trap geometry
+(`tomb::traps::{blade_pivot, blade_tip, crusher_block, dart_position, sand_surface,
+fog_centre}`), `WorldState::outside_spot`, `world::drops::blast_spray_velocity` and
+`authoritative_mine_target` take the frame as their first argument.
+
+### Netcode and saves
+
+- `LiveEntities::frame` (sent every tick) carries the frame; `apply_live_entities` moves the
+  replica into it (`move_frame`) **before** anything else of the frame is applied (netcode's
+  `apply_replication` now applies the live section first), so records measured in the new
+  frame land cleanly. Every peer shifts its own copy with the same `f32` operations, so
+  replicas and hashes agree; entity revisions do not change.
+- `Pose::origin` / `Relevance::origin` (netcode): a pose is the frame-local position in tiles
+  plus the frame origin tile (`world::frame_origin`); distances, smoothing, interpolation and
+  relevance go through exact origin deltas (`Pose::delta`, `rebased`,
+  `Relevance::contains_pose`; chunk boxes relative to the relevance origin), so they hold
+  however far from the origin and from each other players are. `PROTOCOL_VERSION` 15.
+- Save format 13 (game crate): `terrain.frame` and `terrain.column_limit`. Format 8-12 files
+  load as is, as the fixed frame at the origin: their `f32` pixels are the same positions bit
+  for bit (`WorldPos::from_legacy_px` of each is exact).
+
+### Tests
+
+- `position::tests`: lossless legacy round trips (to -9 x 10^15 px), the origin-frame helpers
+  equal the old expressions, sub-pixel steps and nearby deltas stay exact 10^6, 10^9 and
+  ±10^12 tiles out, recentring moves whole sectors on the drifted axis only, tiles past the
+  `i32` grid saturate (outside every world).
+- `world::frame_tests`: a rig hovering, flying into a wall and landing 10^6 px, 10^9 px and
+  10^9 tiles out matches the near flight **bit for bit** (every tick's position, velocity, hull
+  and fuel) at 30, 60 and 120 Hz; far runs are deterministic (state hash); a 1,200-tile drive
+  in a floating frame hops sectors with no jump in the rig's absolute position, a dropped item
+  keeps its place, and the drive ends within 0.5 px of the fixed-frame drive; every old
+  generator keeps the fixed frame; a replica follows a frame move.
+- `netcode tests::world_far`: three clients over 150 ms / 3 % loss with duplication and
+  reordering play 10^9 tiles out while the frame hops; every client authority hash matches the
+  host at every compared frame.
+- Game: a format 12 save with a rig at 4.2 million px loads exactly, and a floating frame
+  round-trips in format 13; `--frame-shift 1,-1` renders all 442 screenshot scenes in a frame
+  off the origin: underground, tomb, crypt and Moon scenes are pixel-identical, the rest differ
+  in under 2 % of pixels (the night lighting's cell grid and dither phase), all but two dusk
+  scenes under 1 %.
+- V1-V10 golden digests and every existing determinism, replay and save hash are unchanged
+  (the fixed frame at the origin is not hashed and all helpers reduce to the old expressions).
+
+### Known limits
+
+- One frame per world, anchored on the first player: a co-op partner far from the anchor keeps
+  `f32` precision relative to it (the pre-F7 behaviour, no worse); per-region frames are F11.
+- Tile coordinates are `i32`: positions resolve at any distance (`WorldPos`), but terrain ends at
+  ±2.1 x 10^9 columns (beyond, tiles saturate and read as walls). 10^12 tiles is covered by the
+  position types; gameplay tests run to 10^9 tiles.
+- Rendering reads the same frame (see the game crate's `view_frame`); presentation-only
+  heuristics that read the absolute place (sky parallax, the town heading) go through
+  `legacy_px`, accurate to a tile or so 10^9 tiles out. The dev online bots still assume the
+  town is near.
+- No gameplay event codes were added (350-359 stay free).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
@@ -2970,7 +3115,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 
 | Kind | Contents | Who receives it |
 |---|---|---|
-| Per tick | rig pose, velocity, fuel, hull, weapon state (capacitor, cooldown, aim, trigger), drill/scanner timers, deep-run pressure; the charge serial and entity id/revision counters (`LiveEntities`) | clients the rig is relevant to |
+| Per tick | rig pose, velocity, fuel, hull, weapon state (capacitor, cooldown, aim, trigger), drill/scanner timers, deep-run pressure; the charge serial, entity id/revision counters and the local pixel frame (`LiveEntities`, applied first, see "Wave 7 positions") | clients the rig is relevant to |
 | Per tick, delta | entities (gas clouds, boulders, drops, charges, projectiles, targets, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
 | Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
 | Op log | per-player discovery | the owner only |

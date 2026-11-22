@@ -68,8 +68,24 @@ Modules:
   own icons), each row showing `Tier n/max` and the footer the next tier's effect
   (`economy::upgrade_effect`); the inventory lists every line's tier; HUD bars whose maximum
   passes 999 show just the reading (`ui_kit::compact_amount`) so large tanks and hulls fit.
+- `view_frame` (F7, wave 7) — presentation draws in the presented world's local pixel frame
+  (`fatherload_simulation::position::Frame`, set from `RenderSnapshot::build` and after each
+  runtime step): every position the simulation hands out is relative to it, so the camera's
+  sector is the frame origin and `f32` drawing stays exact however far out play goes. Every
+  tile-to-pixel conversion in rendering, effects, audio and the HUD goes through
+  `view_frame::frame()` (`col_px`, `rel_col`, `rel_row`, `tile_center`, `col`, `row`,
+  `col_ceil`, ...; the ground line is `rendering::world::ground_y()`), parallax layers use
+  `view_frame::parallax_x/y` (absolute place, so a frame move never makes them jump), effects
+  kept in pixels follow a frame move (`Effects::reframe`) and an online client's pose overrides
+  rebase onto the rendered world's frame (`Pose::rebased`). Split-screen seats share the
+  world's frame (one per world until F11).
 - `scene_capture` — `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]
-  [--frame-timing N] [--export-saves]` renders scripted scenes to PNGs (see the art guide).
+  [--frame-timing N] [--export-saves] [--frame-shift X,Y]` renders scripted scenes to PNGs (see
+  the art guide). `--frame-shift X,Y` re-expresses every staged world in a fixed frame X sectors
+  right and Y down before its frames run: nothing moves in the world, so diffing against an
+  unshifted run finds drawing that still reads positions as world pixels (wave 7: all 442 scenes
+  pixel-identical underground and under 2 % elsewhere, the night lighting grid's phase).
+  `far_billion_tiles` and `far_frame_hop` show play 10^9 tiles out and a frame hop mid-drive.
   `--frame-timing N` then draws N more frames per scene and prints the CPU time of the frame
   work (snapshot, renderer sync and draw calls; not the swap): mean, median, p95 and max.
   `--export-saves` opens no window and writes each scene's staged world as a save

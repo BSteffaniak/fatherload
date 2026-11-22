@@ -33,6 +33,16 @@ Bytes move through `fatherload_quic_transport` in the app and through `LinkSim` 
 
 ## Per-client replication
 
+**Positions far from the origin (F7, wave 7).** A `Pose` is `origin + (x, y)`: the
+simulation's frame origin in tiles (`world::frame_origin`) plus the frame-local position, so
+`x`/`y` stay small and exact anywhere. `Pose::delta` subtracts origins exactly first;
+`distance`, `lerp`, smoothing and the snapshot buffer's extrapolation go through it, so a frame
+move between ticks never shows as a correction. `Relevance::origin` is the viewer pose's origin:
+`contains_pose` rebases a pose, and the world's chunk relevance measures chunk boxes from it, so
+relevance holds when players are far from the origin and from each other. A client applies the
+per-tick live section (`S::Entities`, which carries the world's frame) **before** player states
+and entity records, so a frame move shifts the replica first. `PROTOCOL_VERSION` 15.
+
 Each frame is built for one client from its `Relevance` (its player, position and
 `relevance_radius`, infinite by default):
 
