@@ -37,7 +37,7 @@ use crate::{
     ControlState, PlayerId, SimulationParams, WorldState,
     depth_progression::{
         DESCENT_COUNT, DescentLayout, DescentSpan, PlanLayout, ProgressionRules, RigSystem,
-        core_tier_cap, descent_gate, descent_value_percent,
+        core_tier_cap, depth_line_cap, descent_gate, descent_value_percent,
     },
     economy::{MAX_UPGRADE_LEVEL, UpgradeKind, upgrade_cost_for},
     logistics::{
@@ -73,10 +73,15 @@ pub struct DescentStratum {
     /// The radiator tier its heat needs.
     pub heat_tier: u8,
     /// New things it brings: its arrival, its creatures, its landmark, its mechanic and its
-    /// story beat.
+    /// story beat (the length of `markers`).
     pub novelties: u8,
     /// Minutes its authored content takes (creatures met, the landmark, the story beat).
     pub content_minutes: f64,
+    /// The new things themselves (Wave 8), from the registry's real content: its arrival,
+    /// creatures met here first, its signature mechanic and fluids, its screen effects, its
+    /// landmarks, its story logs and the workshop recipe it opens. Upgrade tiers bought and
+    /// the Descent's gate are added as the bot plays.
+    pub markers: Vec<Novelty>,
 }
 
 impl DescentStratum {
@@ -84,6 +89,182 @@ impl DescentStratum {
     pub const fn rows(&self) -> i32 {
         self.bottom - self.top
     }
+}
+
+/// What kind of new thing a stratum brings (the "something new every 20-40 minutes" check,
+/// expansion plan §13).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum NoveltyKind {
+    /// Arriving in a new stratum (its banner, rock, palette and music).
+    Arrival,
+    /// A creature kind met here for the first time.
+    Creature,
+    /// A rule that changes how it plays: the stratum's signature, fluids, a field.
+    Mechanic,
+    /// A set piece or a kind of place met here first (outpost, settlement, gate chamber,
+    /// cavern, anomaly room, cave ecosystems, tombs).
+    Landmark,
+    /// A story beat or expedition log.
+    StoryLog,
+    /// An upgrade tier, rig system or workshop recipe.
+    UpgradeTier,
+    /// A screen effect (the light, a grade, a blur, ...).
+    Effect,
+    /// The Descent's gate set piece.
+    Gate,
+}
+
+impl NoveltyKind {
+    pub const ALL: [Self; 8] = [
+        Self::Arrival,
+        Self::Creature,
+        Self::Mechanic,
+        Self::Landmark,
+        Self::StoryLog,
+        Self::UpgradeTier,
+        Self::Effect,
+        Self::Gate,
+    ];
+
+    /// The report's short name.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Arrival => "arrival",
+            Self::Creature => "creature",
+            Self::Mechanic => "mechanic",
+            Self::Landmark => "landmark",
+            Self::StoryLog => "story",
+            Self::UpgradeTier => "upgrade",
+            Self::Effect => "effect",
+            Self::Gate => "gate",
+        }
+    }
+}
+
+/// One new thing a stratum brings.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Novelty {
+    pub kind: NoveltyKind,
+    pub name: String,
+}
+
+impl Novelty {
+    #[must_use]
+    pub fn new(kind: NoveltyKind, name: impl Into<String>) -> Self {
+        Self {
+            kind,
+            name: name.into(),
+        }
+    }
+}
+
+/// A source of story logs per stratum (Wave 8 seam): the story track's expedition logs
+/// register here, as the field effects' sources do in [`crate::field::STRATUM_FIELD_SOURCES`].
+pub type StoryLogSource = fn(crate::descent::Stratum) -> Vec<&'static str>;
+
+/// Every story log source the probe reads (the Descents' own story beats until the story
+/// track appends its expedition logs).
+pub const STORY_LOG_SOURCES: &[StoryLogSource] = &[descent_story_beats];
+
+/// Each Descent's story beat, told in its first stratum.
+#[must_use]
+pub fn descent_story_beats(stratum: crate::descent::Stratum) -> Vec<&'static str> {
+    let descent = stratum.descent();
+    if descent.first_stratum() == stratum {
+        vec![descent.story_beat()]
+    } else {
+        Vec::new()
+    }
+}
+
+/// The real content markers of every stratum, top to bottom (Wave 8).
+///
+/// Creatures met first there, its signature mechanic, fluids and field physics, its screen effects, landmarks
+/// met first there (set pieces always count), story logs and the workshop recipes it opens.
+#[must_use]
+pub fn registry_markers() -> Vec<Vec<Novelty>> {
+    use crate::descent::{LandmarkKind, Stratum};
+    use std::collections::BTreeSet;
+    let mut met_creatures = BTreeSet::new();
+    let mut met_places = BTreeSet::new();
+    let mut met_effects = BTreeSet::new();
+    Stratum::ALL
+        .iter()
+        .map(|stratum| {
+            let def = stratum.def();
+            let mut markers = vec![Novelty::new(NoveltyKind::Arrival, def.name)];
+            // Classic strata roam their band's roster; the rest their own table.
+            let creatures: Vec<crate::enemy::EnemyKind> = if def.creatures.is_empty() {
+                crate::enemy::band_roster(def.host_band)
+                    .iter()
+                    .map(|(kind, _)| *kind)
+                    .collect()
+            } else {
+                def.creatures.iter().map(|(kind, _)| *kind).collect()
+            };
+            for kind in creatures {
+                if met_creatures.insert(kind) {
+                    markers.push(Novelty::new(NoveltyKind::Creature, kind.name()));
+                }
+            }
+            markers.push(Novelty::new(NoveltyKind::Mechanic, def.signature));
+            for rule in def.fluids {
+                markers.push(Novelty::new(
+                    NoveltyKind::Mechanic,
+                    format!("{:?} pockets", rule.kind),
+                ));
+            }
+            let field = &def.field;
+            if field.gravity_milli != (0, 1000)
+                || field.time_scale_permille != 1000
+                || field.friction_permille != 1000
+                || field.drag_permille != 1000
+                || field.mirror_controls
+            {
+                markers.push(Novelty::new(NoveltyKind::Mechanic, "field physics"));
+            }
+            for level in field.screen {
+                if met_effects.insert(level.effect) {
+                    markers.push(Novelty::new(
+                        NoveltyKind::Effect,
+                        format!("{:?}", level.effect),
+                    ));
+                }
+            }
+            if field.light_permille < 700 && met_effects.insert(crate::descent::ScreenEffect::Fog) {
+                markers.push(Novelty::new(NoveltyKind::Effect, "darkness"));
+            }
+            for kind in def.landmarks {
+                let set_piece = matches!(
+                    kind,
+                    LandmarkKind::Outpost
+                        | LandmarkKind::GateChamber
+                        | LandmarkKind::HollowCavern
+                        | LandmarkKind::AnomalyRoom
+                        | LandmarkKind::Settlements
+                );
+                if set_piece || met_places.insert(*kind) {
+                    markers.push(Novelty::new(NoveltyKind::Landmark, format!("{kind:?}")));
+                }
+            }
+            for source in STORY_LOG_SOURCES {
+                for log in source(*stratum) {
+                    markers.push(Novelty::new(NoveltyKind::StoryLog, log));
+                }
+            }
+            for recipe in crate::workshop::RECIPES
+                .iter()
+                .filter(|recipe| recipe.stratum() == *stratum)
+            {
+                markers.push(Novelty::new(
+                    NoveltyKind::UpgradeTier,
+                    format!("recipe: {}", recipe.name),
+                ));
+            }
+            markers
+        })
+        .collect()
 }
 
 /// The strata the descent bot plays (the F8 stratum registry implements it: [`RegistryStrata`]).
@@ -134,12 +315,14 @@ impl StratumRegistry for RegistryStrata {
         let layout = crate::descent::fields::cached_layout(&self.settings);
         let ground = self.ground();
         let plan = PlanStrata.strata();
+        let markers = registry_markers();
         let last = (Stratum::ALL.len() - 1) as f64;
         Stratum::ALL
             .iter()
             .zip(&plan)
+            .zip(markers)
             .enumerate()
-            .map(|(index, (stratum, modelled))| {
+            .map(|(index, ((stratum, modelled), markers))| {
                 let def = stratum.def();
                 let (top, bottom) = layout.rows(*stratum);
                 let descent = u8::try_from(stratum.descent().index()).unwrap_or(u8::MAX);
@@ -189,12 +372,12 @@ impl StratumRegistry for RegistryStrata {
                     hazard_per_minute: modelled.hazard_per_minute
                         * (0.5 + f64::from(hazard_weight) / 16.0).min(2.0),
                     heat_tier: (1.0 + 20.0 * share).round() as u8,
-                    // Arrival, the story beat, each creature, each set piece and the mechanic.
-                    novelties: 2 + creatures + set_pieces + mechanic,
+                    novelties: u8::try_from(markers.len()).unwrap_or(u8::MAX),
                     content_minutes: 7.0f64.mul_add(
                         f64::from(creatures),
                         6.0f64.mul_add(f64::from(set_pieces + mechanic), 18.0),
                     ),
+                    markers,
                 }
             })
             .collect()
@@ -274,6 +457,21 @@ impl StratumRegistry for PlanStrata {
                     heat_tier: (1.0 + 20.0 * share).round() as u8,
                     novelties: 4 + creatures,
                     content_minutes: 24.0 + 7.0 * f64::from(creatures),
+                    markers: {
+                        let mut markers = vec![
+                            Novelty::new(NoveltyKind::Arrival, span.name),
+                            Novelty::new(NoveltyKind::Mechanic, "signature rule"),
+                            Novelty::new(NoveltyKind::Landmark, "landmark"),
+                            Novelty::new(NoveltyKind::StoryLog, "story beat"),
+                        ];
+                        for creature in 0..creatures {
+                            markers.push(Novelty::new(
+                                NoveltyKind::Creature,
+                                format!("creature {}", creature + 1),
+                            ));
+                        }
+                        markers
+                    },
                 }
             })
             .collect()
@@ -331,11 +529,41 @@ pub struct StratumRun {
     pub hull_tier: u8,
     /// Fuel an everyday trip from the nearest base burned, as a share of the tank (percent).
     pub everyday_fuel_percent: f64,
-    /// The longest wait between new things inside it (minutes).
+    /// The longest wait between new things inside it (minutes), counting from the last new
+    /// thing before it and up to the next stratum's arrival.
     pub longest_gap_minutes: f64,
     /// Upgrade tiers and systems bought in it.
     pub purchases: u32,
+    /// Of those, the tiers fitted as workshop parts (Wave 8).
+    pub crafted: u32,
+    /// Every new thing met in it (minutes since it began, kind, name), in order (Wave 8).
+    pub events: Vec<(f64, NoveltyKind, String)>,
 }
+
+impl StratumRun {
+    /// How many of its new things are of `kind`.
+    #[must_use]
+    pub fn count(&self, kind: NoveltyKind) -> usize {
+        self.events
+            .iter()
+            .filter(|(_, each, _)| *each == kind)
+            .count()
+    }
+
+    /// Whether something new came at least every [`PACING_MAX_GAP_MINUTES`] here.
+    #[must_use]
+    pub fn paced(&self) -> bool {
+        self.longest_gap_minutes <= PACING_MAX_GAP_MINUTES
+    }
+}
+
+/// The pacing target (expansion plan §13): something new about every 20-40 minutes, so no wait
+/// between new things longer than this.
+pub const PACING_MAX_GAP_MINUTES: f64 = 40.0;
+/// Most deaths a stratum may cost the bot before the pacing check calls it unfair.
+pub const PACING_MAX_DEATHS_PER_STRATUM: u32 = 2;
+/// Most of the tank an everyday trip may burn before the check calls fuel unfair (percent).
+pub const PACING_MAX_EVERYDAY_FUEL_PERCENT: f64 = 100.0;
 
 /// The whole descent.
 #[derive(Clone, Debug, PartialEq)]
@@ -373,6 +601,42 @@ impl DescentRun {
     #[must_use]
     pub fn longest_gap(&self) -> f64 {
         self.gaps.iter().copied().fold(0.0, f64::max)
+    }
+
+    /// The strata of the first `descents` Descents that fail the pacing check (Wave 8): a wait
+    /// between new things over [`PACING_MAX_GAP_MINUTES`], more than
+    /// [`PACING_MAX_DEATHS_PER_STRATUM`] deaths, or everyday trips burning more than
+    /// [`PACING_MAX_EVERYDAY_FUEL_PERCENT`] of the tank. Each with why.
+    #[must_use]
+    pub fn pacing_failures(&self, descents: u8) -> Vec<(String, String)> {
+        self.strata
+            .iter()
+            .filter(|run| run.stratum.descent < descents)
+            .filter_map(|run| {
+                let mut why = Vec::new();
+                if !run.paced() {
+                    why.push(format!("a {:.0}-minute wait", run.longest_gap_minutes));
+                }
+                if run.deaths > PACING_MAX_DEATHS_PER_STRATUM {
+                    why.push(format!("{} deaths", run.deaths));
+                }
+                if run.everyday_fuel_percent > PACING_MAX_EVERYDAY_FUEL_PERCENT {
+                    why.push(format!(
+                        "everyday trips burn {:.0}% of the tank",
+                        run.everyday_fuel_percent
+                    ));
+                }
+                (!why.is_empty()).then(|| (run.stratum.name.to_owned(), why.join(", ")))
+            })
+            .collect()
+    }
+
+    /// Whether the first `descents` Descents pass the pacing check (the integrator keeps
+    /// [`crate::worldgen::DEEP_DESCENT_FOR_NEW_WORLDS`] on only if Descents I-III do).
+    #[must_use]
+    pub fn pacing_passes(&self, descents: u8) -> bool {
+        self.strata.iter().any(|run| run.stratum.descent < descents)
+            && self.pacing_failures(descents).is_empty()
     }
 }
 
@@ -471,7 +735,29 @@ struct Rig {
     hull: u8,
     radiator: u8,
     systems: u8,
+    /// Pressure Rating and Headlamp tiers (Wave 8).
+    pressure: u8,
+    lamp: u8,
+    /// Layer resources aboard, by stratum (index into [`crate::descent::Stratum::ALL`]).
+    layer_units: [f64; crate::descent::STRATUM_COUNT],
     credits: f64,
+}
+
+impl Rig {
+    /// Whether the bay holds what `recipe` takes.
+    fn holds(&self, recipe: &crate::workshop::Recipe) -> bool {
+        recipe
+            .inputs
+            .iter()
+            .all(|(stratum, count)| self.layer_units[stratum.index()] >= f64::from(*count))
+    }
+
+    /// Takes what `recipe` takes out of the bay.
+    fn spend(&mut self, recipe: &crate::workshop::Recipe) {
+        for (stratum, count) in recipe.inputs {
+            self.layer_units[stratum.index()] -= f64::from(*count);
+        }
+    }
 }
 
 impl Rig {
@@ -482,6 +768,8 @@ impl Rig {
             UpgradeKind::CargoBay => self.bay,
             UpgradeKind::Engine => self.engine,
             UpgradeKind::Hull => self.hull,
+            UpgradeKind::PressureRating => self.pressure,
+            UpgradeKind::Headlamp => self.lamp,
             _ => self.radiator,
         }
     }
@@ -493,9 +781,22 @@ impl Rig {
             UpgradeKind::CargoBay => &mut self.bay,
             UpgradeKind::Engine => &mut self.engine,
             UpgradeKind::Hull => &mut self.hull,
+            UpgradeKind::PressureRating => &mut self.pressure,
+            UpgradeKind::Headlamp => &mut self.lamp,
             _ => &mut self.radiator,
         }
     }
+}
+
+/// Minutes a dip past a gate takes to feel its need (and climb back) before its rig system
+/// goes on sale (Wave 8).
+const GATE_DIP_MINUTES: f64 = 3.0;
+
+/// The thruster burn factor of seals rated `rating` in Descent `descent`.
+fn pressure_factor(rating: u8, descent: u8) -> f64 {
+    f64::from(crate::depth_progression::pressure_fuel_percent(
+        rating, descent,
+    )) / 100.0
 }
 
 /// What one mining trip from `base_row` to a face at `face_row` in `stratum` yields.
@@ -504,6 +805,8 @@ struct Trip {
     credits: f64,
     fuel: f64,
     damage: f64,
+    /// Layer resources dug out on the way (Wave 8).
+    layer_units: f64,
 }
 
 fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overhead: f64) -> Trip {
@@ -515,10 +818,12 @@ fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overh
     let tiles = cargo / stratum.ore_share;
     let dig_seconds = tiles * tile_seconds(stratum, rig.drill, overhead);
     let burn = fuel_burn_efficiency(rig.tank);
+    // Below its Pressure Rating the thrusters burn more (Wave 8).
     let fuel = tiles * DIG_FUEL_PER_TILE
         + (distance / climb + dig_seconds * THRUST_SHARE_MINING)
             * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
-            * f64::from(burn);
+            * f64::from(burn)
+            * pressure_factor(rig.pressure, stratum.descent);
     let mining_minutes = dig_seconds / 60.0;
     let guard = 0.88_f64.powi(i32::from(rig.hull) - i32::from(stratum.rock_tier));
     Trip {
@@ -526,6 +831,7 @@ fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overh
         credits: cargo * stratum.ore_value,
         fuel,
         damage: stratum.hazard_per_minute * mining_minutes * guard,
+        layer_units: tiles * (1.0 - stratum.ore_share) / crate::workshop::LAYER_YIELD_ONE_IN as f64,
     }
 }
 
@@ -548,6 +854,9 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         hull: 1,
         radiator: 1,
         systems: 0,
+        pressure: 0,
+        lamp: 0,
+        layer_units: [0.0; crate::descent::STRATUM_COUNT],
         credits: 0.0,
     };
     let mut clock_minutes = 0.0_f64;
@@ -560,35 +869,33 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
     let mut beacon_rows: Vec<i32> = Vec::new();
     let mut claimed: Vec<u8> = Vec::new();
     let mut deaths_total = 0;
-    let note = |at: f64, last: &mut f64, gaps: &mut Vec<f64>| {
-        gaps.push(at - *last);
-        *last = at;
-    };
+    let mut felt = 0_u8;
     for (index, stratum) in strata.iter().enumerate() {
         let start = clock_minutes;
         let drill_tier = rig.drill;
         let hull_tier = rig.hull;
         let descent = stratum.descent;
-        // Arrival is new; the rest of its content is spread over its time below.
-        note(clock_minutes, &mut last_novelty, &mut gaps);
+        // New things met in this stratum, in minutes since it began.
+        let mut events: Vec<(f64, NoveltyKind, String)> = Vec::new();
         let outpost_row = descents
             .get(usize::from(descent))
             .map_or(0, |span| if descent == 0 { 0 } else { span.top + 40 });
         // The stratum's content minutes, and digging through it.
         let rows = f64::from(stratum.rows());
         let dig_minutes = rows * tile_seconds(stratum, rig.drill, overhead) / 60.0;
-        let mut minutes = stratum.content_minutes + dig_minutes;
+        let mut minutes = dig_minutes;
+        let new_descent = index > 0 && strata[index - 1].descent != descent;
         // The Descent's ancient lift restored once (it shortens the trips back up).
-        if index > 0 && strata[index - 1].descent != descent {
+        if new_descent {
             rig.credits -=
                 f64::from(scaled_price(ANCIENT_LIFT_RESTORE_PRICE, descent)).min(rig.credits);
         }
         // What the next stratum asks for.
         let next = strata.get(index + 1);
         // A rig rated for the next stratum: a drill for its rock, a hull for its hazards, a
-        // radiator for its heat, a bay, tank and engine for its longer trips, and the gate
-        // system when it opens a new Descent.
-        let needs = next.map_or((0, 0, 0, 0, None), |next| {
+        // radiator for its heat, a bay, tank and engine for its longer trips, seals for its
+        // Descent's pressure, and the gate system when it opens a new Descent.
+        let needs = next.map_or((0, 0, 0, 0, None, descent), |next| {
             let gate = if next.descent == descent {
                 None
             } else {
@@ -600,16 +907,29 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 next.heat_tier,
                 next.rock_tier.saturating_sub(3),
                 gate,
+                next.descent,
             )
         });
         let cap = core_tier_cap(descent);
+        let line_cap = depth_line_cap(descent);
+        // The tier a player is comfortable at by this stratum (Wave 8 bot).
+        let comfort = u8::try_from(index + 2).unwrap_or(u8::MAX);
         // The bot mines the upper part of the stratum it is in.
         let face = stratum.top + stratum.rows() / 3;
         let mut trips = 0_u32;
         let mut deaths = 0_u32;
         let mut purchases = 0_u32;
+        let mut crafted = 0_u32;
         let mut everyday = 0.0_f64;
         let mut stalled = 0_u32;
+        // A part from the workshop pays only part of a tier's price (resources for the rest),
+        // when a recipe for the line is known by this Descent's outposts.
+        let part_for = |kind: UpgradeKind| {
+            crate::workshop::RECIPES.iter().filter(move |recipe| {
+                recipe.descent() <= descent
+                    && recipe.output == crate::workshop::CraftOutput::Part(kind)
+            })
+        };
         // Mine until the next stratum's needs are bought (and a comfort tier or two).
         for _ in 0..4_000 {
             // A beacon whenever the next one is affordable: trips start near the face.
@@ -641,8 +961,8 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             // The tank must carry an everyday trip with a reserve.
             let tank_short = preview.fuel > tank * 0.6;
             let lacks = |rig: &Rig| {
-                let (drill, hull, heat, haul, gate) = needs;
-                let mut core: Vec<UpgradeKind> = [
+                let (drill, hull, heat, haul, gate, next_descent) = needs;
+                let mut wanted: Vec<UpgradeKind> = [
                     (UpgradeKind::Drill, drill),
                     (UpgradeKind::Hull, hull),
                     (UpgradeKind::Radiator, heat),
@@ -654,11 +974,15 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 .filter(|(kind, tier)| rig.level(*kind) < (*tier).min(cap))
                 .map(|(kind, _)| kind)
                 .collect();
-                if tank_short && rig.tank < cap && !core.contains(&UpgradeKind::FuelTank) {
-                    core.push(UpgradeKind::FuelTank);
+                if tank_short && rig.tank < cap && !wanted.contains(&UpgradeKind::FuelTank) {
+                    wanted.push(UpgradeKind::FuelTank);
+                }
+                // Seals rated for where the rig works (on sale once the Descent is reached).
+                if rig.pressure < descent.max(next_descent).min(line_cap) {
+                    wanted.push(UpgradeKind::PressureRating);
                 }
                 let system = gate.filter(|system| rig.systems & system.bit() == 0);
-                (core, system)
+                (wanted, system)
             };
             // Buy what is needed, cheapest first, then comfort lines while the purse is fat.
             loop {
@@ -666,12 +990,18 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 if let Some(system) = system
                     && core.is_empty()
                 {
+                    // Felt before it can be bought: a dip past the gate first.
+                    if felt & system.bit() == 0 {
+                        felt |= system.bit();
+                        minutes += GATE_DIP_MINUTES;
+                    }
                     let price = f64::from(system.price());
                     if rig.credits >= price {
                         rig.credits -= price;
                         rig.systems |= system.bit();
                         systems.push((system, (clock_minutes + minutes) / 60.0));
                         purchases += 1;
+                        events.push((minutes, NoveltyKind::UpgradeTier, system.name().to_owned()));
                         continue;
                     }
                     break;
@@ -684,19 +1014,44 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                             UpgradeKind::CargoBay,
                             UpgradeKind::FuelTank,
                             UpgradeKind::Engine,
+                            UpgradeKind::Drill,
                         ]
                         .into_iter()
-                        .filter(|kind| rig.level(*kind) < rig.drill.min(cap)),
+                        // Wave 8: a player buys the bay, tank and drill that make trips pay
+                        // (about a tier per stratum), not only what the next stratum demands.
+                        .filter(|kind| rig.level(*kind) < comfort.max(rig.drill).min(cap)),
                     )
+                    .chain((rig.lamp < line_cap).then_some(UpgradeKind::Headlamp))
                     .min_by_key(|kind| upgrade_cost_for(*kind, rig.level(*kind), rules));
                 let Some(kind) = wanted else {
                     break;
                 };
-                let price = f64::from(upgrade_cost_for(kind, rig.level(kind), rules));
+                let shop = f64::from(upgrade_cost_for(kind, rig.level(kind), rules));
+                // A workshop part when the bay holds the resources for one.
+                let part = part_for(kind).find(|recipe| rig.holds(recipe));
+                let price = part.map_or(shop, |_| {
+                    f64::from(crate::workshop::part_credits(
+                        u32::try_from(shop as u64).unwrap_or(u32::MAX),
+                    ))
+                });
                 if rig.credits >= price && (essential || rig.credits >= price * 1.5) {
                     rig.credits -= price;
+                    if let Some(recipe) = part {
+                        rig.spend(recipe);
+                        crafted += 1;
+                    }
                     *rig.level_mut(kind) += 1;
                     purchases += 1;
+                    events.push((
+                        minutes,
+                        NoveltyKind::UpgradeTier,
+                        format!(
+                            "{} tier {}{}",
+                            kind.name(),
+                            rig.level(kind),
+                            if part.is_some() { " (crafted)" } else { "" }
+                        ),
+                    ));
                 } else {
                     break;
                 }
@@ -716,6 +1071,9 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             let run = trip(&rig, stratum, base, face, overhead);
             trips += 1;
             everyday = everyday.max(run.fuel / tank * 100.0);
+            if let Some(slot) = rig.layer_units.get_mut(index) {
+                *slot += run.layer_units;
+            }
             let hull = f64::from(hull_capacity_for_level(rig.hull));
             // Two jumps on the beacon network (out and back), and the fuel to refill.
             let (jump_fuel, jump_credits) = if jump > 0 {
@@ -747,33 +1105,51 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                     rig.credits -= price;
                     rig.hull += 1;
                     purchases += 1;
+                    events.push((
+                        minutes,
+                        NoveltyKind::UpgradeTier,
+                        format!("Hull Plating tier {}", rig.hull),
+                    ));
                 }
             }
             minutes += run.seconds / 60.0;
         }
-        // Spread the stratum's new things over its time.
-        let firsts = f64::from(stratum.novelties.saturating_sub(1)) + f64::from(purchases).min(4.0);
-        if firsts > 0.0 {
-            for step in 1..=(firsts as u32) {
-                let at = start + minutes * f64::from(step) / (firsts + 1.0);
-                note(at, &mut last_novelty, &mut gaps);
-            }
+        // The stratum's authored content: its markers spread over its time (arrival first),
+        // each costing its share of the content minutes.
+        minutes += stratum.content_minutes;
+        let content: Vec<&Novelty> = stratum.markers.iter().collect();
+        let count = content.len().max(1) as f64;
+        for (slot, marker) in content.iter().enumerate() {
+            let at = if marker.kind == NoveltyKind::Arrival {
+                0.0
+            } else {
+                minutes * slot as f64 / count
+            };
+            events.push((at, marker.kind, marker.name.clone()));
         }
-        clock_minutes += minutes;
-        deaths_total += deaths;
-        let longest = gaps
-            .iter()
-            .rev()
-            .take(firsts as usize + 1)
-            .copied()
-            .fold(0.0, f64::max);
         let leaving_descent = strata
             .get(index + 1)
             .is_none_or(|next| next.descent != descent);
         if leaving_descent {
+            events.push((minutes, NoveltyKind::Gate, "gate".to_owned()));
+        }
+        events.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // The gaps: from the last new thing before this stratum, between its new things, and
+        // to its end (the next stratum's arrival is new).
+        let mut longest = 0.0_f64;
+        for (at, ..) in &events {
+            let absolute = start + at;
+            let gap = absolute - last_novelty;
+            gaps.push(gap);
+            longest = longest.max(gap);
+            last_novelty = absolute;
+        }
+        clock_minutes += minutes;
+        let tail = clock_minutes - last_novelty;
+        longest = longest.max(tail);
+        deaths_total += deaths;
+        if leaving_descent {
             descent_hours[usize::from(descent)] = clock_minutes / 60.0;
-            // A Descent's gate set piece.
-            note(clock_minutes, &mut last_novelty, &mut gaps);
             if let Some(span) = descents.get(usize::from(descent)) {
                 let rows = f64::from(span.rows() - 40);
                 let climb = STOCK_CLIMB_ROWS_PER_SECOND
@@ -781,6 +1157,7 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 let fuel = (rows / climb + 120.0)
                     * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
                     * f64::from(fuel_burn_efficiency(rig.tank))
+                    * pressure_factor(rig.pressure, descent)
                     + 300.0 * DIG_FUEL_PER_TILE;
                 expedition[usize::from(descent)] =
                     fuel / f64::from(fuel_capacity_for_level(rig.tank)) * 100.0;
@@ -797,6 +1174,8 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             everyday_fuel_percent: everyday,
             longest_gap_minutes: longest,
             purchases,
+            crafted,
+            events,
         });
     }
     DescentRun {
@@ -809,6 +1188,9 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         deaths: deaths_total,
     }
 }
+
+/// The Descents the pacing check covers (I-III: Wave 8's authored content).
+pub const PACING_DESCENTS: u8 = 3;
 
 /// §14's target hours at the end of each Descent.
 pub const TARGET_HOURS: [(f64, f64); DESCENT_COUNT] = [
@@ -918,6 +1300,81 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
         ]);
     }
     section.tables.push(per_stratum);
+    // Wave 8: the "something new every 20-40 minutes" check on Descents I-III, from the
+    // registry's real content markers and what the bot bought on the way.
+    let mut pacing = Table::new(
+        "Descent I-III pacing: new things per stratum (real content markers), the longest wait, deaths and fuel stress",
+        &[
+            "Stratum",
+            "Minutes",
+            "New things",
+            "Creatures",
+            "Mechanics",
+            "Landmarks",
+            "Story",
+            "Upgrades (crafted)",
+            "Effects",
+            "Longest gap (min)",
+            "20-40 min check",
+            "Deaths",
+            "Everyday fuel (% of tank)",
+        ],
+    );
+    for stratum in run
+        .strata
+        .iter()
+        .filter(|stratum| stratum.stratum.descent < PACING_DESCENTS)
+    {
+        pacing.row(vec![
+            format!(
+                "{} {}",
+                crate::depth_progression::numeral(stratum.stratum.descent),
+                stratum.stratum.name
+            ),
+            format!("{:.0}", stratum.minutes),
+            stratum.events.len().to_string(),
+            stratum.count(NoveltyKind::Creature).to_string(),
+            stratum.count(NoveltyKind::Mechanic).to_string(),
+            stratum.count(NoveltyKind::Landmark).to_string(),
+            stratum.count(NoveltyKind::StoryLog).to_string(),
+            format!(
+                "{} ({})",
+                stratum.count(NoveltyKind::UpgradeTier),
+                stratum.crafted
+            ),
+            stratum.count(NoveltyKind::Effect).to_string(),
+            format!("{:.0}", stratum.longest_gap_minutes),
+            if stratum.paced() { "pass" } else { "FAIL" }.to_owned(),
+            stratum.deaths.to_string(),
+            format!("{:.0}", stratum.everyday_fuel_percent),
+        ]);
+    }
+    if !pacing.rows.is_empty() {
+        section.tables.push(pacing);
+    }
+    let failures = run.pacing_failures(PACING_DESCENTS);
+    section.notes.push(if failures.is_empty() {
+        "Descents I-III pass the pacing check: something new at least every 40 minutes, at most \
+         two deaths a stratum, everyday trips within one tank."
+            .to_owned()
+    } else {
+        format!(
+            "Descents I-III pacing check fails in: {}.",
+            failures
+                .iter()
+                .map(|(name, why)| format!("{name} ({why})"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    });
+    section.metric(
+        "descent.pacing_passes_d1_3",
+        if run.pacing_passes(PACING_DESCENTS) {
+            1.0
+        } else {
+            0.0
+        },
+    );
     let mut systems = String::new();
     for (system, hours) in &run.systems {
         let _ = write!(systems, "{} at {hours:.1} h; ", system.name());
@@ -1032,6 +1489,81 @@ mod tests {
         assert!(section.tables.len() >= 2);
         // Same config, same run.
         assert_eq!(run_descent(&PlanStrata, &config), run);
+    }
+
+    #[test]
+    fn the_pacing_check_reads_real_content_markers_for_descents_one_to_three() {
+        let registry = RegistryStrata::default_world();
+        let strata = registry.strata();
+        // Every stratum arrives, has its signature mechanic, and the Crust meets creatures.
+        for stratum in &strata {
+            assert_eq!(
+                stratum.markers.first().map(|marker| marker.kind),
+                Some(NoveltyKind::Arrival)
+            );
+            assert!(
+                stratum
+                    .markers
+                    .iter()
+                    .any(|marker| marker.kind == NoveltyKind::Mechanic),
+                "{}",
+                stratum.name
+            );
+        }
+        assert!(strata[..5].iter().any(|stratum| {
+            stratum
+                .markers
+                .iter()
+                .any(|marker| marker.kind == NoveltyKind::Creature)
+        }));
+        // Each Descent opens with its story beat, and the workshop's recipes are new things.
+        assert!(
+            strata[5]
+                .markers
+                .iter()
+                .any(|marker| marker.kind == NoveltyKind::StoryLog)
+        );
+        assert!(
+            strata[1]
+                .markers
+                .iter()
+                .any(|marker| marker.name.starts_with("recipe: "))
+        );
+        // A short run over Descents I-III: the table, the check and its metric.
+        let config = DescentConfig {
+            strata_limit: Some(17),
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&registry, &config);
+        assert_eq!(run.strata.len(), 17);
+        for stratum in &run.strata {
+            assert!(stratum.events.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+            assert!(stratum.longest_gap_minutes > 0.0);
+        }
+        // The bot buys seals for the Old Deep and fits workshop parts on the way.
+        assert!(run.strata.iter().any(|stratum| {
+            stratum.events.iter().any(|(_, kind, name)| {
+                *kind == NoveltyKind::UpgradeTier && name.starts_with("Pressure Rating")
+            })
+        }));
+        assert!(
+            run.strata
+                .iter()
+                .map(|stratum| stratum.crafted)
+                .sum::<u32>()
+                > 0
+        );
+        let section = descent_section(&run);
+        assert!(section.metrics.contains_key("descent.pacing_passes_d1_3"));
+        assert!(
+            section
+                .tables
+                .iter()
+                .any(|table| table.caption.starts_with("Descent I-III pacing"))
+        );
+        let failures = run.pacing_failures(PACING_DESCENTS);
+        assert_eq!(run.pacing_passes(PACING_DESCENTS), failures.is_empty());
     }
 
     #[test]

@@ -249,7 +249,7 @@ mod tests {
         let player = PlayerId::new(0);
         let settings = WorldSettings {
             generator: GeneratorVersion::V11,
-            ..WorldSettings::new(0x0B0A_4D)
+            ..WorldSettings::new(0x00B0_A40D)
         };
         let world = WorldState::new_game_with_settings(
             player,
@@ -275,8 +275,8 @@ mod tests {
         }
         let frame = world.frame();
         let rig = world.player_mut(player).expect("rig");
-        rig.x = frame.col_px(x) + TILE_SIZE * 0.5;
-        rig.y = frame.row_px(y) + TILE_SIZE * 0.5;
+        rig.x = TILE_SIZE.mul_add(0.5, frame.col_px(x));
+        rig.y = TILE_SIZE.mul_add(0.5, frame.row_px(y));
     }
 
     #[test]
@@ -298,7 +298,7 @@ mod tests {
         let (hint, text) = due_hint(&world, player, &BTreeSet::new()).expect("a hint");
         assert_eq!(hint, Hint::LayerResource);
         assert!(text.contains("Root Fibre"), "{text}");
-        let seen: BTreeSet<Hint> = [Hint::LayerResource].into_iter().collect();
+        let seen: BTreeSet<Hint> = std::iter::once(Hint::LayerResource).collect();
         assert_ne!(
             due_hint(&world, player, &seen).map(|(hint, _)| hint),
             Some(hint)

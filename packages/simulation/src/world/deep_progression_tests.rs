@@ -136,7 +136,7 @@ fn placeholder_strata_below_descent_three_never_cook_a_rig_that_came_through_the
         assert!(radiator_cooling(radiator) >= cap, "{stratum:?}");
         let middle = TilePosition {
             x: 30,
-            y: (span.top + span.bottom) / 2,
+            y: i32::midpoint(span.top, span.bottom),
         };
         let band = world.terrain().band_at(middle);
         let excess = band_heat_units(band)
@@ -462,7 +462,7 @@ fn workshops_turn_layer_resources_into_parts_and_supplies() {
     );
     let rig = world.player(PLAYER).expect("rig");
     assert!(
-        rig.hull > low + rig.max_hull() * 0.5,
+        rig.hull > rig.max_hull().mul_add(0.5, low),
         "{} -> {}",
         low,
         rig.hull

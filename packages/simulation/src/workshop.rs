@@ -36,6 +36,7 @@ const YIELD_SALT: u64 = 0x1A7E_5EED_0BAD_C0DE;
 /// Whether drilling the rock tile at `position` of a world with `seed` digs out a layer
 /// resource (the caller checks that the world has Descents and that the tile was rock).
 #[must_use]
+#[allow(clippy::cast_sign_loss, reason = "hashing the coordinates' bits")]
 pub const fn layer_yield(seed: u64, position: TilePosition) -> bool {
     let mut hash = seed ^ YIELD_SALT;
     hash ^= (position.x as i64 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
@@ -50,6 +51,7 @@ pub const fn layer_yield(seed: u64, position: TilePosition) -> bool {
 /// Credits one unit of `stratum`'s layer resource is worth (the value curve recipes are
 /// balanced against).
 #[must_use]
+#[allow(clippy::cast_possible_truncation, reason = "41 strata, 8 Descents")]
 pub const fn layer_resource_worth(stratum: Stratum) -> u32 {
     let base = 50 + 12 * stratum.index() as u32;
     base * descent_value_percent(stratum.descent().index() as u8) / 100
@@ -85,6 +87,7 @@ pub struct Recipe {
 impl Recipe {
     /// The Descent whose outposts first craft it (the deepest of its resources' Descents).
     #[must_use]
+    #[allow(clippy::cast_possible_truncation, reason = "8 Descents")]
     pub const fn descent(&self) -> u8 {
         let mut deepest = 0_u8;
         let mut index = 0;
@@ -246,6 +249,7 @@ pub const fn outpost_crafts(outpost_descent: u8, recipe: &Recipe) -> bool {
 
 /// The credits a part recipe costs on top of its resources, given the line's shop price.
 #[must_use]
+#[allow(clippy::cast_possible_truncation, reason = "checked against u32::MAX")]
 pub const fn part_credits(shop_price: u32) -> u32 {
     let credits = shop_price as u64 * PART_PRICE_PERCENT as u64 / 100;
     let rounded = credits.div_ceil(10) * 10;

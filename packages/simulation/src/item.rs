@@ -210,7 +210,7 @@ impl ItemKind {
         match self {
             Self::Mineral(_) => ItemCategory::Mineral,
             Self::Artifact(_) => ItemCategory::Artifact,
-            Self::Material(_) => ItemCategory::Material,
+            Self::Material(_) | Self::Layer(_) => ItemCategory::Material,
             Self::Block(_) => ItemCategory::Block,
             Self::Module(_) => ItemCategory::Module,
             Self::Weapon(_) => ItemCategory::Weapon,
@@ -218,7 +218,6 @@ impl ItemKind {
             Self::Explosive(_) => ItemCategory::Explosive,
             Self::Cosmetic(_) => ItemCategory::Cosmetic,
             Self::Quest(_) => ItemCategory::Quest,
-            Self::Layer(_) => ItemCategory::Material,
         }
     }
 

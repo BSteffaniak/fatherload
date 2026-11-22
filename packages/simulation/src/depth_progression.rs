@@ -732,9 +732,10 @@ pub const fn depth_line_tier_name(pressure: bool, level: u8) -> &'static str {
     }
 }
 
-/// The Descent (0 = I) that terrain `row` of a world with `settings` lies in, cheaply (the
-/// cached registry layout on Deep Descent worlds; the plan's table, read from the ground line,
-/// otherwise). The movement step and the tick read it every tick.
+/// The Descent (0 = I) that terrain `row` of a world with `settings` lies in, cheaply.
+///
+/// The cached registry layout on Deep Descent worlds; the plan's table, read from the ground
+/// line, otherwise. The movement step and the tick read it every tick.
 #[must_use]
 pub fn descent_index_at_row(settings: &WorldSettings, row: i32) -> u8 {
     if settings.generator.has_descents() {
@@ -752,8 +753,9 @@ pub fn descent_index_at_row(settings: &WorldSettings, row: i32) -> u8 {
     }
 }
 
-/// Heat units the placeholder strata below Descent III run at most in Descent `descent`
-/// (`None`: Descents I-III, whose heat is authored). The radiator tier on sale before a
+/// Heat units the placeholder strata below Descent III run at most in Descent `descent`.
+///
+/// `None`: Descents I-III, whose heat is authored. The radiator tier on sale before a
 /// Descent opens covers it with no heat shielding, so a rig that came through the gates is
 /// never cooked (Waves 9-10 author these strata's own heat).
 #[must_use]
@@ -776,6 +778,7 @@ pub const GATE_DAMAGE_MIN_PER_SECOND: f32 = 3.0;
 /// system for: from [`GATE_DAMAGE_MIN_PER_SECOND`] to [`GATE_DAMAGE_PER_SECOND`] over
 /// [`GATE_RAMP_ROWS`].
 #[must_use]
+#[allow(clippy::cast_precision_loss, reason = "a few dozen rows")]
 pub fn gate_damage_per_second(rows_into: i32) -> f32 {
     let share = rows_into.clamp(0, GATE_RAMP_ROWS) as f32 / GATE_RAMP_ROWS as f32;
     (GATE_DAMAGE_PER_SECOND - GATE_DAMAGE_MIN_PER_SECOND).mul_add(share, GATE_DAMAGE_MIN_PER_SECOND)
@@ -806,10 +809,11 @@ pub const LAMP_II_FELT_LIGHT: f32 = 0.4;
 /// fee, like its fuel and repairs).
 pub const OUTPOST_SHOP_PERCENT: [u32; 2] = [115, 100];
 
-/// Whether an outpost in Descent `outpost_descent` stocks tier `next_level` of `kind` (the deep
-/// settlements sell the tiers their Descent needs: core tiers to the Descent's cap, the
+/// Whether an outpost in Descent `outpost_descent` stocks tier `next_level` of `kind`.
+///
+/// The deep settlements sell the tiers their Descent needs: core tiers to the Descent's cap, the
 /// Pressure Rating and Headlamp to the tier rated for the Descent below, the hazard counters,
-/// scanner and bombs, and every rig system; never the sky and Moon gear or the drill mount).
+/// scanner and bombs, and every rig system; never the sky and Moon gear or the drill mount.
 #[must_use]
 pub const fn outpost_stocks(
     outpost_descent: u8,
@@ -843,11 +847,14 @@ pub const fn outpost_stocks(
     }
 }
 
-/// Classic sale value of a new deep ore that is the `rank`-th richest (0 = the commonest) of
+/// Classic sale value of a new deep ore of a stratum in Descent `descent`.
+///
+/// `rank` is how rich it is among the stratum's ores (0 = the commonest) of
 /// a stratum in Descent `descent`: the price curve new ores in the Descents take their values
 /// from (Descent I's commonest is worth a copper-and-iron haul, each rank about half again
 /// more, times the Descent value curve).
 #[must_use]
+#[allow(clippy::cast_possible_truncation, reason = "checked against u32::MAX")]
 pub const fn deep_ore_value(descent: u8, rank: u8) -> u32 {
     // Each Descent's commonest ore starts about where the last one's fourth rank left off,
     // times the Descent value curve; each rank is worth half again more.

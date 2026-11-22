@@ -521,8 +521,9 @@ pub const SPAWN_TILE_X: i32 = 97;
 /// Columns either side of the town whose topsoil is plain dirt (no clay lumps).
 pub const TOWN_CLEAN_TOPSOIL_MARGIN: i32 = 20;
 
-/// Wave 8: whether new worlds default to the Deep Descent (generator V11) in the new-game
-/// dialog. The integrator keeps it on only if the descent probe's Descent I-III pacing check
+/// Wave 8: whether new worlds default to the Deep Descent (generator V11).
+///
+/// The new-game dialog reads it. The integrator keeps it on only if the descent probe's Descent I-III pacing check
 /// passes (`balance::descent::DescentRun::pacing_passes`); "Classic (V10)" stays selectable
 /// either way.
 pub const DEEP_DESCENT_FOR_NEW_WORLDS: bool = true;
