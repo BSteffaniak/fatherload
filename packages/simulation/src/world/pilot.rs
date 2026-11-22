@@ -105,7 +105,21 @@ impl PilotTerrain for PilotView<'_> {
     }
 
     fn swim_sink(&self, tile: TilePosition) -> f32 {
-        match self.world.swimmable_fluid_at(tile) {
+        let fluid = self.world.swimmable_fluid_at(tile);
+        let above = TilePosition {
+            x: tile.x,
+            y: tile.y - 1,
+        };
+        if matches!(
+            fluid,
+            Some(crate::fluid::FluidKind::Brine | crate::fluid::FluidKind::LiquidMetal)
+        ) && self.world.swimmable_fluid_at(above) != fluid
+        {
+            // At the surface a buoyant fluid holds the swimmer there rather than lifting it
+            // out (which would bob it in and out of the fluid, splashing every time).
+            return 0.0;
+        }
+        match fluid {
             Some(crate::fluid::FluidKind::Brine) => -crate::pilot::SWIM_SINK * 0.4,
             Some(crate::fluid::FluidKind::LiquidMetal) => -crate::pilot::SWIM_SINK * 1.5,
             Some(crate::fluid::FluidKind::Acid) => crate::pilot::SWIM_SINK * 0.9,

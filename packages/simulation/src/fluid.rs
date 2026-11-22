@@ -169,13 +169,6 @@ impl FluidKind {
             Self::LiquidMetal => 40.0,
         }
     }
-
-    /// Whether a pilot can swim in it (liquid metal holds a pilot up like a floor would, but
-    /// it burns; every other fluid is swum).
-    #[must_use]
-    pub const fn swimmable(self) -> bool {
-        !matches!(self, Self::LiquidMetal)
-    }
 }
 
 /// One fluid cell: its kind and level (`1..=FLUID_MAX`).
@@ -323,8 +316,6 @@ impl Submersion {
 
 /// Share of a rig under fluid at which it handles as a submarine.
 pub const SUBMARINE_SHARE: f32 = 0.6;
-/// Thrust a submerged rig's engine still gives (its lift is mostly ballast).
-pub const SUBMARINE_THRUST_SHARE: f32 = 0.55;
 /// Downward push of a submerged rig diving (drill held off the ground, px/s²).
 pub const SUBMARINE_DIVE_ACCELERATION: f32 = 520.0;
 /// Fastest a submerged rig moves in any direction (px/s).
@@ -349,7 +340,7 @@ pub struct SubmersionGear {
     pub acid_resistance: f32,
     /// Share of liquid-metal heat kept out (0..=1).
     pub heat_resistance: f32,
-    /// Multiplier on submarine handling (top speed and thrust; 1 is stock).
+    /// Multiplier on submarine handling (dive push and top speed; 1 is stock).
     pub handling: f32,
 }
 
