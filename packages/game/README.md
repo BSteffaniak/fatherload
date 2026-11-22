@@ -232,6 +232,12 @@ Silicon Mac under heavy load from other builds), before / after the Moon fix:
 | tomb_run_side_view_traps / side_tomb_sand | 1.04 / 2.81 | - | 1.93 / 1.54 | 1.23 / 1.27 |
 | crypt_traps / crypt_skeleton_pack | 1.22 / 1.00 | - | 1.54 / 1.30 | 1.37 / 1.11 |
 
+Review re-run (software WebGL, system Chrome, load average 110-130, 10 s per run): `sky_space`
+with the stand-in discs 2.28 / 24.7 ms mean (medians 2.2 / 3.1) against 43.5 / 57.4 ms
+(medians 3.6 / 39.7) for the build before it, alternating runs. The spread between runs of the
+same build is as large as the difference, so treat it as "no worse, probably better" until it
+is measured on a quiet machine; `night_full_moon` and `sky_moon_from_below` stay at about 2 ms.
+
 Every other state stays near 1-3 ms of frame work on both backends (software WebGL is bound
 by rasterizing, which happens outside the measured callback). Desktop `--frame-timing` agrees:
 `sky_space` 3.25 ms before and 1.69 ms after, most scenes 1-3 ms, `split_four_mixed` the
