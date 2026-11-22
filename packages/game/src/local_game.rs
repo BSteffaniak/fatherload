@@ -319,10 +319,10 @@ impl LocalGame {
                         // F9 craft rotation: the rotation thrusters and the seat's assists.
                         .with_rotation(if on_foot { 0.0 } else { sampled.rotate })
                         .with_assists(self.shell.assists);
-                    if !on_foot && sampled.dpad_rotates {
-                        // A controller's d-pad turns the rig; only its stick drives.
+                    if !on_foot && let Some(stick) = sampled.rig_horizontal() {
+                        // A controller's d-pad turns the rig; a deflected stick drives alone.
                         frame.controls = fatherload_simulation::ControlState::new(
-                            sampled.stick_horizontal,
+                            stick,
                             frame.controls.thrust,
                             frame.controls.drill_down,
                         )
@@ -414,10 +414,20 @@ impl LocalGame {
             if anchors.len() <= view.seat_index {
                 anchors.resize(view.seat_index + 1, None);
             }
+            // The rolled camera (F9) turns about the seat's rig as drawn.
+            let pivot = snapshot
+                .players
+                .iter()
+                .find(|player| player.player_id == view.player_id)
+                .map_or((view.camera.x, view.camera.y), |player| {
+                    (player.x, player.y)
+                });
             anchors[view.seat_index] = Some(crate::weapon_aim::ViewAnchor {
                 viewport: view.viewport,
                 camera: view.camera,
                 world_scale: view.world_scale,
+                roll: view.roll,
+                pivot,
             });
             if self.shell.gameplay_input_enabled(view.seat_index) {
                 view.aim_preview = crate::render_snapshot::AimPreview::for_selection(

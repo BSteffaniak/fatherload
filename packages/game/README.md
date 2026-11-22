@@ -234,8 +234,10 @@ open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_act
   (`rendering/world.rs::TurnedAbout`, rlgl matrix stack), so the seat's own craft looks upright
   while the world turns; other rigs show their own lean (`PlayerPresentation::orientation`).
 - **Controls**: `PlayerInput::{rotate, dpad_rotates, stick_horizontal}`: keyboard `,` / `.`,
-  the arrow-keys seat Numpad `/` `*`, a controller's d-pad left/right in the rig (the stick
-  drives meanwhile; on foot and in menus the d-pad walks and steps), touch `<ROT` / `ROT>`
+  the arrow-keys seat Numpad `/` `*`, a controller's d-pad left/right in the rig (a deflected
+  stick then drives alone, `PlayerInput::rig_horizontal`; with the stick centred the d-pad
+  still drives and drills sideways, so grounded rigs stay drivable; on foot and in menus the
+  d-pad walks and steps), touch `<ROT` / `ROT>`
   (`TouchControl::{RotateLeft, RotateRight}`, top inner corner of the stick zone, below any
   dropped top-row button). Options gains Screen effects, Gyro stabiliser and Horizon hold
   (`SettingsFile::{effects, assists}`, defaults full / off); the assists ride along in every

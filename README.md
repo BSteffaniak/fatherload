@@ -1065,8 +1065,8 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 
 | Action | Controller (Xbox names) | Keyboard |
 | --- | --- | --- |
-| Move / drill sideways | Left stick (on foot and in menus also the d-pad) | `A` / `D` |
-| Turn the rig (rotation thrusters) | d-pad left / right (in the rig) | `,` / `.` |
+| Move / drill sideways | Left stick or d-pad (in the rig the d-pad drives only while the stick is centred) | `A` / `D` |
+| Turn the rig (rotation thrusters) | d-pad left / right (in the rig; with the stick centred it also drives) | `,` / `.` |
 | Thrust | `A`, or up on stick / d-pad (`RT` too while no weapon is mounted) | `W` / Space |
 | Fire weapon | `RT` (held) | left mouse button / `V` |
 | Aim weapon | Right stick (released: auto-aim at the nearest target ahead) | Mouse |

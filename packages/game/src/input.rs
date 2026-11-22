@@ -135,15 +135,27 @@ pub struct PlayerInput {
     /// the arrow-keys seat's Numpad / and *, the touch rotate buttons, a controller's d-pad
     /// left and right).
     pub rotate: f32,
-    /// `rotate` comes from a controller's d-pad, which also folds into `horizontal`: in the
-    /// rig the d-pad turns it and only the stick drives (`stick_horizontal`); on foot and in
-    /// menus the d-pad walks and steps as before.
+    /// `rotate` comes from a controller's d-pad, which also folds into `horizontal`. In the
+    /// rig the d-pad turns it; while the stick is deflected only the stick drives
+    /// (`stick_horizontal`, see [`Self::rig_horizontal`]), and with the stick centred the
+    /// d-pad still drives (and drills sideways) as before. On foot and in menus the d-pad
+    /// walks and steps as before.
     pub dpad_rotates: bool,
     /// A controller's stick share of `horizontal` (equal to `horizontal` on other devices).
     pub stick_horizontal: f32,
 }
 
 impl PlayerInput {
+    /// The stick the rig drives with when it differs from `horizontal` (F9): a controller's
+    /// d-pad turns the rig, so while the stick is deflected the stick alone drives. With the
+    /// stick centred the d-pad keeps driving and drilling sideways (a grounded rig ignores the
+    /// rotation thrusters, so d-pad players can still drive on the ground).
+    #[must_use]
+    pub fn rig_horizontal(&self) -> Option<f32> {
+        (self.dpad_rotates && self.stick_horizontal.abs() > f32::EPSILON)
+            .then_some(self.stick_horizontal)
+    }
+
     /// Whether this input backs out of the current menu (Esc/Backspace or gamepad B).
     #[must_use]
     pub const fn backs_out(&self) -> bool {

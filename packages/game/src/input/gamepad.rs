@@ -589,6 +589,32 @@ mod tests {
     }
 
     #[test]
+    fn the_dpad_turns_the_rig_and_still_drives_while_the_stick_rests() {
+        let mut mapper = PadMapper::default();
+        // D-pad alone: turns the rig and still drives (and drills) sideways, so a grounded
+        // rig, which ignores its rotation thrusters, can be driven with the d-pad.
+        let alone = mapper.map(&pad(&[PadButton::DPadLeft]), DT);
+        assert!((alone.rotate + 1.0).abs() < f32::EPSILON);
+        assert!((alone.horizontal + 1.0).abs() < f32::EPSILON);
+        assert_eq!(alone.rig_horizontal(), None, "drives with the d-pad");
+        // Stick deflected: the stick drives alone while the d-pad turns the rig.
+        let both = PadState {
+            left_x: 0.8,
+            ..pad(&[PadButton::DPadLeft])
+        };
+        let both = mapper.map(&both, DT);
+        assert!((both.rotate + 1.0).abs() < f32::EPSILON);
+        assert!(
+            both.rig_horizontal()
+                .is_some_and(|stick| (stick - 0.8).abs() < f32::EPSILON)
+        );
+        // The stick alone: no rotation, nothing to override.
+        let stick_only = mapper.map(&stick(0.8, 0.0), DT);
+        assert!(stick_only.rotate.abs() < f32::EPSILON);
+        assert_eq!(stick_only.rig_horizontal(), None);
+    }
+
+    #[test]
     fn menus_step_once_when_stick_and_dpad_point_the_same_way() {
         let mut mapper = PadMapper::default();
         let both = PadState {
