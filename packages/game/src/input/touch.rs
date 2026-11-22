@@ -605,11 +605,18 @@ impl TouchLayout {
             TouchRect::around(inner + pitch, y, radius),
         ));
         if anchor {
-            // The Gravity Anchor under the pair (Wave 9): turn the rig, then anchor it.
-            self.controls.push((
-                TouchControl::Anchor,
-                TouchRect::around(inner + pitch * 0.5, y + radius * 2.0 + margin, radius),
-            ));
+            // The Gravity Anchor under the pair (Wave 9): turn the rig, then anchor it. On a
+            // short screen it sits beside the pair instead, on the stick zone's side.
+            let under = y + radius * 2.0 + margin;
+            let (x, y) = if under + radius <= zone.y + zone.h * 0.5 {
+                (inner + pitch * 0.5, under)
+            } else if left_handed {
+                (inner + pitch * 2.0, y)
+            } else {
+                (inner - pitch, y)
+            };
+            self.controls
+                .push((TouchControl::Anchor, TouchRect::around(x, y, radius)));
         }
     }
 

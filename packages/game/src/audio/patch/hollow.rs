@@ -226,7 +226,7 @@ pub(super) fn forge_ambience_loop(rng: &mut Rng) -> Vec<f32> {
 /// The breakthrough: the rock sky gives and the light floods in. A deep swell rising into a
 /// bright major chord with a choir-like shimmer, held, then let go.
 pub(super) fn sun_sting(rng: &mut Rng) -> Vec<f32> {
-    let seconds = 4.2;
+    let seconds = 3.8;
     let chord = [110.0_f32, 164.75, 220.0, 277.25, 330.0, 440.0];
     let mut voices: Vec<(Osc, Osc)> = chord
         .iter()
@@ -312,7 +312,7 @@ pub(super) fn serpent_roar(rng: &mut Rng) -> Vec<f32> {
 
 /// The inner sun about to flare: a slow rising swell of heat (it warns; nothing pulses fast).
 pub(super) fn flare_swell(rng: &mut Rng) -> Vec<f32> {
-    let seconds = 2.6;
+    let seconds = 1.95;
     let mut a = Osc::new(Wave::Saw).with_phase(rng.unit());
     let mut b = Osc::new(Wave::Saw).with_phase(rng.unit());
     let mut filter = Svf::new(FilterMode::LowPass, 300.0, 1.2);
