@@ -444,6 +444,12 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::SlateSkink
             | EnemyKind::ShelfCrab
             | EnemyKind::TubeCrawler
+            // The Old Deep's (Wave 8) asymmetric kinds.
+            | EnemyKind::FossilEel
+            | EnemyKind::GlowGrub
+            | EnemyKind::Glowmother
+            | EnemyKind::PistonWarden
+            | EnemyKind::MagmaSalamander
     )
 }
 

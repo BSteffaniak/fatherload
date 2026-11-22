@@ -331,7 +331,7 @@ fn glowmother_scene(stage: &mut SceneStage<'_>) {
         fit(world, player);
         let (centre, (half_w, half_h)) =
             sites::glowmother_den(&settings(), &descent::layout(&settings())).expect("a den");
-        place_rig(world, player, centre.x - 6, centre.y + half_h - 2);
+        place_rig(world, player, centre.x - 2, centre.y + half_h - 2);
         finish(
             world,
             player,
@@ -343,7 +343,7 @@ fn glowmother_scene(stage: &mut SceneStage<'_>) {
         world.set_dose_for_tests(player, 300);
         world.stream_terrain_near_players();
     });
-    stage.settle(240);
+    stage.settle(420);
 }
 
 fn machine_scene(stage: &mut SceneStage<'_>) {
