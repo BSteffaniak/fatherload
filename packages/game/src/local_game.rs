@@ -15,6 +15,7 @@ use fatherload_simulation::{
 };
 
 mod crew;
+mod old_deep_news;
 mod rewards;
 
 #[cfg(test)]
@@ -540,6 +541,7 @@ impl LocalGame {
         self.announce_villages(&players);
         self.announce_moon(&players);
         self.announce_logistics(&players);
+        self.announce_old_deep(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_stories(&players);

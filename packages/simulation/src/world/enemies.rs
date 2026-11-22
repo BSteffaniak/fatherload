@@ -2283,8 +2283,13 @@ impl WorldState {
             return;
         }
         let radius = EnemyKind::BroodNest.stats().radius;
+        // The Glowmother (Wave 8) births glow grubs; nests hatch bats.
+        let brood_kind = match self.enemy_parts(id).map(|(_, state)| state.kind) {
+            Some(EnemyKind::Glowmother) => EnemyKind::GlowGrub,
+            _ => EnemyKind::CaveBat,
+        };
         let spawned = self.spawn_enemy_with(
-            EnemyKind::CaveBat,
+            brood_kind,
             (body.x, body.y - radius - 6.0),
             tier,
             None,
@@ -2646,7 +2651,14 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::RogueExcavator
         | EnemyKind::AncientGuardian
         | EnemyKind::DerelictAutomaton
-        | EnemyKind::Warden => tags.machines,
+        | EnemyKind::Warden
+        | EnemyKind::PistonWarden => tags.machines,
+        // The Old Deep's creatures (Wave 8) roost where their kin do.
+        EnemyKind::PrismMoth | EnemyKind::JetRay | EnemyKind::VoidJelly => tags.swarmers,
+        EnemyKind::FossilEel => tags.burrowers || tags.aquatic,
+        EnemyKind::GlowGrub => tags.nests || tags.swarmers,
+        EnemyKind::MagmaSalamander => tags.heat || tags.nests,
+        EnemyKind::Glowmother => false,
         EnemyKind::BroodLord => tags.elite_lair,
         // The Crust (Wave 8): moles in burrows, leeches and wasps by water, bats and beetles in
         // the old works' caves, skinks and crabs on cave floors, tube things in the heat.

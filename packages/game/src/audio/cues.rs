@@ -265,6 +265,15 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SinkholeRumble => Patch::SinkholeRumble,
         SoundCue::DeepClaimFanfare => Patch::DeepClaimFanfare,
         SoundCue::TubeBreath => Patch::TubeBreath,
+        SoundCue::ResonanceChime => Patch::ResonanceChime,
+        SoundCue::ValveTurn => Patch::ValveTurn,
+        SoundCue::PistonSlam => Patch::PistonSlam,
+        SoundCue::GeigerAlert => Patch::GeigerAlert,
+        SoundCue::StormSiren => Patch::StormSiren,
+        SoundCue::CoreStrike => Patch::CoreStrike,
+        SoundCue::CoreWake => Patch::CoreWake,
+        SoundCue::DeepLog => Patch::DeepLog,
+        SoundCue::BoneCrumble => Patch::BoneCrumble,
     }
 }
 
@@ -771,6 +780,40 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::DeepClaimMissing { .. } => Some(SoundCue::VacuumAlarm),
         GameplayEventKind::LavaTubeEntered { .. } => Some(SoundCue::TubeBreath),
         GameplayEventKind::CrustCreature { .. } => Some(SoundCue::CreatureHiss),
+        // Descent II, the Old Deep (Wave 8).
+        GameplayEventKind::ResonanceChain { .. } => Some(SoundCue::ResonanceChime),
+        GameplayEventKind::FossilBoneFreed { intact, .. } => Some(if *intact {
+            SoundCue::ArtifactPickup
+        } else {
+            SoundCue::BoneCrumble
+        }),
+        GameplayEventKind::SkeletonCompleted { .. } => Some(SoundCue::Sell),
+        GameplayEventKind::GasTideTurned { high: true } => Some(SoundCue::SteamHiss),
+        GameplayEventKind::GasTideTurned { high: false } => None,
+        GameplayEventKind::AmberStuck { .. } => Some(SoundCue::AcidFizz),
+        GameplayEventKind::CathedralValveOpened { .. } => Some(SoundCue::ValveTurn),
+        GameplayEventKind::CathedralLiftRestored { .. } => Some(SoundCue::MachineCharge),
+        GameplayEventKind::DoseWarning { .. } => Some(SoundCue::GeigerAlert),
+        GameplayEventKind::MutationGained { .. } => Some(SoundCue::DeepLog),
+        GameplayEventKind::MachineryWoke { .. } => Some(SoundCue::GateGrind),
+        GameplayEventKind::PistonStruck { .. } => Some(SoundCue::PistonSlam),
+        GameplayEventKind::HeatStormChanged { phase } => match phase {
+            fatherload_simulation::old_deep::StormPhase::Gathering => Some(SoundCue::StormSiren),
+            fatherload_simulation::old_deep::StormPhase::Raging => Some(SoundCue::FireWhoosh),
+            fatherload_simulation::old_deep::StormPhase::Calm => None,
+        },
+        GameplayEventKind::LavaPoured { .. } => Some(SoundCue::FireCrackle),
+        GameplayEventKind::DeepLogRead { .. } => Some(SoundCue::DeepLog),
+        GameplayEventKind::StarCoreAwoke | GameplayEventKind::StarCoreBeaten { .. } => {
+            Some(SoundCue::CoreWake)
+        }
+        GameplayEventKind::StarCorePhase { phase, .. } => match phase {
+            fatherload_simulation::old_deep::CorePhase::Exposed => Some(SoundCue::MachineCharge),
+            fatherload_simulation::old_deep::CorePhase::Shielded => Some(SoundCue::CoreStrike),
+            _ => None,
+        },
+        GameplayEventKind::GlowmotherAwoke { .. } => Some(SoundCue::CreatureScreech),
+        GameplayEventKind::GlowmotherDefeated { .. } => Some(SoundCue::CreatureDeath),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1084,7 +1127,26 @@ mod tests {
             | GameplayEventKind::DeepClaimGranted { .. }
             | GameplayEventKind::DeepClaimMissing { .. }
             | GameplayEventKind::LavaTubeEntered { .. }
-            | GameplayEventKind::CrustCreature { .. } => {}
+            | GameplayEventKind::CrustCreature { .. }
+            | GameplayEventKind::ResonanceChain { .. }
+            | GameplayEventKind::FossilBoneFreed { .. }
+            | GameplayEventKind::SkeletonCompleted { .. }
+            | GameplayEventKind::GasTideTurned { .. }
+            | GameplayEventKind::AmberStuck { .. }
+            | GameplayEventKind::CathedralValveOpened { .. }
+            | GameplayEventKind::CathedralLiftRestored { .. }
+            | GameplayEventKind::DoseWarning { .. }
+            | GameplayEventKind::MutationGained { .. }
+            | GameplayEventKind::MachineryWoke { .. }
+            | GameplayEventKind::PistonStruck { .. }
+            | GameplayEventKind::HeatStormChanged { .. }
+            | GameplayEventKind::LavaPoured { .. }
+            | GameplayEventKind::DeepLogRead { .. }
+            | GameplayEventKind::StarCoreAwoke
+            | GameplayEventKind::StarCorePhase { .. }
+            | GameplayEventKind::StarCoreBeaten { .. }
+            | GameplayEventKind::GlowmotherAwoke { .. }
+            | GameplayEventKind::GlowmotherDefeated { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2116,6 +2178,15 @@ mod tests {
             SoundCue::SinkholeRumble,
             SoundCue::DeepClaimFanfare,
             SoundCue::TubeBreath,
+            SoundCue::ResonanceChime,
+            SoundCue::ValveTurn,
+            SoundCue::PistonSlam,
+            SoundCue::GeigerAlert,
+            SoundCue::StormSiren,
+            SoundCue::CoreStrike,
+            SoundCue::CoreWake,
+            SoundCue::DeepLog,
+            SoundCue::BoneCrumble,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

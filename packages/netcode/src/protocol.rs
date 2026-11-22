@@ -162,6 +162,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `Player::cart` / `PlayerTickState::cart` (mine-cart rides, per tick), the `CrustState`
 ///   world field and `SectionKey::Crust` section (failing sets and shelves, the Sinkhole, the
 ///   Deep Claim, logs read), and the Crust events 400-415.
+/// * The Old Deep (Descent II): `TileKind::Deep(DeepTile)` tiles (codes `0xD00`) in terrain ops,
+///   chunk refreshes and keyframes, the Old Deep creatures (`EnemyKind::PrismMoth` ..
+///   `MagmaSalamander`) in entity records, the `OldDeep` world field and `SectionKey::OldDeep`
+///   section (dose meters, mutations, woken machine halls, skeleton digs, the Cathedral Lift,
+///   the Star Core fight, the Glowmother, story logs read) and the Old Deep events 420-438.
 pub const PROTOCOL_VERSION: u8 = 16;
 
 /// One client input frame: the controls and actions for exactly one tick.

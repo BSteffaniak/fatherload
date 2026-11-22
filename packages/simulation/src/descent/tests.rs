@@ -165,8 +165,15 @@ fn the_classic_strata_are_the_classic_bands() {
         assert_eq!(def.host_band, band);
         assert_eq!(def.soft, band.soft_material(), "{stratum:?}");
         assert_eq!(def.hard, band.hard_material(), "{stratum:?}");
-        // The authored Crust (Wave 8) has creatures of its own.
-        if stratum.descent() != Descent::Crust {
+        // The authored Crust and Old Deep (Wave 8) have creatures of their own.
+        if stratum.descent() == Descent::OldDeep {
+            assert!(
+                def.creatures
+                    .iter()
+                    .any(|(kind, _)| *kind as usize >= crate::enemy::EnemyKind::PrismMoth as usize),
+                "{stratum:?} has no creature of its own"
+            );
+        } else if stratum.descent() != Descent::Crust {
             assert_eq!(
                 def.creatures,
                 crate::enemy::band_roster(band),

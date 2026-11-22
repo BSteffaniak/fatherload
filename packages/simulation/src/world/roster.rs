@@ -111,9 +111,12 @@ impl WorldState {
             // Beacons, built lifts and charges stay keyed by the player id.
             logistics,
             crust,
+            // A leaving player's dose and mutation go with them (Wave 8).
+            old_deep,
         } = self;
         logistics.forget_transient(player_id);
         crust.forget(player_id);
+        old_deep.forget(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

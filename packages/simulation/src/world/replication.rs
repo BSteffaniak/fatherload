@@ -219,6 +219,9 @@ pub enum SectionKey {
     /// The authored Crust: failing sets and shelves, the Sinkhole, the Deep Claim and the logs
     /// read (Wave 8; cart rides travel with the rigs' per-tick state).
     Crust,
+    /// Descent II's live state: dose meters, mutations, machine halls, skeleton digs, the
+    /// Cathedral Lift and the Star Core fight (Wave 8; their tiles travel as terrain ops).
+    OldDeep,
 }
 
 impl SectionKey {
@@ -238,7 +241,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 20] = [
+    pub const SHARED: [Self; 21] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -259,6 +262,7 @@ impl SectionKey {
         Self::Tombs,
         Self::Fields,
         Self::Logistics,
+        Self::OldDeep,
     ];
 }
 
@@ -288,6 +292,7 @@ pub enum SectionPayload {
     Fields(Box<crate::field::FieldZones>),
     Logistics(Box<crate::logistics::Logistics>),
     Crust(Box<crate::crust::CrustState>),
+    OldDeep(Box<crate::old_deep::OldDeep>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -478,6 +483,7 @@ impl WorldState {
             fluids: _,
             logistics,
             crust,
+            old_deep,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -577,6 +583,7 @@ impl WorldState {
             SectionKey::Fields => SectionPayload::Fields(Box::new(fields.clone())),
             SectionKey::Logistics => SectionPayload::Logistics(Box::new(logistics.clone())),
             SectionKey::Crust => SectionPayload::Crust(Box::new(crust.clone())),
+            SectionKey::OldDeep => SectionPayload::OldDeep(Box::new(old_deep.clone())),
         })
     }
 
@@ -742,6 +749,9 @@ impl WorldState {
             }
             (SectionKey::Crust, SectionPayload::Crust(crust)) => {
                 self.crust = *crust;
+            }
+            (SectionKey::OldDeep, SectionPayload::OldDeep(old_deep)) => {
+                self.old_deep = *old_deep;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

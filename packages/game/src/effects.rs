@@ -1151,7 +1151,20 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::TombMemberDowned { player_id, .. }
         | GameplayEventKind::TombRunEnded { player_id, .. }
         | GameplayEventKind::CryptRoll { player_id, .. }
-        | GameplayEventKind::CryptPitFall { player_id, .. } => Some(player_id),
+        | GameplayEventKind::CryptPitFall { player_id, .. }
+        // Descent II, the Old Deep (Wave 8).
+        | GameplayEventKind::ResonanceChain { player_id, .. }
+        | GameplayEventKind::FossilBoneFreed { player_id, .. }
+        | GameplayEventKind::SkeletonCompleted { player_id, .. }
+        | GameplayEventKind::AmberStuck { player_id }
+        | GameplayEventKind::CathedralValveOpened { player_id, .. }
+        | GameplayEventKind::CathedralLiftRestored { player_id }
+        | GameplayEventKind::DoseWarning { player_id, .. }
+        | GameplayEventKind::MutationGained { player_id, .. }
+        | GameplayEventKind::PistonStruck { player_id }
+        | GameplayEventKind::DeepLogRead { player_id, .. }
+        | GameplayEventKind::StarCoreBeaten { player_id }
+        | GameplayEventKind::GlowmotherDefeated { player_id } => Some(player_id),
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }
@@ -1209,7 +1222,14 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::SupportCollapsed { .. }
         | GameplayEventKind::SlateShudder { .. }
         | GameplayEventKind::SlateSlid { .. }
-        | GameplayEventKind::CrustCreature { .. } => None,
+        | GameplayEventKind::CrustCreature { .. }
+        | GameplayEventKind::GasTideTurned { .. }
+        | GameplayEventKind::MachineryWoke { .. }
+        | GameplayEventKind::HeatStormChanged { .. }
+        | GameplayEventKind::LavaPoured { .. }
+        | GameplayEventKind::StarCoreAwoke
+        | GameplayEventKind::StarCorePhase { .. }
+        | GameplayEventKind::GlowmotherAwoke { .. } => None,
     }
 }
 

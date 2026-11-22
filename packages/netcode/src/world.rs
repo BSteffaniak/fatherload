@@ -327,6 +327,26 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::DeepClaimMissing { player_id } => (413, Some(player_id)),
         GameplayEventKind::LavaTubeEntered { player_id } => (414, Some(player_id)),
         GameplayEventKind::CrustCreature { .. } => (415, None),
+        // Descent II, the Old Deep (wave 8): 420-439.
+        GameplayEventKind::ResonanceChain { player_id, .. } => (420, Some(player_id)),
+        GameplayEventKind::FossilBoneFreed { player_id, .. } => (421, Some(player_id)),
+        GameplayEventKind::SkeletonCompleted { player_id, .. } => (422, Some(player_id)),
+        GameplayEventKind::GasTideTurned { .. } => (423, None),
+        GameplayEventKind::AmberStuck { player_id } => (424, Some(player_id)),
+        GameplayEventKind::CathedralValveOpened { player_id, .. } => (425, Some(player_id)),
+        GameplayEventKind::CathedralLiftRestored { player_id } => (426, Some(player_id)),
+        GameplayEventKind::DoseWarning { player_id, .. } => (427, Some(player_id)),
+        GameplayEventKind::MutationGained { player_id, .. } => (428, Some(player_id)),
+        GameplayEventKind::MachineryWoke { .. } => (429, None),
+        GameplayEventKind::PistonStruck { player_id } => (430, Some(player_id)),
+        GameplayEventKind::HeatStormChanged { .. } => (431, None),
+        GameplayEventKind::LavaPoured { .. } => (432, None),
+        GameplayEventKind::DeepLogRead { player_id, .. } => (433, Some(player_id)),
+        GameplayEventKind::StarCoreAwoke => (434, None),
+        GameplayEventKind::StarCorePhase { .. } => (435, None),
+        GameplayEventKind::StarCoreBeaten { player_id } => (436, Some(player_id)),
+        GameplayEventKind::GlowmotherAwoke { .. } => (437, None),
+        GameplayEventKind::GlowmotherDefeated { player_id } => (438, Some(player_id)),
     }
 }
 

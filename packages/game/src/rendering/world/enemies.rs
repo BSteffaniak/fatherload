@@ -25,7 +25,10 @@ use fatherload_simulation::{
 use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
-    sprites::{crypt as crypt_art, enemies as art, moon as moon_art, tomb as tomb_art},
+    sprites::{
+        crypt as crypt_art, enemies as art, moon as moon_art, old_deep as deep_art,
+        tomb as tomb_art,
+    },
 };
 
 use super::{ART, Pen, fx::disc, snap};
@@ -83,6 +86,15 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::ShelfCrab => &art::SHELF_CRAB,
         EnemyKind::TubeCrawler => &art::TUBE_CRAWLER,
         EnemyKind::CinderMoth => &art::CINDER_MOTH,
+        // The Old Deep (Wave 8).
+        EnemyKind::PrismMoth => &deep_art::PRISM_MOTH,
+        EnemyKind::FossilEel => &deep_art::FOSSIL_EEL,
+        EnemyKind::JetRay => &deep_art::JET_RAY,
+        EnemyKind::GlowGrub => &deep_art::GLOW_GRUB,
+        EnemyKind::Glowmother => &deep_art::GLOWMOTHER,
+        EnemyKind::PistonWarden => &deep_art::PISTON_WARDEN,
+        EnemyKind::VoidJelly => &deep_art::VOID_JELLY,
+        EnemyKind::MagmaSalamander => &deep_art::MAGMA_SALAMANDER,
     }
 }
 
@@ -371,7 +383,29 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::CryptLord
         | EnemyKind::PotterWasp
         | EnemyKind::MineBat
-        | EnemyKind::CinderMoth => sprite.frame_at(phase),
+        | EnemyKind::CinderMoth
+        | EnemyKind::PrismMoth
+        | EnemyKind::JetRay
+        | EnemyKind::GlowGrub
+        | EnemyKind::Glowmother
+        | EnemyKind::VoidJelly => sprite.frame_at(phase),
+        // A lunge's wind-up shows the drawn-back pose; walkers stride while moving.
+        EnemyKind::PistonWarden | EnemyKind::MagmaSalamander => {
+            if state.mode == EnemyMode::Windup {
+                1
+            } else if moving && state.kind == EnemyKind::MagmaSalamander {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
+        EnemyKind::FossilEel => {
+            if moving || attacking {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
     }
 }
 

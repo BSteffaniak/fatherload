@@ -896,6 +896,10 @@ impl Tile {
                 Some(fluid) => TileKind::Fluid(fluid),
                 None => return None,
             },
+            0xD00..=0xDFF => match crate::old_deep::DeepTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Deep(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

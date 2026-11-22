@@ -141,6 +141,19 @@ impl Material {
                 | fatherload_simulation::sky::SkyTile::TempleKeystone
                 | fatherload_simulation::sky::SkyTile::TempleCache => Self::Hard,
             },
+            // The Old Deep (Wave 8): shale and amber give, crystal and gems ring, the rest grinds.
+            TileKind::Deep(tile) => match tile {
+                fatherload_simulation::old_deep::DeepTile::Shale
+                | fatherload_simulation::old_deep::DeepTile::Amber => Self::Soft,
+                fatherload_simulation::old_deep::DeepTile::ResonantCrystal
+                | fatherload_simulation::old_deep::DeepTile::Prism
+                | fatherload_simulation::old_deep::DeepTile::LatentGem
+                | fatherload_simulation::old_deep::DeepTile::IsotopeCluster
+                | fatherload_simulation::old_deep::DeepTile::VoidBloom
+                | fatherload_simulation::old_deep::DeepTile::FossilBone
+                | fatherload_simulation::old_deep::DeepTile::ExpeditionLog => Self::Ore,
+                _ => Self::Hard,
+            },
             TileKind::Lunar(tile) => match tile {
                 fatherload_simulation::moon::LunarTile::Regolith
                 | fatherload_simulation::moon::LunarTile::MareDust

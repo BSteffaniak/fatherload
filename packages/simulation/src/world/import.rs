@@ -217,6 +217,7 @@ impl WorldState {
                 ..crate::logistics::Logistics::default()
             },
             crust: crate::crust::CrustState::default(),
+            old_deep: crate::old_deep::OldDeep::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

@@ -110,6 +110,9 @@ mod night;
 #[cfg(test)]
 mod night_tests;
 mod no_clip;
+mod old_deep;
+#[cfg(test)]
+mod old_deep_tests;
 mod people;
 #[cfg(test)]
 mod people_tests;
@@ -447,6 +450,10 @@ pub struct WorldState {
     /// shelves, the Sinkhole, the Deep Claim, the logs read.
     #[serde(default)]
     crust: crate::crust::CrustState,
+    /// Descent II's live state (Wave 8, see [`crate::old_deep`]): dose meters, mutations,
+    /// woken machine halls, skeleton digs, the Cathedral Lift and the Star Core fight.
+    #[serde(default)]
+    old_deep: crate::old_deep::OldDeep,
 }
 
 impl WorldState {

@@ -203,6 +203,11 @@ impl WorldState {
         if !self.crust.is_empty() {
             hash.write_serialized(&self.crust);
         }
+        // Absent until something of the Old Deep happens (Wave 8), so older worlds keep their
+        // hashes.
+        if !self.old_deep.is_empty() {
+            hash.write_serialized(&self.old_deep);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

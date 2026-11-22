@@ -165,6 +165,8 @@ impl WorldState {
             // Lifts, outposts and beacons are tiles; a ride pins its rider every tick.
             logistics: _,
             crust: _,
+            // Dose meters, halls, digs and the fights are tiles and ticks (Wave 8).
+            old_deep: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

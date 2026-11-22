@@ -328,6 +328,10 @@ pub enum TileKind {
     /// root mats, mine timber and rails, slate shelves, basalt columns, tube glass, the cabin,
     /// strongboxes, the Sinkhole's core, rubble and Gravel Hollow's gravel.
     Crust(crate::crust::CrustTile),
+    /// A tile of the Old Deep's strata (Wave 8, Descent II of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
+    /// [`crate::old_deep`]).
+    Deep(crate::old_deep::DeepTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -436,6 +440,7 @@ impl TileKind {
             Self::Lunar(tile) => tile.name(),
             Self::Fluid(fluid) => fluid.name(),
             Self::Crust(tile) => tile.name(),
+            Self::Deep(tile) => tile.name(),
         }
     }
 
@@ -531,6 +536,7 @@ impl Tile {
             TileKind::Lunar(tile) => 0x700 | tile.code(),
             TileKind::Fluid(fluid) => FLUID_TILE_CODE_BASE | fluid.code(),
             TileKind::Crust(tile) => CRUST_TILE_CODE_BASE | tile.code(),
+            TileKind::Deep(tile) => crate::old_deep::DEEP_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1545,6 +1551,14 @@ impl Terrain {
                     TileKind::Cave(cave) if cave.is_cache() => continue,
                     // So do sky caches and nests (WP-SKY): drill them, or bring their island down.
                     TileKind::Sky(sky) if sky.is_cache() => continue,
+                    // The Old Deep's fixtures and the Star Core itself (only a drill strikes
+                    // the core; bombs still break pylons and pistons).
+                    TileKind::Deep(tile)
+                        if tile.indestructible()
+                            || matches!(tile, crate::old_deep::DeepTile::FirstCore) =>
+                    {
+                        continue;
+                    }
                     _ => None,
                 };
                 let tile = left.map_or(
@@ -1822,6 +1836,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Bedrock | TileKind::Sky(crate::sky::SkyTile::AetherCore) => true,
         // The colony, the alien facility and the Moon's core (WP-MOON).
         TileKind::Lunar(tile) => tile.indestructible(),
+        // The Star Core arena, the shielded core and the Cathedral Lift's fixtures (Wave 8).
+        TileKind::Deep(tile) => tile.indestructible(),
         _ => false,
     }
 }
@@ -1877,6 +1893,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Sky(tile) => tile.hardness(),
         TileKind::Lunar(tile) => tile.hardness(),
         TileKind::Crust(tile) => tile.hardness(),
+        TileKind::Deep(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1919,6 +1936,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Sky(tile) => tile.durability(),
         TileKind::Lunar(tile) => tile.durability(),
         TileKind::Crust(tile) => tile.durability(),
+        TileKind::Deep(tile) => tile.durability(),
     }
 }
 

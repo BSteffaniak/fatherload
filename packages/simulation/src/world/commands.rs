@@ -580,6 +580,13 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
             4 => 0.19,
             _ => 0.22,
         },
+        // Old Deep tiles (Wave 8): shale and amber give quickly, the core and machines slowly.
+        TileKind::Deep(tile) => match tile.hardness() {
+            0..=2 => 0.1,
+            3 => 0.15,
+            4 => 0.18,
+            _ => 0.22,
+        },
     }
 }
 

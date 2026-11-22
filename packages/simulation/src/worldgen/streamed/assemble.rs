@@ -249,6 +249,27 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
         // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.
         super::crust_pass::apply_sinkhole(ctx, &mut chunk_kinds);
     }
+    if let Some(layout) = &ctx.descent {
+        // The Old Deep (V11, Wave 8): Descent II's features and set pieces over the landmarks
+        // (the cable and outposts still carve over them).
+        let (top, bottom) = crate::old_deep::sites::carve_rows(layout);
+        if rect.max.y >= top && rect.min.y <= bottom {
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = crate::old_deep::sites::carve_tile(
+                    &ctx.settings,
+                    layout,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     if !ctx.logistics.lifts.is_empty() || !ctx.logistics.outposts.is_empty() {
         // Depth logistics (V11, Wave 7 integration): the outposts' floors and the builders'
         // cable of ancient lifts, over the landmarks.

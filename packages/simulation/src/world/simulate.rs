@@ -495,6 +495,9 @@ impl WorldState {
                 MineResult::Mined(TileKind::Poi(tile)) => {
                     self.open_poi_tile(player_id, target, tile, &mut output);
                 }
+                MineResult::Mined(TileKind::Deep(tile)) => {
+                    self.mined_deep_tile(player_id, target, tile, &mut output);
+                }
                 MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
                     self.open_cave_cache(player_id, target, tile, &mut output);
                 }
@@ -540,6 +543,9 @@ impl WorldState {
         self.advance_logistics(next_tick, &mut output);
         // The authored Crust (Wave 8): failing sets and shelves, the Sinkhole, the gate.
         self.advance_crust(next_tick, &mut output);
+        // Descent II, the Old Deep (Wave 8): doses, machines, jets, storms, tides, the
+        // Cathedral Lift and the Star Core (returns at once in worlds without Descents).
+        self.advance_old_deep(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

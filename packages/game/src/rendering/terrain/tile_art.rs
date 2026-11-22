@@ -41,6 +41,7 @@ use crate::rendering::pixel_art::{
 mod built_art;
 mod cave_art;
 mod crust_art;
+mod deep_art;
 mod lunar_art;
 mod poi_art;
 mod sky_art;
@@ -48,6 +49,7 @@ mod sky_art;
 pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use crust_art::{crust_color, crust_glow};
+pub use deep_art::deep_color;
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
@@ -415,6 +417,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Sky(tile) => return sky_art::sky_color(tile),
         TileKind::Lunar(tile) => return lunar_art::lunar_color(tile),
         TileKind::Crust(tile) => return crust_art::crust_color(tile),
+        TileKind::Deep(tile) => return deep_art::deep_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -596,7 +599,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Built(_)
         | TileKind::Sky(_)
         | TileKind::Lunar(_)
-        | TileKind::Crust(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Crust(_)
+        | TileKind::Deep(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -862,6 +866,24 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     }
     if let TileKind::Poi(tile) = kind {
         poi_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // Descent II's materials and set pieces (Wave 8).
+    if let TileKind::Deep(tile) = kind {
+        deep_art::paint(
             &mut canvas,
             terrain,
             position,
@@ -1298,6 +1320,7 @@ const fn grows_grass(material: TileKind) -> bool {
         material,
         TileKind::Surface(_)
             | TileKind::Lunar(_)
+            | TileKind::Deep(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

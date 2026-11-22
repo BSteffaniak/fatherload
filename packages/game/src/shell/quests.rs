@@ -41,6 +41,8 @@ pub enum FanfareKind {
     NightSurvived,
     /// The rare spawn of a new-moon night walks.
     AlphaHunts,
+    /// A moment of Descent II, the Old Deep (Wave 8): a story log, a set piece, a mutation.
+    OldDeep,
 }
 
 /// A banner across the top of a seat's view.

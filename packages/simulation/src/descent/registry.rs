@@ -7,7 +7,7 @@
 //! variants and gate until its Wave authors it for real.
 
 use crate::{
-    enemy::{EnemyKind, band_roster},
+    enemy::EnemyKind,
     terrain::{DeepStratum, MineralKind, StrategicResourceKind, TileKind},
     worldgen::{Band, HazardKind},
 };
@@ -25,8 +25,9 @@ use super::{
 
 use DescentKey as Key;
 use EnemyKind::{
-    AcidSpitter, AncientGuardian, BroodNest, Burrower, CaveBat, MagmaWisp, MiningDrone, RockMimic,
-    RogueExcavator, SentryTurret, Shellback,
+    AcidSpitter, AncientGuardian, BroodNest, Burrower, CaveBat, FossilEel, GlowGrub, JetRay,
+    MagmaSalamander, MagmaWisp, MiningDrone, PistonWarden, PrismMoth, RockMimic, RogueExcavator,
+    SentryTurret, Shellback, VoidJelly,
 };
 use HazardKind::{Explosive, Gas, Lava, MagmaVent, Pressure};
 use MineralKind::{Copper, Diamond, Emerald, Gold, Iron, Mythril, Platinum, Ruby, Silver, Uranium};
@@ -323,7 +324,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::CrystalFaults,
         descent: Descent::OldDeep,
         name: "Crystal Faults",
-        signature: "Resonance chains and crystal refraction that lights hidden ore.",
+        signature: "Resonance: drilled crystal rings its fault; prisms split the lamp into beams that light hidden gems.",
         share_per_mille: 145,
         host_band: deep(DeepStratum::CrystalFaults),
         soft: TileKind::Stone,
@@ -335,8 +336,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(160, 220, 255)),
         ),
         ores: &[ore(Diamond, 500, 900, 80), ore(Ruby, 300, 600, 26)],
-        layer_resource: resource("Crystal Lens", StrategicResourceKind::CrystalLens),
-        creatures: band_roster(deep(DeepStratum::CrystalFaults)),
+        layer_resource: resource("Resonant Shards", StrategicResourceKind::CrystalLens),
+        creatures: &[(PrismMoth, 5), (CaveBat, 3), (RockMimic, 3)],
         hazards: &[
             (Gas, 1),
             (Lava, 2),
@@ -353,7 +354,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::FossilOceans,
         descent: Descent::OldDeep,
         name: "Fossil Oceans",
-        signature: "Gas tides, amber traps and fossil skeletons to excavate.",
+        signature: "Gas tides breathe from the pockets, amber holds rigs fast, skeletons are dug out bone by bone.",
         share_per_mille: 145,
         host_band: deep(DeepStratum::FossilOceans),
         soft: TileKind::Stone,
@@ -365,8 +366,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(240, 180, 60)),
         ),
         ores: &[ore(Platinum, 500, 900, 80), ore(Diamond, 400, 600, 20)],
-        layer_resource: resource("Radiant Fossil", StrategicResourceKind::RadiantFossil),
-        creatures: band_roster(deep(DeepStratum::FossilOceans)),
+        layer_resource: resource("Amber Resin", StrategicResourceKind::RadiantFossil),
+        creatures: &[(FossilEel, 5), (Shellback, 3), (AcidSpitter, 2)],
         hazards: &[
             (Gas, 8),
             (Lava, 2),
@@ -383,7 +384,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::PressureCathedrals,
         descent: Descent::OldDeep,
         name: "Pressure Cathedrals",
-        signature: "Grand chambers, pressure jets and the Cathedral Lift.",
+        signature: "Grand naves where timed pressure jets throw rigs; three valves restore the Cathedral Lift.",
         share_per_mille: 145,
         host_band: deep(DeepStratum::PressureCathedrals),
         palette: palette(
@@ -393,8 +394,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(200, 190, 255)),
         ),
         ores: &[ore(Mythril, 500, 900, 60), ore(Platinum, 300, 600, 16)],
-        layer_resource: resource("Pressure Pearl", StrategicResourceKind::PressurePearl),
-        creatures: band_roster(deep(DeepStratum::PressureCathedrals)),
+        layer_resource: resource("Compressed Basalt", StrategicResourceKind::PressurePearl),
+        creatures: &[(JetRay, 5), (RockMimic, 3), (SentryTurret, 1)],
         hazards: &[
             (Gas, 1),
             (Lava, 2),
@@ -410,7 +411,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::RadioactiveHollow,
         descent: Descent::OldDeep,
         name: "Radioactive Hollow",
-        signature: "A dose meter, mutation relics and a glowing green palette.",
+        signature: "A dose meter fills near glow rock and costs fuel, sight and hull; mutation relics change the rig.",
         share_per_mille: 145,
         host_band: deep(DeepStratum::RadioactiveHollow),
         palette: palette(
@@ -420,8 +421,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(140, 255, 90)),
         ),
         ores: &[ore(Uranium, 500, 900, 60), ore(Platinum, 400, 600, 16)],
-        layer_resource: resource("Core Shard", StrategicResourceKind::CoreShard),
-        creatures: band_roster(deep(DeepStratum::RadioactiveHollow)),
+        layer_resource: resource("Glow Isotopes", StrategicResourceKind::CoreShard),
+        creatures: &[(GlowGrub, 6), (AcidSpitter, 3), (RogueExcavator, 2)],
         hazards: &[
             (Gas, 1),
             (Lava, 2),
@@ -441,7 +442,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::AncientMachineLayer,
         descent: Descent::OldDeep,
         name: "Ancient Machine Layer",
-        signature: "Machinery that wakes up, conveyors and pistons; first builder ruins.",
+        signature: "Builder halls wake as you near: conveyors carry rigs, pistons slam, tablets tell of the builders.",
         share_per_mille: 145,
         host_band: deep(DeepStratum::AncientMachineLayer),
         palette: palette(
@@ -451,8 +452,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(255, 170, 60)),
         ),
         ores: &[ore(Mythril, 500, 900, 60), ore(Uranium, 400, 600, 12)],
-        layer_resource: resource("Machine Relic", StrategicResourceKind::MachineRelic),
-        creatures: band_roster(deep(DeepStratum::AncientMachineLayer)),
+        layer_resource: resource("Machine Alloy", StrategicResourceKind::MachineRelic),
+        creatures: &[(PistonWarden, 4), (MiningDrone, 4), (SentryTurret, 2)],
         hazards: &[
             (Gas, 1),
             (Lava, 2),
@@ -469,7 +470,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::VoidGeodeFields,
         descent: Descent::OldDeep,
         name: "Void Geode Fields",
-        signature: "Low-gravity pockets and floaty flight.",
+        signature: "Geodes hold low gravity that pulls out to their shells: float, turn the rig and land on the walls.",
         share_per_mille: 140,
         host_band: deep(DeepStratum::VoidGeodeFields),
         palette: palette(
@@ -480,7 +481,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Mythril, 500, 900, 70), ore(Diamond, 300, 600, 30)],
         layer_resource: resource("Void Glass", StrategicResourceKind::VoidGlass),
-        creatures: band_roster(deep(DeepStratum::VoidGeodeFields)),
+        creatures: &[(VoidJelly, 5), (CaveBat, 3), (MiningDrone, 2)],
         hazards: &[
             (Gas, 1),
             (Lava, 2),
@@ -496,7 +497,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::MantleStormZone,
         descent: Descent::OldDeep,
         name: "Mantle Storm Zone",
-        signature: "Heat storms and spreading lava.",
+        signature: "Heat storms on a timer scorch open caves and make storm vents pour molten metal: dig in.",
         share_per_mille: 135,
         host_band: deep(DeepStratum::MantleStormZone),
         palette: palette(
@@ -510,8 +511,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ore(Uranium, 400, 600, 20),
             ore(Ruby, 200, 500, 12),
         ],
-        layer_resource: resource("Core Shard", StrategicResourceKind::CoreShard),
-        creatures: band_roster(deep(DeepStratum::MantleStormZone)),
+        layer_resource: resource("Mantle Fragments", StrategicResourceKind::CoreShard),
+        creatures: &[(MagmaSalamander, 5), (MagmaWisp, 4), (RogueExcavator, 2)],
         hazards: &[
             (Gas, 1),
             (Lava, 8),

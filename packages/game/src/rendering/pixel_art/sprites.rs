@@ -10,6 +10,7 @@ pub mod icons;
 pub mod interior;
 pub mod menu_icons;
 pub mod moon;
+pub mod old_deep;
 pub mod poi;
 pub mod prompts;
 pub mod rig;
@@ -416,6 +417,15 @@ pub const ALL: &[&SpriteDef] = &[
     &moon::LIFE_SUPPORT,
     &moon::LUNAR_RELIC,
     &moon::WARDEN_EYE,
+    // Descent II, the Old Deep (Wave 8).
+    &old_deep::PRISM_MOTH,
+    &old_deep::FOSSIL_EEL,
+    &old_deep::JET_RAY,
+    &old_deep::GLOW_GRUB,
+    &old_deep::GLOWMOTHER,
+    &old_deep::PISTON_WARDEN,
+    &old_deep::VOID_JELLY,
+    &old_deep::MAGMA_SALAMANDER,
     &moon::LUNAR_CUTTER,
     &moon::LOW_G_MORTAR,
     &moon::VOID_LANCE,

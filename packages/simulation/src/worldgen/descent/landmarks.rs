@@ -165,6 +165,16 @@ pub fn logistics_sites(settings: &WorldSettings) -> LogisticsSites {
         sites.place_ancient_lift(column, previous_station, station, ANCIENT_STATION_SPACING);
         previous_station = station;
     }
+    // Wave 8: the Cathedral Lift, from Cathedral Station down to the Pressure Cathedrals' nave
+    // (dead until its three valves are opened; see `crate::old_deep`).
+    if let Some(nave) = crate::old_deep::sites::cathedral(settings, &layout) {
+        sites.place_ancient_lift(
+            nave.lift_column,
+            nave.top_station,
+            nave.bottom_station,
+            nave.bottom_station - nave.top_station,
+        );
+    }
     sites
 }
 

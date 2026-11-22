@@ -641,8 +641,12 @@ pub type StratumFieldSource = fn(&WorldSettings, Frame, f32, f32) -> Option<Fiel
 /// registers its per-stratum profile lookup here ([]), so a V11 stratum's gravity, time,
 /// grip, drag, light, mirroring and screen effects reach every reader of [`sample`] with no
 /// other change. Sources must be pure functions of the settings and the position.
-pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] =
-    &[crate::descent::fields::stratum_field_source];
+pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] = &[
+    // Wave 8: the Void Geode Fields' low-gravity geodes (inside a hollow only; it blends the
+    // stratum's own field in itself).
+    crate::old_deep::fields::geode_field_source,
+    crate::descent::fields::stratum_field_source,
+];
 
 /// The stratum profile at local pixel `(x, y)` of `frame` (see [`STRATUM_FIELD_SOURCES`]).
 #[must_use]

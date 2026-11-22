@@ -114,7 +114,8 @@ fn v11_carves_and_installs_an_outpost_per_descent_on_the_builders_cable() {
     let settings = v11(0x0BAD_CAB1);
     let sites = logistics_sites(&settings);
     assert_eq!(sites.outposts.len(), Descent::ALL.len());
-    assert_eq!(sites.lifts.len(), Descent::ALL.len());
+    // The builders' cable (one lift per Descent) plus the Cathedral Lift (Wave 8), last.
+    assert_eq!(sites.lifts.len(), Descent::ALL.len() + 1);
     let column = outpost_column(&settings);
     let layout = layout(&settings);
     for (outpost, descent) in sites.outposts.iter().zip(Descent::ALL) {
@@ -125,7 +126,7 @@ fn v11_carves_and_installs_an_outpost_per_descent_on_the_builders_cable() {
         let hall = landmarks::outpost(&settings, &layout, descent).expect("hall");
         assert_eq!(hall.bounds.max.y, outpost.floor_row);
     }
-    for pair in sites.lifts.windows(2) {
+    for pair in sites.lifts[..Descent::ALL.len()].windows(2) {
         assert_eq!(pair[0].bottom_row, pair[1].top_row, "the lifts chain");
         assert_eq!(pair[0].column, pair[1].column);
     }
@@ -148,7 +149,7 @@ fn v11_carves_and_installs_an_outpost_per_descent_on_the_builders_cable() {
         Some(TileKind::Built(BuiltTile::RuinWall))
     );
     assert_eq!(world.logistics().outposts.len(), Descent::ALL.len());
-    assert_eq!(world.logistics().lifts.len(), Descent::ALL.len());
+    assert_eq!(world.logistics().lifts.len(), Descent::ALL.len() + 1);
     assert!(world.progression_rules().is_descent());
     // A V10 world has none of it.
     let classic = WorldState::new_game_with_settings(

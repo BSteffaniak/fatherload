@@ -14,6 +14,8 @@
 
 use std::f32::consts::TAU;
 
+mod old_deep;
+
 use super::{
     analysis,
     dsp::{
@@ -362,6 +364,26 @@ patches! {
     CrustSlateLoop => "loop_crust_slate",
     CrustBasaltLoop => "loop_crust_basalt",
     SinkholeLoop => "loop_sinkhole",
+    // Descent II, the Old Deep (wave 8), appended at the end so every earlier patch keeps its
+    // seeds.
+    ResonanceChime => "resonance_chime",
+    ValveTurn => "valve_turn",
+    PistonSlam => "piston_slam",
+    GeigerAlert => "geiger_alert",
+    StormSiren => "storm_siren",
+    CoreStrike => "core_strike",
+    CoreWake => "core_wake",
+    DeepLog => "deep_log",
+    BoneCrumble => "bone_crumble",
+    CrystalLoop => "loop_crystal_faults",
+    FossilLoop => "loop_fossil_oceans",
+    CathedralLoop => "loop_pressure_cathedrals",
+    HollowLoop => "loop_radioactive_hollow",
+    MachineLoop => "loop_machine_layer",
+    GeodeLoop => "loop_void_geodes",
+    MantleLoop => "loop_mantle_storm",
+    StarCoreLoop => "loop_star_core",
+    GeigerLoop => "loop_geiger",
 }
 
 /// Playback metadata of a patch.
@@ -452,9 +474,42 @@ impl Patch {
 
     /// Playback metadata.
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "each family of patches keeps its own row"
+    )]
     pub const fn info(self) -> PatchInfo {
         use Category::{Alarm, Big, Feedback, Impact, Interface, Loop};
         match self {
+            // The Old Deep (wave 8): the strata's beds, the core's theme and the dose crackle
+            // loop; struck crystal and story stings ring out; machinery is physical.
+            Self::CrystalLoop
+            | Self::FossilLoop
+            | Self::CathedralLoop
+            | Self::HollowLoop
+            | Self::MachineLoop
+            | Self::GeodeLoop
+            | Self::MantleLoop
+            | Self::StarCoreLoop
+            | Self::GeigerLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::ResonanceChime | Self::DeepLog => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.5)
+                .jitter(0.02, 0.5),
+            Self::ValveTurn | Self::PistonSlam | Self::BoneCrumble => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.05, 1.0),
+            Self::GeigerAlert | Self::StormSiren => PatchInfo::new(Alarm)
+                .instances(1)
+                .send(0.2)
+                .jitter(0.0, 0.3),
+            Self::CoreStrike | Self::CoreWake => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.0, 0.3)
+                .ducking(0.4)
+                .priority(8),
             Self::UiMove => PatchInfo::new(Interface).instances(2).jitter(0.02, 0.5),
             Self::UiConfirm | Self::UiBack | Self::Toast => {
                 PatchInfo::new(Interface).instances(2).jitter(0.01, 0.5)
@@ -1170,6 +1225,24 @@ impl Patch {
             Self::CrustSlateLoop => crust_slate_loop(rng),
             Self::CrustBasaltLoop => crust_basalt_loop(rng),
             Self::SinkholeLoop => sinkhole_loop(rng),
+            Self::ResonanceChime => old_deep::resonance_chime(rng),
+            Self::ValveTurn => old_deep::valve_turn(rng),
+            Self::PistonSlam => old_deep::piston_slam(rng),
+            Self::GeigerAlert => old_deep::geiger_alert(rng),
+            Self::StormSiren => old_deep::storm_siren(rng),
+            Self::CoreStrike => old_deep::core_strike(rng),
+            Self::CoreWake => old_deep::core_wake(rng),
+            Self::DeepLog => old_deep::deep_log(rng),
+            Self::BoneCrumble => old_deep::bone_crumble(rng),
+            Self::CrystalLoop => old_deep::crystal_loop(rng),
+            Self::FossilLoop => old_deep::fossil_loop(rng),
+            Self::CathedralLoop => old_deep::cathedral_loop(rng),
+            Self::HollowLoop => old_deep::hollow_loop(rng),
+            Self::MachineLoop => old_deep::machine_loop(rng),
+            Self::GeodeLoop => old_deep::geode_loop(rng),
+            Self::MantleLoop => old_deep::mantle_loop(rng),
+            Self::StarCoreLoop => old_deep::star_core_loop(rng),
+            Self::GeigerLoop => old_deep::geiger_loop(rng),
         }
     }
 }

@@ -378,6 +378,10 @@ impl WorldState {
         target: TilePosition,
         kind: TileKind,
     ) {
+        // A fossil bone torn out of the rock crumbles (Wave 8, the Old Deep).
+        if !self.deep_drop_allowed(target, kind) {
+            return;
+        }
         let (cx, cy) = self.frame().tile_center(target);
         let velocity = self.players.get(&player_id).map_or((0.0, 0.0), |player| {
             let (dx, dy) = (player.x - cx, player.y - cy);

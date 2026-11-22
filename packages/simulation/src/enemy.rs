@@ -174,6 +174,23 @@ pub enum EnemyKind {
     TubeCrawler,
     /// Basalt Columns: a moth drawn to heat and lamps, its wings smouldering.
     CinderMoth,
+    // --- Descent II, the Old Deep (Wave 8, `crate::old_deep`), appended -----------------
+    /// Crystal Faults: a glassy moth drawn to headlamps that swoops through the beam.
+    PrismMoth,
+    /// Fossil Oceans: a bony eel that swims through shale and lunges out of the walls.
+    FossilEel,
+    /// Pressure Cathedrals: a broad ray that rides the jets and dives from the vaults.
+    JetRay,
+    /// Radioactive Hollow: a glowing grub that crawls in packs; its bite raises the dose.
+    GlowGrub,
+    /// Radioactive Hollow's mini-boss: a vast glowing brood mother that births grubs.
+    Glowmother,
+    /// Ancient Machine Layer: a builder automaton that charges like a piston.
+    PistonWarden,
+    /// Void Geode Fields: a drifting jelly that floats in the low gravity and spits void bolts.
+    VoidJelly,
+    /// Mantle Storm Zone: a magma salamander that spits fire from cave floors.
+    MagmaSalamander,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -491,7 +508,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 48] = [
+    pub const ALL: [Self; 56] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -540,6 +557,14 @@ impl EnemyKind {
         Self::ShelfCrab,
         Self::TubeCrawler,
         Self::CinderMoth,
+        Self::PrismMoth,
+        Self::FossilEel,
+        Self::JetRay,
+        Self::GlowGrub,
+        Self::Glowmother,
+        Self::PistonWarden,
+        Self::VoidJelly,
+        Self::MagmaSalamander,
     ];
 
     /// Whether the creature goes into fluid (Part III F9). No creature does yet: every one
@@ -1347,6 +1372,132 @@ impl EnemyKind {
                 knockback: 70.0,
                 ..stats("Cinder Moth", Creature, Flying, AttackStyle::Contact)
             },
+            // --- The Old Deep (Wave 8) ---------------------------------------------------
+            Self::PrismMoth => EnemyStats {
+                radius: 7.0,
+                health: 24.0,
+                speed: 125.0,
+                // Drawn to lamps: it sees a rig's light from far off.
+                sight_tiles: 14.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 30.0,
+                contact_damage: 6.0,
+                windup_millis: 550,
+                cooldown_millis: 1_900,
+                attack_range_tiles: 5.0,
+                knockback: 110.0,
+                ..stats("Prism Moth", Creature, Flying, AttackStyle::Swoop)
+            },
+            Self::FossilEel => EnemyStats {
+                radius: 8.0,
+                health: 48.0,
+                speed: 80.0,
+                dash_speed: 300.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 11.0,
+                leash_tiles: 28.0,
+                contact_damage: 9.0,
+                windup_millis: 800,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 4.5,
+                knockback: 180.0,
+                ..stats("Fossil Eel", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::JetRay => EnemyStats {
+                radius: 9.0,
+                health: 40.0,
+                speed: 145.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 36.0,
+                contact_damage: 8.0,
+                windup_millis: 650,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 7.0,
+                knockback: 200.0,
+                ..stats("Jet Ray", Creature, Flying, AttackStyle::Swoop)
+            },
+            Self::GlowGrub => EnemyStats {
+                radius: 6.0,
+                health: 16.0,
+                speed: 62.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 20.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 70.0,
+                ..stats("Glow Grub", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Glowmother => EnemyStats {
+                radius: 15.0,
+                health: 540.0,
+                speed: 28.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 12.0,
+                leash_tiles: 18.0,
+                contact_damage: 18.0,
+                windup_millis: 1_200,
+                cooldown_millis: 5_500,
+                attack_range_tiles: 12.0,
+                knockback: 280.0,
+                elite: true,
+                ..stats("The Glowmother", Creature, Walking, AttackStyle::Spawner)
+            },
+            Self::PistonWarden => EnemyStats {
+                radius: 11.0,
+                health: 95.0,
+                speed: 48.0,
+                dash_speed: 370.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 7.0,
+                leash_tiles: 22.0,
+                contact_damage: 13.0,
+                windup_millis: 950,
+                cooldown_millis: 2_900,
+                attack_range_tiles: 6.0,
+                knockback: 320.0,
+                ..stats("Piston Warden", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::VoidJelly => EnemyStats {
+                radius: 9.0,
+                health: 36.0,
+                speed: 38.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 24.0,
+                contact_damage: 5.0,
+                windup_millis: 900,
+                cooldown_millis: 2_700,
+                attack_range_tiles: 10.0,
+                knockback: 90.0,
+                ..stats(
+                    "Void Jelly",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Bolt, 1),
+                )
+            },
+            Self::MagmaSalamander => EnemyStats {
+                radius: 9.0,
+                health: 62.0,
+                speed: 66.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 8.0,
+                windup_millis: 750,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 9.0,
+                ..stats(
+                    "Magma Salamander",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Fireball, 1),
+                )
+            },
         }
     }
 
@@ -1481,6 +1632,15 @@ impl EnemyKind {
             Self::ShelfCrab => (15.0, 10.0),
             Self::TubeCrawler => (13.0, 8.0),
             Self::CinderMoth => (9.0, 7.0),
+            // The Old Deep (Wave 8), sized to their art.
+            Self::PrismMoth => (12.0, 9.0),
+            Self::FossilEel => (16.0, 7.0),
+            Self::JetRay => (20.0, 8.0),
+            Self::GlowGrub => (9.0, 6.0),
+            Self::Glowmother => (28.0, 18.0),
+            Self::PistonWarden => (14.0, 15.0),
+            Self::VoidJelly => (11.0, 13.0),
+            Self::MagmaSalamander => (18.0, 8.0),
         }
     }
 
@@ -2313,6 +2473,56 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         EnemyKind::TubeCrawler => {
             add(richer, 1 + extra / 2);
             if rare < 15 {
+                add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
+            }
+        }
+        // The Old Deep (Wave 8): each drops its stratum's layer resource now and then.
+        EnemyKind::PrismMoth => {
+            if rare < 35 {
+                add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+            }
+        }
+        EnemyKind::FossilEel => {
+            add(mineral, 1);
+            if rare < 20 {
+                add(ItemKind::Artifact(ArtifactKind::Fossil), 1);
+            }
+        }
+        EnemyKind::JetRay => {
+            if rare < 40 {
+                add(ItemKind::Material(StrategicResourceKind::PressurePearl), 1);
+            }
+        }
+        EnemyKind::GlowGrub => {
+            if rare < 25 {
+                add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
+            }
+        }
+        EnemyKind::Glowmother => {
+            add(
+                ItemKind::Material(StrategicResourceKind::CoreShard),
+                5 + extra,
+            );
+            add(richer, 4 + extra);
+            add(ItemKind::Artifact(ArtifactKind::ReactorBloom), 1);
+        }
+        EnemyKind::PistonWarden => {
+            add(
+                ItemKind::Material(StrategicResourceKind::MachineRelic),
+                1 + extra / 2,
+            );
+            if rare < 30 {
+                add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+            }
+        }
+        EnemyKind::VoidJelly => {
+            if rare < 45 {
+                add(ItemKind::Material(StrategicResourceKind::VoidGlass), 1);
+            }
+        }
+        EnemyKind::MagmaSalamander => {
+            add(mineral, 1);
+            if rare < 30 {
                 add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
             }
         }

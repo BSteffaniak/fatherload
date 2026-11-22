@@ -719,6 +719,25 @@ pub enum SoundCue {
     DeepClaimFanfare,
     /// A lava tube's hot breath.
     TubeBreath,
+    // --- Descent II, the Old Deep (Wave 8) ---
+    /// Crystal ringing and shattering in a chain.
+    ResonanceChime,
+    /// A Cathedral Lift valve wheel turning open.
+    ValveTurn,
+    /// A machine hall's piston slamming.
+    PistonSlam,
+    /// The dose meter stepping up.
+    GeigerAlert,
+    /// A heat storm gathering.
+    StormSiren,
+    /// A strike on the open Star Core.
+    CoreStrike,
+    /// The Star Core waking (and its fall).
+    CoreWake,
+    /// A story log found.
+    DeepLog,
+    /// A fossil bone crumbling.
+    BoneCrumble,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

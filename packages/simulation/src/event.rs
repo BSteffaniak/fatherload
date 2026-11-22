@@ -1102,6 +1102,101 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // --- Descent II, the Old Deep (Wave 8, codes 420-439; see `crate::old_deep`) ---------
+    /// Drilling resonant crystal rang the fault: `shattered` crystals broke around tile
+    /// `(x, y)`; `harvested` when a Resonance Drill caught their shards.
+    ResonanceChain {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        shattered: u8,
+        harvested: bool,
+    },
+    /// A fossil bone came out of the rock at tile `(x, y)`, whole or crumbled.
+    FossilBoneFreed {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        intact: bool,
+    },
+    /// A whole skeleton was dug out without a broken bone: the museum's bounty.
+    SkeletonCompleted {
+        player_id: PlayerId,
+        bones: u8,
+        bounty: u32,
+    },
+    /// The Fossil Oceans' gas tide turned (`high`: the pockets breathe gas).
+    GasTideTurned {
+        high: bool,
+    },
+    /// A rig touched amber and is held fast.
+    AmberStuck {
+        player_id: PlayerId,
+    },
+    /// A Cathedral Lift valve opened (`opened` of three).
+    CathedralValveOpened {
+        player_id: PlayerId,
+        valve: u8,
+        opened: u8,
+    },
+    /// The Cathedral Lift runs again: a fast route between Cathedral Station and the nave.
+    CathedralLiftRestored {
+        player_id: PlayerId,
+    },
+    /// A rig's dose meter crossed warning step `level` (1-3).
+    DoseWarning {
+        player_id: PlayerId,
+        level: u8,
+    },
+    /// A mutation relic changed a rig.
+    MutationGained {
+        player_id: PlayerId,
+        mutation: crate::old_deep::Mutation,
+    },
+    /// A machine hall woke as a rig came near (its top-left tile).
+    MachineryWoke {
+        x: i32,
+        y: i32,
+    },
+    /// A piston's ram slammed onto a rig.
+    PistonStruck {
+        player_id: PlayerId,
+    },
+    /// The Mantle Storm Zone's weather turned.
+    HeatStormChanged {
+        phase: crate::old_deep::StormPhase,
+    },
+    /// A storm vent poured molten metal at tile `(x, y)`.
+    LavaPoured {
+        x: i32,
+        y: i32,
+    },
+    /// A story log was read: an expedition cache, a builder tablet or the core's revelation
+    /// (`crate::old_deep::LOG_*`).
+    DeepLogRead {
+        player_id: PlayerId,
+        log: u8,
+    },
+    /// The Star Core woke as a rig entered its arena.
+    StarCoreAwoke,
+    /// The Star Core's fight changed phase (`strikes_left` before it is spent).
+    StarCorePhase {
+        phase: crate::old_deep::CorePhase,
+        strikes_left: u8,
+    },
+    /// The Star Core is spent: the Pressure Hull is the crew's and the way below opens.
+    StarCoreBeaten {
+        player_id: PlayerId,
+    },
+    /// The Glowmother woke in her den.
+    GlowmotherAwoke {
+        x: i32,
+        y: i32,
+    },
+    /// The Glowmother fell.
+    GlowmotherDefeated {
+        player_id: PlayerId,
+    },
 }
 
 /// What a weapon shot struck.
