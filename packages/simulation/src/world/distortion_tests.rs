@@ -1046,3 +1046,59 @@ fn parallax_station_is_a_peopled_research_station_beside_the_descent_vi_outpost(
     // No other world has it.
     assert!(village::village(&WorldSettings::new(SEED), id).is_none());
 }
+
+#[test]
+fn leashed_glitchlings_and_bitworms_go_home_instead_of_hanging_where_the_leash_caught_them() {
+    for kind in [EnemyKind::Glitchling, EnemyKind::Bitworm] {
+        let mut world = world_at(60);
+        world.set_enemy_difficulty(EnemyDifficulty::Normal);
+        let settings = settings();
+        let layout = layout(&settings);
+        let row = rot::tier_tops(&layout)[2] + 10;
+        let column = landmarks::outpost_column(&settings) + 70;
+        // One long open gallery: home at its left end, the creature far down it to the right.
+        let gallery = TileRect {
+            min: TilePosition {
+                x: column - 40,
+                y: row - 1,
+            },
+            max: TilePosition {
+                x: column + 40,
+                y: row + 1,
+            },
+        };
+        fill(&mut world, gallery.expanded(3), TileKind::Stone);
+        fill(&mut world, gallery, TileKind::Air);
+        // The rig waits out of sight, so nothing re-starts the hunt.
+        put_rig(
+            &mut world,
+            TilePosition {
+                x: column,
+                y: row - 30,
+            },
+        );
+        let home = (column - 36, row);
+        let (x, y) = world.frame().tile_center(TilePosition {
+            x: column + 36,
+            y: row,
+        });
+        let id = world.spawn_enemy(kind, x, y);
+        world.entities.update(id, |entity| {
+            if let crate::entity::EntityState::Enemy(state) = &mut entity.state {
+                state.home = home;
+                state.mode = EnemyMode::Return;
+                state.target = None;
+            }
+        });
+        let (hx, hy) = world.frame().centre_of(home.0, home.1);
+        let mut closest = f32::MAX;
+        for _ in 0..60 * 30 {
+            let _ = ticks(&mut world, 1);
+            let (body, _) = world.enemy_parts(id).expect("alive");
+            closest = closest.min((body.x - hx).hypot(body.y - hy));
+        }
+        let (_, state) = world.enemy_parts(id).expect("alive");
+        assert_eq!(state.mode, EnemyMode::Idle, "{kind:?} settled");
+        assert!(closest < TILE_SIZE * 2.5, "{kind:?} went home: {closest}");
+    }
+}

@@ -567,6 +567,23 @@ impl WorldState {
                 let (hx, hy) = self.frame().centre_of(state.home.0, state.home.1);
                 goal = Some((hx, hy));
             }
+            (EnemyMode::Return, _) => {
+                // Leashed: it blinks back home and settles (otherwise it would hang where the
+                // leash caught it, too far from home ever to take up a hunt again).
+                let (hx, hy) = self.frame().centre_of(state.home.0, state.home.1);
+                let near = (hx - body.x).hypot(hy - body.y) < TILE_SIZE * 1.5;
+                if !near && !physics::collides(&self.terrain, hx, hy, spec.radius) {
+                    body.x = quantize(hx);
+                    body.y = quantize(hy);
+                    body.previous_x = body.x;
+                    body.previous_y = body.y;
+                    body.velocity_x = 0.0;
+                    body.velocity_y = 0.0;
+                }
+                state.mode = EnemyMode::Idle;
+                state.target = None;
+                goal = Some((hx, hy));
+            }
             _ => {}
         }
         if state.mode == EnemyMode::Windup {
@@ -663,10 +680,11 @@ impl WorldState {
         );
         let target = self.rig_position(state.target, (body.x, body.y));
         let hunting = state.mode.hostile() && target.is_some();
+        let home = self.bitworm_home(body, state);
         if now >= state.mode_until || ahead_blocked {
             // Due a turn check (square corners only).
             let mut pick = None;
-            if let Some((tx, ty)) = target.filter(|_| hunting) {
+            if let Some((tx, ty)) = target.filter(|_| hunting).or(home) {
                 let (dx, dy) = (tx - body.x, ty - body.y);
                 let along = dx.mul_add(hx, dy * hy);
                 let across_x = -hy;
@@ -719,7 +737,7 @@ impl WorldState {
             state.mode_until = self.after(now, BITWORM_TURN_MILLIS);
         }
         let (hx, hy) = heading(state.pattern);
-        let speed = if hunting {
+        let speed = if hunting || home.is_some() {
             spec.speed
         } else {
             spec.speed * 0.5
@@ -744,6 +762,19 @@ impl WorldState {
         self.keep_out_of_fluid(state.kind, before, body);
         self.keep_off_bodies(id, body, state);
         self.contact_attack(body, state, now, output);
+    }
+
+    /// Where a leashed bitworm heads: its home, which it runs the grid back toward and
+    /// settles at (`None` unless it is returning).
+    fn bitworm_home(&self, body: &Body, state: &mut EnemyState) -> Option<(f32, f32)> {
+        if state.mode != EnemyMode::Return {
+            return None;
+        }
+        let (hx, hy) = self.frame().centre_of(state.home.0, state.home.1);
+        if (hx - body.x).hypot(hy - body.y) < TILE_SIZE * 2.0 {
+            state.mode = EnemyMode::Idle;
+        }
+        Some((hx, hy))
     }
 
     // --- Glassbacks -----------------------------------------------------------------------------
