@@ -5283,7 +5283,9 @@ peaceful (`hollow_peaceful`).
   touch); `Prompt::Anchor`, `PadAction::Anchor`, `TouchControl::Anchor`.
 - Audio: fifteen patches appended at the end of `patches!` (`audio/patch/hollow.rs`: five music
   beds, three ambience beds, the breakthrough's sting, gust, bellow, roc cry, the serpent's roar,
-  the flare's swell, the anchor's thunk), `hollow_cue` and `hollow_voice`.
+  the flare's swell, the anchor's thunk), `hollow_cue` and `hollow_voice`. The director's
+  `hollow_music` plays each stratum's piece and bed (eight seat loop slots), the Sun Serpent's
+  theme in place of the Sunforge's while it is awake near.
 - Scenes: `hollow_breakthrough`, `hollow_inner_sky`, `hollow_inner_night`, `hollow_breach`,
   `hollow_jungle`, `hollow_jungle_night`, `hollow_sunfolk_village`, `hollow_ride`, `hollow_isles`,
   `hollow_upside_down_landing`, `hollow_sunforge`, `hollow_sunforge_shade`,
@@ -5305,10 +5307,11 @@ pillars and doorways; the forge's stones; the Breach; the Sunfolk hall and its p
 ### Descent probe
 
 `hollow::authored_content` and `authored_markers` feed the probe. Default seed, this branch
-(Descent IV still a placeholder ending at 30.0 h): the Hollow World runs 30.0 h to about 39 h
-(it was 30.0-36.4 h), every gap between new things 20 minutes or less in its strata (the
-Upside-Down Isles and the Sunforge used to wait 48 minutes). Once Descent IV's track lengthens
-its chapter, Descent V ends inside §14's 42-53 h window; re-check at integration.
+(Descent IV still a placeholder, ending at 30.0 h): the Hollow World leaves the Inner Sky at
+32.4 h, the Megafauna Jungle at 34.6 h, the Upside-Down Isles at 36.9 h and the Sunforge at
+**39.7 h** (whole run 73.0 h), the longest gap between new things 11-22 minutes per stratum, no
+deaths. Once Descent IV's track lengthens its chapter, Descent V ends inside §14's 42-53 h
+window; re-check at integration.
 
 ### Seams and known limits
 
