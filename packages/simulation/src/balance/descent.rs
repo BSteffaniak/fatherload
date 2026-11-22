@@ -36,8 +36,8 @@ use super::{BalanceProbe, ProbeContext, ReportSection, Table};
 use crate::{
     ControlState, PlayerId, SimulationParams, WorldState,
     depth_progression::{
-        DESCENT_COUNT, DescentLayout, PlanLayout, ProgressionRules, RigSystem, core_tier_cap,
-        descent_gate, descent_value_percent,
+        DESCENT_COUNT, DescentLayout, DescentSpan, PlanLayout, ProgressionRules, RigSystem,
+        core_tier_cap, descent_gate, descent_value_percent,
     },
     economy::{MAX_UPGRADE_LEVEL, UpgradeKind, upgrade_cost_for},
     logistics::{
@@ -86,10 +86,132 @@ impl DescentStratum {
     }
 }
 
-/// The strata the descent bot plays (the F8 stratum registry implements it).
+/// The strata the descent bot plays (the F8 stratum registry implements it: [`RegistryStrata`]).
 pub trait StratumRegistry {
     /// Every stratum, top to bottom.
     fn strata(&self) -> Vec<DescentStratum>;
+
+    /// The eight Descents' rows (rows below the ground line): the plan's table unless the
+    /// registry knows its own.
+    fn descents(&self) -> Vec<DescentSpan> {
+        PlanLayout.descents().to_vec()
+    }
+}
+
+/// The real stratum registry ([`crate::descent`]) on a Deep Descent world's seeded layout, as
+/// the descent bot plays it (Wave 7 integration).
+///
+/// From the registry: each stratum's name, its seeded rows (counted from the ground line), its
+/// common rock, its ores' values through the stratum (the Descent value curve applied), its
+/// hazard weights, and its novelties and content time from its creatures, landmarks and field
+/// mechanic. Still modelled like [`PlanStrata`] (the registry has no numbers for them yet):
+/// the drill and radiator tiers each stratum asks for and how much tougher deep rock is.
+#[derive(Clone, Copy, Debug)]
+pub struct RegistryStrata {
+    pub settings: crate::worldgen::WorldSettings,
+}
+
+impl RegistryStrata {
+    /// The registry on the default seed's Deep Descent world.
+    #[must_use]
+    pub const fn default_world() -> Self {
+        Self {
+            settings: crate::worldgen::WorldSettings {
+                generator: crate::worldgen::GeneratorVersion::DEEP_DESCENT,
+                ..crate::worldgen::WorldSettings::new(crate::worldgen::DEFAULT_WORLD_SEED)
+            },
+        }
+    }
+
+    fn ground(&self) -> i32 {
+        crate::descent::fields::cached_layout(&self.settings).tops[0]
+    }
+}
+
+impl StratumRegistry for RegistryStrata {
+    fn strata(&self) -> Vec<DescentStratum> {
+        use crate::descent::{LandmarkKind, Stratum};
+        let layout = crate::descent::fields::cached_layout(&self.settings);
+        let ground = self.ground();
+        let plan = PlanStrata.strata();
+        let last = (Stratum::ALL.len() - 1) as f64;
+        Stratum::ALL
+            .iter()
+            .zip(&plan)
+            .enumerate()
+            .map(|(index, (stratum, modelled))| {
+                let def = stratum.def();
+                let (top, bottom) = layout.rows(*stratum);
+                let descent = u8::try_from(stratum.descent().index()).unwrap_or(u8::MAX);
+                let share = index as f64 / last;
+                // The registry's ores through the middle of the stratum, by weight.
+                let weights = def.ore_weights(500);
+                let total: u32 = weights.iter().sum();
+                let classic = if total == 0 {
+                    modelled.ore_value * 100.0 / f64::from(descent_value_percent(descent))
+                } else {
+                    weights
+                        .iter()
+                        .zip(crate::worldgen::deposits::MINERALS)
+                        .map(|(weight, mineral)| f64::from(*weight) * f64::from(mineral.value()))
+                        .sum::<f64>()
+                        / f64::from(total)
+                };
+                let hazard_weight: u32 = def.hazards.iter().map(|(_, weight)| weight).sum();
+                let creatures = u8::try_from(def.creatures.len()).unwrap_or(u8::MAX);
+                let set_pieces = u8::try_from(
+                    def.landmarks
+                        .iter()
+                        .filter(|kind| {
+                            matches!(
+                                kind,
+                                LandmarkKind::Outpost
+                                    | LandmarkKind::GateChamber
+                                    | LandmarkKind::AnomalyRoom
+                                    | LandmarkKind::HollowCavern
+                                    | LandmarkKind::Settlements
+                            )
+                        })
+                        .count(),
+                )
+                .unwrap_or(u8::MAX);
+                let mechanic = u8::from(!def.field.is_neutral() || !def.fluids.is_empty());
+                DescentStratum {
+                    descent,
+                    name: def.name,
+                    top: top - ground,
+                    bottom: bottom + 1 - ground,
+                    rock_tier: modelled.rock_tier,
+                    rock: def.soft,
+                    toughness: modelled.toughness,
+                    ore_value: classic * f64::from(descent_value_percent(descent)) / 100.0,
+                    ore_share: 0.2,
+                    hazard_per_minute: modelled.hazard_per_minute
+                        * (0.5 + f64::from(hazard_weight) / 16.0).min(2.0),
+                    heat_tier: (1.0 + 20.0 * share).round() as u8,
+                    // Arrival, the story beat, each creature, each set piece and the mechanic.
+                    novelties: 2 + creatures + set_pieces + mechanic,
+                    content_minutes: 7.0f64.mul_add(
+                        f64::from(creatures),
+                        6.0f64.mul_add(f64::from(set_pieces + mechanic), 18.0),
+                    ),
+                }
+            })
+            .collect()
+    }
+
+    fn descents(&self) -> Vec<DescentSpan> {
+        let ground = self.ground();
+        crate::depth_progression::RegistryLayout::of(&self.settings)
+            .descents()
+            .iter()
+            .map(|span| DescentSpan {
+                top: span.top - ground,
+                bottom: span.bottom - ground,
+                ..*span
+            })
+            .collect()
+    }
 }
 
 /// Classic mineral values the plan's ore ramps through.
@@ -413,6 +535,7 @@ fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overh
 pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> DescentRun {
     let rules = ProgressionRules::Descent;
     let mut strata = registry.strata();
+    let descents = registry.descents();
     if let Some(limit) = config.strata_limit {
         strata.truncate(limit);
     }
@@ -448,8 +571,8 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         let descent = stratum.descent;
         // Arrival is new; the rest of its content is spread over its time below.
         note(clock_minutes, &mut last_novelty, &mut gaps);
-        let outpost_row = PlanLayout
-            .descent(descent)
+        let outpost_row = descents
+            .get(usize::from(descent))
             .map_or(0, |span| if descent == 0 { 0 } else { span.top + 40 });
         // The stratum's content minutes, and digging through it.
         let rows = f64::from(stratum.rows());
@@ -651,7 +774,7 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             descent_hours[usize::from(descent)] = clock_minutes / 60.0;
             // A Descent's gate set piece.
             note(clock_minutes, &mut last_novelty, &mut gaps);
-            if let Some(span) = PlanLayout.descent(descent) {
+            if let Some(span) = descents.get(usize::from(descent)) {
                 let rows = f64::from(span.rows() - 40);
                 let climb = STOCK_CLIMB_ROWS_PER_SECOND
                     * f64::from(engine_power(rig.engine).min(crate::player::ENGINE_CLIMB_CAP));
@@ -709,8 +832,8 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
     let mut section = ReportSection::new(
         "Descent (Part III F10)",
         format!(
-            "A bot plays the Deep Descent through the plan's 41 strata (the stratum registry \
-             adapter) on the Descent ladders, rig systems and logistics prices. The drill moves \
+            "A bot plays the Deep Descent through the stratum registry's 41 strata (the default \
+             seed's V11 layout) on the Descent ladders, rig systems and logistics prices. The drill moves \
              on to the next tile in {:.2} s besides chipping (measured through the tick). Whole run: {:.1} h (target 60-90 h); {:.0}% of \
              the gaps between new things are 40 minutes or less (longest {:.0} min); {} deaths.",
             run.dig_overhead,
@@ -836,7 +959,9 @@ impl BalanceProbe for DescentProbe {
             tick_rate_hz: context.config.tick_rate_hz,
             ..DescentConfig::default()
         };
-        descent_section(&run_descent(&PlanStrata, &config))
+        // The real stratum registry on the default seed's Deep Descent world (Wave 7
+        // integration); `PlanStrata` stays for comparison and tests.
+        descent_section(&run_descent(&RegistryStrata::default_world(), &config))
     }
 }
 
@@ -857,6 +982,35 @@ mod tests {
                 pair[1].name
             );
         }
+    }
+
+    #[test]
+    fn the_real_registry_covers_41_seeded_strata_to_the_heart() {
+        let registry = RegistryStrata::default_world();
+        let strata = registry.strata();
+        assert_eq!(strata.len(), crate::depth_progression::STRATUM_COUNT);
+        assert_eq!(strata[0].top, 0);
+        assert_eq!(strata[0].name, "Topsoil");
+        assert_eq!(strata.last().map(|stratum| stratum.name), Some("The Heart"));
+        let bottom = strata.last().map_or(0, |stratum| stratum.bottom);
+        assert!((12_900..=13_100).contains(&bottom), "{bottom}");
+        for pair in strata.windows(2) {
+            assert_eq!(pair[0].bottom, pair[1].top, "contiguous");
+            assert!(pair[1].descent >= pair[0].descent);
+        }
+        assert!(strata.iter().all(|stratum| stratum.ore_value > 0.0));
+        let descents = registry.descents();
+        assert_eq!(descents.len(), DESCENT_COUNT);
+        assert_eq!(descents.last().map(|span| span.bottom), Some(bottom));
+        // A short run on it.
+        let config = DescentConfig {
+            strata_limit: Some(6),
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&registry, &config);
+        assert_eq!(run.strata.len(), 6);
+        assert!(run.total_hours() > 1.0);
     }
 
     #[test]
@@ -894,7 +1048,7 @@ mod tests {
     #[test]
     #[ignore = "prints the full descent report"]
     fn descent_report() {
-        let run = run_descent(&PlanStrata, &DescentConfig::default());
+        let run = run_descent(&RegistryStrata::default_world(), &DescentConfig::default());
         let report = super::super::BalanceReport {
             header: "Descent probe".to_owned(),
             sections: vec![descent_section(&run)],
