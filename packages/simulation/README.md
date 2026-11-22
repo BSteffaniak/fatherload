@@ -4159,6 +4159,158 @@ Crust's own entries (appended).
 - The expedition logs are the Crust's own (`CRUST_LOGS`); the story track's log system can
   adopt them.
 
+## Wave 8 old deep: Descent II, the Old Deep (`src/old_deep.rs`, `src/old_deep/{sites,refraction,fields}.rs`, `src/world/old_deep.rs`)
+
+Descent II of a V11 world (rows about 1,100-2,700, the seven classic deep strata, each about
+230 rows) now has authored content: every stratum has a signature rule introduced gently and
+then pushed, its own materials (`TileKind::Deep(DeepTile)`, codes `0xD00`), a layer resource,
+native creatures, a landmark and a Fathers' expedition log; the Descent ends at the Star Core
+boss, whose defeat grants the Pressure Hull. Classic worlds never see any of it: only V11
+generation places `DeepTile`s, every rule reads only them or the V11 layout, and
+`advance_old_deep` returns at once in a world without Descents (V1-V10 digests and hashes are
+unchanged; `GOLDEN_V11_DIGEST` is updated).
+
+### Generation (`old_deep::sites`, called from `assemble` after the landmarks, before the cable)
+
+- `carve_tile(settings, layout, x, y, current)` is a pure per-tile function. Each Descent II
+  stratum lays a region grid (`region_size`); a region whose centre row is in that stratum may
+  hold one feature drawn wholly inside it, and a tile asks only its stratum's and its two
+  neighbours' regions, so chunks carve identically in any order. Seed variants
+  (`descent::variant`) shift each stratum's feature mix ("Singing Faults" more faults, "Prism
+  Seams" more grottos, and so on). Features replace only rock, ore, hazards and soft cave
+  dressing (`carvable`), never built pieces, ruins, caches, POIs or fluid.
+- Features: crystal faults (resonant crystal two wide with prisms at the ends and latent gems
+  behind) and prism grottos (Crystal Faults); fossil skeletons from three templates in shale
+  beds, amber blobs and gas basins (Fossil Oceans); grand naves with pillars and jet vents
+  (Pressure Cathedrals); glow pits ringed with glow rock and isotopes, some with a mutation
+  relic (Radioactive Hollow); machine halls with belt floors, piston ceilings, doors and a
+  builder tablet (Ancient Machine Layer); void-glass geodes with blooms (Void Geode Fields);
+  storm-vent pockets in cinder rock (Mantle Storm Zone); plus scattered singles.
+- Set pieces, once per world: the **Cathedral Lift nave** (`cathedral`: a 54x28 vaulted nave
+  in the middle of the Pressure Cathedrals with two ledges, three `LiftValve`s and climbing
+  jets, centred on `cathedral_lift_column`, the column outside Cathedral Station's far door);
+  the **Glowmother's den** (`glowmother_den`); a **Fathers' camp** per stratum
+  (`expedition_camp`: a plated niche with an `ExpeditionLog`); and the **Star Core arena**
+  (`star_core_arena`, built over Descent II's gate chamber: indestructible `CoreWall` sides and
+  floor, a diggable cinder roof, the shielded core on a pedestal, two floor pylons and two on
+  side platforms).
+- `landmarks::logistics_sites` appends the **Cathedral Lift** as a ninth ancient lift, from
+  Cathedral Station's floor to the nave's floor (stations only at its ends).
+- `fields::geode_field_source` is registered first in `field::STRATUM_FIELD_SOURCES`: inside a
+  geode's hollow the pull is `GEODE_GRAVITY` (0.32 g) pointing out from the heart to the shell,
+  drag drops to 0.35, rotation is free, a light wobble and violet grade show; it blends the
+  stratum source's field underneath and answers `None` everywhere else.
+
+### Rules (`world/old_deep.rs`; all timing from world milliseconds, so every tick rate agrees)
+
+| Stratum | Rule | Counter-play |
+|---|---|---|
+| Crystal Faults | **Resonance**: breaking resonant crystal shatters the connected crystal within `resonance_reach(drill)` (1 tile for a slow drill, up to 4); 5+ shards without a Resonance Drill shake a cave-in loose. **Refraction** (`refraction::refract`, pure): a prism the headlamp reaches (7 tiles, clear line through air or crystal) splits the lamp into three beams (straight on and 45 degrees each side) running 14 tiles through air and crystal; tiles along them are lit and latent gems (plain-stone look, Diamond when broken) show. `WorldState::refraction_for(player)`. | The Resonance Drill harvests the shards (crystal lenses drop); slower drills contain chains; prisms find the gems. |
+| Fossil Oceans | **Gas tides** (`gas_tide`, 90 s cycle, high 30-55 s): at high tide gas pockets under open air within reach breathe a gas cloud once per tide. **Amber**: a rig pressed against amber is held to `AMBER_SPEED_CAP`. **Skeletons**: a bone taken with at most one rock side left (`bone_exposed`) comes out whole (a fossil artifact), else it crumbles (no drop); a whole skeleton pays `SKELETON_BOUNTY_PER_BONE` per bone. | Watch the tide panel; drill amber away; dig round bones first. |
+| Pressure Cathedrals | **Pressure jets** (`jet_active`, 4.2 s period, 1.5 s blast, a 0.7 s steam tell; vents out of step by column) throw a rig in the column above upward. **The Cathedral Lift**: holding a valve 3 s (`VALVE_HOLD_MILLIS`, within reach) opens it; while any valve is held every jet in the nave is calm (co-op: one holds, one climbs); three valves restore the lift (`CathedralLiftRestored`). | Time the jets, or ride them to the ledges. |
+| Radioactive Hollow | **The dose meter** (`Dose`, 1 Hz): +4/s in the hollow, +2 per glow rock and +4 per isotope or relic within 3 tiles (up to +18); steps at 400 / 700 / 1000 (`DoseWarning`) cost fuel (20 % / 45 % of a unit a second), blind the scanner and finally hull; it drains 6/s outside (18/s near an outpost). **Mutation relics** grant one of `Mutation::{Lumen, LeadSkin, Regrowth, FuelGland}` for 5 minutes (+150 dose). | `dose_shield_percent`: gas scrubber tiers 15 % each, the Pressure Hull part 30 %, Lead Skin 75 %. Short dives. |
+| Ancient Machine Layer | **Machinery** wakes as a rig comes within 8 tiles of a hall (`MachineryWoke`, `woken_halls`): belts carry resting rigs at `CONVEYOR_SPEED`, pistons slam (`piston_extension`, 3.6 s) and strike a rig a ram lands on (`PistonStruck`, 14 hull, shoved down). Builder tablets tell the builders' story. | Time the rams; bombs break housings. |
+| Void Geode Fields | **Geode gravity** (the field source above): rigs float and turn to land on the walls. | Rotation thrusters; cargo weight. |
+| Mantle Storm Zone | **Heat storms** (`storm_phase`, 150 s: calm, 15 s gathering, 30 s raging): a rig in open cave air (`STORM_EXPOSED_OPEN_TILES` of the 7x7 round it open) loses `STORM_DAMAGE_PER_SECOND`; storm vents near rigs pour molten metal (5 cells each storm, real fluid). | Dig in (a tight tunnel shelters); the Thermal Hull halves it, heat shield tiers cut it. |
+
+**The Star Core** (the gate, `advance_star_core`): dormant until a rig enters the arena; then
+shielded while any pylon stands, throwing flare fans (fireball shots, faster and wider as it
+weakens) and sparks (magma wisps, up to 3). Breaking all four pylons opens the core for
+`CORE_EXPOSED_MILLIS` (16 s): drilling it out is a strike (`CORE_STRIKES` = 3); a strike or the
+window closing relights every pylon. The third strike spends the core (`FirstCoreSpent`),
+breaches the arena floor, grants `RigSystem::PressureHull` to every rig, and reads the reveal
+log (`LOG_CORE_REVEAL`: the core was a lock, not the bottom). No countdown: an arena empty for
+10 s puts an unfinished fight back to sleep, whole. **The Glowmother** (mini-boss): wakes when a
+rig nears her den, births glow grubs (Spawner), and her fall is remembered.
+
+**Creatures** (appended `EnemyKind`s, all on the generic body rules: `step_body`,
+`free_from_rock`, `keep_off_bodies`, `site_fits`, contact boxes sized to the sprites, sight and
+hearing): Prism Moth (flying swooper drawn from far off), Fossil Eel (burrowing lunger through
+shale), Jet Ray (broad swooper), Glow Grub (walking pack biter), the Glowmother (spawner
+mini-boss), Piston Warden (machine lunger), Void Jelly (slow flying bolt-spitter), Magma
+Salamander (walking fire-spitter). The registry's Descent II creature tables mix each new kind
+with two classic kinds (V11 only; classic worlds keep `band_roster`); each drops its layer
+resource now and then. The registry's signatures and layer resource names (Resonant Shards,
+Amber Resin, Compressed Basalt, Glow Isotopes, Machine Alloy, Void Glass, Mantle Fragments)
+are updated.
+
+### State, events and formats
+
+- `WorldState::old_deep: OldDeep` (serde default; hashed only when not empty; the appended
+  shared section `SectionKey::OldDeep`): doses, mutations, woken halls, skeleton digs, the
+  Cathedral Lift, the Star Core fight, the Glowmother, logs read, storm-vent pours and tide
+  breaths. `OldDeep::forget` runs when a player leaves. Doses change once a second (the
+  section is not resent every tick).
+- Events 420-438 (`ResonanceChain`, `FossilBoneFreed`, `SkeletonCompleted`, `GasTideTurned`,
+  `AmberStuck`, `CathedralValveOpened`, `CathedralLiftRestored`, `DoseWarning`,
+  `MutationGained`, `MachineryWoke`, `PistonStruck`, `HeatStormChanged`, `LavaPoured`,
+  `DeepLogRead`, `StarCoreAwoke`, `StarCorePhase`, `StarCoreBeaten`, `GlowmotherAwoke`,
+  `GlowmotherDefeated`); 439 is free.
+- `PROTOCOL_VERSION` 16 (one bump: the tiles, creatures, section and events). No save format
+  bump: every new field has a serde default.
+- Shared-file edits (all additive): `TileKind::Deep` arms in `terrain.rs`, persistence,
+  `item.rs`, `commands.rs` (chip seconds); the `assemble` hook; `field::STRATUM_FIELD_SOURCES`
+  (the geode source first); `landmarks::logistics_sites` (the Cathedral Lift);
+  `simulate_tick` (`advance_old_deep` after `advance_logistics`, the mined-tile arm); the drill
+  drop guard (`deep_drop_allowed`); `hatch_brood` (the Glowmother's brood); the registry's
+  Descent II entries; `balance::descent::RegistryStrata` (counts `old_deep::authored_content`).
+
+### Game side
+
+Tile art (`rendering/terrain/tile_art/deep_art.rs`: faceted crystal and void glass, banded
+shale, honey amber, ivory bones, carved nave ashlar, jet grates, valve wheels, glow veins,
+isotope spears, the relic, riveted casings, chevroned belts, hazard-striped housings, glyph
+tablets, cinder, the core wall, pylons, the core and the Fathers' crate); creature sprites
+(`pixel_art/sprites/old_deep.rs`); the world layer (`rendering/world/old_deep.rs`: glows,
+jet plumes and tells, rams, belt motion, valve-hold rings, the core's shield and pylon beams,
+each seat's own refracted beams and lit gems drawn after the darkness pass, with the beams also
+lighting the cave darkness, and storm embers); the per-seat panel and screen effects
+(`rendering/old_deep_hud.rs`: dose meter and mutation, storm clock, gas tide, valves, the
+Star Core's phase and strikes; the dose's green grade and vignette and the storm's haze go
+through the field-effect stack, so the accessibility setting and photosensitivity limits apply;
+nothing flashes); news, fanfares and the story logs' text (`local_game/old_deep_news.rs`,
+`FanfareKind::OldDeep`); audio (appended at the end of `patches!`: seven stratum beds, the Star
+Core theme, the geiger crackle that follows the dose, and nine one-shots; every new event has a
+cue). Touch and split screen need nothing new: every interaction is drilling, flying or standing
+near something. Scenes: `old_deep_crystal_faults`, `old_deep_fossil_oceans`,
+`old_deep_pressure_cathedrals`, `old_deep_cathedral_lift`, `old_deep_radioactive_hollow`,
+`old_deep_glowmother`, `old_deep_machine_layer`, `old_deep_void_geodes`, `old_deep_mantle_storm`,
+`old_deep_star_core`, `old_deep_star_core_exposed`, `old_deep_fathers_log`.
+
+### Tests and the probe
+
+`old_deep::tests` (codes, tick-rate-safe cycles, tides, storms, pistons, dose),
+`old_deep::refraction::tests`, `old_deep::fields::tests`, `old_deep::sites::tests` (every
+stratum's materials, the set pieces where the tick looks for them, none in older worlds),
+`world::old_deep_tests` (classic worlds untouched; resonance reach and harvest; refraction and
+Lumen; bones whole or crumbled and a skeleton's bounty; amber; the gas tide; jets at 30 and 60 Hz;
+three held valves restore the Cathedral Lift; dose, gear and drain; a mutation relic; a hall
+waking and its belt carrying a rig; a storm scorching an open cave but not a dug-in rig; **a bot
+with Descent II kit flies the arena, breaks the pylons and strikes the core three times**,
+winning the Pressure Hull, with the Descent III gate crushing the rig before and letting it pass
+after; an emptied arena puts the core back to sleep; geode gravity in the world; the descent
+probe). The enemy body tests now hold the eight new kinds too.
+
+Descent probe (`--balance-report --only descent`, default seed): Descent II takes **8.9 h**
+(14.3 h to 23.2 h; §14's span is 7-16 h), every Old Deep stratum's longest gap between new
+things is 9 minutes or less, no deaths. Descent I still ends at 14.3 h on the registry's Crust
+(the Crust track's re-pacing answers that); after a 7 h Crust, Descent II ends about 15.9 h in
+(target 13-18 h). `world::old_deep_tests::the_descent_probe_paces_the_old_deep_like_the_plan`
+holds the span and the gaps.
+
+### Seams and known limits (for the integrator and later waves)
+
+- Cathedral Station has fuel, repair, sale, dive charges, claim and respawn (Wave 7 outposts);
+  it has no resident people yet (the people system's settlements are surface-only): a later
+  wave can seat a camp there.
+- `RestoreLift` can still pay to restore the Cathedral Lift from its bottom station; the valves
+  are the free way.
+- Flares use `ShotKind::Fireball` with `shooter: MagmaWisp`; the core is a tile set piece, not
+  an entity (no health bar entity; the panel shows its strikes).
+- Pistons push and strike but do not write terrain (the ram is a hazard volume drawn live).
+- Code families: `0xD00` for `DeepTile`; if another Wave 8 track chose the same family, one
+  of us moves.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
