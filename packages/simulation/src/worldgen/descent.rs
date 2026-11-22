@@ -399,7 +399,37 @@ pub const fn scaled_row(layout: &DescentLayout, nominal: i32) -> i32 {
     if nominal >= WORLD_HEIGHT_TILES {
         return end;
     }
-    // The mapping is monotone over Descents I and II: binary search the first row.
+    // The mapping is monotone over Descents I and II, where stratum `index` maps its rows
+    // linearly onto classic band `index`: invert it in the stratum whose span holds `nominal`.
+    // (Exactly the first row a binary search over [`nominal_row`] finds, without its dozen
+    // probes; `scaled_row_matches_a_search_of_nominal_rows` checks every value.)
+    let mut index = 0;
+    while index + 1 < Band::ALL.len() && nominal >= nominal_span(Band::ALL[index + 1]).0 {
+        index += 1;
+    }
+    let (first, end_nominal) = nominal_span(Band::ALL[index]);
+    let top = layout.tops[index];
+    let span = layout.tops[index + 1] - top;
+    if nominal <= first || span <= 0 {
+        return top;
+    }
+    // The least `r` with `(r - top) * (end - first) / span >= nominal - first`.
+    let length = end_nominal - first;
+    let steps = ((nominal - first) as i64 * span as i64 + length as i64 - 1) / length as i64;
+    top + steps as i32
+}
+
+/// [`scaled_row`] by binary search over [`nominal_row`] (the reference the closed form must
+/// match).
+#[cfg(test)]
+pub(crate) const fn scaled_row_by_search(layout: &DescentLayout, nominal: i32) -> i32 {
+    if nominal <= SKY_ROWS {
+        return nominal;
+    }
+    let end = layout.tops[Band::ALL.len()];
+    if nominal >= WORLD_HEIGHT_TILES {
+        return end;
+    }
     let (mut low, mut high) = (SKY_ROWS, end);
     while low < high {
         let middle = low + (high - low) / 2;

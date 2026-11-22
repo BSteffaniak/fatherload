@@ -207,6 +207,23 @@ fn classic_rules_read_the_host_bands() {
 }
 
 #[test]
+fn scaled_row_matches_a_search_of_nominal_rows() {
+    for seed in [0, 1, 7, 0xBEEF, 0x00C0_FFEE, u64::MAX] {
+        for size in [WorldSize::Standard, WorldSize::Large] {
+            let settings = WorldSettings { size, ..v11(seed) };
+            let layout = layout(&settings);
+            for nominal in -3..WORLD_HEIGHT_TILES + 3 {
+                assert_eq!(
+                    scaled_row(&layout, nominal),
+                    scaled_row_by_search(&layout, nominal),
+                    "seed {seed}, {size:?}, nominal row {nominal}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn older_worlds_name_the_strata_of_their_bands() {
     for settings in [
         WorldSettings::new(3),
