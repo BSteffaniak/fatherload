@@ -4332,6 +4332,210 @@ holds the span and the gaps.
 - Pre-existing, seen while testing: the depth reward (`DeepRewardGranted`) drops its ore on
   the tile right of a rig, which can block a creature's line of sight in a staged test room.
 
+## Wave 8 Living Dark: Descent III authored (`src/living_dark.rs`, `src/world/living_dark.rs`, `src/world/enemies/living.rs`, `src/worldgen/descent/living.rs`)
+
+The Living Dark (rows about 2,700-4,200 of a V11 world, §14 Descent III) stops being a
+placeholder. Biology takes over: each stratum's walls are alive in their own way, its signature
+rule shows up gently near its top and is pushed by its bottom, it has its own rock, palette,
+ores, layer resource, creatures, set pieces, music and ambience, and the Descent ends at the
+Mycelial Mind, whose Bio-Filter and Lamp II open Descent IV.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (pushed deeper) | Creatures | Set piece | Ores, layer resource | Music, ambience |
+|---|---|---|---|---|---|
+| Fungal Forest | giant mushroom caps bounce rigs; spore pods (and puffers' lobs) burst into spore clouds that blur and colour-shift the screen and sting a hull; its field's blur and grade deepen (`deepening`) | spore puffer, cap crawler, glow gnats | cap groves (more and taller deeper) | silver, emerald, platinum; Spore Silk | `FungalForest` / `Spores` |
+| Root Labyrinth | every tile dug grows back as root (150 s at the top, 75 s at the bottom, jittered so a tunnel closes tile by tile); root axes and fire keep paths open | root snapper, bark beetle, thorn wisp | heartroots (a taproot with a diamond knot) | gold, ruby, diamond; Heartwood | `RootLabyrinth` / `Roots` |
+| The Hive | two factions: the Amber Court (friendly: royal jelly, errands) and the Swarm (soldier packs, a brood matriarch); stealing from the Court sours it | Swarm soldier, Swarm lancer, Court drone; mini-boss the brood matriarch | the Amber Court's hall, brood galleries, the matriarch's gallery | gold, platinum, uranium; Royal Jelly | `Hive` / `Hive` |
+| Flesh Caverns | its rock is flesh and heals back (40 s top, 20 s bottom); gullets' acid tides rise and fall on a 90 s cycle; a heartbeat (quicker deeper and while the tide rises) drives the music and the walls' pulse | maw worm (bores flesh), bile polyp (buds leechlings), leechling | gullets with acid glands | ruby, diamond, uranium; Living Sinew | `FleshCaverns` (heartbeat) / `Heartbeat` |
+| Glow Sea | near-total darkness (field light 60 per mille): the only light is creatures', the rig lamp a candle (`GLOW_SEA_LAMP_SCALE` 0.3) until Lamp II | lure fish, glow jelly, angler (a light on a rod as bait) | abyssal halls (water pooled in them), the Mind's hollow | diamond, platinum, mythril; Lure Light | `GlowSea` / `Abyss` |
+
+`MusicCue`, `AmbienceCue` and `LandmarkKind::LivingDark` (generator `LandmarkGenerator::LivingDark`)
+are appended; the Flesh Caverns' rock is `TileKind::Cave(CaveTile::Flesh)` (counted as plain rock
+by the deposit and hazard passes, `streamed::base::is_plain_rock`, so ore sits in flesh).
+
+### Generation (V11 only; `worldgen/descent/living.rs`)
+
+Run by `streamed::assemble` after the Descent landmarks and before the logistics sites, a pure
+function of the settings and the tile (chunk order never matters), only over chunks near the
+Living Dark's rows:
+
+- **Stamps**: at most one per `LIVING_REGION` (56 x 40) cell whose centre is in a living stratum,
+  rolled more often deeper (`base + extra * along`), kept clear of stratum edges, the fixed
+  stamps and the outposts' column: cap groves, heartroots, brood galleries, gullets
+  (`LivingStamp::gullet_glands`), abyssal halls. Fixed per world: the **Amber Court**
+  (`court_hall`: a 64 x 18 comb hall with arches, a royal larder and doors, 70-120 columns from
+  the spawn on the side away from the outposts), the **matriarch's gallery**
+  (`matriarch_gallery`, past the Court and deeper) and the **Mind's hollow** (`mind_hollow`,
+  `mind_floor_row`: Descent III's gate chamber overgrown into a mycelium cavern round the
+  builders' pillars). Only plain rock, ore and hazards are carved.
+- **Living rock** (`living_rock`): mycelium veins in the Fungal Forest, wandering root lines in
+  the Root Labyrinth (denser deeper; vertical taproots, three times as often in the "Taproot
+  Shafts" variant), comb seams in the Hive.
+- Seed variants pick densities (Cap Canopy groves, Brood Galleries, Acid Gullets, Angler Deeps).
+- New `CaveTile`s (appended, codes 15-21): `Root`, `Flesh`, `Comb`, `JellyCell`, `SporePod`,
+  `AcidGland`, `CharredRoot`.
+- **`GOLDEN_V11_DIGEST` changed** (now `0xf7eb_a7d0_2a09_fff0`); the V1-V10 golden digests are
+  unchanged (nothing here runs before V11).
+
+### Mechanics (`world/living_dark.rs`, after the late entity phase, before the fluid pass)
+
+- **Openings**: the terrain journal now keeps the kind each write replaced
+  (`Terrain::journal_with_before`, never serialized), so the tick tells a dug root, a burst spore
+  pod or a theft from the Court apart from any other write. Openings in the Root Labyrinth and
+  Flesh Caverns are scheduled to grow back (`LivingSchedule`), unless scorched or inside an
+  outpost; the regrowth runs at most `REGROW_BUDGET` (24) tiles a tick and waits
+  `REGROW_RETRY_MILLIS` while a rig, pilot or creature is in the tile (nothing is ever sealed in).
+- **Root axes** (`LivingDarkAction::FireRootAxe`, bought at outposts, in town or at the Court):
+  cut a 3-wide shaft 12 rows up through roots, flesh and plain rock and scorch it and its walls
+  (never regrows); **fire** (incendiary blasts, `living_dark_blasts`) burns roots away for good.
+- **Spores**: a pod burst by drill, blast or a rig brushing it (`SPORE_POD_BRUSH_PIXELS`), a
+  puffer's spore ball or the Mind's orb (`ShotKind::Spore` / `MindSpore`,
+  `burst_spore_shot`) leaves a `FieldPreset::Spores` zone (blur, a green grade, a touch of
+  chromatic split) for `SPORE_CLOUD_MILLIS` / `SPORE_SHOT_CLOUD_MILLIS`, at most
+  `MAX_SPORE_CLOUDS`; it stings a rig without the Bio-Filter (`SPORE_DAMAGE_PER_SECOND`), and
+  `WorldState::view_fields_for` drops spore zones from a Bio-Filter rig's view.
+- **Bounces**: mushroom caps bounce as before (`MUSHROOM_BOUNCE_*`); a rig falling onto a cap
+  crawler's cap bounces off it too (`LivingDarkEvent::CapBounce`).
+- **Acid tide** (`tide_at`, `heartbeat_bpm`): a pure function of world time (tick-rate safe):
+  rising 35 s, high 10 s, ebbing 35 s, low 10 s. Every `TIDE_STEP_MILLIS` the gullets within
+  `TIDE_REACH_TILES` of a rig fill their open basin with acid up to the level
+  (`TIDE_HIGH_PERMILLE` of the gullet at high water) and drain what is above it, waking the
+  fluid pass (acid flows into tunnels dug from a gullet). The Bio-Filter keeps acid out
+  (`submersion_gear().acid_resistance` 1).
+- **The Glow Sea** (`glow_light_at`, `lamp_scale_for`): its light at a point is its ambient
+  (`GLOW_SEA_AMBIENT`) plus every light-giving creature's pool (`EnemyKind::light_tiles`) and
+  every rig lamp (a candle without Lamp II, `LAMP_II_LIGHT_SCALE` with it).
+- **The Hive** (`HiveState`, crew-wide): standing -100..100; errands in order
+  (`Errand::SoldiersAtTheGate`: cull 8 Swarm soldiers or lancers; `TheStolenBrood`: break 6
+  jelly cells in the matriarch's gallery; `TheMatriarch`: slay her) counted in the tick (kills
+  through `living_dark_kill`, broken cells through the journal), turned in at the Court for
+  standing and credits. Drilling the Court's comb or jelly costs `COURT_THEFT_STANDING` each;
+  under `COURT_HOSTILE_BELOW` its drones hunt rigs and its counter only takes amends. The last
+  errand is a **choice**: slay the matriarch (`SwarmState::Broken`: no more soldiers are bred,
+  `living_spawn_allowed`) or **broker a truce** (`SwarmState::Truce`: its soldiers stand down,
+  the Court's standing drops). Honoured (standing 50+) halves the jelly's price.
+- **The Mycelial Mind** (`world/enemies/living.rs`): wakes when a rig enters its hollow, with
+  three nerve nodes (`EnemyKind::MindNode`) that shield it (`mind_shields`: every hit ignored);
+  it lobs spore orbs, calls a spore storm onto every rig in its hollow every
+  `MIND_STORM_MILLIS` (faster each cycle) and possesses the nearest creature (or raises two spore
+  thralls) every `MIND_POSSESS_MILLIS`, at most `MAX_THRALLS` at once: a possessed creature
+  (`EnemyState::phase == POSSESSED_PHASE`) senses rigs through rock and is never leashed. With
+  its nodes dead it is exposed for `MIND_EXPOSED_MILLIS`, then they regrow. Its death
+  (`mind_fell`) grants every rig the **Bio-Filter and Lamp II** (`grant_rig_system`), and
+  rigs that join later are fitted too; with no rig in its hollow for `MIND_SLEEP_MILLIS` it
+  sleeps and heals. On a Peaceful world (no creatures) it yields its gate to the first rig in
+  its hollow.
+- **The brood matriarch** appears in her gallery when a rig comes near (until the Swarm breaks),
+  and breeds Swarm soldiers (`brood_of`; bile polyps bud leechlings, cave nests still hatch bats).
+- **Gate**: the Bio-Filter and Lamp II are boss rewards (`RigSystem::boss_reward`), never sold
+  on Descent worlds (`UpgradeLock::Boss`); the descent harness grants them at the Descent's end
+  after `BOSS_FIGHT_MINUTES` (25).
+
+### Creatures (`enemy.rs`, appended `EnemyKind`s)
+
+| Kind | Body | Behaviour | Counter |
+|---|---|---|---|
+| `SporePuffer` | walker | lobs spore balls (clouds where they land) | close in; Bio-Filter |
+| `CapCrawler` | walker | charges; its cap bounces rigs that land on it, turns bullets | blasts, fire |
+| `GlowGnat` | flyer swarm | bites; a small light | anything |
+| `RootSnapper` | walker, dormant | lies still in a tunnel, snaps when close (leash 6) | keep away, fire |
+| `BarkBeetle` | burrower | bores roots and rock (rarely, `BITE_MILLIS`) | blasts |
+| `ThornWisp` | flyer | thorn volleys | close in, fire |
+| `HiveSoldier` | flyer pack | the Swarm's swarm; stands down in a truce | blasts, fire |
+| `HiveDrone` | flyer | the Court's worker: harmless unless the Court is hostile | do not steal |
+| `AcidLancer` | walker | acid volleys | break line of sight |
+| `SwarmMatriarch` | walker, elite | breeds soldiers in her gallery | explosives |
+| `MawWorm` | burrower | bores flesh, lunges | stop drilling |
+| `BilePolyp` | stationary | buds leechlings | explosives |
+| `Leechling` | flyer, swims | small biter | anything |
+| `LureFish` | flyer, swims | harmless, a light | follow it |
+| `GlowJelly` | flyer, swims | drifting sting, a strong light | keep clear |
+| `Angler` | flyer, swims, dormant | a light dangled as bait; lunges hard when close | do not follow the bait |
+| `MycelialMind` | stationary boss | orbs, storms, possession; shielded by nodes | kill the nodes, then it |
+| `MindNode` | stationary | shields the Mind | anything, fire |
+
+All follow the body rules (`step_body`, `free_from_rock`, `keep_off_bodies`, `site_fits`,
+contact boxes sized to their sprites, `CONTACT_MARGIN` / `STANDOFF_PIXELS`, line-of-sight
+noticing); `living_notice` decides the factions and thralls. `EnemyKind::can_swim` answers
+`true` for the Glow Sea's fish and jellies and the leechlings. Shots: `Spore`, `Thorn`,
+`MindSpore`.
+
+### State, formats and events
+
+- `LivingDark` (world field, appended `SectionKey::LivingDark`, saved with serde defaults,
+  hashed once non-empty so older worlds keep their hashes): root axes per rig, `HiveState`,
+  `MindState`, the spore clouds' expiries. `LivingSchedule` (saved, never hashed or replicated,
+  cleared in client keyframes like the fluids' schedule): tiles waiting to grow back, scorched
+  tiles, the tides' applied levels.
+- Commands: `LogisticsCommand::LivingDark(LivingDarkAction)` (root axes and the Court's
+  `CourtService`s), checked by `check_living_dark` (refusals `LogisticsRefusal::LivingDark`),
+  so the depth logistics dialog serves them with the inputs every seat already has.
+- `field::ScreenEffect::Blur` appended (`SCREEN_EFFECT_COUNT` 14); `ScreenEffects::levels` is
+  saved and sent as a list (older 13-level lists pad with zeros); the registry's `Blur` maps to
+  it. `FieldPreset::Spores` appended.
+- **`PROTOCOL_VERSION` 16** (one bump for the track); **no save format bump** (every new field
+  has a serde default; format 13 files load as before).
+- Events: one `GameplayEventKind::LivingDark { what, player_id, x, y }`, netcode codes
+  `440 + LivingDarkEvent::code()` (440-459; 20 kinds).
+- Dev seams: `release_spore_cloud`, `dig_living_tiles`, `flood_gullets_near`.
+
+### Game side
+
+- Tile art for the new cave tiles (tangled root strands, wet flesh lobes, honeycomb, jelly
+  cells, a hanging spore pod, an acid gland, charcoal), and a back wall of its own for every
+  living stratum's open ground (`tile_art/living_art.rs`).
+- `rendering/world/living_dark.rs`: the Flesh Caverns' walls pulse with the heartbeat (low
+  contrast, under two beats a second, scaled by the effects setting), and the Glow Sea's dark is
+  drawn in the world, cut back only by living lights and lamps (the seat's post-process light is
+  lifted there so the screen is not darkened twice).
+- The post-process stack gains a **blur** pass (both GLSL variants, `uE`), eased and limited like
+  every effect (Reduced lets 45 % through, Off none).
+- Eighteen creature sprites and three shots (`pixel_art/sprites/living.rs`), with glows and
+  the angler's bait; eleven audio patches appended at the end of `patches!` (five one-shots,
+  six music loops) and the director's `living_dark_music` (the heartbeat loop's rate follows
+  `heartbeat_bpm`; the Mind's theme replaces the Glow Sea's while it fights near).
+- The logistics dialog becomes the Amber Court's counter in its hall (royal jelly, errands with
+  their progress, the truce, amends, the crew's standing) and lists root axes in the field kit;
+  the use prompt reads "Visit the Amber Court". The shop tags the boss rewards "BOSS".
+- Scenes: `living_fungal_grove`, `living_spore_cloud`, `living_root_labyrinth`,
+  `living_hive_court`, `living_hive_court_counter`, `living_hive_swarm`,
+  `living_hive_matriarch`, `living_flesh_gullet`, `living_glow_sea`, `living_glow_sea_lamp_ii`,
+  `living_mycelial_mind`, `living_mind_exposed`.
+
+### Tests
+
+`world/living_dark_tests.rs` (bounce off a cap and a cap crawler; a burst pod's cloud: blur and
+grade on screen, the sting, the Bio-Filter's view, the clearing; roots growing back over minutes,
+never into a rig, never where an axe cut; fire burning roots; flesh healing faster deeper; the
+Hive's errands, theft, hostility, amends and truce, replicated through the section and hashed;
+the matriarch and the broken Swarm; the acid tide rising and ebbing alike at 20 and 60 Hz; the
+heartbeat; creature-only light and Lamp II; **a bot beating the Mycelial Mind** with a railgun
+(nodes, exposure, possession) and the crew's rewards; a Peaceful world's open gate; determinism
+and older worlds untouched), `worldgen/descent/living/tests.rs` (living rock in every stratum;
+an ignored ASCII dump), `balance::descent::tests::the_living_dark_ends_on_the_plans_hours_and_its_gate_is_won_not_bought`
+(the registry harness: Descent III ends inside §14's 22-29 h, the Bio-Filter won at its end,
+no gap over 40 minutes), and the registry, field and landmark tests updated for the authored
+strata.
+
+### Descent probe
+
+`--balance-report --only descent` on the real registry (default seed): Descent III ends at
+**27.4 h** before the boss model and inside 22-29 h with it (the test above pins the window).
+
+### Seams and known limits
+
+- The Hive's errands are authored for the Court (the steward's three errands), not story arcs of
+  the people engine: the Court has no generated residents yet (a Hive culture, insect folk art
+  and routines would make it a full settlement; the errands' `Errand::brief` text and standing
+  are ready to bind to a steward character).
+- Possession reuses the crypt lord's `EnemyState::phase` byte (`POSSESSED_PHASE`) instead of a new
+  field, so enemy records and hashes keep their layout.
+- Spore clouds are field zones: up to `MAX_SPORE_CLOUDS` of the 64 zones a world keeps.
+- The living strata still borrow their host band's heat (the integrator's heat-per-stratum work
+  from the Crust track should give them their own).
+- The descent harness models the boss as fixed minutes, not a simulated fight.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

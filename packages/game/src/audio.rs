@@ -249,7 +249,15 @@ mod tests {
                 | Patch::HollowLoop
                 | Patch::MachineLoop
                 | Patch::MantleLoop
-                | Patch::StarCoreLoop => (40.0, 3_000.0),
+                | Patch::StarCoreLoop
+                // The Living Dark (wave 8): wet flesh, the Mind's growl, the heartbeat, the
+                // abyss's moan, the labyrinth's bowed drone and the Mind's war drums.
+                | Patch::FleshSquelch
+                | Patch::MindRoar
+                | Patch::HeartbeatLoop
+                | Patch::GlowSeaLoop
+                | Patch::RootLoop
+                | Patch::MindLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

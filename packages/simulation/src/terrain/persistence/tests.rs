@@ -224,7 +224,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
         0x10C << 8,
         0x21F << 8,
         0x3FF << 8,
-        0x40F << 8,
+        0x41F << 8,
         0x506 << 8,
         0x6FF << 8,
         0x7EE << 8,

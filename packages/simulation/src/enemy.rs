@@ -75,6 +75,30 @@
 //! | [`EnemyKind::Cultist`] | creature (caster) | crypt ambushes and guards | glowing hands, then a hex bolt (a fan of three every third cast) | close in, break line of sight |
 //! | [`EnemyKind::CryptGolem`] | machine (construct) | crypt ambushes, vaults | raises its fists, a ring on the floor, then a slam | keep out of the ring; EMP stuns it, explosives crack it |
 //! | [`EnemyKind::CryptLord`] | creature (boss) | the last floor's hall | a pattern tell before every attack; three phases | roll through the volleys, use the pillars |
+//!
+//! The Living Dark's creatures (Wave 8, Descent III, [`crate::living_dark`]) roam its five strata;
+//! `world/enemies/living.rs` gives them their factions, brood and thralls:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::SporePuffer`] | creature (ranged) | Fungal Forest floors | swells before it lobs a spore ball | close in; the Bio-Filter sees through its clouds |
+//! | [`EnemyKind::CapCrawler`] | creature (armoured) | Fungal Forest | rears, then charges; its cap bounces a rig landing on it | blasts, fire |
+//! | [`EnemyKind::GlowGnat`] | creature (swarmer) | Fungal Forest | a glowing cloud | anything |
+//! | [`EnemyKind::RootSnapper`] | creature (ambusher) | Root Labyrinth tunnels | lies still as roots, then splits into a maw | keep away, fire |
+//! | [`EnemyKind::BarkBeetle`] | creature (burrower) | Root Labyrinth; eats root | rumble, then a lunge | blasts |
+//! | [`EnemyKind::ThornWisp`] | creature (ranged) | Root Labyrinth | its heart brightens before a thorn volley | close in, fire |
+//! | [`EnemyKind::HiveSoldier`] | creature (pack) | the Hive, while the Swarm raids | buzzing packs | blasts, fire; a truce stands them down |
+//! | [`EnemyKind::HiveDrone`] | creature (neutral) | the Hive | harmless until the Court turns hostile | do not steal from the Court |
+//! | [`EnemyKind::AcidLancer`] | creature (ranged) | the Hive's ledges | rears before spitting | break line of sight |
+//! | [`EnemyKind::SwarmMatriarch`] | creature (mini-boss) | her gallery | lays soldiers | explosives |
+//! | [`EnemyKind::MawWorm`] | creature (burrower) | Flesh Caverns; bores flesh | its maw opens before a lunge | stop drilling |
+//! | [`EnemyKind::BilePolyp`] | creature (spawner) | Flesh Caverns walls | pulses before budding | explosives |
+//! | [`EnemyKind::Leechling`] | creature (swarmer, swims) | Flesh Caverns | wriggling packs | anything |
+//! | [`EnemyKind::LureFish`] | creature (harmless, swims) | Glow Sea | a moving light | follow it |
+//! | [`EnemyKind::GlowJelly`] | creature (drifter, swims) | Glow Sea | a pulsing bell | keep clear |
+//! | [`EnemyKind::Angler`] | creature (ambusher, swims) | Glow Sea | a light dangled as bait; it lunges when you come close | do not chase lights blindly |
+//! | [`EnemyKind::MycelialMind`] | creature (boss) | the Mind's hollow | spore storms, possession | kill its nodes, then it |
+//! | [`EnemyKind::MindNode`] | creature (shield) | the Mind's hollow | a pulsing sac | anything, fire |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1664,7 +1688,7 @@ impl EnemyKind {
                 ..stats("Cap Crawler", Creature, Walking, AttackStyle::Lunge)
             },
             Self::GlowGnat => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 12.0,
                 speed: 140.0,
                 sight_tiles: 10.0,
@@ -1817,7 +1841,7 @@ impl EnemyKind {
                 ..stats("Bile Polyp", Creature, Stationary, AttackStyle::Spawner)
             },
             Self::Leechling => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 14.0,
                 speed: 125.0,
                 sight_tiles: 10.0,
@@ -1837,7 +1861,8 @@ impl EnemyKind {
                 sight_tiles: 0.0,
                 hearing_tiles: 0.0,
                 leash_tiles: 16.0,
-                contact_damage: 0.0,
+                // It never hunts (`living_notice`); a nip if something forces it.
+                contact_damage: 1.0,
                 windup_millis: 0,
                 cooldown_millis: 2_000,
                 attack_range_tiles: 0.0,
@@ -1874,9 +1899,9 @@ impl EnemyKind {
                 ..stats("Angler", Creature, Flying, AttackStyle::Lunge)
             },
             Self::MycelialMind => EnemyStats {
-                radius: 22.0,
+                radius: 20.0,
                 // Its nodes shield it most of the fight: it only bleeds while exposed.
-                health: 560.0,
+                health: 420.0,
                 speed: 0.0,
                 sight_tiles: 20.0,
                 hearing_tiles: 20.0,
@@ -1896,12 +1921,13 @@ impl EnemyKind {
             },
             Self::MindNode => EnemyStats {
                 radius: 9.0,
-                health: 110.0,
+                health: 90.0,
                 speed: 0.0,
                 sight_tiles: 0.0,
                 hearing_tiles: 0.0,
                 leash_tiles: 0.0,
-                contact_damage: 0.0,
+                // It never hunts (`living_notice`): a sting only if a rig rams it.
+                contact_damage: 1.0,
                 windup_millis: 0,
                 cooldown_millis: 10_000,
                 attack_range_tiles: 0.0,

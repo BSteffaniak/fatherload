@@ -1065,6 +1065,22 @@ world dug to the floor, the browser memory fixture) show it.
   Heart. Review scenes: `descent_gravity_shear`, `descent_upside_down_isles`,
   `descent_mirror_cell`, `descent_sunforge_glare`, `descent_underground_ocean`,
   `descent_builders_cable`.
+- **The Living Dark** (Descent III, Wave 8) is authored: the **Fungal Forest** (giant mushroom
+  caps bounce the rig; spore pods and spore puffers burst into clouds that blur and tint the
+  screen), the **Root Labyrinth** (tunnels grow shut behind you over minutes; root axes from
+  the field kit cut a shaft up that never closes, and fire burns roots away), **the Hive** (the
+  friendly Amber Court sells royal jelly and hands out errands at its counter; the hostile Swarm
+  sends soldier packs and breeds them in its matriarch's gallery; steal from the Court and it
+  turns on you; the last errand ends in a choice: slay the matriarch or buy the Swarm's truce),
+  the **Flesh Caverns** (mined flesh heals back, acid tides rise and fall in the gullets, the
+  walls and the music beat with a heartbeat that quickens deeper) and the **Glow Sea** (almost
+  total darkness, lit only by lure fish, glow jellies and the anglers' baits; the rig lamp is a
+  candle until Lamp II). Its gate is the **Mycelial Mind**: kill its nerve nodes to expose it
+  while it storms spores and possesses creatures; it grants the Bio-Filter (spore and acid
+  immunity) and Lamp II. Scenes: `living_fungal_grove`, `living_spore_cloud`,
+  `living_root_labyrinth`, `living_hive_court`, `living_hive_court_counter`,
+  `living_hive_swarm`, `living_hive_matriarch`, `living_flesh_gullet`, `living_glow_sea`,
+  `living_glow_sea_lamp_ii`, `living_mycelial_mind`, `living_mind_exposed`.
 - The depth ruler names the Descent and stratum beside its marker, the mine map's footer names
   them too, and an **"entering <stratum>"** banner slides in at each new stratum (a new
   Descent shows its number).

@@ -48,7 +48,7 @@ pub const fn brood_of(kind: EnemyKind) -> EnemyKind {
 /// How far a possessed creature senses rigs, tiles.
 const POSSESSED_SENSE_TILES: f32 = 40.0;
 /// Most creatures the Mind holds at once.
-const MAX_THRALLS: usize = 3;
+const MAX_THRALLS: usize = 2;
 /// Columns either side of the hollow's centre the nodes hang at.
 const NODE_SPREAD: [i32; MIND_NODES] = [-11, 0, 11];
 

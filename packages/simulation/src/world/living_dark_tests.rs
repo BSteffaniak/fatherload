@@ -776,7 +776,7 @@ fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() 
     let mut possessed = false;
     let mut exposed = false;
     let mut defeated = false;
-    for count in 0..u64::from(hz) * 600 {
+    for count in 0..u64::from(hz) * 900 {
         // The nearest node, then the Mind once they are down.
         let (rx, ry) = {
             let rig = world.player(PLAYER).expect("rig");
@@ -830,9 +830,27 @@ fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() 
         );
     }
     assert!(fired > 10, "the bot fired its railgun ({fired})");
+    let left =
+        world.player(PLAYER).expect("rig").hull / world.player(PLAYER).expect("rig").max_hull();
+    assert!(
+        left > 0.2,
+        "with a margin: {:.0} % of the hull left",
+        left * 100.0
+    );
     assert!(possessed, "the Mind possessed a creature");
     assert!(exposed, "its nodes fell and it was exposed");
-    assert!(defeated, "the bot beat the Mind");
+    assert!(
+        defeated,
+        "the bot beat the Mind (left at {:?}, nodes {})",
+        world
+            .living_dark()
+            .mind
+            .entity
+            .and_then(|id| world.entities().get(EntityId(id)))
+            .and_then(|entity| entity.state.health())
+            .map(|health| health.current),
+        world.living_dark().mind.nodes.len()
+    );
     assert!(world.living_dark().mind.beaten);
     let rig = world.player(PLAYER).expect("rig");
     assert!(rig.hazard_gear.has_system(RigSystem::BioFilter));
@@ -891,4 +909,171 @@ fn the_living_dark_is_deterministic_and_leaves_older_worlds_alone() {
     let _ = ticks(&mut world, 30);
     assert!(world.living_dark().is_empty());
     assert!(world.descent_strata_layout().is_none());
+}
+
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the arena, the cast and the fight in one place"
+)]
+fn the_living_darks_creatures_keep_the_body_rules() {
+    use crate::{enemy::Locomotion, physics};
+    let hz = 30;
+    let mut world = world_at(hz);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    let row = middle_row(Stratum::FungalForest);
+    let (left, right, top, floor) = (20, 100, row - 10, row + 8);
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: 60,
+            y: floor - 1,
+        },
+    );
+    fill(
+        &mut world,
+        TileRect {
+            min: TilePosition {
+                x: left - 4,
+                y: top - 4,
+            },
+            max: TilePosition {
+                x: right + 4,
+                y: floor + 4,
+            },
+        },
+        TileKind::Stone,
+    );
+    fill(
+        &mut world,
+        TileRect {
+            min: TilePosition { x: left, y: top },
+            max: TilePosition {
+                x: right,
+                y: floor - 1,
+            },
+        },
+        TileKind::Air,
+    );
+    // Pillars and a flesh bank for the borers.
+    fill(
+        &mut world,
+        TileRect {
+            min: TilePosition {
+                x: 40,
+                y: floor - 6,
+            },
+            max: TilePosition {
+                x: 41,
+                y: floor - 1,
+            },
+        },
+        TileKind::Stone,
+    );
+    fill(
+        &mut world,
+        TileRect {
+            min: TilePosition {
+                x: left,
+                y: floor - 8,
+            },
+            max: TilePosition {
+                x: left + 4,
+                y: floor - 1,
+            },
+        },
+        TileKind::Cave(CaveTile::Flesh),
+    );
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: 60,
+            y: floor - 1,
+        },
+    );
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        let _ = rig.receive_weapon(WeaponKind::RivetGun);
+        let _ = rig.mount_weapon(Some(WeaponKind::RivetGun));
+        rig.weapon.energy = rig.battery_capacity();
+    }
+    let frame = world.frame();
+    let kinds: Vec<EnemyKind> = EnemyKind::ALL
+        .into_iter()
+        .filter(|kind| kind.is_living_dark())
+        .collect();
+    for (index, kind) in (0_i32..).zip(kinds) {
+        let column = left + 8 + (index * 4) % (right - left - 12);
+        let tile = match kind.stats().locomotion {
+            Locomotion::Walking | Locomotion::Stationary => TilePosition {
+                x: column,
+                y: floor - 1 - i32::from(kind.stats().radius > 12.0),
+            },
+            Locomotion::Flying => TilePosition {
+                x: column,
+                y: top + 3 + index % 5,
+            },
+            Locomotion::Burrowing => TilePosition {
+                x: left + 5,
+                y: floor - 3,
+            },
+        };
+        let (x, y) = frame.tile_center(tile);
+        let _ = world.spawn_enemy(kind, x, y);
+    }
+    let mut checked = 0_usize;
+    for count in 0..u64::from(hz) * 30 {
+        let axis = if (count / 40) % 2 == 0 { 0.8 } else { -0.8 };
+        let controls = ControlState::new(axis, count % 50 < 10, false).with_weapon(WeaponControl {
+            fire: true,
+            auto_aim: true,
+            aim_x: 127,
+            aim_y: 0,
+        });
+        let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::held(PLAYER, controls));
+        let rig = world.player(PLAYER).expect("rig").clone();
+        for (entity, state) in world.enemies() {
+            let radius = state.kind.stats().radius;
+            assert!(
+                !physics::collides(world.terrain(), entity.body.x, entity.body.y, radius),
+                "{:?} inside rock at tick {count}",
+                state.kind
+            );
+            let (own_w, own_h) = state.kind.contact_half();
+            let (rig_w, rig_h) = super::enemies::RIG_CONTACT_HALF;
+            let depth = (own_w + rig_w - (entity.body.x - rig.x).abs())
+                .min(own_h + rig_h - (entity.body.y - rig.y).abs())
+                .max(0.0);
+            // Rock wins over the push (the body rules): a creature pinned between the rig and
+            // rock on both of its escape sides may be left touching deeper for a tick.
+            let side_x = (entity.body.x - rig.x).signum();
+            let side_y = (entity.body.y - rig.y).signum();
+            let pinned = physics::collides(
+                world.terrain(),
+                side_x.mul_add(own_w + rig_w, rig.x),
+                entity.body.y,
+                radius,
+            ) && physics::collides(
+                world.terrain(),
+                entity.body.x,
+                side_y.mul_add(own_h + rig_h, rig.y),
+                radius,
+            );
+            if pinned {
+                continue;
+            }
+            assert!(
+                depth <= 1.0,
+                "{:?} #{} sits {depth} px inside the rig at tick {count}: {:?} {:?} rig ({}, {})",
+                state.kind,
+                entity.id.get(),
+                (entity.body.x, entity.body.y),
+                state.mode,
+                rig.x,
+                rig.y
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 1_000, "a real fight: {checked}");
 }

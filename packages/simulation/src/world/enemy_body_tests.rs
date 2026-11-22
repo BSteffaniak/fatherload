@@ -122,6 +122,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         && !crate::night::is_nocturnal(kind)
         && !kind.is_tomb()
         && !kind.is_crypt()
+        // The Living Dark's creatures (Wave 8) hold to these rules in their own arena
+        // (`living_dark_tests::the_living_darks_creatures_keep_the_body_rules`).
+        && !kind.is_living_dark()
 }
 
 /// One of every cave kind at an open spot in the arena.

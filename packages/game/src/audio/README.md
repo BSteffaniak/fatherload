@@ -118,6 +118,17 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `alarm_hull_low` | alarm | Warbling triangle (520 Hz, 14 Hz vibrato) over a sine an octave down. |
 | `alarm_hull_critical` | alarm | Detuned saws (620 / 655 Hz), resonant low-pass, saturated, 18 Hz tremolo. |
 | `explosion` | big | Layered: noise crack, sub boom (60 -> 28 Hz, saturated), brown-noise body with a falling low-pass, band-passed mid roar, 60 debris grains and chunk knocks over 2.5 s; ducks other sounds by up to 55%. |
+| `spore_puff` | feedback | A spore pod bursting (Wave 8): a fat low "pof" of noise, an airy settling hiss and tiny pops. |
+| `root_creak` | feedback | Roots tightening: a resonant band-passed saw creak bending in pitch, fibrous cracks. |
+| `flesh_squelch` | feedback | Flesh knitting shut: a wet low-passed squelch that sucks closed over a falling gulp. |
+| `hive_chime` | feedback | The Amber Court: a buzzing G and three rising marimba notes. |
+| `mind_roar` | big | The Mycelial Mind: a warbling FM growl over a sub swell, breath full of spores. |
+| `loop_fungal` | loop | Fungal Forest music: a breathing A/E pad, slow pentatonic glass bells, spore hiss. |
+| `loop_roots` | loop | Root Labyrinth music: a low bowed ostinato (D, E flat, D, C) over a creaking drone and knocks. |
+| `loop_hive` | loop | The Hive's music: a buzzing wing drone, a busy marimba figure in G, mandible clicks. |
+| `loop_heartbeat` | loop | Flesh Caverns music: four lub-dubs a loop over a sour minor-second drone; the director plays it at the stratum's heartbeat. |
+| `loop_glow_sea` | loop | Glow Sea music: near silence, a low moan and slow distant glass chimes. |
+| `loop_mind` | loop | The Mind's fight: pounding toms and a detuned saw choir gliding a minor third. |
 | `poi_discovered` | big | Mysterious sting: detuned-saw pad (A3, E4, B4 entering in turn) under a slowly moving low-pass, two FM bells, 300 ms echo. |
 | `vault_fanfare` | big | Door boom and rumble, a C-E-G brass arpeggio into a held C major chord, a run of bells. |
 | `milestone` | big | D major brass swell under a quick ascending bell arpeggio. |

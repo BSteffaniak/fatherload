@@ -41,7 +41,7 @@ pub const SPORE_CLOUD_HALF: (i32, i32) = (4, 3);
 /// Most spore clouds in the air at once (the oldest clears first).
 pub const MAX_SPORE_CLOUDS: usize = 12;
 /// Hull a second a spore cloud stings a rig without the Bio-Filter (at full strength).
-pub const SPORE_DAMAGE_PER_SECOND: f32 = 2.0;
+pub const SPORE_DAMAGE_PER_SECOND: f32 = 1.0;
 /// A rig brushing a spore pod (its body this close to the pod's tile, pixels) bursts it.
 pub const SPORE_POD_BRUSH_PIXELS: f32 = 6.0;
 
@@ -321,7 +321,7 @@ impl HiveState {
 /// Nerve nodes that shield the Mind.
 pub const MIND_NODES: usize = 3;
 /// How long the Mind stays exposed once its nodes are dead, before they regrow.
-pub const MIND_EXPOSED_MILLIS: u64 = 25_000;
+pub const MIND_EXPOSED_MILLIS: u64 = 30_000;
 /// Time between the Mind's spore storms (shorter once it has been exposed).
 pub const MIND_STORM_MILLIS: u64 = 8_000;
 /// Time between possessions.
