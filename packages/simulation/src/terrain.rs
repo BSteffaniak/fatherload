@@ -1215,7 +1215,8 @@ impl Terrain {
     /// [`Self::max_x`]; code that walks or clamps columns should use those instead.
     #[must_use]
     pub const fn width(&self) -> i32 {
-        self.max_x() - self.min_x() + 1
+        // Saturating: a far test world's raised column limit spans more than i32 (F7).
+        self.max_x().saturating_sub(self.min_x()).saturating_add(1)
     }
 
     #[must_use]
