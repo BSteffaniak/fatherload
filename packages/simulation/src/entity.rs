@@ -151,6 +151,13 @@ pub struct Body {
     pub asleep: bool,
 }
 
+impl crate::position::Reframe for Body {
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        shift.apply(&mut self.x, &mut self.y);
+        shift.apply(&mut self.previous_x, &mut self.previous_y);
+    }
+}
+
 impl Body {
     /// A body at rest at `(x, y)`.
     #[must_use]
@@ -456,6 +463,40 @@ pub enum EntityState {
     Npc(NpcState),
 }
 
+impl crate::position::Reframe for EntityState {
+    /// Per-kind local positions: a person's walking leg and a pilot's rope anchor. Every other
+    /// kind keeps only tile coordinates, lengths and timers (the compiler lists them here).
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        match self {
+            Self::Npc(npc) => {
+                npc.from_x = shift.x(npc.from_x);
+                npc.target_x = shift.x(npc.target_x);
+            }
+            Self::Pilot(pilot) => {
+                if let Some(rope) = &mut pilot.tether {
+                    shift.apply(&mut rope.anchor_x, &mut rope.anchor_y);
+                }
+            }
+            Self::GasCloud(_)
+            | Self::Boulder(_)
+            | Self::Drop(_)
+            | Self::Critter(_)
+            | Self::Enemy(_)
+            | Self::EnemyShot(_)
+            | Self::Charge(_)
+            | Self::Projectile(_)
+            | Self::Target(_) => {}
+        }
+    }
+}
+
+impl crate::position::Reframe for Entity {
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        self.body.reframe(shift);
+        self.state.reframe(shift);
+    }
+}
+
 impl EntityState {
     #[must_use]
     pub const fn kind(&self) -> EntityKind {
@@ -723,6 +764,19 @@ impl EntityStore {
         };
         store.rebuild_indices();
         store
+    }
+
+    /// Moves every entity with a frame move (F7). Revisions do not change: every peer moves
+    /// its own copy of the store the same way.
+    pub(crate) fn reframe_all(&mut self, shift: crate::position::FrameShift) {
+        use crate::position::Reframe;
+        if shift.is_zero() {
+            return;
+        }
+        for entity in &mut self.entities {
+            entity.reframe(shift);
+        }
+        self.rebuild_indices();
     }
 
     fn rebuild_indices(&mut self) {

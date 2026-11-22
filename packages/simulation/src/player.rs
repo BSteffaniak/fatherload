@@ -141,6 +141,15 @@ pub struct Player {
     clippy::missing_const_for_fn,
     reason = "BTreeMap cannot be constructed in const fn"
 )]
+impl crate::position::Reframe for Player {
+    /// The rig's position and its tether harpoon's hook. `x_remainder` is a sub-ulp
+    /// correction relative to `x` and stays as it is.
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        shift.apply(&mut self.x, &mut self.y);
+        self.weapon.reframe(shift);
+    }
+}
+
 impl Player {
     #[must_use]
     pub fn new(spawn_x: f32, spawn_y: f32) -> Self {

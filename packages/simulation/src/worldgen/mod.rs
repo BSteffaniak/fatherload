@@ -276,6 +276,50 @@ impl GeneratorVersion {
         matches!(self, Self::V10)
     }
 
+    /// Whether worlds of this generator use a **floating** local pixel frame (F7,
+    /// [`crate::position::Frame`]): every position is measured from a sector that re-centres
+    /// on play, so precision never degrades far from the origin. V1-V10 worlds keep the fixed
+    /// frame at the origin (their positions are the old world pixels, bit for bit). A new
+    /// generator (V11, the Deep Descent) answers `true` here.
+    #[must_use]
+    pub const fn floating_frame(self) -> bool {
+        match self {
+            Self::Legacy
+            | Self::V1
+            | Self::V2
+            | Self::V3
+            | Self::V4
+            | Self::V5
+            | Self::V6
+            | Self::V7
+            | Self::V8
+            | Self::V9
+            | Self::V10 => false,
+        }
+    }
+
+    /// How far a streamed world of this generator extends either side of column 0 (bounded
+    /// worlds ignore it). V5-V10 keep [`streamed::STREAMED_COLUMN_LIMIT`] (their village,
+    /// sky town and continent placement is sized to it). Tile columns are `i32` and the frame
+    /// keeps positions exact out to `i32::MAX` columns, so a new generator may raise this to
+    /// at least 10^9 (F7).
+    #[must_use]
+    pub const fn column_limit(self) -> i32 {
+        match self {
+            Self::Legacy
+            | Self::V1
+            | Self::V2
+            | Self::V3
+            | Self::V4
+            | Self::V5
+            | Self::V6
+            | Self::V7
+            | Self::V8
+            | Self::V9
+            | Self::V10 => streamed::STREAMED_COLUMN_LIMIT,
+        }
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {

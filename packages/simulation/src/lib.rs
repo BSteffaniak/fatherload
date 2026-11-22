@@ -41,6 +41,7 @@ pub mod physics;
 pub mod pilot;
 pub mod player;
 pub mod poi;
+pub mod position;
 pub mod progression;
 pub mod protection;
 pub mod quantize;

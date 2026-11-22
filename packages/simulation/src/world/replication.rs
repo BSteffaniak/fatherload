@@ -84,6 +84,11 @@ pub struct LiveEntities {
     /// The entity store's next revision.
     #[serde(default)]
     pub next_entity_revision: u64,
+    /// The world's local pixel frame (F7): every position in this frame's records is relative
+    /// to it. A replica moves its own copy of the world into it before applying anything else
+    /// of the frame (netcode applies this section first).
+    #[serde(default)]
+    pub frame: crate::position::Frame,
 }
 
 /// One player's on-change section.
@@ -343,6 +348,7 @@ impl WorldState {
             next_bomb_id: self.next_bomb_id,
             next_entity_id: self.entities.next_id(),
             next_entity_revision: self.entities.next_revision(),
+            frame: self.terrain.frame(),
         }
     }
 
@@ -351,12 +357,16 @@ impl WorldState {
         clippy::needless_pass_by_value,
         reason = "replicated sections are handed over by value"
     )]
-    pub const fn apply_live_entities(&mut self, entities: LiveEntities) {
+    pub fn apply_live_entities(&mut self, entities: LiveEntities) {
         let LiveEntities {
             next_bomb_id,
             next_entity_id,
             next_entity_revision,
+            frame,
         } = entities;
+        if frame != self.terrain.frame() {
+            self.move_frame(frame);
+        }
         self.next_bomb_id = next_bomb_id;
         self.entities
             .set_counters(next_entity_id, next_entity_revision);

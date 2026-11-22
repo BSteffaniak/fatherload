@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     cave::CaveTile,
     poi::PoiTile,
+    position::Frame,
     surface::building_foundation_at,
     worldgen::{
         self, Band, FeatureId, FeatureIndex, FeatureKind, TileRect, WorldFeature, WorldSettings,
@@ -564,6 +565,13 @@ pub struct Terrain {
     digest: u64,
     /// Tile writes recorded while a simulation tick runs (never serialized or hashed).
     journal: Option<Vec<TileChange>>,
+    /// The local pixel space every gameplay position is measured in (F7, see
+    /// [`crate::position`]): local pixel `(x, y)` is in tile [`Frame::tile_at`]. Saved with
+    /// the terrain; owned by the world (it moves only in `WorldState::recentre_frame`).
+    frame: Frame,
+    /// A streamed world's column limit raised past its generator's (test and tool worlds far
+    /// from the origin; never serialized, replicated or hashed).
+    column_limit_override: Option<i32>,
 }
 
 #[derive(Clone, Debug)]
@@ -676,6 +684,8 @@ impl Terrain {
             storage: Storage::Streamed(StreamedTiles::default()),
             digest: 0,
             journal: None,
+            frame: Frame::for_generator(settings.generator),
+            column_limit_override: None,
         }
     }
 
@@ -708,6 +718,8 @@ impl Terrain {
             }),
             digest,
             journal: None,
+            frame: Frame::for_generator(settings.generator),
+            column_limit_override: None,
         }
     }
 
@@ -747,7 +759,7 @@ impl Terrain {
     pub const fn min_x(&self) -> i32 {
         match &self.storage {
             Storage::Bounded(_) => 0,
-            Storage::Streamed(_) => -worldgen::streamed::STREAMED_COLUMN_LIMIT,
+            Storage::Streamed(_) => -self.column_limit(),
         }
     }
 
@@ -756,8 +768,39 @@ impl Terrain {
     pub const fn max_x(&self) -> i32 {
         match &self.storage {
             Storage::Bounded(bounded) => bounded.width - 1,
-            Storage::Streamed(_) => worldgen::streamed::STREAMED_COLUMN_LIMIT - 1,
+            Storage::Streamed(_) => self.column_limit() - 1,
         }
+    }
+
+    /// How far a streamed world extends either side of column 0: its generator's
+    /// [`GeneratorVersion::column_limit`](worldgen::GeneratorVersion::column_limit), unless a
+    /// test world raised it ([`Self::set_column_limit_for_tests`]).
+    #[must_use]
+    pub const fn column_limit(&self) -> i32 {
+        match self.column_limit_override {
+            Some(limit) => limit,
+            None => self.settings.generator.column_limit(),
+        }
+    }
+
+    /// Raises (or lowers) a streamed world's column limit, for test and tool worlds far from
+    /// the origin (F7 precision tests at 10^9 tiles). Not saved or replicated: every peer of
+    /// such a world must call it.
+    #[doc(hidden)]
+    pub const fn set_column_limit_for_tests(&mut self, limit: i32) {
+        self.column_limit_override = Some(if limit < 1 { 1 } else { limit });
+    }
+
+    /// The local pixel frame of the world's positions (see [`crate::position`]).
+    #[must_use]
+    pub const fn frame(&self) -> Frame {
+        self.frame
+    }
+
+    /// Sets the local pixel frame record. Only the world moves it (shifting every position
+    /// with it, `WorldState::set_frame`); restoring a saved terrain sets it from the save.
+    pub(crate) const fn set_frame(&mut self, frame: Frame) {
+        self.frame = frame;
     }
 
     /// Whether column `x` is inside the world.
@@ -1457,7 +1500,7 @@ impl Terrain {
                 ))
             }
             Storage::Streamed(_) => {
-                let limit = worldgen::streamed::STREAMED_COLUMN_LIMIT;
+                let limit = self.column_limit();
                 if position.x < -limit || position.x >= limit {
                     return None;
                 }

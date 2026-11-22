@@ -126,6 +126,11 @@ impl WorldState {
         hash.write_i32(self.terrain.width());
         hash.write_i32(self.terrain.height());
         hash.write_serialized(self.terrain.settings());
+        // F7: the local pixel frame, absent for the fixed frame at the origin (V1-V10 worlds
+        // keep their hashes).
+        if self.terrain.frame() != crate::position::Frame::FIXED {
+            hash.write_serialized(&self.terrain.frame());
+        }
         hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
         hash.write_u64(self.terrain.digest());
         hash.write_u64(self.entities.next_id());

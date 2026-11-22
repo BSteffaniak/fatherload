@@ -233,6 +233,14 @@ pub struct TerrainSnapshot {
     /// [`ChunkPosition::local_index`]. Empty for bounded terrain (and missing in older saves).
     #[serde(default)]
     pub chunks: Vec<(ChunkPosition, TileDiffs)>,
+    /// The world's local pixel frame (F7, [`crate::position::Frame`]); missing in older saves,
+    /// whose positions are world pixels: the fixed frame at the origin.
+    #[serde(default)]
+    pub frame: crate::position::Frame,
+    /// A raised column limit of a far test or tool world
+    /// ([`Terrain::set_column_limit_for_tests`]); `None` for every real world.
+    #[serde(default)]
+    pub column_limit: Option<i32>,
 }
 
 /// Why a [`TerrainSnapshot`] could not be restored.
@@ -470,6 +478,8 @@ impl Terrain {
                             .collect(),
                     },
                     chunks: Vec::new(),
+                    frame: self.frame,
+                    column_limit: self.column_limit_override,
                 }
             }
             Storage::Streamed(streamed) => TerrainSnapshot {
@@ -495,6 +505,8 @@ impl Terrain {
                         )
                     })
                     .collect(),
+                frame: self.frame,
+                column_limit: self.column_limit_override,
             },
         }
     }
@@ -514,9 +526,14 @@ impl Terrain {
             digest,
             diffs,
             chunks,
+            frame,
+            column_limit,
         } = snapshot;
         if settings.generator.is_streamed() {
-            return Self::from_streamed_snapshot(settings, height, digest, chunks);
+            let mut terrain =
+                Self::from_streamed_snapshot(settings, height, digest, chunks, column_limit)?;
+            terrain.frame = frame;
+            return Ok(terrain);
         }
         let mut terrain = Self::regenerate(&settings, width, height)?;
         let tile_count = terrain.stored_tile_count();
@@ -537,6 +554,7 @@ impl Terrain {
                 actual: terrain.digest,
             });
         }
+        terrain.frame = frame;
         Ok(terrain)
     }
 
@@ -547,12 +565,16 @@ impl Terrain {
         height: i32,
         digest: u64,
         chunks: Vec<(ChunkPosition, TileDiffs)>,
+        column_limit: Option<i32>,
     ) -> Result<Self, TerrainRestoreError> {
         if height != settings.height_tiles() {
             return Err(TerrainRestoreError::InvalidSize { width: 0, height });
         }
         let mut terrain = Self::streamed(settings);
-        let limit = worldgen::streamed::STREAMED_COLUMN_LIMIT;
+        if let Some(limit) = column_limit {
+            terrain.set_column_limit_for_tests(limit);
+        }
+        let limit = terrain.column_limit();
         let Storage::Streamed(streamed) = &mut terrain.storage else {
             return Err(TerrainRestoreError::InvalidSize { width: 0, height });
         };

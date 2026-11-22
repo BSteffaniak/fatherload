@@ -475,6 +475,8 @@ impl WorldState {
         self.wake_entities_near(&output.terrain_ops);
         output.discoveries = self.take_discoveries();
         self.stream_terrain_near_players();
+        // F7: a floating frame follows its anchor rig (nothing moves in absolute terms).
+        self.recentre_frame();
         self.set_simulation_tick(next_tick);
         output
     }

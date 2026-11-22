@@ -790,6 +790,14 @@ pub struct Tether {
     pub length: f32,
 }
 
+impl crate::position::Reframe for RigWeaponState {
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        if let Some(tether) = &mut self.tether {
+            shift.apply(&mut tether.x, &mut tether.y);
+        }
+    }
+}
+
 impl RigWeaponState {
     /// The aim as a unit vector (right when unset).
     #[must_use]

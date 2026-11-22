@@ -69,6 +69,7 @@ mod entity_tests;
 mod explosive_tests;
 #[cfg(test)]
 mod flight_tests;
+mod frame;
 mod garage;
 #[cfg(test)]
 mod god_mode_tests;
@@ -289,6 +290,12 @@ pub struct LostCargoSite {
     pub y: f32,
     /// The spilled ore and artifacts.
     pub items: crate::item::ItemContainer,
+}
+
+impl crate::position::Reframe for LostCargoSite {
+    fn reframe(&mut self, shift: crate::position::FrameShift) {
+        shift.apply(&mut self.x, &mut self.y);
+    }
 }
 
 impl LostCargoSite {
