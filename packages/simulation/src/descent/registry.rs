@@ -156,11 +156,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Rgb(58, 36, 24),
             Some(Rgb(212, 155, 92)),
         ),
-        ores: &[
-            ore(Copper, 200, 600, 100),
-            ore(Iron, 600, 500, 75),
-            ore(Silver, 950, 300, 22),
-        ],
+        ores: &[ore(Copper, 200, 600, 100), ore(Iron, 650, 500, 90)],
         layer_resource: resource("Root Fibre", StrategicResourceKind::RadiantFossil),
         creatures: CRUST_TOPSOIL,
         hazards: &[],
@@ -290,7 +286,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::HardRock,
         hard: TileKind::Stone,
         palette: palette(
-            Rgb(52, 48, 47),
+            Rgb(78, 48, 44),
             Rgb(26, 22, 38),
             Rgb(26, 22, 38),
             Some(Rgb(232, 112, 42)),

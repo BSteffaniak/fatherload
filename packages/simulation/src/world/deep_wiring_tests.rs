@@ -76,7 +76,7 @@ fn v11_strata_generate_their_fluid_pockets_and_older_worlds_none() {
     let flesh = fluids_in(&settings, Stratum::FleshCaverns);
     assert!(flesh.iter().any(|(_, kind)| *kind == FluidKind::Acid));
     // A stratum without rules stays dry.
-    assert!(fluids_in(&settings, Stratum::GreyStone).is_empty());
+    assert!(fluids_in(&settings, Stratum::SlateShelves).is_empty());
     // Generated fluid rests: every cell has something under it that holds it.
     let world = WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::default());
     for (at, _) in ocean.iter().chain(&core).take(400) {

@@ -165,11 +165,14 @@ fn the_classic_strata_are_the_classic_bands() {
         assert_eq!(def.host_band, band);
         assert_eq!(def.soft, band.soft_material(), "{stratum:?}");
         assert_eq!(def.hard, band.hard_material(), "{stratum:?}");
-        assert_eq!(
-            def.creatures,
-            crate::enemy::band_roster(band),
-            "{stratum:?}"
-        );
+        // The authored Crust (Wave 8) has creatures of its own.
+        if stratum.descent() != Descent::Crust {
+            assert_eq!(
+                def.creatures,
+                crate::enemy::band_roster(band),
+                "{stratum:?}"
+            );
+        }
         assert_eq!(stratum.enemy_tier(), u8::try_from(index).unwrap_or(0));
     }
     for stratum in Stratum::ALL.into_iter().skip(Band::ALL.len()) {
@@ -209,9 +212,14 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
         }
         for (kind, weight) in def.creatures {
             assert!(*weight > 0);
-            // Placeholders reuse underground kinds only (no sky, Moon, night or tomb families).
+            // Underground kinds only (no sky, Moon, night, tomb or crypt families): the classic
+            // ones and the authored strata's own (Wave 8 on).
             assert!(
-                (*kind as usize) <= crate::enemy::EnemyKind::AncientGuardian as usize,
+                !kind.is_sky()
+                    && !kind.is_lunar()
+                    && !crate::night::is_nocturnal(*kind)
+                    && !kind.is_tomb()
+                    && !kind.is_crypt(),
                 "{stratum:?}: {kind:?}"
             );
         }
@@ -235,8 +243,22 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
         for level in field.screen {
             assert!(level.intensity_permille <= 1_000, "{stratum:?}");
         }
-        // Music follows the Descent.
-        assert_eq!(def.music as usize, def.descent as usize, "{stratum:?}");
+        // Music follows the Descent; the authored Crust (Wave 8) has a piece per stratum.
+        if def.descent == Descent::Crust {
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::Topsoil
+                        | MusicCue::ClayBeds
+                        | MusicCue::GreyStone
+                        | MusicCue::SlateShelves
+                        | MusicCue::BasaltColumns
+                ),
+                "{stratum:?}"
+            );
+        } else {
+            assert_eq!(def.music as usize, def.descent as usize, "{stratum:?}");
+        }
     }
     assert!(FieldProfile::NEUTRAL.is_neutral());
     assert!(FieldProfile::default().is_neutral());

@@ -552,7 +552,7 @@ fn v11_generation_is_pinned() {
 
 /// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
 /// pockets, the outposts on the builders' cable and the ancient lifts' carve).
-const GOLDEN_V11_DIGEST: u64 = 0x0b77_fedb_a074_af24;
+const GOLDEN_V11_DIGEST: u64 = 0x0f79_d67d_4036_2ce6;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]
