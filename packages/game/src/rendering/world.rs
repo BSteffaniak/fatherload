@@ -258,11 +258,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.explored,
         scene.visible,
     );
+    // Trap sight is per seat: only this view's own pilot's lantern shows hidden traps.
+    let trap_sight =
+        tombs::seat_trap_sight_of(scene.pilots, scene.local.map(|local| local.player_id));
     tombs::draw_tomb_marks(
         draw,
         scene.terrain,
         scene.tombs,
-        scene.pilots,
+        trap_sight,
         scene.visible,
         seconds,
     );
@@ -275,10 +278,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             explored: scene.explored,
             visible: scene.visible,
             millis: scene.world_millis,
-            trap_sight: scene
-                .pilots
-                .iter()
-                .any(|pilot| pilot.state.boons.trap_sight),
+            trap_sight,
         },
     );
     sky_continents::draw_continent_fronts(draw, scene.terrain, scene.visible, seconds);

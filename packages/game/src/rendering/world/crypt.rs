@@ -215,10 +215,7 @@ pub(super) fn draw_crypt_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         look: look(CryptTileset::of(run.site.setting)),
         millis,
         seconds: scene.ticks as f32 / 60.0,
-        trap_sight: scene
-            .pilots
-            .iter()
-            .any(|pilot| Some(pilot.player_id) == local && pilot.state.boons.trap_sight),
+        trap_sight: super::tombs::seat_trap_sight_of(scene.pilots, local),
         tiles,
     };
     draw.draw_rectangle_rec(visible, crypt.look.background);

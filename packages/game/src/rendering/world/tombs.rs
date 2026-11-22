@@ -13,6 +13,7 @@
 )]
 
 use fatherload_simulation::{
+    PlayerId,
     base::BuiltTile,
     terrain::{TILE_SIZE, Terrain, TileKind, TilePosition},
     tomb::{SiteStyle, Tombs},
@@ -98,20 +99,42 @@ pub(super) fn draw_tomb_floors(
     }
 }
 
-/// Hidden traps glow for a pilot carrying the Trap-Sight Lantern; open shrines and caches get a
-/// soft halo so the run's landmarks read in the dark.
+/// Whether the view of `seat`'s player shows hidden traps: only that player's own pilot
+/// carrying the Trap-Sight Lantern lights them (per seat: in split screen a crewmate's lantern
+/// does not reveal them on the other screen).
+pub(super) fn seat_trap_sight<'a>(
+    pilots: impl IntoIterator<Item = (PlayerId, &'a fatherload_simulation::pilot::PilotState)>,
+    seat: Option<PlayerId>,
+) -> bool {
+    seat.is_some_and(|seat| {
+        pilots
+            .into_iter()
+            .any(|(owner, state)| owner == seat && state.boons.trap_sight)
+    })
+}
+
+/// [`seat_trap_sight`] over drawn pilots.
+pub(super) fn seat_trap_sight_of(pilots: &[PilotPresentation], seat: Option<PlayerId>) -> bool {
+    seat_trap_sight(
+        pilots.iter().map(|pilot| (pilot.player_id, &pilot.state)),
+        seat,
+    )
+}
+
+/// Hidden traps glow for the seat whose pilot carries the Trap-Sight Lantern (`trap_sight`,
+/// [`seat_trap_sight`]); open shrines and caches get a soft halo so the run's landmarks read
+/// in the dark.
 pub(super) fn draw_tomb_marks(
     draw: &mut impl RaylibDraw,
     terrain: &Terrain,
     tombs: &Tombs,
-    pilots: &[PilotPresentation],
+    trap_sight: bool,
     visible: Rectangle,
     seconds: f32,
 ) {
     if tombs.runs.is_empty() {
         return;
     }
-    let trap_sight = pilots.iter().any(|pilot| pilot.state.boons.trap_sight);
     let (left, top, right, bottom) = tiles_in(visible);
     let pulse = (seconds * 3.0).sin().mul_add(0.25, 0.75);
     for y in top..bottom {
@@ -186,5 +209,26 @@ pub(super) fn draw_downed(
             );
             draw.draw_rectangle_v(Vector2::new(x - 2.0, y - 27.0), Vector2::new(4.0, 4.0), RED);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fatherload_simulation::pilot::{PilotGear, PilotState};
+
+    use super::*;
+
+    #[test]
+    fn trap_sight_is_per_seat() {
+        let (lantern, plain) = (PlayerId::new(1), PlayerId::new(2));
+        let mut lit = PilotState::new(lantern, PilotGear::default(), 1);
+        lit.boons.trap_sight = true;
+        let dark = PilotState::new(plain, PilotGear::default(), 1);
+        let pilots = [(lantern, &lit), (plain, &dark)];
+        // The lantern carrier's screen shows hidden traps; the crewmate's (split screen) does
+        // not, and neither does a view with no player.
+        assert!(seat_trap_sight(pilots, Some(lantern)));
+        assert!(!seat_trap_sight(pilots, Some(plain)));
+        assert!(!seat_trap_sight(pilots, None));
     }
 }
