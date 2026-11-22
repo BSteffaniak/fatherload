@@ -103,8 +103,11 @@ fn every_upgrade_line_has_many_tiers_with_rising_prices() {
                 | UpgradeKind::PressurizedHull
                 | UpgradeKind::LifeSupport
         ) || kind.rig_system().is_some()
+            || kind.is_depth_line()
         {
-            // One-tier lines: the Moon's seals and the Deep Descent's rig systems.
+            // One-tier lines: the Moon's seals and the Deep Descent's rig systems. The Wave 8
+            // Descent ladders (deep gear, dear from the first tier) are checked in
+            // `deep_progression_tests`.
             continue;
         }
         let tiers = kind.max_level() - kind.starting_level();

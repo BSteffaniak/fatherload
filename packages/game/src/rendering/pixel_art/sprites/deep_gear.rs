@@ -13,7 +13,7 @@ use crate::rendering::pixel_art::sprite::SpriteDef;
 
 /// Pressure Rating: a dial with its needle in the red, on a riveted seal ring.
 pub const PRESSURE_RATING: SpriteDef = SpriteDef {
-    name: "icon_pressure_rating",
+    name: "icon_pressure_rating_line",
     legend: &[
         ('o', INK),
         ('s', STEEL_LIGHT),
@@ -38,7 +38,7 @@ pub const PRESSURE_RATING: SpriteDef = SpriteDef {
 
 /// Headlamp: a lamp housing throwing a cone of light.
 pub const HEADLAMP: SpriteDef = SpriteDef {
-    name: "icon_headlamp",
+    name: "icon_headlamp_line",
     legend: &[
         ('o', INK),
         ('s', STEEL),
@@ -62,7 +62,7 @@ pub const HEADLAMP: SpriteDef = SpriteDef {
 
 /// The outposts' workshop: an anvil with a hammer over it.
 pub const WORKSHOP: SpriteDef = SpriteDef {
-    name: "icon_workshop",
+    name: "icon_workshop_anvil",
     legend: &[
         ('o', INK),
         ('s', STEEL_LIGHT),
