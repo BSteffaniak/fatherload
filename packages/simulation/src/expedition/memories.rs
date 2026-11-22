@@ -5,8 +5,27 @@
 //! can wait for a log ([`SettlementMemory::after_log`]): people open up about what the crew has
 //! already read, so the town's memories follow the trail instead of spoiling it. Ids are never
 //! renamed or reused; new lines append.
+//!
+//! # Speakers (Wave 9)
+//!
+//! An id's middle part is its **speaker key** ([`SettlementMemory::speaker_key`]): the person
+//! who says it. A settlement with resident people casts one resident per key, and that person
+//! tells their own lines in their own voice ([`line_by_for_visit`]); anyone else there passes a
+//! line on with its speaker named ([`SettlementMemory::told`]). Cathedral Station and the
+//! Amber Court have their residents ([`crate::people::deep_folk`]).
+//!
+//! # Registering a settlement (Wave 9 seam)
+//!
+//! Merrow City (Descent IV), the jungle tribes' village (Descent V) and the Prism Relay
+//! (Descent VI) are built by their Descent tracks; their lines are here already. A settlement
+//! whose population's name is one of [`Settlement::place_names`] remembers the Fathers
+//! ([`Settlement::of_place_name`]); its people speak the lines whose speaker key
+//! [`Settlement::speaker_for_role`] gives their trade. Wiring a new place takes one name in
+//! `place_names` (or the place's real name there) and, if its trades differ, a row in
+//! `speaker_for_role`.
 
 use super::ExpeditionState;
+use crate::people::Role;
 
 /// A deep settlement that remembers the expedition.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -17,10 +36,24 @@ pub enum Settlement {
     OldDeepCamp,
     /// The insect city in the Living Dark (Descent III).
     TheHive,
+    // --- Wave 9 (appended). -----------------------------------------------------------------
+    /// The merrow's city in its air bubble (Descent IV), where Sefa stayed.
+    MerrowCity,
+    /// The jungle tribes' village under the inner sun (Descent V), where Bran stayed.
+    JungleTribes,
+    /// The Descent VI outpost on the edge of the Prism Desert.
+    PrismRelay,
 }
 
 impl Settlement {
-    pub const ALL: [Self; 3] = [Self::GravelHollow, Self::OldDeepCamp, Self::TheHive];
+    pub const ALL: [Self; 6] = [
+        Self::GravelHollow,
+        Self::OldDeepCamp,
+        Self::TheHive,
+        Self::MerrowCity,
+        Self::JungleTribes,
+        Self::PrismRelay,
+    ];
 
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -28,6 +61,80 @@ impl Settlement {
             Self::GravelHollow => "Gravel Hollow",
             Self::OldDeepCamp => "the Old Deep camp",
             Self::TheHive => "the Hive",
+            Self::MerrowCity => "Merrow City",
+            Self::JungleTribes => "the jungle tribes",
+            Self::PrismRelay => "the Prism Relay",
+        }
+    }
+
+    /// The prefix of the settlement's memory ids.
+    #[must_use]
+    pub const fn id_prefix(self) -> &'static str {
+        match self {
+            Self::GravelHollow => "gravel_hollow.",
+            Self::OldDeepCamp => "old_deep_camp.",
+            Self::TheHive => "hive.",
+            Self::MerrowCity => "merrow_city.",
+            Self::JungleTribes => "jungle_tribes.",
+            Self::PrismRelay => "prism_relay.",
+        }
+    }
+
+    /// The names a settlement's population may go by (the registration seam, see the module
+    /// docs). The Descent tracks' settlements answer to their plan names.
+    #[must_use]
+    pub const fn place_names(self) -> &'static [&'static str] {
+        match self {
+            Self::GravelHollow => &[crate::crust::GRAVEL_HOLLOW_NAME],
+            Self::OldDeepCamp => &["Cathedral Station"],
+            Self::TheHive => &["The Amber Court", "the Amber Court"],
+            Self::MerrowCity => &["Merrow City", "Merrow Air Dock"],
+            Self::JungleTribes => &["the Jungle Tribes", "The Jungle Tribes", "Sunward Camp"],
+            Self::PrismRelay => &["Prism Relay", "the Prism Relay"],
+        }
+    }
+
+    /// The settlement a population named `name` is, if it remembers the Fathers.
+    #[must_use]
+    pub fn of_place_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|settlement| settlement.place_names().contains(&name))
+    }
+
+    /// The speaker key a resident of this settlement working `role` speaks for, if any.
+    ///
+    /// The residents cast by [`crate::people::deep_folk`] carry their key themselves; this is
+    /// the fallback for settlements whose people are generated (the Descent tracks' towns).
+    #[must_use]
+    pub const fn speaker_for_role(self, role: Role) -> Option<&'static str> {
+        match (self, role) {
+            (Self::GravelHollow, Role::Smith) => Some("smith"),
+            (Self::GravelHollow, Role::Innkeeper) => Some("innkeeper"),
+            (Self::GravelHollow | Self::MerrowCity | Self::JungleTribes, Role::Apprentice) => {
+                Some("child")
+            }
+            (Self::GravelHollow, Role::Prospector | Role::RetiredMiner) => Some("miner"),
+            (Self::OldDeepCamp, Role::Quartermaster) => Some("quartermaster"),
+            (Self::OldDeepCamp, Role::Prospector) => Some("prospector"),
+            (Self::OldDeepCamp, Role::Healer) => Some("medic"),
+            (Self::OldDeepCamp, Role::Cartographer) => Some("surveyor"),
+            (Self::OldDeepCamp, Role::Innkeeper | Role::Baker) => Some("cook"),
+            (Self::TheHive, Role::Storyteller) => Some("elder"),
+            (Self::TheHive, Role::Mechanic) => Some("pump_tender"),
+            (Self::TheHive, Role::Healer) => Some("nurse"),
+            (Self::TheHive, Role::Warden) => Some("soldier"),
+            (Self::TheHive, Role::ShrineKeeper) => Some("queen"),
+            (Self::MerrowCity, Role::Scholar | Role::Storyteller) => Some("archivist"),
+            (Self::MerrowCity, Role::ShrineKeeper | Role::Brewer) => Some("singer"),
+            (Self::MerrowCity, Role::Quartermaster | Role::Trader) => Some("dockkeeper"),
+            (Self::JungleTribes, Role::Warden | Role::Hermit) => Some("chief"),
+            (Self::JungleTribes, Role::Healer) => Some("healer"),
+            (Self::JungleTribes, Role::Farmer | Role::Prospector) => Some("hunter"),
+            (Self::PrismRelay, Role::Quartermaster | Role::Mechanic) => Some("keeper"),
+            (Self::PrismRelay, Role::Tinkerer | Role::Smith) => Some("glass_cutter"),
+            (Self::PrismRelay, Role::Courier | Role::Prospector | Role::Hermit) => Some("drifter"),
+            _ => None,
         }
     }
 }
@@ -51,10 +158,17 @@ impl SettlementMemory {
     pub fn open(&self, state: &ExpeditionState) -> bool {
         self.after_log.is_none_or(|log| state.found >= log)
     }
+
+    /// The speaker key: the middle part of the id (`hive.pump_tender.wrench_one` ->
+    /// `pump_tender`).
+    #[must_use]
+    pub fn speaker_key(&self) -> &'static str {
+        self.id.split('.').nth(1).unwrap_or("")
+    }
 }
 
 /// Every remembered line.
-pub const MEMORIES: [SettlementMemory; 15] = [
+pub const MEMORIES: [SettlementMemory; 40] = [
     SettlementMemory {
         id: "gravel_hollow.smith.rails",
         settlement: Settlement::GravelHollow,
@@ -177,6 +291,212 @@ pub const MEMORIES: [SettlementMemory; 15] = [
         line: "The light below is not a stone. It sleeps, and it dreams of the sky. The \
                Lamp-Bearers will come back to wake it. Or you will.",
     },
+    // --- Wave 9: Cathedral Station and the Hive hear of the deeper Descents. ----------------
+    SettlementMemory {
+        id: "old_deep_camp.quartermaster.drums",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "the quartermaster",
+        after_log: Some(31),
+        line: "A sea, they say, down past the Living Dark, and the Fathers rafted it. I sold \
+               Halloran those fuel drums, you know. Thought he wanted them for fuel.",
+    },
+    SettlementMemory {
+        id: "old_deep_camp.medic.fingers",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "the medic",
+        after_log: Some(33),
+        line: "Brannigan's notes say she took two of Halloran's fingers in the ice and he joked \
+               all the way through it. That's a good patient. The worst kind, and the best.",
+    },
+    SettlementMemory {
+        id: "old_deep_camp.surveyor.hollow",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "the surveyor",
+        after_log: Some(41),
+        line: "Calloway measured the inside of the world twice and wrote: hollow. I believed \
+               her numbers before I'd believe my own eyes. Still do.",
+    },
+    SettlementMemory {
+        id: "old_deep_camp.cook.grave",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "the cook",
+        after_log: Some(48),
+        line: "If you pass Halloran's grave, leave him a song. Any song. He hated a quiet room \
+               and he sang flat, so you can't do worse.",
+    },
+    SettlementMemory {
+        id: "old_deep_camp.prospector.twin",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "a prospector",
+        after_log: Some(51),
+        line: "Fellow came up the lift swearing he'd met himself down there. We laughed. Then \
+               he showed me his twin's tally marks, in his own hand, counting backwards.",
+    },
+    SettlementMemory {
+        id: "hive.elder.wet_singers",
+        settlement: Settlement::TheHive,
+        speaker: "a worker elder",
+        after_log: Some(36),
+        line: "Click. The Wet-Singers under the water remember the Lamp-Bearers too. They say \
+               Tall Ones. Tall. Yes. Taller than the comb, and gentle with it.",
+    },
+    SettlementMemory {
+        id: "hive.pump_tender.still_singing",
+        settlement: Settlement::TheHive,
+        speaker: "a pump tender",
+        after_log: Some(40),
+        line: "Wrench-One said: if my soft-shells come after me, show them the pumps still \
+               sing. Listen. They sing. Tell his friends, when you find them.",
+    },
+    SettlementMemory {
+        id: "hive.nurse.mother_twice",
+        settlement: Settlement::TheHive,
+        speaker: "a nurse",
+        after_log: Some(45),
+        line: "The humming soft-shell stayed with the giants' people? Hm-hm. Then she is a \
+               mother twice. The brood is glad. They hum her song louder today.",
+    },
+    SettlementMemory {
+        id: "hive.queen.warm_brood",
+        settlement: Settlement::TheHive,
+        speaker: "the queen's voice",
+        after_log: Some(49),
+        line: "The Lamp-Bearers hung a little sun inside the world so their sleep would be \
+               warm. We felt it once, long ago: the walls were warm for a whole brood.",
+    },
+    // --- Wave 9: Merrow City (Descent IV), where Sefa stayed. --------------------------------
+    SettlementMemory {
+        id: "merrow_city.dockkeeper.raft",
+        settlement: Settlement::MerrowCity,
+        speaker: "the dock keeper",
+        after_log: Some(31),
+        line: "Your Fathers came to the bubble on a raft of drums. We thought it was a whale \
+               that had swallowed a stove.",
+    },
+    SettlementMemory {
+        id: "merrow_city.singer.lullaby",
+        settlement: Settlement::MerrowCity,
+        speaker: "a singer",
+        after_log: None,
+        line: "We sing the Tall Ones' song to make the little ones sleep. A dry-air woman \
+               taught us a new verse, about a town far above that hums. We sing that too.",
+    },
+    SettlementMemory {
+        id: "merrow_city.archivist.sefa",
+        settlement: Settlement::MerrowCity,
+        speaker: "the archivist",
+        after_log: Some(36),
+        line: "Sefa-of-the-dry-air sat in our archive for nine of your years. She wrote our \
+               songs in a book with lines in it, and cried at all the right parts.",
+    },
+    SettlementMemory {
+        id: "merrow_city.child.hat",
+        settlement: Settlement::MerrowCity,
+        speaker: "a child",
+        after_log: Some(37),
+        line: "The big one, Amos, let me wear his hat. It smelled of smoke. Is it all smoke, \
+               up there? Sefa said no. Sefa said: mostly rain.",
+    },
+    SettlementMemory {
+        id: "merrow_city.archivist.thread",
+        settlement: Settlement::MerrowCity,
+        speaker: "the archivist",
+        after_log: Some(38),
+        line: "The oldest song says the Tall Ones came from the stars on a thread and tied it \
+               to the fire at the world's heart. Sefa said the thread is your cable. She was \
+               right about most things.",
+    },
+    SettlementMemory {
+        id: "merrow_city.archivist.flat_song",
+        settlement: Settlement::MerrowCity,
+        speaker: "the archivist",
+        after_log: Some(48),
+        line: "Sefa woke one night and said the radio man was gone. She sang his town song, \
+               very flat, the way he did. We all sang it flat with her.",
+    },
+    // --- Wave 9: the jungle tribes (Descent V), where Bran stayed. ---------------------------
+    SettlementMemory {
+        id: "jungle_tribes.child.cheese",
+        settlement: Settlement::JungleTribes,
+        speaker: "a child",
+        after_log: None,
+        line: "Grandmother Bran taught us a song about cheese. We don't know what cheese is. \
+               It's a very good song.",
+    },
+    SettlementMemory {
+        id: "jungle_tribes.chief.fever",
+        settlement: Settlement::JungleTribes,
+        speaker: "the chief",
+        after_log: Some(43),
+        line: "I burned with fever as a girl and the sky-woman Bran sat with me three nights. \
+               I am chief now. She named me, after: Ruth-Little.",
+    },
+    SettlementMemory {
+        id: "jungle_tribes.hunter.sled_board",
+        settlement: Settlement::JungleTribes,
+        speaker: "a hunter",
+        after_log: Some(44),
+        line: "We lent your Fathers our gentlest grazer. It came home alone with a painted \
+               board on its back: THE FATHERS' LOAD. The board hangs in the long-house.",
+    },
+    SettlementMemory {
+        id: "jungle_tribes.healer.soup",
+        settlement: Settlement::JungleTribes,
+        speaker: "the healer",
+        after_log: Some(45),
+        line: "I was Bran's hands when hers shook, at the end. Willow bark, cold cloth and \
+               soup. Soup is half of medicine, she said, and nagging is the other half.",
+    },
+    SettlementMemory {
+        id: "jungle_tribes.chief.slow_hum",
+        settlement: Settlement::JungleTribes,
+        speaker: "the chief",
+        after_log: Some(47),
+        line: "The radio man knew he was dying. He told my father: when the hum goes slower, \
+               don't be afraid. It isn't me. It's the big heart, resting.",
+    },
+    // --- Wave 9: the Prism Relay (Descent VI), the outpost on the glass desert's edge. -------
+    SettlementMemory {
+        id: "prism_relay.drifter.hello",
+        settlement: Settlement::PrismRelay,
+        speaker: "a drifter",
+        after_log: None,
+        line: "Sometimes the relay picks up a voice: a radio man saying hello. He's been dead \
+               for years. Out here, that's just a Tuesday.",
+    },
+    SettlementMemory {
+        id: "prism_relay.keeper.read_in_order",
+        settlement: Settlement::PrismRelay,
+        speaker: "the relay keeper",
+        after_log: Some(52),
+        line: "Twice a week someone comes in shaking because they met themselves. I tell them \
+               what Calloway told the first of us: read in order. The false one keys to \
+               nothing.",
+    },
+    SettlementMemory {
+        id: "prism_relay.glass_cutter.two_clocks",
+        settlement: Settlement::PrismRelay,
+        speaker: "the glass cutter",
+        after_log: Some(56),
+        line: "Varga came through with a grey beard he swore was black that morning. Time \
+               pools out there. I keep two clocks and believe neither of them.",
+    },
+    SettlementMemory {
+        id: "prism_relay.keeper.filters",
+        settlement: Settlement::PrismRelay,
+        speaker: "the relay keeper",
+        after_log: Some(59),
+        line: "Calloway left a set of lamp filters on that hook, red, gold and blue, with a \
+               note: for the doors. Best thing anyone ever left down here.",
+    },
+    SettlementMemory {
+        id: "prism_relay.drifter.streets",
+        settlement: Settlement::PrismRelay,
+        speaker: "a drifter",
+        after_log: Some(60),
+        line: "Past the glass the walls turn into streets. Varga and Calloway went down there, \
+               and the relay's needle has pointed after them ever since.",
+    },
 ];
 
 /// The lines `settlement`'s people may say to a crew with `state`, in order.
@@ -187,6 +507,32 @@ pub fn lines_for(
     MEMORIES
         .iter()
         .filter(move |memory| memory.settlement == settlement && memory.open(state))
+}
+
+/// The lines `speaker` (a speaker key) of `settlement` may tell a crew with `state`, in the
+/// order they open.
+pub fn lines_by<'a>(
+    settlement: Settlement,
+    speaker: &'a str,
+    state: &'a ExpeditionState,
+) -> impl Iterator<Item = &'static SettlementMemory> + 'a {
+    lines_for(settlement, state).filter(move |memory| memory.speaker_key() == speaker)
+}
+
+/// The line `speaker` of `settlement` tells a crew with `state` on its `visit`-th talk: their
+/// own open lines take turns, newest first (Wave 9: residents speak for themselves).
+#[must_use]
+pub fn line_by_for_visit(
+    settlement: Settlement,
+    speaker: &str,
+    state: &ExpeditionState,
+    visit: u32,
+) -> Option<&'static SettlementMemory> {
+    let mut open: Vec<&'static SettlementMemory> = lines_by(settlement, speaker, state).collect();
+    open.sort_by_key(|memory| memory.after_log.unwrap_or(0));
+    let count = u32::try_from(open.len()).ok().filter(|count| *count > 0)?;
+    let back = usize::try_from(visit % count).ok()?;
+    open.get(open.len() - 1 - back).copied()
 }
 
 /// The line with stable id `id`.

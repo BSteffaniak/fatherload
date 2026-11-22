@@ -295,6 +295,14 @@ impl WorldState {
             ids.push(TOWN_VILLAGE);
             // The Moon's colonists (Wave 6), on worlds whose Moon has a colony.
             ids.extend(people::colony::colony_settlement_id(&settings));
+            // Cathedral Station and the Amber Court (Wave 9). Nobody at the Court comes out to
+            // talk while it is hostile to the crew.
+            let court_hostile = self.living_dark.hive.court_hostile();
+            ids.extend(
+                people::deep_folk::settlement_ids(&settings)
+                    .into_iter()
+                    .filter(|id| !(court_hostile && people::deep_folk::is_hive_folk(*id))),
+            );
             for id in ids {
                 if found.contains_key(&id) {
                     continue;
@@ -797,9 +805,11 @@ impl WorldState {
             .is_some_and(|conversation| conversation.npc == npc);
         // A contractor building for this player talks about the job (WP-HOME).
         let site_line = self.site_talk(id, player_id);
-        // Gravel Hollow remembers the Fathers' expedition (Wave 8 integration).
-        let remembers = self.terrain.settings().generator.has_descents()
-            && settlement.population.village_name == crate::crust::GRAVEL_HOLLOW_NAME;
+        // The settlements that remember the Fathers' expedition (Wave 8 integration: Gravel
+        // Hollow; Wave 9: Cathedral Station's and the Amber Court's residents, and any
+        // settlement registered by name, see `expedition::memories`).
+        let remembers = remembering(self.terrain.settings(), &settlement);
+        let resident = people::deep_folk::resident_speaker(&character);
         let mut lines: Vec<ConversationLine> = Vec::new();
         let mut marked = None;
         {
@@ -817,15 +827,57 @@ impl WorldState {
                     }
                     let visit = state.memory(player_id).talks;
                     let spoken = people::talk(&character, state, &ctx);
-                    // Mid-conversation the greeting is already said.
-                    let skip = usize::from(continuing && spoken.len() > 1);
-                    lines.extend(spoken.into_iter().skip(skip).map(|line| ConversationLine {
-                        speaker: Speaker::Them,
-                        text: line.text,
-                    }));
-                    // Every other visit the talk turns to the Fathers.
-                    if remembers && visit % 2 == 1 {
-                        lines.extend(fathers_memory(&self.expedition, visit / 2));
+                    if let Some((remembered, speaker)) = resident {
+                        // A deep settlement's resident (Wave 9): their own greeting, the
+                        // day's word, then what they remember of the Fathers, in their voice.
+                        if !continuing {
+                            lines.extend(people::deep_folk::greeting(&character).map(|text| {
+                                ConversationLine {
+                                    speaker: Speaker::Them,
+                                    text: text.to_owned(),
+                                }
+                            }));
+                        }
+                        // Hive folk keep to their own words; station folk chat as well.
+                        if !people::deep_folk::is_hive_folk(id.village) {
+                            lines.extend(spoken.into_iter().skip(1).map(|line| ConversationLine {
+                                speaker: Speaker::Them,
+                                text: line.text,
+                            }));
+                        }
+                        lines.extend(resident_memory(
+                            &self.expedition,
+                            remembered,
+                            speaker,
+                            visit,
+                        ));
+                    } else {
+                        // Mid-conversation the greeting is already said.
+                        let skip = usize::from(continuing && spoken.len() > 1);
+                        lines.extend(spoken.into_iter().skip(skip).map(|line| ConversationLine {
+                            speaker: Speaker::Them,
+                            text: line.text,
+                        }));
+                        // Every other visit the talk turns to the Fathers: in the speaker's
+                        // own voice where they speak for a memory, else passed on.
+                        if let Some(remembered) = remembers
+                            && visit % 2 == 1
+                        {
+                            let own =
+                                remembered
+                                    .speaker_for_role(character.role)
+                                    .and_then(|speaker| {
+                                        resident_memory(
+                                            &self.expedition,
+                                            remembered,
+                                            speaker,
+                                            visit / 2,
+                                        )
+                                    });
+                            lines.extend(own.or_else(|| {
+                                fathers_memory(&self.expedition, remembered, visit / 2)
+                            }));
+                        }
                     }
                 }
                 TalkTopic::Rumours => {
@@ -834,9 +886,9 @@ impl WorldState {
                         state.remember(player_id, time.day, MemoryFact::Met);
                     }
                     lines.extend(said(people::say(&character, state, &ctx, Topic::Rumour)));
-                    if remembers {
+                    if let Some(remembered) = remembers {
                         let visit = state.memory(player_id).talks;
-                        lines.extend(fathers_memory(&self.expedition, visit));
+                        lines.extend(fathers_memory(&self.expedition, remembered, visit));
                     }
                 }
                 TalkTopic::Life => {
@@ -1317,15 +1369,51 @@ fn item_name(item: crate::item::ItemKind) -> String {
     }
 }
 
-/// What Gravel Hollow's people pass on about the Fathers' expedition on a crew's `visit` (Wave
-/// 8 integration: `expedition::memories`, opened as the crew reads the trail).
+/// What a settlement's people pass on about the Fathers' expedition on a crew's `visit` (Wave
+/// 8 integration: `expedition::memories`, opened as the crew reads the trail): anyone's line,
+/// with its speaker named.
 fn fathers_memory(
     expedition: &crate::expedition::ExpeditionState,
+    settlement: crate::expedition::memories::Settlement,
     visit: u32,
 ) -> Option<ConversationLine> {
-    use crate::expedition::memories::{Settlement as Remembering, line_for_visit};
-    line_for_visit(Remembering::GravelHollow, expedition, visit).map(|memory| ConversationLine {
-        speaker: Speaker::Them,
-        text: format!("The Fathers? We still tell of them. {}", memory.told()),
+    crate::expedition::memories::line_for_visit(settlement, expedition, visit).map(|memory| {
+        ConversationLine {
+            speaker: Speaker::Them,
+            text: format!("The Fathers? We still tell of them. {}", memory.told()),
+        }
     })
+}
+
+/// What `speaker` of `settlement` remembers of the Fathers, said in their own voice (Wave 9).
+fn resident_memory(
+    expedition: &crate::expedition::ExpeditionState,
+    settlement: crate::expedition::memories::Settlement,
+    speaker: &str,
+    visit: u32,
+) -> Option<ConversationLine> {
+    crate::expedition::memories::line_by_for_visit(settlement, speaker, expedition, visit).map(
+        |memory| ConversationLine {
+            speaker: Speaker::Them,
+            text: memory.line.to_owned(),
+        },
+    )
+}
+
+/// The memories `settlement`'s people tell, if it remembers the Fathers (Deep Descent worlds):
+/// a deep settlement with residents, or one registered by its name.
+fn remembering(
+    settings: &crate::worldgen::WorldSettings,
+    settlement: &Settlement,
+) -> Option<crate::expedition::memories::Settlement> {
+    if !settings.generator.has_descents() {
+        return None;
+    }
+    people::deep_folk::DeepSettlement::of_id(settlement.village)
+        .map(people::deep_folk::DeepSettlement::remembering)
+        .or_else(|| {
+            crate::expedition::memories::Settlement::of_place_name(
+                &settlement.population.village_name,
+            )
+        })
 }

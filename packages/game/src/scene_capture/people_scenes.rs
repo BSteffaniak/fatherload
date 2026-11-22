@@ -128,7 +128,7 @@ fn approach_someone(
 
 /// Opens a conversation with the person nearest seat 0's rig (that `wanted` accepts) by
 /// pressing the talk key.
-fn open_talk(stage: &mut SceneStage<'_>, wanted: fn(&Character) -> bool) {
+pub(super) fn open_talk(stage: &mut SceneStage<'_>, wanted: fn(&Character) -> bool) {
     let _ = approach_someone(stage, wanted);
     stage.settle(2);
     stage.hold(

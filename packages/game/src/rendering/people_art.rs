@@ -219,6 +219,210 @@ enum Legs {
     Robe,
 }
 
+/// The Amber Court's people (Wave 9): the hive insects' carapace colours by their trade
+/// (`(shell, shade, band)`): honey workers, a cream nurse, a rust-red soldier, a violet
+/// queen's voice and a greying elder.
+/// How much bigger than a person the Amber Court's insects are drawn.
+const HIVE_SCALE: f32 = 1.5;
+
+const fn hive_colours(role: Role) -> (Color, Color, Color) {
+    match role {
+        Role::Healer => (CREAM, SAND, GOLD),
+        Role::Warden => (RUST, MAROON, ORANGE),
+        Role::ShrineKeeper => (VIOLET, PLUM, LAVENDER),
+        Role::Storyteller => (STONE_LIGHT, STONE, AMBER),
+        _ => (AMBER, COPPER, GOLD),
+    }
+}
+
+/// Draws one of the Amber Court's insects at `pen` (feet centre) in `pose`: a banded abdomen
+/// behind, a thorax on six jointed legs, a round head with big compound eyes, feelers that
+/// bob slowly and mandibles that click while it talks, and its trade in its fore-claws (a
+/// wrench, a grub, a spear, a lamp, a staff). Everything moves slowly (no flashing).
+fn draw_hive_folk(
+    draw: &mut impl RaylibDraw,
+    pen: PersonPen,
+    character: &Character,
+    pose: Pose,
+    seconds: f32,
+) {
+    let seed = character.appearance.seed;
+    let role = character.role;
+    let (shell, shade, band) = hive_colours(role);
+    let f = if pose.facing < 0 { -1 } else { 1 };
+    // Drawn facing right; x mirrors about the feet centre when it faces left.
+    let mut r = |x: i32, y: i32, w: i32, h: i32, c: Color| {
+        let x = if f > 0 { x } else { -x - w + 1 };
+        pen.rect(draw, x, y, w, h, c);
+    };
+    let phase = (seed >> 9) % 100;
+    let step = pose
+        .stride
+        .map(|walked| ((walked / 6.0) as i32).rem_euclid(2));
+    let bob = i32::from(step == Some(1));
+    // Shadow.
+    r(-9, 0, 18, 1, with_alpha(INK, 80));
+    // Six legs, two by two, alternating as it walks.
+    for (index, x) in [-6, -1, 4].into_iter().enumerate() {
+        let lift = match step {
+            Some(s) if (index as i32 + s) % 2 == 0 => 1,
+            _ => 0,
+        };
+        r(x, -4 - lift, 1, 4 - (1 - lift), INK);
+        r(x + 1, -4 - lift, 1, 3, shade);
+        r(x - 1, -1 - lift, 2, 1, INK);
+    }
+    // The abdomen behind: an oval with honey bands.
+    let ab_y = -11 + bob;
+    r(-10, ab_y + 1, 8, 6, INK);
+    r(-11, ab_y + 2, 10, 4, INK);
+    r(-10, ab_y + 2, 8, 4, shell);
+    r(-9, ab_y + 1, 6, 1, shell);
+    for x in [-9, -6] {
+        r(x, ab_y + 2, 1, 4, band);
+    }
+    r(-10, ab_y + 5, 8, 1, shade);
+    // Wings folded over the abdomen, faint.
+    r(-9, ab_y, 6, 2, with_alpha(SKY_LIGHT, 90));
+    // The thorax.
+    let th_y = -9 + bob;
+    r(-3, th_y - 1, 7, 6, INK);
+    r(-2, th_y, 5, 4, shell);
+    r(-2, th_y + 3, 5, 1, shade);
+    r(-1, th_y, 2, 1, band);
+    // The head, raised in front, with compound eyes.
+    let hd_y = -14 + bob;
+    r(3, hd_y, 6, 6, INK);
+    r(4, hd_y + 1, 4, 4, shell);
+    let blink = ((seconds * 0.8 + phase as f32 / 17.0) % 5.0) < 0.15;
+    r(6, hd_y + 1, 2, 2, if blink { shade } else { DEEP_BLUE });
+    if !blink {
+        r(7, hd_y + 1, 1, 1, SKY_LIGHT);
+    }
+    // Mandibles, clicking while it talks.
+    let open = i32::from(pose.talking && ((seconds * 6.0) as i32) % 2 == 0);
+    r(8, hd_y + 4, 2, 1, INK);
+    r(8, hd_y + 5 + open, 2, 1, INK);
+    // Feelers: two, bobbing slowly out of step; the elder's droop, the queen's voice wears a
+    // crest between them.
+    let sway = ((seconds * 1.4 + phase as f32 * 0.1).sin() * 1.5) as i32;
+    let droop = i32::from(role == Role::Storyteller) * 2;
+    for (index, lean) in [(0, 0), (1, 2)] {
+        let x0 = 5 + index;
+        for k in 0..4 {
+            let x = x0 + k / 2 + lean / 2;
+            let y = hd_y - 1 - k + (if k > 1 { droop } else { 0 }) + if k == 3 { sway } else { 0 };
+            r(x, y, 1, 1, shade);
+        }
+        r(x0 + 2 + lean / 2, hd_y - 4 + droop + sway, 1, 1, band);
+    }
+    if role == Role::ShrineKeeper {
+        r(4, hd_y - 2, 4, 1, GOLD);
+        r(5, hd_y - 3, 1, 1, GOLD);
+        r(7, hd_y - 3, 1, 1, GOLD);
+    }
+    // Fore-claws holding the trade, before the head.
+    let claw_y = th_y + 1;
+    r(4, claw_y, 3, 1, INK);
+    match role {
+        // The pump tender's wrench (the Wrench-One's, polished).
+        Role::Mechanic => {
+            r(7, claw_y - 3, 1, 5, STEEL);
+            r(6, claw_y - 4, 3, 1, STEEL_LIGHT);
+        }
+        // The nurse carries a sleeping grub.
+        Role::Healer => {
+            r(6, claw_y - 1, 4, 3, BONE);
+            r(7, claw_y - 1, 1, 3, CREAM);
+        }
+        // The guard's spear of comb wax and bone.
+        Role::Warden => {
+            r(7, claw_y - 9, 1, 12, LOAM);
+            r(6, claw_y - 11, 3, 2, BONE);
+        }
+        // The queen's voice holds up a small lamp of jelly, glowing softly.
+        Role::ShrineKeeper => {
+            r(7, claw_y - 3, 1, 3, SOIL_DARK);
+            r(6, claw_y - 6, 3, 3, GOLD);
+            r(7, claw_y - 5, 1, 1, CREAM);
+        }
+        // The elder leans on a root staff.
+        Role::Storyteller => {
+            r(7, claw_y - 4, 1, 8, SOIL);
+        }
+        _ => {
+            r(6, claw_y - 1, 3, 2, GOLD);
+        }
+    }
+}
+
+/// The Amber Court insect's portrait for the talk panel ([`PORTRAIT_SIZE`] art pixels).
+fn draw_hive_portrait(
+    draw: &mut impl RaylibDraw,
+    pen: PersonPen,
+    character: &Character,
+    talking: bool,
+    seconds: f32,
+) {
+    let (shell, shade, band) = hive_colours(character.role);
+    let size = PORTRAIT_SIZE;
+    let phase = (character.appearance.seed >> 9) % 100;
+    // A comb backdrop: hexagon-ish cells in amber.
+    pen.rect(draw, 0, 0, size, size, with_alpha(SOIL_DARK, 200));
+    for row in 0..5 {
+        for column in 0..5 {
+            let x = column * 7 + (row % 2) * 3 - 2;
+            let y = row * 7 - 1;
+            pen.rect(draw, x, y, 6, 6, with_alpha(AMBER, 50));
+            pen.rect(draw, x + 1, y + 1, 4, 4, with_alpha(SOIL_DARK, 120));
+        }
+    }
+    // Shoulders of the thorax.
+    pen.rect(draw, 5, 23, 22, 9, INK);
+    pen.rect(draw, 6, 24, 20, 8, shell);
+    pen.rect(draw, 6, 29, 20, 1, shade);
+    pen.rect(draw, 14, 24, 4, 3, band);
+    // The head: a broad rounded shell.
+    pen.rect(draw, 7, 8, 18, 16, INK);
+    pen.rect(draw, 8, 7, 16, 1, INK);
+    pen.rect(draw, 8, 9, 16, 14, shell);
+    pen.rect(draw, 9, 8, 14, 1, shell);
+    pen.rect(draw, 8, 20, 16, 2, shade);
+    // Two big compound eyes, faceted.
+    let blink = ((seconds * 0.8 + phase as f32 / 17.0) % 5.0) < 0.15;
+    for x in [9, 18] {
+        pen.rect(draw, x, 11, 6, 6, INK);
+        if blink {
+            pen.rect(draw, x + 1, 13, 4, 1, shade);
+        } else {
+            pen.rect(draw, x + 1, 12, 4, 4, DEEP_BLUE);
+            pen.px(draw, x + 1, 12, SKY_LIGHT);
+            pen.px(draw, x + 3, 14, OCEAN);
+            pen.px(draw, x + 2, 15, OCEAN);
+        }
+    }
+    // Mandibles, clicking while it talks.
+    let open = i32::from(talking && ((seconds * 6.0) as i32) % 2 == 0);
+    pen.rect(draw, 11 - open, 22, 4, 2, INK);
+    pen.rect(draw, 17 + open, 22, 4, 2, INK);
+    pen.px(draw, 14 - open, 24, INK);
+    pen.px(draw, 17 + open, 24, INK);
+    // Feelers curling up out of the frame.
+    let sway = ((seconds * 1.4 + phase as f32 * 0.1).sin() * 1.5) as i32;
+    for (x, lean) in [(11, -1), (20, 1)] {
+        for k in 0..6 {
+            pen.px(draw, x + lean * (k / 2), 7 - k, shade);
+        }
+        pen.rect(draw, x + lean * 3 + sway, 0, 2, 2, band);
+    }
+    if character.role == Role::ShrineKeeper {
+        pen.rect(draw, 12, 5, 8, 2, GOLD);
+        pen.px(draw, 13, 4, GOLD);
+        pen.px(draw, 16, 3, GOLD);
+        pen.px(draw, 18, 4, GOLD);
+    }
+}
+
 /// Draws `character` at `pen` (feet centre) in `pose` at `seconds`.
 pub fn draw_person_posed(
     draw: &mut impl RaylibDraw,
@@ -227,6 +431,16 @@ pub fn draw_person_posed(
     pose: Pose,
     seconds: f32,
 ) {
+    if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
+        // The Court's insects stand half again as big as people (their logs say "the size of
+        // the rig").
+        let pen = PersonPen {
+            pixel: pen.pixel * HIVE_SCALE,
+            ..pen
+        };
+        draw_hive_folk(draw, pen, character, pose, seconds);
+        return;
+    }
     let look: Appearance = character.appearance;
     let seed = look.seed;
     let culture = character.culture;
@@ -704,6 +918,9 @@ pub fn draw_person_posed(
 /// The figure's height in art pixels (for name tags and the portrait frame).
 #[must_use]
 pub const fn person_height(character: &Character) -> i32 {
+    if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
+        return 27;
+    }
     let tall = match character.appearance.build {
         4 => 2,
         1 => 1,
@@ -728,6 +945,10 @@ pub fn draw_portrait(
     talking: bool,
     seconds: f32,
 ) {
+    if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
+        draw_hive_portrait(draw, pen, character, talking, seconds);
+        return;
+    }
     let look = character.appearance;
     let seed = look.seed;
     let culture = character.culture;

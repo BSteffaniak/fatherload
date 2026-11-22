@@ -298,6 +298,32 @@ impl Settlement {
         )
     }
 
+    /// A deep settlement's routine view (Wave 9, [`super::deep_folk`]): residents who live and
+    /// work in one carved hall (no building to enter, they sleep in the hall), shown once the
+    /// hall is explored like every underground settlement.
+    #[must_use]
+    pub fn deep_hall(
+        id: VillageId,
+        ground_row: i32,
+        span: (i32, i32),
+        plaza: (i32, i32),
+        population: &Population,
+    ) -> Self {
+        let homes = vec![None; population.characters.len()];
+        let keepers = vec![None; population.characters.len()];
+        Self::assemble(
+            id,
+            ground_row,
+            span,
+            plaza,
+            Vec::new(),
+            population,
+            &homes,
+            &keepers,
+            true,
+        )
+    }
+
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
     fn assemble(
         village: VillageId,
@@ -594,6 +620,10 @@ pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlem
     let built = SETTLEMENTS.get_or_compute(key, || {
         if super::colony::is_colony(id) {
             return super::colony::colony_settlement(settings).map(Arc::new);
+        }
+        // Cathedral Station and the Amber Court (Wave 9).
+        if let Some(place) = super::deep_folk::DeepSettlement::of_id(id) {
+            return super::deep_folk::settlement(settings, place).map(Arc::new);
         }
         // Sky towns and sky cities share the sky flag in their ids (Wave 6 fix): a sky city
         // this world has keeps its id as before, and every other sky-flagged id falls through

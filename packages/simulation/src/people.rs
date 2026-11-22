@@ -55,6 +55,7 @@ pub mod colony;
 #[cfg(test)]
 mod content_tests;
 pub mod contractor;
+pub mod deep_folk;
 pub mod dialogue;
 pub mod ledger;
 pub mod memory;

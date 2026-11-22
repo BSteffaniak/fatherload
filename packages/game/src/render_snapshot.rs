@@ -1238,7 +1238,9 @@ fn view_snapshot(
             .and_then(|id| world.bases().module(id))
             .map(|module| module.kind),
         in_colony: world.at_colony_counter(player_id),
-        logistics_stop: crate::shell::logistics::stop_prompt(world, player_id),
+        // A deep hall's resident in reach takes the use prompt from its counter (Wave 9).
+        logistics_stop: crate::shell::logistics::stop_prompt(world, player_id)
+            .filter(|_| crate::shell::deep_resident_in_reach(world, player_id).is_none()),
         seat_index,
         player_id,
         viewport,

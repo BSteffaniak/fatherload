@@ -178,9 +178,9 @@ fn classic_worlds_keep_the_old_page_cycle() {
 }
 
 #[test]
-fn arriving_at_the_old_deeps_outpost_its_camp_remembers_the_fathers() {
-    // Wave 8 integration: the deep settlements' memories of the expedition go up as a card,
-    // once a day, on the seat that arrives.
+fn arriving_at_the_old_deeps_outpost_its_people_come_out_to_talk() {
+    // Wave 9: Cathedral Station has resident people, who tell their memories of the Fathers
+    // in conversation; the Wave 8 card no longer goes up there.
     let mut world = deep_world();
     world.set_expedition(ExpeditionState {
         found: 21,
@@ -203,13 +203,23 @@ fn arriving_at_the_old_deeps_outpost_its_camp_remembers_the_fathers() {
             WorldPos::tile_center(i64::from(outpost.column), i64::from(outpost.floor_row - 1)),
         );
     });
-    idle(&mut game, 3);
-    let moment = game.shell.seat(0).story_moment.clone().expect("a card");
-    assert_eq!(moment.kind, StoryMomentKind::Remembered);
-    assert_eq!(moment.title, "Cathedral Station");
-    assert!(moment.text.contains('"'), "{}", moment.text);
-    // Once a day: staying on adds no new card.
-    game.shell.seat_mut(0).story_moment = None;
-    idle(&mut game, 3);
-    assert!(game.shell.seat(0).story_moment.is_none());
+    idle(&mut game, 30);
+    assert!(
+        game.shell
+            .seat(0)
+            .story_moment
+            .as_ref()
+            .is_none_or(|moment| moment.kind != StoryMomentKind::Remembered)
+    );
+    let station = fatherload_simulation::people::deep_folk::CATHEDRAL_STATION;
+    let folk = game
+        .world()
+        .entities()
+        .of_kind(fatherload_simulation::entity::EntityKind::Npc)
+        .filter(|entity| {
+            matches!(entity.state, fatherload_simulation::entity::EntityState::Npc(state)
+                if state.character.village == station)
+        })
+        .count();
+    assert_eq!(folk, 5, "the station's five residents are about");
 }

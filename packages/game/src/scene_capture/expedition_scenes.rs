@@ -22,6 +22,11 @@ use fatherload_simulation::{
     },
 };
 
+use fatherload_simulation::people::{
+    Role,
+    deep_folk::{self, DeepSettlement},
+};
+
 use super::{Scene, SceneStage, carve, place_rig, reveal};
 use crate::shell::ModalScreen;
 
@@ -37,24 +42,89 @@ const fn settings() -> WorldSettings {
 
 pub const EXPEDITION_SCENES: &[Scene] = &[
     Scene {
-        name: "settlement_memory_cathedral",
-        summary: "Wave 8 integration: arriving at Cathedral Station, its prospectors' camp remembers the Fathers on a story card",
-        setup: memory_scene,
+        name: "residents_cathedral_station",
+        summary: "Wave 9: Cathedral Station's residents in their hall; the medic tells what she remembers of the Fathers in conversation",
+        setup: |stage| residents_scene(stage, DeepSettlement::CathedralStation, Some(Role::Healer)),
+    },
+    Scene {
+        name: "residents_amber_court",
+        summary: "Wave 9: the Amber Court's insect residents; the queen's voice speaks of the Lamp-Bearers' little sun",
+        setup: |stage| residents_scene(stage, DeepSettlement::AmberCourt, Some(Role::ShrineKeeper)),
+    },
+    Scene {
+        name: "residents_amber_court_hall",
+        summary: "Wave 9: the Amber Court's residents about their comb hall: the elder, the pump tender, the nurse, the guard and the queen's voice",
+        setup: |stage| residents_scene(stage, DeepSettlement::AmberCourt, None),
     },
     Scene {
         name: "expedition_camp",
         summary: "The Fathers' first camp beside the builders' cable: tent, lamp, sled, stove and the cipher canister waiting on its crate",
-        setup: |stage| camp_scene(stage, 1, false),
+        setup: |stage| camp_scene(stage, 1, Shot::Waiting),
     },
     Scene {
         name: "expedition_log_read",
         summary: "Reading a log: the rig at the Grey Stone wreck, the canister open and the expedition log card",
-        setup: |stage| camp_scene(stage, 6, true),
+        setup: |stage| camp_scene(stage, 6, Shot::Read),
     },
     Scene {
         name: "expedition_cairn",
         summary: "A cairn with its flag and chalk arrow in the Slate Shelves, the canister still sealed (the log before is unread)",
-        setup: |stage| camp_scene(stage, 8, false),
+        setup: |stage| camp_scene(stage, 8, Shot::Sealed),
+    },
+    Scene {
+        name: "expedition_raft_camp",
+        summary: "Wave 9: the Fathers' camp on the Underground Ocean: frost on the canvas, the sled lashed on fuel drums, a paddle",
+        setup: |stage| camp_scene(stage, 31, Shot::Waiting),
+    },
+    Scene {
+        name: "expedition_sky_camp",
+        summary: "Wave 9: the camp in the Inner Sky, on a floating stone of its own under the inner sun",
+        setup: |stage| camp_scene(stage, 41, Shot::Waiting),
+    },
+    Scene {
+        name: "expedition_jungle_camp",
+        summary: "Wave 9: Bran's camp in the Megafauna Jungle: a leaf thatch, a hammock, a tusk and flowers, the log read on its card",
+        setup: |stage| camp_scene(stage, 43, Shot::Read),
+    },
+    Scene {
+        name: "expedition_dov_grave",
+        summary: "Wave 9: Dov Halloran's grave in the Sunforge: the sunstone with his headset, flowers, the canister at its foot",
+        setup: |stage| camp_scene(stage, 48, Shot::Waiting),
+    },
+    Scene {
+        name: "expedition_thin_camp",
+        summary: "Wave 9: the camp in the Mirror Strata, its mirror twin standing faintly beside it and its corners rotting to blocks",
+        setup: |stage| camp_scene(stage, 51, Shot::Waiting),
+    },
+    Scene {
+        name: "expedition_codex",
+        summary: "Wave 9: the codex page: the hired hand's strongbox diary and the builders' tablets and room inscriptions",
+        setup: codex_scene,
+    },
+    Scene {
+        name: "expedition_builder_echo",
+        summary: "Wave 9: the first builder echo in the Sunforge, Ines's translation on the card",
+        setup: |stage| echo_scene(stage, 20),
+    },
+    Scene {
+        name: "anomaly_sideways",
+        summary: "Wave 9: a sideways room below Descent IV: gravity pulls to the right wall, rubble heaped on it",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::Sideways),
+    },
+    Scene {
+        name: "anomaly_sunlit",
+        summary: "Wave 9: a sunlit room: bloom and warm light from nowhere, a brass sun-disc in the wall",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::Sunlit),
+    },
+    Scene {
+        name: "anomaly_weightless",
+        summary: "Wave 9: a floating room: stones adrift, the caches under the ceiling",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::Weightless),
+    },
+    Scene {
+        name: "anomaly_lensing",
+        summary: "Wave 9: a bent room: the picture lensed round a dark knot, rings of bent light",
+        setup: |stage| anomaly_scene(stage, AnomalyKind::Lensing),
     },
     Scene {
         name: "expedition_journal",
@@ -99,6 +169,8 @@ fn deep_world(world: &mut WorldState, player: PlayerId) {
     *world.terrain_mut() = Terrain::generate(&settings());
     world.set_progression_rules(ProgressionRules::Descent);
     world.install_logistics_sites(&landmarks::logistics_sites(&settings()), false);
+    // Below Descent I the crew holds the Deep Claim (the Sinkhole's gate).
+    world.grant_deep_claim();
     if let Some(rig) = world.player_mut(player) {
         rig.fuel_tank_level = 14;
         rig.fuel_capacity = fatherload_simulation::player::fuel_capacity_for_level(14);
@@ -124,21 +196,32 @@ fn read_up_to(found: u8, echoes: u8) -> ExpeditionState {
     }
 }
 
-/// The rig at log `number`'s site: inside it (`enter`: the canister opens through the tick)
-/// or in a tunnel dug up to its wall (the canister waits, or shows its seal).
-fn camp_scene(stage: &mut SceneStage<'_>, number: u8, enter: bool) {
+/// How a camp scene shows its canister.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Shot {
+    /// The rig in a tunnel at the wall, the canister waiting its turn.
+    Waiting,
+    /// The rig at the wall, the canister sealed (the log before is unread).
+    Sealed,
+    /// The rig inside: the canister opens through the tick and its card goes up.
+    Read,
+}
+
+/// The rig at log `number`'s site, its canister as `shot` shows it.
+fn camp_scene(stage: &mut SceneStage<'_>, number: u8, shot: Shot) {
     let room = site(number);
+    let enter = shot == Shot::Read;
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         deep_world(world, player);
-        // Read up to the log before (a cairn scene leaves a gap, so its canister is sealed).
-        let before = if enter || number == 1 {
-            number - 1
-        } else {
+        // Read up to the log before (a sealed shot leaves a gap).
+        let before = if shot == Shot::Sealed {
             number - 2
+        } else {
+            number - 1
         };
         let mut journal = read_up_to(before, 0);
-        if !enter && number > 1 {
+        if shot == Shot::Sealed {
             journal.sealed.insert(number);
         }
         // No echo interrupts these shots.
@@ -217,10 +300,10 @@ fn echo_scene(stage: &mut SceneStage<'_>, index: usize) {
     stage.settle(40);
 }
 
-/// The first room of `kind` out from the scene column, through Descents I to III.
+/// The first room of `kind` out from the scene column, through Descents I to VI.
 fn room_of(kind: AnomalyKind) -> Option<AnomalyRoom> {
     let layout = descent::layout(&settings());
-    let (_, bottom) = layout.descent_rows(fatherload_simulation::descent::Descent::LivingDark);
+    let (_, bottom) = layout.descent_rows(fatherload_simulation::descent::Descent::StrangeLayers);
     let area = TileRect {
         min: TilePosition {
             x: -900,
@@ -264,13 +347,16 @@ fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
                 inner.max.y - 1..inner.max.y + 1,
             );
         }
-        let row = if kind == AnomalyKind::GravityFlip {
-            inner.min.y + 1
-        } else {
-            inner.max.y
+        let (column, row) = match kind {
+            AnomalyKind::GravityFlip => (inner.min.x + 5, inner.min.y + 1),
+            // Resting on the right wall, the room's floor.
+            AnomalyKind::Sideways => (inner.max.x - 2, inner.min.y + 2),
+            // Adrift in the middle.
+            AnomalyKind::Weightless => (inner.min.x + 7, centre.y),
+            // Clear of the caches (the mirror room's twins sit three in from each wall).
+            _ => (inner.min.x + 5, inner.max.y),
         };
-        // Clear of the caches (the mirror room's twins sit three in from each wall).
-        place_rig(world, player, inner.min.x + 5, row);
+        place_rig(world, player, column, row);
         reveal(
             world,
             player,
@@ -283,33 +369,85 @@ fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
     stage.settle(600);
 }
 
-/// The rig at the Old Deep's outpost with the trail read past the Cathedral: the camp's
-/// memory of the Fathers goes up as a card (Wave 8 integration).
-fn memory_scene(stage: &mut SceneStage<'_>) {
+/// The rig in a deep settlement's hall with the trail read deep into the Hollow World: its
+/// residents are about, and the one working `role` tells a memory of the Fathers in
+/// conversation (Wave 9).
+fn residents_scene(stage: &mut SceneStage<'_>, place: DeepSettlement, role: Option<Role>) {
+    let Some((ground, first, last)) = deep_folk::hall(&settings(), place) else {
+        return;
+    };
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         deep_world(world, player);
-        world.grant_deep_claim();
-        let mut journal = read_up_to(21, 0);
+        let mut journal = read_up_to(49, 0);
         journal.echoes = u8::try_from(ECHOES.len()).unwrap_or(u8::MAX);
         world.set_expedition(journal);
-        let Some(outpost) = world
-            .logistics()
-            .outposts
-            .values()
-            .find(|outpost| outpost.descent == 1)
-            .cloned()
-        else {
-            return;
-        };
-        place_rig(world, player, outpost.column, outpost.floor_row - 1);
+        let middle = i32::midpoint(first, last);
+        place_rig(world, player, middle, ground - 1);
         reveal(
             world,
             player,
-            outpost.column - 40..outpost.column + 40,
-            outpost.floor_row - 20..outpost.floor_row + 10,
+            first - 40..last + 40,
+            ground - 22..ground + 10,
         );
         world.stream_terrain_near_players();
     });
-    stage.settle(40);
+    // The population refreshes every half second; then let them settle into their day.
+    stage.settle(150);
+    stage.seat(0).village.banner = None;
+    match role {
+        Some(Role::Healer) => super::people_scenes::open_talk(stage, |c| c.role == Role::Healer),
+        Some(_) => super::people_scenes::open_talk(stage, |c| c.role == Role::ShrineKeeper),
+        None => {
+            // Back from the residents so the hall and its people show whole.
+            stage.play_on(|world| {
+                let player = world.player_ids().next();
+                if let Some(player) = player {
+                    world.teleport_rig_to(
+                        player,
+                        fatherload_simulation::position::WorldPos::tile_center(
+                            i64::from(first - 6),
+                            i64::from(ground - 1),
+                        ),
+                    );
+                }
+            });
+            stage.settle(4);
+        }
+    }
+}
+
+/// The codex page of a crew that has opened four strongboxes, read three tablets and the
+/// Star Core's revelation, and entered two of the deeper rooms.
+fn codex_scene(stage: &mut SceneStage<'_>) {
+    let room = site(13);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(21, u8::try_from(ECHOES.len()).unwrap_or(u8::MAX));
+        journal.anomaly_kinds = AnomalyKind::Sunlit.bit() | AnomalyKind::Sideways.bit();
+        world.set_expedition(journal);
+        let first = fatherload_simulation::old_deep::LOG_TABLET_FIRST;
+        world.set_codex_finds_for_tests(
+            &[0, 1, 2, 4],
+            &[
+                first,
+                first + 1,
+                first + 3,
+                fatherload_simulation::old_deep::LOG_CORE_REVEAL,
+            ],
+        );
+        let floor = room.floor_row();
+        let x = room.bounds.min.x - 20;
+        carve(world, x - 6..x + 6, floor - 3..floor);
+        place_rig(world, player, x, floor - 1);
+        reveal(world, player, x - 30..x + 30, floor - 16..floor + 14);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::ExpeditionCodex);
+    // The Star Core's revelation, pinned under the list.
+    seat.selected_menu_item = 7;
+    stage.settle(3);
 }

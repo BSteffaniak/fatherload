@@ -1132,10 +1132,12 @@ impl LocalGame {
     /// The Living Dark's news for local seats (Wave 8): the Mycelial Mind's fight and its
     /// rewards, the Amber Court's anger at theft, the Swarm's fall, and the acid tide turning
     /// for seats in the Flesh Caverns. News with no rig of its own reaches every local seat.
-    /// A card for each local seat arriving at a deep settlement that remembers the Fathers'
-    /// expedition (Wave 8 integration, `expedition::memories`): Gravel Hollow, the Old Deep's
-    /// camp at its outpost and the Amber Court. One line a settlement a day, opened as the
-    /// crew reads the trail; it reads only replicated state, so it works online too.
+    /// A card for each local seat arriving at a deep outpost that remembers the Fathers'
+    /// expedition (Wave 8 integration, `expedition::memories`): Gravel Hollow's, and the outposts
+    /// of Descents IV-VI until their settlements' people are wired (Wave 9). Cathedral Station
+    /// and the Amber Court have resident people now, who tell their memories in conversation
+    /// instead (`people::deep_folk`). One line a settlement a day, opened as the crew reads the
+    /// trail; it reads only replicated state, so it works online too.
     fn announce_settlement_memories(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::expedition::memories::{Settlement, line_for_visit};
         let world = self.runtime.world();
@@ -1149,18 +1151,17 @@ impl LocalGame {
                 continue;
             };
             let tile = rig.tile_in(crate::view_frame::frame());
-            let settlement = if world.at_court(*player) {
-                Some(Settlement::TheHive)
-            } else {
+            let settlement =
                 world
                     .logistics()
                     .outpost_at(tile)
                     .and_then(|outpost| match outpost.descent {
                         0 => Some(Settlement::GravelHollow),
-                        1 => Some(Settlement::OldDeepCamp),
+                        3 => Some(Settlement::MerrowCity),
+                        4 => Some(Settlement::JungleTribes),
+                        5 => Some(Settlement::PrismRelay),
                         _ => None,
-                    })
-            };
+                    });
             let Some(settlement) = settlement else {
                 continue;
             };
@@ -1174,6 +1175,9 @@ impl LocalGame {
                 Settlement::GravelHollow => "Gravel Hollow",
                 Settlement::OldDeepCamp => "Cathedral Station",
                 Settlement::TheHive => "The Amber Court",
+                Settlement::MerrowCity => "Merrow City",
+                Settlement::JungleTribes => "The Jungle Tribes",
+                Settlement::PrismRelay => "The Prism Relay",
             };
             cards.push((seat, settlement, place, memory.told()));
         }

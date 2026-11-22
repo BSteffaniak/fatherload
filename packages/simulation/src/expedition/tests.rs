@@ -404,18 +404,87 @@ fn a_journal_reads_as_a_prefix_and_memories_open_with_the_trail() {
         );
     }
     for memory in &MEMORIES {
-        assert!(memory.id.starts_with(match memory.settlement {
-            Settlement::GravelHollow => "gravel_hollow.",
-            Settlement::OldDeepCamp => "old_deep_camp.",
-            Settlement::TheHive => "hive.",
-        }));
+        assert!(memory.id.starts_with(memory.settlement.id_prefix()));
+        assert_eq!(memory.id.split('.').count(), 3, "{}", memory.id);
+        assert!(!memory.speaker_key().is_empty());
         assert!(
             memory
                 .after_log
                 .is_none_or(|log| usize::from(log) <= LOGS.len())
         );
+        assert!(memory.line.len() < 260, "{}", memory.id);
     }
     assert_eq!(Stratum::TheHive.descent(), Descent::LivingDark);
+}
+
+/// Wave 9: the settlements of Descents IV-VI remember the member who stayed with them (or
+/// passed through), and their lines wait for the logs that tell of it; the registration seam
+/// finds them by name and casts speakers by trade.
+#[test]
+fn the_deeper_settlements_remember_their_fathers_and_register_by_name() {
+    use super::memories::{line_by_for_visit, lines_by};
+    use crate::people::Role;
+    let mut state = ExpeditionState::default();
+    for (settlement, name) in [
+        (Settlement::MerrowCity, "Sefa"),
+        (Settlement::JungleTribes, "Bran"),
+        (Settlement::PrismRelay, "Calloway"),
+    ] {
+        let lines: Vec<_> = MEMORIES
+            .iter()
+            .filter(|memory| memory.settlement == settlement)
+            .collect();
+        assert!(lines.len() >= 5, "{settlement:?}");
+        assert!(lines.iter().any(|memory| memory.line.contains(name)));
+        // Something to say from the first visit; the rest opens with the trail.
+        assert!(lines.iter().any(|memory| memory.after_log.is_none()));
+        assert!(lines.iter().any(|memory| memory.after_log.is_some()));
+        assert_eq!(
+            Settlement::of_place_name(settlement.place_names()[0]),
+            Some(settlement)
+        );
+    }
+    assert_eq!(
+        Settlement::of_place_name("Cathedral Station"),
+        Some(Settlement::OldDeepCamp)
+    );
+    assert_eq!(Settlement::of_place_name("Ashford"), None);
+    // Speakers by trade: an archivist of Merrow City tells the archivist's lines in turn.
+    assert_eq!(
+        Settlement::MerrowCity.speaker_for_role(Role::Scholar),
+        Some("archivist")
+    );
+    assert!(line_by_for_visit(Settlement::MerrowCity, "archivist", &state, 0).is_none());
+    state.found = 38;
+    let told: BTreeSet<&str> = (0..6)
+        .filter_map(|visit| line_by_for_visit(Settlement::MerrowCity, "archivist", &state, visit))
+        .map(|memory| memory.id)
+        .collect();
+    assert_eq!(
+        told,
+        lines_by(Settlement::MerrowCity, "archivist", &state)
+            .map(|memory| memory.id)
+            .collect()
+    );
+    assert_eq!(told.len(), 2, "{told:?}");
+    // Newest first.
+    assert_eq!(
+        line_by_for_visit(Settlement::MerrowCity, "archivist", &state, 0).map(|m| m.id),
+        Some("merrow_city.archivist.thread")
+    );
+    // Every speaker a trade casts has lines to tell.
+    for settlement in Settlement::ALL {
+        for role in Role::ALL.into_iter().chain(Role::LUNAR).chain(Role::SKY) {
+            if let Some(speaker) = settlement.speaker_for_role(role) {
+                assert!(
+                    MEMORIES
+                        .iter()
+                        .any(|m| m.settlement == settlement && m.speaker_key() == speaker),
+                    "{settlement:?} {speaker}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

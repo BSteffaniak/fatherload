@@ -59,8 +59,8 @@ pub use story::{
 pub use test_mode::WARP_BANDS;
 pub use village::{
     BANNER_TICKS, SeatVillage, TalkChoice, VILLAGE_COUNTER_X, VILLAGE_REACH, VillageBanner,
-    VillageInterior, building_title, gift_items, interior_village, interior_village_now,
-    keeper_inside, room_residents, talk_choices, talk_target,
+    VillageInterior, building_title, deep_resident_in_reach, gift_items, interior_village,
+    interior_village_now, keeper_inside, room_residents, talk_choices, talk_target,
 };
 
 pub use descent::{STRATUM_BANNER_TICKS, StratumBanner};
@@ -1440,6 +1440,15 @@ impl SeatUi {
                 .and_then(|player| homes::home_door_here(ctx.world, player))
             {
                 self.enter_home(ctx, plot, 0, homes::HOME_DOOR_X + 46.0, cues);
+                return false;
+            }
+            // A deep hall's resident in reach talks before the hall's counter (Wave 9).
+            if ctx
+                .player
+                .and_then(|player| village::deep_resident_in_reach(ctx.world, player))
+                .is_some()
+                && self.try_talk_outdoors(ctx, cues, requests)
+            {
                 return false;
             }
             // A deep outpost's counter, a lift station or one's own depth beacon (Part III

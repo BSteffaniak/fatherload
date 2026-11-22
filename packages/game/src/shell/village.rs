@@ -126,6 +126,15 @@ pub fn gift_items(
         .collect()
 }
 
+/// A resident of Cathedral Station or the Amber Court within `player`'s reach (Wave 9): the
+/// use key talks to them before it opens the hall's counter, which the rest of the hall keeps.
+#[must_use]
+pub fn deep_resident_in_reach(world: &WorldState, player: PlayerId) -> Option<EntityId> {
+    let npc = talk_target(world, player)?;
+    let (_, state) = world.npc(npc)?;
+    fatherload_simulation::people::deep_folk::is_deep_folk(state.character.village).then_some(npc)
+}
+
 /// The person `player`'s rig would talk to with the talk key: the nearest person within reach,
 /// unless the rig stands at a building door and they are more than
 /// [`TALK_OVER_DOOR_TILES`] away (then the key enters the building).
