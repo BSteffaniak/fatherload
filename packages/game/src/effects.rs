@@ -1026,6 +1026,17 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::BeaconTravelled { player_id, .. }
         | GameplayEventKind::DiveChargeFired { player_id, .. }
         | GameplayEventKind::DescentGateBlocked { player_id, .. }
+        | GameplayEventKind::CartBoarded { player_id }
+        | GameplayEventKind::CartSwitched { player_id }
+        | GameplayEventKind::CartLeft { player_id, .. }
+        | GameplayEventKind::StrongboxOpened { player_id, .. }
+        | GameplayEventKind::SinkholeRumble { player_id }
+        | GameplayEventKind::SinkholeEscaped { player_id }
+        | GameplayEventKind::SinkholeCaught { player_id }
+        | GameplayEventKind::SinkholeReset { player_id }
+        | GameplayEventKind::DeepClaimGranted { player_id }
+        | GameplayEventKind::DeepClaimMissing { player_id }
+        | GameplayEventKind::LavaTubeEntered { player_id }
         | GameplayEventKind::PurchaseCompleted { player_id }
         | GameplayEventKind::CargoChanged { player_id }
         | GameplayEventKind::BombPlaced { player_id }
@@ -1193,7 +1204,12 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::CryptSlam { .. }
         | GameplayEventKind::CryptSummon { .. }
         | GameplayEventKind::FluidBreached { .. }
-        | GameplayEventKind::FluidReacted { .. } => None,
+        | GameplayEventKind::FluidReacted { .. }
+        | GameplayEventKind::SupportCreaked { .. }
+        | GameplayEventKind::SupportCollapsed { .. }
+        | GameplayEventKind::SlateShudder { .. }
+        | GameplayEventKind::SlateSlid { .. }
+        | GameplayEventKind::CrustCreature { .. } => None,
     }
 }
 

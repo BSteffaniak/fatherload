@@ -705,6 +705,20 @@ pub enum SoundCue {
     AcidFizz,
     /// A rig plunging under (heavier than a pilot's splash).
     RigSplash,
+    /// A mine cart coupling, boarded or left (Wave 8, the Crust).
+    CartClunk,
+    /// A cart taking the branch at a junction.
+    CartSwitch,
+    /// A timber set groaning before it fails.
+    TimberCreak,
+    /// A roof (or a slate shelf) coming down.
+    RoofCollapse,
+    /// The Sinkhole letting go.
+    SinkholeRumble,
+    /// The Deep Claim won.
+    DeepClaimFanfare,
+    /// A lava tube's hot breath.
+    TubeBreath,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

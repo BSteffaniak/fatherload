@@ -44,6 +44,9 @@ mod clock;
 mod clock_tests;
 mod commands;
 mod crew;
+mod crust;
+#[cfg(test)]
+mod crust_tests;
 #[cfg(test)]
 mod crypt_tests;
 mod crypts;
@@ -440,6 +443,10 @@ pub struct WorldState {
     /// lifts, outposts, beacons, rides, dives and dive charges.
     #[serde(default)]
     logistics: crate::logistics::Logistics,
+    /// The authored Crust (Wave 8, see [`crate::crust`]): failing timber sets and slate
+    /// shelves, the Sinkhole, the Deep Claim, the logs read.
+    #[serde(default)]
+    crust: crate::crust::CrustState,
 }
 
 impl WorldState {

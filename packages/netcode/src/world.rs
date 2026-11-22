@@ -310,6 +310,23 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::BeaconTravelled { player_id, .. } => (397, Some(player_id)),
         GameplayEventKind::DiveChargeFired { player_id, .. } => (398, Some(player_id)),
         GameplayEventKind::DescentGateBlocked { player_id, .. } => (399, Some(player_id)),
+        // The authored Crust (wave 8): 400-419.
+        GameplayEventKind::CartBoarded { player_id } => (400, Some(player_id)),
+        GameplayEventKind::CartSwitched { player_id } => (401, Some(player_id)),
+        GameplayEventKind::CartLeft { player_id, .. } => (402, Some(player_id)),
+        GameplayEventKind::SupportCreaked { .. } => (403, None),
+        GameplayEventKind::SupportCollapsed { .. } => (404, None),
+        GameplayEventKind::SlateShudder { .. } => (405, None),
+        GameplayEventKind::SlateSlid { .. } => (406, None),
+        GameplayEventKind::StrongboxOpened { player_id, .. } => (407, Some(player_id)),
+        GameplayEventKind::SinkholeRumble { player_id } => (408, Some(player_id)),
+        GameplayEventKind::SinkholeEscaped { player_id } => (409, Some(player_id)),
+        GameplayEventKind::SinkholeCaught { player_id } => (410, Some(player_id)),
+        GameplayEventKind::SinkholeReset { player_id } => (411, Some(player_id)),
+        GameplayEventKind::DeepClaimGranted { player_id } => (412, Some(player_id)),
+        GameplayEventKind::DeepClaimMissing { player_id } => (413, Some(player_id)),
+        GameplayEventKind::LavaTubeEntered { player_id } => (414, Some(player_id)),
+        GameplayEventKind::CrustCreature { .. } => (415, None),
     }
 }
 

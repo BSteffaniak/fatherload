@@ -194,6 +194,8 @@ pub enum GroundGrip {
 
 /// Share of the drive's top speed left on mud.
 pub const MUD_TOP_SPEED_SHARE: f32 = 0.45;
+/// Share of the drive's push that takes on mud (it bogs down).
+pub const MUD_DRIVE_SHARE: f32 = 0.5;
 /// Share of the thrusters' lift left while pulling out of mud.
 pub const MUD_LIFT_SHARE: f32 = 0.6;
 /// How fast a sliding rig loses speed on slick slate with the stick neutral or against it
@@ -596,6 +598,12 @@ pub struct SinkholeSite {
     pub lip_row: i32,
     /// Everything the collapse may fill: the chamber, the funnel and a margin either side.
     pub zone: TileRect,
+    /// The Fathers' adit: a timbered tunnel from the funnel's top out past the zone's east
+    /// edge (the way out the collapse never reaches).
+    pub adit: TileRect,
+    /// The expedition's camp at the adit's end, outside the zone (where caught rigs are set
+    /// down).
+    pub camp: TileRect,
 }
 
 /// Rows from the chamber's floor up to the Sinkhole's lip.
@@ -618,21 +626,61 @@ pub fn sinkhole_site(settings: &WorldSettings) -> Option<SinkholeSite> {
         y: floor - 1,
     };
     let lip_row = floor - SINKHOLE_DEPTH_ROWS;
+    let zone = TileRect {
+        min: TilePosition {
+            x: chamber.min.x - SINKHOLE_ZONE_MARGIN,
+            y: lip_row,
+        },
+        max: TilePosition {
+            x: chamber.max.x + SINKHOLE_ZONE_MARGIN,
+            y: floor - 1,
+        },
+    };
+    let adit = TileRect {
+        min: TilePosition {
+            x: core.x,
+            y: lip_row,
+        },
+        max: TilePosition {
+            x: zone.max.x + 3,
+            y: lip_row + 2,
+        },
+    };
+    let camp = TileRect {
+        min: TilePosition {
+            x: zone.max.x + 4,
+            y: lip_row - 1,
+        },
+        max: TilePosition {
+            x: zone.max.x + 13,
+            y: lip_row + 2,
+        },
+    };
     Some(SinkholeSite {
         chamber,
         core,
         lip_row,
-        zone: TileRect {
-            min: TilePosition {
-                x: chamber.min.x - SINKHOLE_ZONE_MARGIN,
-                y: lip_row,
-            },
-            max: TilePosition {
-                x: chamber.max.x + SINKHOLE_ZONE_MARGIN,
-                y: floor - 1,
-            },
-        },
+        zone,
+        adit,
+        camp,
     })
+}
+
+impl SinkholeSite {
+    /// Whether tile `tile` is clear of the collapse (above the lip, or out of the zone).
+    #[must_use]
+    pub const fn clear_of(&self, tile: TilePosition) -> bool {
+        tile.y < self.lip_row || tile.x < self.zone.min.x || tile.x > self.zone.max.x
+    }
+
+    /// Where a rig the collapse caught is set down: the middle of the camp's floor.
+    #[must_use]
+    pub const fn landing(&self) -> TilePosition {
+        TilePosition {
+            x: i32::midpoint(self.camp.min.x, self.camp.max.x),
+            y: self.camp.max.y,
+        }
+    }
 }
 
 /// Half width of the Sinkhole's funnel `rows_up` rows over the chamber's ceiling: wide at the
@@ -646,7 +694,7 @@ pub const fn funnel_half_width(rows_up: i32) -> i32 {
 pub const SINKHOLE_FRONT_ROWS_PER_SECOND: u32 = 3;
 /// Warning before the front starts to climb once the core is out.
 pub const SINKHOLE_RUMBLE_MILLIS: u64 = 3_000;
-/// Hull share a rig caught by the collapse loses (it is dug out and set on the lip).
+/// Hull share a rig caught by the collapse loses (it is dug out and set down in the camp).
 pub const SINKHOLE_CAUGHT_HULL_SHARE: f32 = 0.3;
 /// The drill tier Drill II sets a rig to (at least).
 pub const DRILL_II_LEVEL: u8 = 7;

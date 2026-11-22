@@ -1028,6 +1028,80 @@ pub enum GameplayEventKind {
         descent: u8,
         system: crate::depth_progression::RigSystem,
     },
+    // --- The authored Crust (Wave 8, `crate::crust`; netcode codes 400-419) ---------------
+    /// A rig hooked onto a rail of the old mine works.
+    CartBoarded {
+        player_id: PlayerId,
+    },
+    /// A riding rig took the lower branch at a junction.
+    CartSwitched {
+        player_id: PlayerId,
+    },
+    /// A rig left its cart (jumped off, or the line ended) at `speed` tiles a second.
+    CartLeft {
+        player_id: PlayerId,
+        speed: u8,
+    },
+    /// A timber set lost its support at tile `(x, y)`: it creaks before the roof comes down.
+    SupportCreaked {
+        x: i32,
+        y: i32,
+    },
+    /// A timber set came down at tile `(x, y)`.
+    SupportCollapsed {
+        x: i32,
+        y: i32,
+    },
+    /// A slate shelf left hanging at tile `(x, y)` shudders before it slides.
+    SlateShudder {
+        x: i32,
+        y: i32,
+    },
+    /// A slate shelf slid down at tile `(x, y)`.
+    SlateSlid {
+        x: i32,
+        y: i32,
+    },
+    /// A strongbox was drilled open: expedition log `log` (`first`: the crew had not read it).
+    StrongboxOpened {
+        player_id: PlayerId,
+        log: u8,
+        first: bool,
+    },
+    /// The Sinkhole's core came out: the ground rumbles before the collapse climbs.
+    SinkholeRumble {
+        player_id: PlayerId,
+    },
+    /// A rig got clear of the Sinkhole's collapse.
+    SinkholeEscaped {
+        player_id: PlayerId,
+    },
+    /// The Sinkhole's collapse caught a rig (it was dug out onto the lip).
+    SinkholeCaught {
+        player_id: PlayerId,
+    },
+    /// Nobody got clear: the Sinkhole is as it was, its core back in the floor.
+    SinkholeReset {
+        player_id: PlayerId,
+    },
+    /// The Sinkhole topped out with someone clear: the crew holds the Deep Claim and Drill II.
+    DeepClaimGranted {
+        player_id: PlayerId,
+    },
+    /// A rig went below Descent I without the crew's Deep Claim (Descent worlds).
+    DeepClaimMissing {
+        player_id: PlayerId,
+    },
+    /// A rig went into a lava tube's heat.
+    LavaTubeEntered {
+        player_id: PlayerId,
+    },
+    /// A Crust creature did something the game cues, at world pixel `(x, y)`.
+    CrustCreature {
+        action: crate::crust::CrustCreatureAction,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -197,6 +197,8 @@ pub(super) struct WorldScene<'a> {
     pub tick_rate_hz: u32,
     /// Lifts, outposts and beacons (Part III F10).
     pub logistics: &'a fatherload_simulation::logistics::Logistics,
+    /// The authored Crust (Wave 8): the Sinkhole collapse.
+    pub crust: &'a fatherload_simulation::crust::CrustState,
 }
 
 impl WorldScene<'_> {
@@ -411,6 +413,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             ticks: scene.ticks,
         },
     );
+    // The Sinkhole's collapse front (Wave 8): dust boiling up the zone.
+    crust::draw_sinkhole_front(draw, scene.terrain, scene.crust, scene.visible, seconds);
     for player in scene.players {
         speed_fx::draw_speed_lines(draw, player, scene.ticks);
     }
@@ -419,6 +423,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         // seat turns the world back the other way, so it looks upright there).
         let _turned = TurnedAbout::new(player.orientation, player.x, player.y);
         rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
+        // A mine cart under a riding rig (Wave 8, the Crust's old works).
+        if player.riding_cart {
+            crust::draw_cart(draw, player, scene.ticks);
+        }
         if scene
             .pilots
             .iter()

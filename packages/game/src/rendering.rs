@@ -771,6 +771,7 @@ impl GameRenderer {
             world_millis: drawn_world_millis(snapshot),
             tick_rate_hz: snapshot.tick_rate.hz(),
             logistics: snapshot.logistics,
+            crust: snapshot.crust,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

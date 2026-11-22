@@ -226,7 +226,14 @@ mod tests {
                 // Fluids (wave 7): the breach's gush, a rig's plunge and the underwater bed.
                 | Patch::FluidRush
                 | Patch::RigSplash
-                | Patch::BubbleLoop => (40.0, 3_000.0),
+                | Patch::BubbleLoop
+                // The Crust (wave 8): collapses and the Sinkhole's rumble, the basalt's drone
+                // and the chase's drums.
+                | Patch::RoofCollapse
+                | Patch::SinkholeRumble
+                | Patch::CrustBasaltLoop
+                | Patch::SinkholeLoop
+                | Patch::CartClunk => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

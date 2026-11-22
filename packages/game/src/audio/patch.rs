@@ -348,6 +348,20 @@ patches! {
     AcidFizz => "acid_fizz",
     RigSplash => "rig_splash",
     BubbleLoop => "loop_bubbles",
+    // The authored Crust (Wave 8), appended at the end so every earlier patch keeps its seeds.
+    CartClunk => "cart_clunk",
+    CartSwitch => "cart_switch",
+    TimberCreak => "timber_creak",
+    RoofCollapse => "roof_collapse",
+    SinkholeRumble => "sinkhole_rumble",
+    DeepClaimFanfare => "deep_claim_fanfare",
+    TubeBreath => "tube_breath",
+    CrustTopsoilLoop => "loop_crust_topsoil",
+    CrustClayLoop => "loop_crust_clay",
+    CrustWorksLoop => "loop_crust_works",
+    CrustSlateLoop => "loop_crust_slate",
+    CrustBasaltLoop => "loop_crust_basalt",
+    SinkholeLoop => "loop_sinkhole",
 }
 
 /// Playback metadata of a patch.
@@ -606,6 +620,41 @@ impl Patch {
             Self::CryptLoop | Self::CryptBossLoop => {
                 PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0)
             }
+            // The authored Crust (Wave 8): carts and collapses are physical, the Sinkhole's
+            // rumble and the Deep Claim are set pieces, and every stratum's bed loops.
+            Self::CartClunk | Self::CartSwitch => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.32)
+                .jitter(0.04, 1.0),
+            Self::TimberCreak | Self::TubeBreath => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.06, 1.0),
+            Self::RoofCollapse => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.05, 1.0)
+                .ducking(0.25),
+            Self::SinkholeRumble => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.0, 0.3)
+                .ducking(0.35)
+                .priority(8),
+            Self::DeepClaimFanfare => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.48)
+                .jitter(0.0, 0.0)
+                .ducking(0.35),
+            Self::CrustTopsoilLoop
+            | Self::CrustClayLoop
+            | Self::CrustWorksLoop
+            | Self::CrustSlateLoop
+            | Self::CrustBasaltLoop
+            | Self::SinkholeLoop => PatchInfo::new(Loop)
+                .instances(4)
+                .send(0.18)
+                .jitter(0.0, 0.0),
             // Fluids (Part III F9): the flood's gush and a rig's plunge are physical; steam
             // and fizz are small feedback; the bubbles under water loop.
             Self::FluidRush | Self::RigSplash => PatchInfo::new(Impact)
@@ -1108,6 +1157,19 @@ impl Patch {
             Self::AcidFizz => acid_fizz(rng),
             Self::RigSplash => rig_splash(rng),
             Self::BubbleLoop => bubble_loop(rng),
+            Self::CartClunk => cart_clunk(rng),
+            Self::CartSwitch => cart_switch(rng),
+            Self::TimberCreak => timber_creak(rng),
+            Self::RoofCollapse => roof_collapse(rng),
+            Self::SinkholeRumble => sinkhole_rumble(rng),
+            Self::DeepClaimFanfare => deep_claim_fanfare(rng),
+            Self::TubeBreath => tube_breath(rng),
+            Self::CrustTopsoilLoop => crust_topsoil_loop(rng),
+            Self::CrustClayLoop => crust_clay_loop(rng),
+            Self::CrustWorksLoop => crust_works_loop(rng),
+            Self::CrustSlateLoop => crust_slate_loop(rng),
+            Self::CrustBasaltLoop => crust_basalt_loop(rng),
+            Self::SinkholeLoop => sinkhole_loop(rng),
         }
     }
 }
@@ -5982,6 +6044,378 @@ fn bubble_loop(rng: &mut Rng) -> Vec<f32> {
         let pop = bubble(rng, 260.0, 1_100.0);
         mix_into(&mut out, &pop, time, rng.range(0.05, 0.13));
     }
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The authored Crust (Wave 8): its one-shots, each stratum's music bed and the Sinkhole chase.
+// Loops keep to whole cycles in LOOP_SECONDS and spread their events evenly (see above).
+// ---------------------------------------------------------------------------------------------
+
+/// A mine cart coupling: a heavy iron clunk over a wheel thud, and a short rattle of chain.
+fn cart_clunk(rng: &mut Rng) -> Vec<f32> {
+    let base = 170.0 * rng.jitter(0.04);
+    let mut out = clank(rng, base, 0.4);
+    mix_into(&mut out, &thump(140.0, 70.0, 0.16, 1.3), 0.0, 0.7);
+    for index in 0..4_u8 {
+        let pitch = rng.range(900.0, 1_400.0);
+        let link = clank(rng, pitch, 0.06);
+        mix_into(&mut out, &link, 0.05 + f32::from(index) * 0.045, 0.22);
+    }
+    out
+}
+
+/// A rail switch thrown at speed: two sharp iron clacks and a short squeal from the points.
+fn cart_switch(rng: &mut Rng) -> Vec<f32> {
+    let base = 620.0 * rng.jitter(0.03);
+    let mut out = clank(rng, base, 0.14);
+    mix_into(&mut out, &clank(rng, 540.0, 0.14), 0.085, 0.9);
+    let mut squeal = Osc::new(Wave::Saw);
+    let mut band = Svf::new(FilterMode::BandPass, 2_400.0, 4.0);
+    let whine = render(0.2, |t| {
+        band.process(squeal.next(glide(t, 1_850.0, 1_500.0, 0.15))) * perc(t, 0.01, 0.16)
+    });
+    mix_into(&mut out, &whine, 0.02, 0.18);
+    out
+}
+
+/// Timber groaning under load: a slow, resonant saw creak that bends as the wood strains, a
+/// few dry cracks of splitting grain and a sharp snap at the end.
+fn timber_creak(rng: &mut Rng) -> Vec<f32> {
+    let mut wood = Osc::new(Wave::Saw);
+    let mut body = Svf::new(FilterMode::BandPass, 650.0, 3.2);
+    let bend = rng.range(3.0, 4.5);
+    let mut out = render(1.3, |t| {
+        let pitch = 62.0 + 9.0 * sine(t, bend) + 14.0 * t;
+        let shape = segments(t, &[(0.0, 0.0), (0.2, 1.0), (0.9, 0.8), (1.3, 0.0)]);
+        saturate(body.process(wood.next(pitch)) * 1.6, 1.3) * shape
+    });
+    grains(rng, &mut out, 10, (0.15, 1.1), (1_800.0, 4_200.0), 0.3);
+    let snap = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::BandPass,
+        2_600.0,
+        1.1,
+        0.04,
+    );
+    mix_into(&mut out, &snap, 1.12, 0.7);
+    out
+}
+
+/// A roof coming down: a crack, a heavy thump, a long falling rumble and a rain of rock, with
+/// the clatter of broken timber.
+fn roof_collapse(rng: &mut Rng) -> Vec<f32> {
+    let mut out = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        2_000.0,
+        0.8,
+        0.06,
+    );
+    mix_into(
+        &mut out,
+        &thump(95.0 * rng.jitter(0.05), 36.0, 0.55, 2.2),
+        0.01,
+        1.0,
+    );
+    let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut low = Svf::new(FilterMode::LowPass, 420.0, 0.8);
+    let roll = render(1.6, |t| {
+        let cutoff = segments(t, &[(0.0, 520.0), (1.6, 140.0)]);
+        low.run(rumble.next(), cutoff, 0.8)
+            * segments(t, &[(0.0, 0.0), (0.05, 1.0), (0.7, 0.7), (1.6, 0.0)])
+    });
+    mix_into(&mut out, &roll, 0.02, 1.1);
+    grains(rng, &mut out, 70, (0.03, 1.5), (700.0, 3_500.0), 0.45);
+    for index in 0..3_u8 {
+        let pitch = rng.range(180.0, 260.0);
+        let plank = clank(rng, pitch, 0.2);
+        mix_into(&mut out, &plank, 0.1 + f32::from(index) * 0.21, 0.3);
+    }
+    out
+}
+
+/// The Sinkhole letting go: a sub glide swelling for three seconds under a grinding rumble that
+/// churns faster, and the first stones raining down.
+fn sinkhole_rumble(rng: &mut Rng) -> Vec<f32> {
+    let mut sub = Osc::new(Wave::Sine);
+    let mut grind = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut grind_band = Svf::new(FilterMode::BandPass, 900.0, 1.2);
+    let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut rumble_low = Svf::new(FilterMode::LowPass, 300.0, 0.8);
+    let mut out = render(3.2, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (2.6, 1.0), (3.2, 0.0)]);
+        let churn = 0.6 + 0.4 * sine(t, 4.0 + 5.0 * t / 3.2);
+        let deep = saturate(sub.next(glide(t, 50.0, 31.0, 2.8)) * 1.4, 1.8) * 0.6;
+        let grit = grind_band.process(grind.next()) * churn * 0.5;
+        (deep + grit + rumble_low.process(rumble.next())) * swell
+    });
+    for time in scatter(rng, 30, 0.6, 3.0, 0.6) {
+        let pitch = rng.range(300.0, 900.0);
+        let stone = clank(rng, pitch, 0.08);
+        mix_into(&mut out, &stone, time, rng.range(0.06, 0.18));
+    }
+    out
+}
+
+/// The Deep Claim won: a horn call rising G-C-E-G over a held brass chord, a run of bells and
+/// a long ringing tail.
+fn deep_claim_fanfare(rng: &mut Rng) -> Vec<f32> {
+    let mut out = render(3.4, |_| 0.0);
+    for (index, note) in [392.0_f32, 523.25, 659.25, 783.99].into_iter().enumerate() {
+        #[allow(clippy::cast_precision_loss, reason = "four notes")]
+        let start = index as f32 * 0.16;
+        mix_into(&mut out, &brass(rng, note, 0.22, 1.0), start, 0.3);
+    }
+    for note in [261.63_f32, 329.63, 392.0, 523.25] {
+        mix_into(&mut out, &brass(rng, note, 1.6, 0.7), 0.64, 0.18);
+    }
+    for (index, note) in [1_046.5_f32, 1_318.5, 1_568.0, 2_093.0]
+        .into_iter()
+        .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "four bells")]
+        let start = 0.7 + index as f32 * 0.12;
+        mix_into(&mut out, &bell(note, 3.5, 1.2, 1.6), start, 0.12);
+    }
+    mix_into(&mut out, &thump(110.0, 55.0, 0.5, 1.5), 0.64, 0.45);
+    out
+}
+
+/// A lava tube's hot breath: a slow whoosh of warm air rising and falling, crackle along the
+/// glass and a tick of it cooling.
+fn tube_breath(rng: &mut Rng) -> Vec<f32> {
+    let mut air = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 500.0, 0.7);
+    let mut out = render(1.6, |t| {
+        let shape = segments(t, &[(0.0, 0.0), (0.5, 1.0), (1.6, 0.0)]);
+        band.run(air.next(), 350.0 + 700.0 * shape, 0.7) * shape
+    });
+    grains(rng, &mut out, 16, (0.1, 1.4), (2_500.0, 5_000.0), 0.25);
+    mix_into(&mut out, &clank(rng, 2_400.0, 0.05), 1.2, 0.15);
+    out
+}
+
+/// The Topsoil (looped while a seat digs there): a fingerpicked folk line in G major
+/// pentatonic over a soft open-G drone, roots creaking and the scratch of burrowers.
+fn crust_topsoil_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut low = Osc::new(Wave::Triangle);
+    let mut fifth = Osc::new(Wave::Triangle);
+    let mut creak = Osc::new(Wave::Saw);
+    let mut creak_band = Svf::new(FilterMode::BandPass, 520.0, 3.0);
+    let mut out = render(loop_length(), |t| {
+        let swell = 0.8 + 0.2 * sine(t, 0.25);
+        let drone = (low.next(98.0) * 0.5 + fifth.next(147.0) * 0.25) * swell * 0.35;
+        // A root creaking twice a loop, slow and quiet.
+        let creaking = creak_band.process(creak.next(58.0 + 6.0 * sine(t, 0.5)))
+            * (0.5 + 0.5 * sine(t, 0.5)).powi(4)
+            * 0.12;
+        drone + creaking
+    });
+    let eighth = LOOP_SECONDS / 8.0;
+    let line: [Option<f32>; 8] = [
+        Some(392.0),
+        Some(440.0),
+        Some(587.33),
+        None,
+        Some(493.88),
+        Some(440.0),
+        Some(392.0),
+        Some(329.63),
+    ];
+    for (step, note) in line.into_iter().enumerate() {
+        let Some(note) = note else {
+            continue;
+        };
+        #[allow(clippy::cast_precision_loss, reason = "eight steps")]
+        let start = step as f32 * eighth;
+        let pluck = bell(note * rng.jitter(0.002), 1.0, 1.3, 1.1);
+        loop_note(&mut out, &pluck, start, 0.15);
+        // The thumb's low string on the beat.
+        if step % 2 == 0 {
+            let thumb = bell(196.0, 1.0, 0.9, 0.8);
+            loop_note(&mut out, &thumb, start, 0.08);
+        }
+    }
+    scatter_grains(
+        rng,
+        &mut out,
+        loop_events(4.0),
+        (0.0, loop_length()),
+        (300.0, 1_200.0),
+        0.05,
+        false,
+    );
+    out
+}
+
+/// The Clay Beds: a dripping marimba motif in D dorian over a soft A drone, water gurgling
+/// behind the clay and clear drips ringing in the dark.
+fn crust_clay_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut low = Osc::new(Wave::Sine);
+    let mut out = render(loop_length(), |t| {
+        low.next(110.0) * (0.12 + 0.04 * sine(t, 0.25))
+    });
+    let step = LOOP_SECONDS / 8.0;
+    for (index, note) in [
+        293.66_f32, 349.23, 440.0, 392.0, 329.63, 293.66, 261.63, 220.0,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        #[allow(clippy::cast_precision_loss, reason = "eight steps")]
+        let start = index as f32 * step;
+        let bar = bell(note, 4.0, 0.8, 0.7);
+        loop_note(
+            &mut out,
+            &bar,
+            start,
+            if index % 4 == 0 { 0.17 } else { 0.12 },
+        );
+    }
+    for time in scatter(rng, loop_events(3.0), 0.0, loop_length() - 0.1, 1.0) {
+        let pop = bubble(rng, 180.0, 520.0);
+        mix_into(&mut out, &pop, time, rng.range(0.04, 0.09));
+    }
+    for time in scatter(rng, loop_events(1.2), 0.0, loop_length() - 0.5, 1.0) {
+        let drip = bell(rng.range(1_500.0, 2_600.0), 2.0, 0.5, 0.45);
+        mix_into(&mut out, &drip, time, 0.05);
+    }
+    out
+}
+
+/// The Grey Stone's old works: a reedy E drone that breathes, a slow work-song line on a low
+/// brass voice, far-off pick clinks on the beat and the clack of a rail settling.
+fn crust_works_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut reed = Osc::new(Wave::Saw);
+    let mut reed_band = Svf::new(FilterMode::BandPass, 900.0, 1.4);
+    let mut out = render(loop_length(), |t| {
+        let breath = 0.7 + 0.3 * sine(t, 0.25);
+        reed_band.run(reed.next(82.5), 700.0 + 300.0 * breath, 1.4) * breath * 0.28
+    });
+    for (start, note, length) in [
+        (0.0, 329.63_f32, 0.8),
+        (1.0, 392.0, 0.4),
+        (1.5, 440.0, 0.4),
+        (2.0, 392.0, 0.8),
+        (3.0, 293.66, 0.8),
+    ] {
+        let sung = brass(rng, note / 2.0, length, 0.35);
+        loop_note(&mut out, &sung, start, 0.12);
+    }
+    for beat in 0..4_u8 {
+        let pitch = 2_100.0 * rng.jitter(0.05);
+        let pick = clank(rng, pitch, 0.12);
+        loop_note(&mut out, &pick, f32::from(beat) + 0.5, 0.06);
+    }
+    let rail = clank(rng, 380.0, 0.25);
+    loop_note(&mut out, &rail, 2.75, 0.08);
+    out
+}
+
+/// The Slate Shelves: a glassy pad in stacked fifths that swells and ebbs, high drips ringing
+/// off stalactites and the faint tick of shelves settling.
+fn crust_slate_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut voices = [
+        Osc::new(Wave::Triangle),
+        Osc::new(Wave::Triangle),
+        Osc::new(Wave::Triangle),
+        Osc::new(Wave::Triangle),
+    ];
+    let mut shimmer = Svf::new(FilterMode::LowPass, 1_800.0, 0.7);
+    let mut out = render(loop_length(), |t| {
+        let swell = 0.6 + 0.4 * sine(t, 0.25).abs();
+        let pad: f32 = voices
+            .iter_mut()
+            .zip([130.5_f32, 196.0, 293.5, 440.0])
+            .map(|(osc, note)| osc.next(note))
+            .sum::<f32>()
+            / 4.0;
+        shimmer.process(pad) * swell * 0.35
+    });
+    for (start, note) in [(0.4_f32, 1_760.0_f32), (1.7, 2_349.0), (2.9, 1_975.5)] {
+        let drip = bell(note, 3.5, 1.0, 1.4);
+        loop_note(&mut out, &drip, start, 0.08);
+    }
+    scatter_grains(
+        rng,
+        &mut out,
+        loop_events(2.0),
+        (0.0, loop_length()),
+        (3_000.0, 6_000.0),
+        0.03,
+        false,
+    );
+    out
+}
+
+/// The Basalt Columns: a low, hot drone on A with a sour minor second, a heavy slow pulse like
+/// the rock breathing, and crackle along the lava tubes.
+fn crust_basalt_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut root = Osc::new(Wave::Saw);
+    let mut second = Osc::new(Wave::Saw);
+    let mut low = Svf::new(FilterMode::LowPass, 260.0, 1.1);
+    let mut out = render(loop_length(), |t| {
+        let heave = 0.7 + 0.3 * sine(t, 0.5);
+        let raw = root.next(55.0) * 0.6 + second.next(58.25) * 0.25;
+        saturate(low.process(raw) * heave, 1.4) * 0.35
+    });
+    for beat in [0.0_f32, 2.0] {
+        let pulse = thump(70.0, 38.0, 0.6, 1.8);
+        loop_note(&mut out, &pulse, beat, 0.35);
+    }
+    let toll = bell(220.0, 1.41, 1.6, 2.2);
+    loop_note(&mut out, &toll, 1.0, 0.07);
+    scatter_grains(
+        rng,
+        &mut out,
+        loop_events(10.0),
+        (0.0, loop_length()),
+        (2_000.0, 5_000.0),
+        0.05,
+        false,
+    );
+    out
+}
+
+/// The Sinkhole chase (while the collapse climbs): toms driving every eighth (120 bpm), a low
+/// A ostinato climbing a half step each bar, brass stabs and the collapse roaring underneath.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the loop's step index"
+)]
+fn sinkhole_loop(rng: &mut Rng) -> Vec<f32> {
+    const SECONDS: f32 = LOOP_SECONDS;
+    let mut bass = Osc::new(Wave::Saw);
+    let mut bass_filter = Svf::new(FilterMode::LowPass, 500.0, 1.3);
+    let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut rumble_low = Svf::new(FilterMode::LowPass, 220.0, 0.8);
+    let notes = [110.0_f32, 110.0, 130.81, 116.54];
+    let mut out = render(loop_length(), |t| {
+        let step = ((t / (SECONDS / 16.0)) as usize) % 16;
+        let local = t % (SECONDS / 16.0);
+        let note = notes[step / 4];
+        let gate = perc(local, 0.003, 0.18);
+        let line = saturate(bass_filter.process(bass.next(note)) * gate * 1.5, 1.7) * 0.3;
+        line + rumble_low.process(rumble.next()) * 0.45
+    });
+    for beat in 0..8_u8 {
+        let at = f32::from(beat) * (SECONDS / 8.0);
+        let tom = thump(if beat % 2 == 0 { 90.0 } else { 140.0 }, 48.0, 0.25, 1.8);
+        mix_into(&mut out, &tom, at, if beat % 4 == 0 { 0.5 } else { 0.32 });
+    }
+    for (start, chord) in [
+        (0.0, [440.0_f32, 523.25, 659.25]),
+        (2.0, [466.16, 554.37, 698.46]),
+    ] {
+        for note in chord {
+            mix_into(&mut out, &brass(rng, note, 0.3, 1.0), start, 0.13);
+        }
+    }
+    grains_loop(rng, &mut out);
     out
 }
 

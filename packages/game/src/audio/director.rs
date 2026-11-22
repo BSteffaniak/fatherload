@@ -227,6 +227,10 @@ enum SeatLoop {
     Colony,
     /// Bubbles and the muffled pumps while the seat is under fluid (Part III F9).
     Underwater,
+    /// The music bed of the Crust stratum the seat digs in (Wave 8).
+    CrustBed,
+    /// The Sinkhole chase while its collapse climbs (Wave 8).
+    Sinkhole,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -850,6 +854,7 @@ impl Director {
         self.moon_steps(&mut state, listener, snapshot, dt);
         self.tomb_music(live, listener, snapshot.tombs);
         self.crypt_music(live, listener, snapshot.tombs);
+        self.crust_music(live, listener, snapshot, ambience);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1239,6 +1244,64 @@ impl Director {
         });
         if outdoors {
             self.play(patch, 0.55, 0.0, 1.0);
+        }
+    }
+
+    /// The authored Crust's beds (Wave 8, Deep Descent worlds): underground, each Crust stratum
+    /// plays its own piece (the Topsoil's folk line, the Clay Beds' marimba, the works' song,
+    /// the shelves' glass, the basalt's drone); while the Sinkhole's collapse climbs, the
+    /// chase takes over for every seat near it. Quiet in tomb runs.
+    fn crust_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+        ambience: Ambience,
+    ) {
+        use fatherload_simulation::{crust, descent::Stratum};
+        let settings = snapshot.terrain.settings();
+        if !crust::crust_rules(settings) {
+            return;
+        }
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let quiet = 1.0 - ambience.indoor;
+        let chase = snapshot.crust.sinkhole.is_some()
+            && crust::sinkhole_site(settings)
+                .is_some_and(|site| site.zone.expanded(40).contains(tile));
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Sinkhole,
+            Patch::SinkholeLoop,
+            (
+                if chase { 0.75 * quiet } else { 0.0 },
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+        let underground = tile.y > snapshot.terrain.surface_row(tile.x) + 3;
+        let bed = match snapshot.terrain.stratum_at(tile) {
+            Stratum::Topsoil => Some(Patch::CrustTopsoilLoop),
+            Stratum::ClayBeds => Some(Patch::CrustClayLoop),
+            Stratum::GreyStone => Some(Patch::CrustWorksLoop),
+            Stratum::SlateShelves => Some(Patch::CrustSlateLoop),
+            Stratum::BasaltColumns => Some(Patch::CrustBasaltLoop),
+            _ => None,
+        };
+        if let Some(patch) = bed {
+            let gain = if underground && !chase {
+                0.45 * quiet
+            } else {
+                0.0
+            };
+            self.loop_command(
+                live,
+                listener,
+                SeatLoop::CrustBed,
+                patch,
+                (gain, 0.0, 1.0, OPEN_CUTOFF),
+            );
         }
     }
 

@@ -210,6 +210,7 @@ pub const ALL: &[&SpriteDef] = &[
     &terrain::WIND_ASTROLABE,
     &terrain::CLOUD_PEARL,
     &terrain::CLAY_POT,
+    &world::MINE_CART,
     &terrain::HARPY_EGG,
     &terrain::SKY_RELIC,
     &terrain::CRACKS,

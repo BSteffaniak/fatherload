@@ -258,6 +258,13 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SteamHiss => Patch::SteamHiss,
         SoundCue::AcidFizz => Patch::AcidFizz,
         SoundCue::RigSplash => Patch::RigSplash,
+        SoundCue::CartClunk => Patch::CartClunk,
+        SoundCue::CartSwitch => Patch::CartSwitch,
+        SoundCue::TimberCreak => Patch::TimberCreak,
+        SoundCue::RoofCollapse => Patch::RoofCollapse,
+        SoundCue::SinkholeRumble => Patch::SinkholeRumble,
+        SoundCue::DeepClaimFanfare => Patch::DeepClaimFanfare,
+        SoundCue::TubeBreath => Patch::TubeBreath,
     }
 }
 
@@ -744,6 +751,26 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BeaconTravelled { .. } => Some(SoundCue::UplinkWarp),
         GameplayEventKind::DiveChargeFired { .. } => Some(SoundCue::ShapedBlast),
         GameplayEventKind::DescentGateBlocked { .. } => Some(SoundCue::VacuumAlarm),
+        // The authored Crust (Wave 8): the cart's clunk and clack, timber groaning and the roof
+        // coming down, slate shuddering and sliding, a strongbox's latch, the Sinkhole's rumble,
+        // escape and fanfare, the gate's alarm, the tube's breath and the creatures' calls.
+        GameplayEventKind::CartBoarded { .. } => Some(SoundCue::CartClunk),
+        GameplayEventKind::CartSwitched { .. } => Some(SoundCue::CartSwitch),
+        GameplayEventKind::CartLeft { .. } => Some(SoundCue::CartClunk),
+        GameplayEventKind::SupportCreaked { .. } => Some(SoundCue::TimberCreak),
+        GameplayEventKind::SupportCollapsed { .. } | GameplayEventKind::SlateSlid { .. } => {
+            Some(SoundCue::RoofCollapse)
+        }
+        GameplayEventKind::SlateShudder { .. } => Some(SoundCue::StalactiteCrack),
+        GameplayEventKind::StrongboxOpened { .. } => Some(SoundCue::CrateOpened),
+        GameplayEventKind::SinkholeRumble { .. } => Some(SoundCue::SinkholeRumble),
+        GameplayEventKind::SinkholeEscaped { .. } => Some(SoundCue::Milestone),
+        GameplayEventKind::SinkholeCaught { .. } => Some(SoundCue::Damage),
+        GameplayEventKind::SinkholeReset { .. } => Some(SoundCue::VaultReset),
+        GameplayEventKind::DeepClaimGranted { .. } => Some(SoundCue::DeepClaimFanfare),
+        GameplayEventKind::DeepClaimMissing { .. } => Some(SoundCue::VacuumAlarm),
+        GameplayEventKind::LavaTubeEntered { .. } => Some(SoundCue::TubeBreath),
+        GameplayEventKind::CrustCreature { .. } => Some(SoundCue::CreatureHiss),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1041,7 +1068,23 @@ mod tests {
             | GameplayEventKind::OutpostServiced { .. }
             | GameplayEventKind::BeaconTravelled { .. }
             | GameplayEventKind::DiveChargeFired { .. }
-            | GameplayEventKind::DescentGateBlocked { .. } => {}
+            | GameplayEventKind::DescentGateBlocked { .. }
+            | GameplayEventKind::CartBoarded { .. }
+            | GameplayEventKind::CartSwitched { .. }
+            | GameplayEventKind::CartLeft { .. }
+            | GameplayEventKind::SupportCreaked { .. }
+            | GameplayEventKind::SupportCollapsed { .. }
+            | GameplayEventKind::SlateShudder { .. }
+            | GameplayEventKind::SlateSlid { .. }
+            | GameplayEventKind::StrongboxOpened { .. }
+            | GameplayEventKind::SinkholeRumble { .. }
+            | GameplayEventKind::SinkholeEscaped { .. }
+            | GameplayEventKind::SinkholeCaught { .. }
+            | GameplayEventKind::SinkholeReset { .. }
+            | GameplayEventKind::DeepClaimGranted { .. }
+            | GameplayEventKind::DeepClaimMissing { .. }
+            | GameplayEventKind::LavaTubeEntered { .. }
+            | GameplayEventKind::CrustCreature { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1431,6 +1474,33 @@ mod tests {
                 player_id,
                 descent: 2,
                 system: fatherload_simulation::depth_progression::RigSystem::PressureHull,
+            },
+            GameplayEventKind::CartBoarded { player_id },
+            GameplayEventKind::CartSwitched { player_id },
+            GameplayEventKind::CartLeft {
+                player_id,
+                speed: 6,
+            },
+            GameplayEventKind::SupportCreaked { x: 0, y: 0 },
+            GameplayEventKind::SupportCollapsed { x: 0, y: 0 },
+            GameplayEventKind::SlateShudder { x: 0, y: 0 },
+            GameplayEventKind::SlateSlid { x: 0, y: 0 },
+            GameplayEventKind::StrongboxOpened {
+                player_id,
+                log: 0,
+                first: true,
+            },
+            GameplayEventKind::SinkholeRumble { player_id },
+            GameplayEventKind::SinkholeEscaped { player_id },
+            GameplayEventKind::SinkholeCaught { player_id },
+            GameplayEventKind::SinkholeReset { player_id },
+            GameplayEventKind::DeepClaimGranted { player_id },
+            GameplayEventKind::DeepClaimMissing { player_id },
+            GameplayEventKind::LavaTubeEntered { player_id },
+            GameplayEventKind::CrustCreature {
+                action: fatherload_simulation::crust::CrustCreatureAction::BeetleChewed,
+                x: 0,
+                y: 0,
             },
         ]);
         for service in fatherload_simulation::logistics::OutpostService::ALL {
@@ -2039,6 +2109,13 @@ mod tests {
             SoundCue::SteamHiss,
             SoundCue::AcidFizz,
             SoundCue::RigSplash,
+            SoundCue::CartClunk,
+            SoundCue::CartSwitch,
+            SoundCue::TimberCreak,
+            SoundCue::RoofCollapse,
+            SoundCue::SinkholeRumble,
+            SoundCue::DeepClaimFanfare,
+            SoundCue::TubeBreath,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

@@ -152,12 +152,16 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   rides, dives, dive charges, the progression rules), `HazardGear::rig_systems`, the eight
 ///   rig-system `UpgradeKind`s (shop offers 18-25), and the logistics events 390-399.
 ///
-/// Version 16 (wave 8 progression; the integrator collapses the wave's bumps into one):
+/// Version 16 (Wave 8, collapsed into one bump across its tracks). Progression:
 /// * `LogisticsCommand::{OutpostUpgrade, Craft}` (the deep shops and workshops),
 ///   `ItemKind::Layer(Stratum)` (layer resources in bays, drops and events),
 ///   `UpgradeKind::{PressureRating, Headlamp}` (shop offers 26-27), `HazardGear::
 ///   {pressure_rating, headlamp}` in loadouts, and `Logistics::{felt_systems, haul_descent}`
 ///   in the logistics section. No new events.
+/// * The authored Crust: `TileKind::Crust(CrustTile)` tiles and `ArtifactKind::ClayPot`,
+///   `Player::cart` / `PlayerTickState::cart` (mine-cart rides, per tick), the `CrustState`
+///   world field and `SectionKey::Crust` section (failing sets and shelves, the Sinkhole, the
+///   Deep Claim, logs read), and the Crust events 400-415.
 pub const PROTOCOL_VERSION: u8 = 16;
 
 /// One client input frame: the controls and actions for exactly one tick.

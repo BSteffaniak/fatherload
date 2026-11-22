@@ -7,7 +7,7 @@ use crate::{
     infrastructure::InfrastructureKind,
     input::{ControlState, TickInputs},
     progression::WorldEventKind,
-    protection::{HEAT_DAMAGE_PER_EXCESS_UNIT, heat_excess},
+    protection::{HEAT_DAMAGE_PER_EXCESS_UNIT, heat_cooling},
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
@@ -66,8 +66,13 @@ impl WorldState {
             }) {
                 let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
                 // A rig riding a lift cab (Part III F10) neither drills nor flies: the cab
-                // carries it (`advance_logistics`).
-                let riding = self.logistics.is_riding(player_id);
+                // carries it (`advance_logistics`). Nor does one riding a mine cart (Wave 8,
+                // the Crust): the cart carries it (`step_cart_ride`).
+                if on_foot {
+                    self.drop_cart(player_id);
+                }
+                let carted = self.riding_cart(player_id);
+                let riding = self.logistics.is_riding(player_id) || carted;
                 if !riding {
                     let _drill = self.apply_drill_intent(
                         player_id,
@@ -85,6 +90,10 @@ impl WorldState {
                     .players
                     .get(&player_id)
                     .map(|player| (player.x, player.y));
+                let velocity_before = self
+                    .players
+                    .get(&player_id)
+                    .map(|player| (player.velocity_x, player.velocity_y));
                 let no_clip = self.no_clip_active();
                 // WP-PILOT: a recalled rig flies itself to its pilot instead.
                 let recalled = on_foot && self.step_rig_recall(player_id, &mut output);
@@ -106,6 +115,27 @@ impl WorldState {
                         },
                     )
                 };
+                if carted {
+                    // The Crust's mine carts (Wave 8): the stick pushes, brakes and picks the
+                    // branch; thrust jumps off.
+                    self.step_cart_ride(
+                        player_id,
+                        (controls.horizontal(), controls.thrust, controls.drill_down),
+                        tick.next(),
+                        &mut output,
+                    );
+                } else if !recalled && !no_clip && !riding {
+                    // Mud and slick slate under the rig, then a rail to hook onto (Wave 8).
+                    if let Some(before) = velocity_before {
+                        self.apply_ground_grip(player_id, before, controls.horizontal());
+                    }
+                    self.try_board_cart(
+                        player_id,
+                        controls.horizontal(),
+                        controls.thrust,
+                        &mut output,
+                    );
+                }
                 if !no_clip {
                     // A tether harpoon's line holds the rig (T21).
                     self.apply_tether(player_id, controls.thrust);
@@ -304,17 +334,17 @@ impl WorldState {
             }
             // Band heat: each band runs a heat level hotter than the one above it, and the
             // radiator plus heat shielding cover a number of heat levels (see
-            // `crate::protection`), so heat follows the strata wherever they lie.
-            let excess = heat_excess(
-                self.terrain.band_at(center),
-                radiator_level,
-                gear.heat_shield,
-            )
-            .min(self.placeholder_heat_excess_cap(
-                center,
-                radiator_level,
-                gear.heat_shield,
-            ));
+            // `crate::protection`), so heat follows the strata wherever they lie. A Deep
+            // Descent world reads each stratum's own heat instead (Wave 8, lava tubes hotter),
+            // capped fairly in the placeholder Descents (Wave 8 progression).
+            let excess = self
+                .heat_units_at(center)
+                .saturating_sub(heat_cooling(radiator_level, gear.heat_shield))
+                .min(self.placeholder_heat_excess_cap(
+                    center,
+                    radiator_level,
+                    gear.heat_shield,
+                ));
             let depth_damage = if excess > 0 {
                 HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
             } else {
@@ -471,6 +501,13 @@ impl WorldState {
                 MineResult::Mined(TileKind::Sky(tile)) if tile.is_cache() => {
                     self.open_sky_cache(player_id, target, tile, &mut output);
                 }
+                // The authored Crust (Wave 8): a strongbox's log, the Sinkhole's core.
+                MineResult::Mined(TileKind::Crust(crate::crust::CrustTile::Strongbox)) => {
+                    self.open_strongbox(player_id, target, &mut output);
+                }
+                MineResult::Mined(TileKind::Crust(crate::crust::CrustTile::SinkholeCore)) => {
+                    self.start_sinkhole(player_id, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -501,6 +538,8 @@ impl WorldState {
         self.advance_bases(next_tick);
         // Lift rides, dives, outposts reached and the Descent gates (Part III F10).
         self.advance_logistics(next_tick, &mut output);
+        // The authored Crust (Wave 8): failing sets and shelves, the Sinkhole, the gate.
+        self.advance_crust(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

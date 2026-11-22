@@ -237,6 +237,8 @@ pub struct PlayerPresentation {
     /// How far the headlamp reaches relative to stock (Lamp II on Descent worlds; Part III
     /// F10). Remote rigs' gear is private, so theirs reads stock.
     pub lamp_scale: f32,
+    /// Whether the rig rides a mine cart (Wave 8, the Crust's old works).
+    pub riding_cart: bool,
 }
 
 /// Gravity (relative to the ground's) under which a pilot is drawn floating and loping.
@@ -386,6 +388,7 @@ impl PlayerPresentation {
             } else {
                 1.0
             },
+            riding_cart: player.cart.is_some(),
         }
     }
 
@@ -766,6 +769,8 @@ pub struct RenderSnapshot<'w> {
     pub tombs: &'w fatherload_simulation::tomb::Tombs,
     /// Lifts, outposts, beacons, rides, dives and the progression rules (Part III F10).
     pub logistics: &'w fatherload_simulation::logistics::Logistics,
+    /// The authored Crust: the Sinkhole collapse, the Deep Claim, the logs read (Wave 8).
+    pub crust: &'w fatherload_simulation::crust::CrustState,
     /// The world day people live by (mood in the talk panel).
     pub people_day: u32,
     /// The base modules that have power this frame.
@@ -892,6 +897,7 @@ impl<'w> RenderSnapshot<'w> {
             homes: world.homes(),
             tombs: world.tombs(),
             logistics: world.logistics(),
+            crust: world.crust(),
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()

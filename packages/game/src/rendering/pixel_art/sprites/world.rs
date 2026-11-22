@@ -399,3 +399,47 @@ pub const BEDROCK: SpriteDef = SpriteDef {
     ]],
     frame_seconds: 0.0,
 };
+
+/// An old mine cart: riveted iron sides streaked with rust, a dark load lip and two spoked
+/// wheels (the second frame turns them).
+pub const MINE_CART: SpriteDef = SpriteDef {
+    name: "crust_mine_cart",
+    legend: &[
+        ('o', INK),
+        ('d', STEEL_DARK),
+        ('s', STEEL),
+        ('l', STEEL_LIGHT),
+        ('r', RUST),
+        ('c', COPPER),
+        ('w', STONE_DARK),
+    ],
+    frames: &[
+        &[
+            "o..................o",
+            "ollllllllllllllllllo",
+            ".osrssssrsssssrsssd.",
+            ".osssrssssssrssssrd.",
+            ".ocsssssssssssssscd.",
+            ".osssssrssssrssssdd.",
+            "..oddddddddddddddo..",
+            "...owwo......owwo...",
+            "..owsswo....owsswo..",
+            "..owswwo....owwswo..",
+            "...owwo......owwo...",
+        ],
+        &[
+            "o..................o",
+            "ollllllllllllllllllo",
+            ".osrssssrsssssrsssd.",
+            ".osssrssssssrssssrd.",
+            ".ocsssssssssssssscd.",
+            ".osssssrssssrssssdd.",
+            "..oddddddddddddddo..",
+            "...owwo......owwo...",
+            "..owwswo....owswwo..",
+            "..owssswo...owsswo..",
+            "...owwo......owwo...",
+        ],
+    ],
+    frame_seconds: 0.08,
+};

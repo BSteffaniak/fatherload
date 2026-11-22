@@ -164,6 +164,7 @@ impl WorldState {
             fluids: _,
             // Lifts, outposts and beacons are tiles; a ride pins its rider every tick.
             logistics: _,
+            crust: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

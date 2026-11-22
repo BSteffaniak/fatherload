@@ -355,8 +355,9 @@ pub const fn cabin_tile(cabin: &TileRect, surface: i32, x: i32, y: i32) -> Optio
 
 /// What the Sinkhole writes at `(x, y)` over the stamped gate chamber.
 ///
-/// The funnel from the chamber's ceiling up to the lip (choked with rubble at the top, its
-/// walls crumbling), the core on the chamber floor and the Fathers' strongbox beside it.
+/// The funnel from the chamber's ceiling up to the lip (its walls crumbling), the Fathers'
+/// timbered adit out of its top and their camp at the adit's end, the core on the chamber
+/// floor and the Fathers' strongbox beside it.
 #[must_use]
 pub const fn sinkhole_tile(site: &SinkholeSite, x: i32, y: i32) -> Option<TileKind> {
     let centre = site.core.x;
@@ -366,19 +367,55 @@ pub const fn sinkhole_tile(site: &SinkholeSite, x: i32, y: i32) -> Option<TileKi
     if y == site.core.y && x == site.chamber.min.x + 4 {
         return Some(TileKind::Crust(CrustTile::Strongbox));
     }
+    // The expedition's camp: a log-walled room with its strongbox and stores.
+    let camp = site.camp;
+    if camp.contains(TilePosition { x, y }) {
+        if x == camp.max.x || y == camp.min.y {
+            return Some(TileKind::Crust(CrustTile::CabinLog));
+        }
+        if y == camp.max.y {
+            return Some(if x == camp.max.x - 2 {
+                TileKind::Crust(CrustTile::Strongbox)
+            } else if x == camp.max.x - 4 {
+                TileKind::Crust(CrustTile::CabinLog)
+            } else {
+                TileKind::Air
+            });
+        }
+        return Some(TileKind::Air);
+    }
+    let funnel_edge = site.core.x + crust::funnel_half_width(site.chamber.min.y - y) + 2;
+    if y == camp.max.y + 1 && x > funnel_edge && x <= camp.max.x {
+        // A gravel floor under the adit (past the funnel) and the camp.
+        return Some(TileKind::Crust(CrustTile::Gravel));
+    }
+    // The Fathers' adit: a timbered tunnel out of the funnel's top, east past the zone.
+    let adit = site.adit;
+    if x >= adit.min.x && x <= adit.max.x {
+        if y >= adit.min.y && y <= adit.max.y {
+            return Some(TileKind::Air);
+        }
+        if y == adit.min.y - 1 && (x - adit.min.x).rem_euclid(4) != 1 {
+            return Some(TileKind::Crust(CrustTile::Timber));
+        }
+    }
     let ceiling = site.chamber.min.y;
+    let dx = x - centre;
+    let dx = if dx < 0 { -dx } else { dx };
+    // The chamber's middle is clear of pillars under the funnel's throat.
+    if y > ceiling && y < site.chamber.max.y && dx <= crust::funnel_half_width(0) + 1 {
+        return Some(TileKind::Air);
+    }
     if y > ceiling || y < site.lip_row {
         return None;
     }
     let rows_up = ceiling - y;
     let half = crust::funnel_half_width(rows_up);
-    let dx = x - centre;
-    let dx = if dx < 0 { -dx } else { dx };
     if dx > half + 1 {
         return None;
     }
-    if y < site.lip_row + 3 || dx == half + 1 {
-        // The choked top and the crumbling walls.
+    if dx == half + 1 {
+        // The crumbling walls.
         return Some(TileKind::Crust(CrustTile::Rubble));
     }
     Some(TileKind::Air)
@@ -391,9 +428,12 @@ pub fn sinkhole_touching(settings: &WorldSettings, rect: &TileRect) -> Option<Si
         let funnel = TileRect {
             min: TilePosition {
                 x: site.chamber.min.x,
-                y: site.lip_row,
+                y: site.lip_row - 2,
             },
-            max: site.chamber.max,
+            max: TilePosition {
+                x: site.camp.max.x,
+                y: site.chamber.max.y,
+            },
         };
         funnel.intersects(rect)
     })

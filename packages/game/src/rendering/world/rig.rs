@@ -309,6 +309,7 @@ mod tests {
             weapon: None,
             orientation: 0.0,
             lamp_scale: 1.0,
+            riding_cart: false,
         }
     }
 

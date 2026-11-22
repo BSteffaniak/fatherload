@@ -38,6 +38,8 @@ impl WorldState {
         let (home_x, home_y) = self
             .rescue_home(player_id)
             .unwrap_or_else(|| frame.from_legacy_px(12.0 * TILE_SIZE, 4.0 * TILE_SIZE));
+        // A rescued rig leaves any mine cart behind (Wave 8).
+        self.drop_cart(player_id);
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };

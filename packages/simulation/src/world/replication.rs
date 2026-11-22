@@ -216,6 +216,9 @@ pub enum SectionKey {
     /// Depth logistics: lifts, outposts, beacons, rides, dives, dive charges and the
     /// progression rules (Part III F10; station floors travel as terrain ops).
     Logistics,
+    /// The authored Crust: failing sets and shelves, the Sinkhole, the Deep Claim and the logs
+    /// read (Wave 8; cart rides travel with the rigs' per-tick state).
+    Crust,
 }
 
 impl SectionKey {
@@ -284,6 +287,7 @@ pub enum SectionPayload {
     Tombs(Box<crate::tomb::Tombs>),
     Fields(Box<crate::field::FieldZones>),
     Logistics(Box<crate::logistics::Logistics>),
+    Crust(Box<crate::crust::CrustState>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -473,6 +477,7 @@ impl WorldState {
             fields,
             fluids: _,
             logistics,
+            crust,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -571,6 +576,7 @@ impl WorldState {
             SectionKey::Tombs => SectionPayload::Tombs(Box::new(tombs.clone())),
             SectionKey::Fields => SectionPayload::Fields(Box::new(fields.clone())),
             SectionKey::Logistics => SectionPayload::Logistics(Box::new(logistics.clone())),
+            SectionKey::Crust => SectionPayload::Crust(Box::new(crust.clone())),
         })
     }
 
@@ -733,6 +739,9 @@ impl WorldState {
             }
             (SectionKey::Logistics, SectionPayload::Logistics(logistics)) => {
                 self.logistics = *logistics;
+            }
+            (SectionKey::Crust, SectionPayload::Crust(crust)) => {
+                self.crust = *crust;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;
