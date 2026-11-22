@@ -769,7 +769,7 @@ pub struct OldDeep {
     #[serde(default)]
     pub woken_halls: BTreeSet<(i32, i32)>,
     /// Skeleton excavations (by region).
-    #[serde(default)]
+    #[serde(default, with = "pair_map")]
     pub skeletons: BTreeMap<(i32, i32), SkeletonDig>,
     #[serde(default)]
     pub cathedral: CathedralLift,
@@ -781,7 +781,7 @@ pub struct OldDeep {
     #[serde(default)]
     pub logs_read: BTreeSet<u8>,
     /// Storm vents' pours this storm: the storm's index and each vent's count.
-    #[serde(default)]
+    #[serde(default, with = "storm_pours")]
     pub pours: (u64, BTreeMap<(i32, i32), u8>),
     /// Gas pockets that breathed this tide: the tide's index and the pockets.
     #[serde(default)]
@@ -789,6 +789,48 @@ pub struct OldDeep {
     /// Rigs stuck in amber (for the one warning per touch).
     #[serde(default)]
     pub stuck: BTreeSet<PlayerId>,
+}
+
+/// A map keyed by `(x, y)` pairs saved as a list of pairs: saves are JSON, and JSON object keys
+/// must be strings.
+mod pair_map {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, V: Serialize>(
+        map: &BTreeMap<(i32, i32), V>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(map.iter())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, V: Deserialize<'de>>(
+        deserializer: D,
+    ) -> Result<BTreeMap<(i32, i32), V>, D::Error> {
+        Ok(Vec::<((i32, i32), V)>::deserialize(deserializer)?
+            .into_iter()
+            .collect())
+    }
+}
+
+/// [`OldDeep::pours`] with its vent map saved as a list of pairs (see [`pair_map`]).
+mod storm_pours {
+    use std::collections::BTreeMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    type Pours = (u64, BTreeMap<(i32, i32), u8>);
+
+    pub fn serialize<S: Serializer>(pours: &Pours, serializer: S) -> Result<S::Ok, S::Error> {
+        let vents: Vec<(&(i32, i32), &u8)> = pours.1.iter().collect();
+        (pours.0, vents).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Pours, D::Error> {
+        let (storm, vents) = <(u64, Vec<((i32, i32), u8)>)>::deserialize(deserializer)?;
+        Ok((storm, vents.into_iter().collect()))
+    }
 }
 
 impl OldDeep {
@@ -863,6 +905,39 @@ pub const LOG_CORE_REVEAL: u8 = 11;
 
 #[cfg(test)]
 mod tests {
+    /// Saves are JSON: every part of the Old Deep's state must survive a JSON round trip (a
+    /// map keyed by a tuple would refuse to serialize) as well as the binary wire.
+    #[test]
+    fn the_old_deep_state_survives_json_saves_and_the_wire() {
+        let mut deep = super::OldDeep::default();
+        deep.skeletons.insert(
+            (3, -7),
+            super::SkeletonDig {
+                freed: 2,
+                broken: 0,
+                completed: false,
+            },
+        );
+        deep.pours.0 = 9;
+        deep.pours.1.insert((-12, 2_200), 3);
+        deep.woken_halls.insert((1, 2));
+        deep.breathed = (4, std::iter::once((5, 6)).collect());
+        deep.doses.insert(
+            crate::PlayerId::new(1),
+            super::Dose {
+                level: 450,
+                warned: 1,
+            },
+        );
+        deep.logs_read.insert(3);
+        let json = serde_json::to_string(&deep).expect("the state saves as JSON");
+        let back: super::OldDeep = serde_json::from_str(&json).expect("and loads");
+        assert_eq!(back, deep);
+        let bytes = postcard::to_allocvec(&deep).expect("postcard");
+        let back: super::OldDeep = postcard::from_bytes(&bytes).expect("postcard");
+        assert_eq!(back, deep);
+    }
+
     use super::*;
 
     #[test]
