@@ -204,7 +204,7 @@ fn time_bubble(stage: &mut SceneStage<'_>) {
             return;
         };
         let (x, y) = (
-            rig.x + 4.0 * fatherload_simulation::terrain::TILE_SIZE,
+            4.0f32.mul_add(fatherload_simulation::terrain::TILE_SIZE, rig.x),
             rig.y - 8.0,
         );
         world.insert_charge(PlacedBomb {
