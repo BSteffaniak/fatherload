@@ -402,7 +402,9 @@ impl PostProcess {
                 vec4([
                     level(ScreenEffect::Blur),
                     level(ScreenEffect::Glitch),
-                    fx.glitch_step.floor(),
+                    // The step as a small phase in 0..1 (worked out here in full precision):
+                    // the shader's hash then stays inside mediump's range on GLES2 phones.
+                    (fx.glitch_step.floor() * 0.414_214).fract(),
                     0.0,
                 ]),
                 4,
@@ -504,7 +506,7 @@ uniform vec4 uB;
 uniform vec4 uC;
 // fog, wobble phase (cycles), light, one art pixel (texels)
 uniform vec4 uD;
-// blur (Wave 8 spore clouds), glitch (Wave 9 Pixel Rot), glitch step, unused
+// blur (Wave 8 spore clouds), glitch (Wave 9 Pixel Rot), glitch step phase (0..1), unused
 uniform vec4 uE;
 uniform vec3 uGrade;
 uniform vec3 uFogColor;
@@ -537,9 +539,11 @@ void main() {
     if (uE.y > 0.0) {
         float rows = 18.0;
         float band = floor(uv.y * rows);
-        float seed = fract(sin(band * 12.9898 + uE.z * 78.233) * 43758.5453);
+        // Small constants only: a mediump float holds about 2^14 at most and its fraction
+        // grows coarse past a few dozen, so no big sin() hash here.
+        float seed = fract(band * 0.618034 + uE.z * 3.0);
         if (seed < 0.25 * uE.y + 0.05) {
-            float shift = (fract(seed * 91.7) - 0.5) * 0.06 * uE.y;
+            float shift = (fract(seed * 13.7 + band * 0.37) - 0.5) * 0.06 * uE.y;
             uv.x = uv.x + shift;
             glitchSplit = 0.004 * uE.y;
         }
