@@ -1990,10 +1990,11 @@ entrance art and map marker, and is the same for every floor of that place.
   up a step and ledge stair through a ceiling hole, the shrine, caches, the boss room, the
   stairs), all reachable by the stock pilot (T28 replaced it: see "Side-view tombs" below).
   Top-down sites use T29's `crypt::CryptRealizer` (see "Top-down crypts" below; T27's
-  `TopDownRealizer` placeholder is still in the file, unused). `bestiary(style, role, variant)`
+  `TopDownRealizer` placeholder was removed in wave 6). `bestiary(style, role, variant)`
   names the enemy kind (side view: T28's `side_view::bestiary`; top down: T29's
   `crypt::bestiary`); the boss's health is
-  `boss_health_scale(site tier)` (0.5x its stock at tier 1 up to 1.5x at tier 5).
+  `boss_health_scale(site tier)` (`BOSS_HEALTH_SCALE`: 0.5x its stock at tier 1 up to 0.7x at
+  tier 5 since wave 6, on top of the creature tier).
   `TrapKind` (`Spikes`, `TRAP_KINDS` codes reserved) with `damage_per_second`.
 - **Tiles** (`BuiltTile` codes 72-119): `TombWall(style)`, `TombPillar(style)` (pilots pass),
   `TombDoor { style, sealed }`, `TombShrine { lit }`, `TombStairs`, `TombExit`,
@@ -2049,7 +2050,7 @@ entrance art and map marker, and is the same for every floor of that place.
   world tests) plays one run per seed, tier and style on Normal enemies, with kit fitting the
   tier; the report gives run length, cleared / wiped / timeout counts and banked and lost loot
   per tier and style, and `loot_on_offer` the credits of every cache plus the hoard in a whole
-  run. First numbers (4 seeds): the bot clears 2 of 4 tier 1 tombs in about 1.6 minutes and
+  run (and, since wave 6, wipes by tier and style, with the room of a lone member's wipe). First numbers (4 seeds): the bot clears 2 of 4 tier 1 tombs in about 1.6 minutes and
   mostly falls to the placeholder guardian deeper down (it never dodges); loot on offer grows
   from about 900 cr (tier 1) to 3,800, 15,000, 36,000-42,000 and 75,000-90,000 (tier 5).
   Creatures spawn at `enemy_tier(run)` (one under the site's tier, plus one per two floors),
@@ -2158,8 +2159,9 @@ site whose `SiteStyle` is `TopDown` plays it (the style is still fixed per site 
   a spot six tiles off the lord with a clear shot, then the stairs; it shoots the nearest
   creature in sight, rolls away from lunges and slams, off the lord's charge line and
   sideways to incoming shots, never into a pit. `--balance-report --only tombs` (4 seeds, 60
-  Hz): crypts cleared 4/4 at tier 1 (1.6 min), 3/4 at tier 2, 2/4 at tier 3, 0/4 at tier 4,
-  1/4 at tier 5; crypt wipes mostly at the lord ("Crypt wipes by room" note).
+  Hz, after the wave 6 boss retune): crypts cleared 4/4 at tier 1 (1.6 min), 4/4 at tier 2,
+  3/4 at tier 3, 0/4 at tier 4, 2/4 at tier 5; crypt wipes mostly at the lord and in ambushes
+  ("Crypt wipes by room" and "Wipes by tier and style" notes).
   `crypt_bot::floor_text` prints a floor with its traps for debugging.
 - **Scenario helpers**: `scenario_tomb_floor(player, floor)` (straight to a floor, the lord's
   hall), `scenario_crypt_traps(player, traps, started_millis_ago)`; `crypt_floor_millis(run)`
@@ -2174,6 +2176,66 @@ telegraph, spectres through walls, the bot beats the lord through three phases, 
 clears a crypt of every tier on Peaceful, traps tick-rate safe, saves mid-floor with trap
 state); the netcode e2e `world_crypt_runs_predict_rolls_and_converge`; the game's split
 screen with mixed view modes and the crypt touch layout.
+
+## Wave 6 fixes (collected open items from waves 3-5)
+
+- **Tomb bosses** (`tomb::realize::BOSS_HEALTH_SCALE`): the guardian's and crypt lord's
+  multiplier is a gentle table (0.5, 0.55, 0.6, 0.65, 0.7 by site tier) instead of
+  0.25 + 0.25 x tier, because the creature tier (`world::tombs::enemy_tier`) already grows with
+  the site tier and the floor: tier 5's guardian is about 3x tier 1's, not 6.6x
+  (`the_guardians_health_climbs_gently_with_the_tier`). Probe (`--balance-report --only tombs
+  --seeds 4`), cleared of 4 per tier, tomb / crypt: before 4/4, 2/4, 2/1, 1/0, 0/2; after 4/4,
+  3/4, 2/3, 3/0, 1/2. Tier 3's remaining tomb wipes are a guardian and a fall on floor 0; crypt
+  tier 4's lord wipes do not move with its health (they are the lord's damage against kit
+  capped at tier 3). The probe now notes wipes by tier and style and names the room of a lone
+  member's wipe (the run ended in the same tick, which the old note read as "a pit").
+- **Free lift and the dead-air gap** (`environment::{gap_lift_share, jet_stream_in_air,
+  LIFT_FADE_ROWS}`, `milestone::{free_lift_share, free_lift_fuel_limit,
+  FREE_LIFT_FUEL_MARGIN}`): updrafts and vents fade over the 24 rows under the gap's floor,
+  nothing lifts and no jet stream runs inside it (no generated lift reaches it today: the
+  highest V9 vent air tops out 38 rows under it), and free lift is rationed like sky fuel: a rig
+  that cannot cross the gap is lifted in full only while its tank is at least 4 % short of what
+  climbing across from where it is would take (the climb table's estimate, a lower bound of
+  the real climb), and not at all at that limit, so a free ride never leaves it able to cross.
+  Rigs far short (every rig of the island bands' own tiers), crossers and everything outside
+  the island bands ride as before. The altitude events only report updrafts that really lift.
+  Tests: `free_lift_never_reaches_into_the_dead_air_gap`, `free_lift_rides_never_open_the_dead_air_gap`
+  (every near-gap loadout carried free to the top of the lift and to mid-archipelago with the
+  most fuel lift still carries, measured with the real movement step) and
+  `an_updraft_will_not_lift_a_laden_rig_that_cannot_cross_the_gap` (a laden tier 12 rig rose
+  17 rows on free lift before; now none, while a rationed one, a stock rig and a crosser ride).
+- **Garage bay repairs** cost `home::GARAGE_REPAIR_UNIT_COST` (1 cr a point, half the town
+  garage's), billed per point started, tick-rate safe.
+- **Island Hopper** is earned against the world's own calibration (`milestone::island_hopper`,
+  `SkyBands::calibration`, a new field next to `climb`; placement and digests unchanged).
+- **Trap-Sight** is per seat in the game (`rendering::world::tombs::seat_trap_sight`): only the
+  carrier's own screen shows hidden traps, in side-view tombs as in crypts.
+- **Hand pick**: `pilot::pick_seconds` also takes soft sky ground (island turf and soil, roots,
+  vines, the Moon's regolith) at the soft-dirt speed; rock, crystal, caches, nests, springs and
+  temple stone still clink.
+- **Village purchases** name their deal: `SessionServiceRequest::Village { deal: VillageDeal, .. }`
+  (was `offer: u8`, the row). The tick buys that deal only if the counter offers it at that
+  tick, so the dusk or dawn restock can never swap the item
+  (`a_purchase_names_its_deal_so_the_dusk_restock_never_swaps_it`). `PROTOCOL_VERSION` 14.
+- **Mechanism reach** is scoped to the mechanism's own space (`MechanismScope`: a generated
+  pilot space by origin, a tomb run slot, or the open world): a lever or plate never works a
+  gate of the neighbouring space (`a_lever_never_reaches_a_gate_in_the_neighbouring_space`).
+- **Dawn banner** (game, `night_text::DawnWitnesses`): no "DAWN" banner after a night slept away,
+  nor for a seat whose player lay in bed through the night.
+- **Crypt trap shots** honour Sandwalker Sandals per pilot hit (see "Wave 5 integrated").
+- **Rock mimic**: contact 8 (was 14) every 2 s (was 1.3 s): with its lunge now connecting it
+  cost a third of a band's typical hull in a starter-gun duel (46 of 140 in the grey stone, 412
+  of 1,180 in the void geodes); now 13 and 134 (`rock_mimics_bite_fairly`). The up-to-1-px
+  overlap of an enemy pinned against a wall by a ramming rig is left as is (the rig moves before
+  enemies and rock wins the push; `OVERLAP_TOLERANCE` documents it).
+- **Hull warning** on other rigs' nameplates is a share of their max hull
+  (`LOW_HULL_FRACTION`, 35 %, the HUD's), not a fixed 30.
+- **Phone layout**: the clock badge steps left of the thumb cluster's buttons
+  (`clock_hud::badge_rect`, `touch_controls::cluster_rects`) where they rise level with it on a
+  landscape phone (checked at 844x390 and 390x844).
+- **Cleanup**: the tracked `screen.rs.orig`, T27's `TopDownRealizer` and other dead code are gone.
+- **Formats**: `PROTOCOL_VERSION` 14 (the village deal); no save format change; no worldgen
+  change (V1-V10 digests unchanged). No new event codes.
 
 ## Wave 5 integrated: side-view tombs and top-down crypts together
 
@@ -2193,8 +2255,9 @@ generator V10 alone places sites (V1-V9 digests unchanged, V10's pinned once by 
   both styles; it also resets the run to `Exploring`.
 - **Shared relics**: every relic is offered in both styles (`Relic::suits`). Sandwalker
   Sandals and their synergies (`RelicEffects::trap_pct`) now blunt a crypt's overlays and pit
-  falls as they do side-view traps and T27's spikes (crypt trap arrows and boulders are shots
-  and are not scaled). Loot, banking, unlocks, the codex and trophies are T27's and do not care
+  falls as they do side-view traps and T27's spikes; since wave 6 also a trap's arrows and
+  boulders, which are spawned once for the party and scaled for the pilot they hit
+  (`advance_crypt_shot`). Loot, banking, unlocks, the codex and trophies are T27's and do not care
   which style a run is.
 - **Per seat**: a seat's view, camera, minimap, music and HUD follow its own player's run
   (`PilotView`): in split screen one seat can crawl a crypt while the other plays a
@@ -2426,9 +2489,10 @@ WP-FEEL part 2 (wave 3, T18). Deterministic rules only; the game draws the momen
   holds: tank 2 (stock engine) reaches the isles, the stock rig does not; crossing the dead air
   needs a near-max tank and intakes (tank 13 + engine 15 + intake 6, or tank 15 + intake 4).
   On V8 worlds (calibrated on the old, smaller fuel curve) the bigger tanks open the bands
-  earlier: a stock tank already reaches V8's low isles (so a stock rig in a V8 world earns
-  `IslandCapableTank` at once) and tank 10 + engine 15 + intake 2 crosses V8's dead air; no
-  rig crosses without intakes. They decide the `IslandCapableTank` and `ActTwoUnlocked`
+  earlier: a stock tank already reaches V8's low isles and tank 10 + engine 15 + intake 2
+  crosses V8's dead air; no rig crosses without intakes. (Wave 6: `IslandCapableTank` reads
+  `milestone::island_hopper`, which also asks the table the bands were calibrated from,
+  `SkyBands::calibration`, so a stock rig in a V8 world no longer earns it at once.) They decide the `IslandCapableTank` and `ActTwoUnlocked`
   (Act I -> II) milestones and the shop's "Reaches the low sky isles!" / "Crosses the dead-air
   gap" lines on the tank, engine and Altitude Intake previews. `HighFlyer` now needs 420 tiles
   above the ground (a stock rig climbs about 400 on a full tank). The shop also previews the Altitude Intake (thin-air thrust) and De-Icer (cold
@@ -2651,7 +2715,9 @@ only once anything was bought.
   `BuyFurniture` at a land office, crafting, housewarming gifts, antique pieces found in cave
   caches (`decor::cache_find`: relic caches always, one treasure cache in three; reported on
   `CaveCacheOpened::furniture`) and `WorldState::grant_furniture` (the seam for quest rewards). A rig parked in a garage bay regains
-  `GARAGE_REPAIR_PER_SECOND` hull. `Hatch` drops the pilot into the cellar under the house (vent
+  `GARAGE_REPAIR_PER_SECOND` hull at `GARAGE_REPAIR_UNIT_COST` (1 cr, half the town's) a point,
+  paid as the hull starts into each point (tick-rate safe); out of credits it stops at the last
+  point paid for. `Hatch` drops the pilot into the cellar under the house (vent
   grate hatch: rigs cannot follow); `RideLift` runs between the basement and the claim
   (`lift_claim`, `lift_home_from_here`). A home with a lamp lights its plot in `light_at`.
 - **Where actions happen.** `check_home(player, &command)` gives the verdict and `HomeQuote`

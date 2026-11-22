@@ -122,7 +122,7 @@ with the day count and the time.
 
 **The night is dangerous.** As dusk deepens, night monsters rise on the open surface (a
 "NIGHT FALLS" banner and a low sting warn you) and they burrow and flee at dawn ("DAWN", with
-the night's tally). Which ones depends on the land: packs of **shadow hounds** on the plains,
+the night's tally, for whoever stayed up: not after a night slept away). Which ones depends on the land: packs of **shadow hounds** on the plains,
 tundra, badlands and mountains (they will not step into lamp light and run from flares),
 **dune stalkers** that hear footsteps around corners (never through solid ground), **will-o'-wisps** drifting
 over marsh and forest throwing cold wispfire (bullets pass through them; blasts do not), and
@@ -278,7 +278,9 @@ tank tiers can climb (measured, not guessed), so every bigger tank opens more of
 **Altitude physics**: the air thins with height, so engines lose thrust and burn fuel faster
 (high-altitude **Altitude Intake** upgrades win it back), and it gets cold: past the
 archipelago an uncovered cold level burns the hull (the **De-Icer** line covers two levels a
-tier). Wind layers carry a coasting rig (steer against them, or ride them), updrafts lift it,
+tier). Wind layers carry a coasting rig (steer against them, or ride them), updrafts lift it
+(free lift stops at the dead-air gap, and lets go of a rig that cannot cross it once its tank
+nears what crossing from there would take: only your own tank carries you over),
 and gravity is per place: normal up through the islands, lighter on the continents, nearly
 none in orbit, low on the Moon. A **sky gauge** under the wallet shows the band, the air and
 the thrust your intakes keep, the cold against your de-icer, gravity and the wind; the map
@@ -732,7 +734,7 @@ change the wallpaper and the floor), the storage and the deed. Furniture comes f
 office catalogue, the workbench, and a housewarming gift from a builder proud of the work.
 
 Hire the builder again for **expansions**: more rooms, another floor, a garage bay (park the rig
-in it from outside and it is patched up for free), a basement with a hatch down into the mine
+in it from outside and it is patched up at cost, 1 cr a point of hull), a basement with a hatch down into the mine
 below the house, and a private lift from the basement to your claim underground (ride it back
 up with use inside the claim). The deed sets who may come in: the crew decorates, visitors are
 welcome (the default), or owners only; add co-owners from the deed. Homes save with the world
@@ -759,8 +761,9 @@ On foot you are slow vertically and weak at digging, but you fit where the rig c
   is a pilot-only space.
 - **Swim** in cave water (jump / up strokes up, down dives).
 - **Hand pick**: hold the fire button (`LMB` / `V`, controller `RT`) to chip soft dirt, sand,
-  snow, mud and clay where you aim (down while crouching): slow, for footholds, not shafts.
-  Every chipped tile drops a block. Rock just clinks.
+  snow, mud and clay where you aim (down while crouching), and in the sky an island's turf,
+  soil, roots and vines and the Moon's dust: slow, for footholds, not shafts. Every chipped
+  tile drops a block. Rock just clinks.
 - **Explosives**: the bomb button throws the selected charge from the pilot's hands. Stand
   back: blasts hurt pilots.
 - **Jetpack** (the shack's gear rack, three tiers): hold jump in the air to fly for a few
@@ -834,8 +837,9 @@ beside a cracked seal, or a **story** seen through.
   ricochet shots, the trap-sight lantern (hidden spikes glow), the vampiric pick, the glider
   boost and more, with synergies (Spring Heels and Glider Boost make Skywalker). Relics last
   the run. Every relic works in both kinds of place: movement perks change the crypt's dodge
-  roll, and **Sandwalker Sandals** halve trap damage in crypts (spikes, flames, pit falls) as
-  well as tombs.
+  roll, and **Sandwalker Sandals** halve trap damage in crypts (spikes, flames, pit falls, the
+  traps' arrows and boulders) as well as tombs. The trap-sight lantern lights hidden traps on
+  its carrier's own screen only.
 - **Unlocks**: the **tomb codex** (after the milestones in the map's pages: `Enter` from the
   milestones) lists every relic you have carried, the tombs you have mapped and cleared,
   guardians felled and the builders' **lore pages** found in vaults. Each guardian felled also
@@ -903,14 +907,15 @@ beside a cracked seal, or a **story** seen through.
 - **Crypt balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz, the probe bot with kit
   that fits the tier, rolling through tells and shots, keeping off pits and waiting out
   spikes and flames, going for the vault): it clears 4 of 4 tier 1 crypts in about 1.6
-  minutes, 3 of 4 at tier 2, 2 of 4 at tier 3, none at tier 4 and 1 of 4 at tier 5; most of its
-  wipes are at the crypt lord (whose health scales with the site tier like the guardian's).
+  minutes, 4 of 4 at tier 2, 3 of 4 at tier 3, none at tier 4 and 2 of 4 at tier 5; most of its
+  wipes are at the crypt lord (whose health scales gently with the site tier like the
+  guardian's: 0.5x its stock at tier 1 to 0.7x at tier 5 since wave 6).
 - **Side-view balance** (`--balance-report --only tombs`, 4 seeds, 60 Hz): a scripted bot (rifle then
   sidearm, aiming at what it sees within 14 tiles, first relic each floor, no dodging, no
   detours to the vault) reads the side-view traps ahead (it waits out blades, crushers, darts,
   fog and the sand, never stops on a crumbling slab) and goes back for a lever it passed. In
-  side-view tombs it clears all 4 tier 1 runs in about 0.9 minutes, 4 of 8 at tiers 2-3 (1-1.2
-  minutes) and 1 of 8 at tiers 4-5 (2.3-3 minutes): nearly all its wipes are at the guardian,
+  side-view tombs it clears all 4 tier 1 runs in about 0.9 minutes, 5 of 8 at tiers 2-3 (1-1.1
+  minutes) and 4 of 8 at tiers 4-5 (2.1-2.5 minutes, after the wave 6 guardian retune): most of its wipes are at the guardian,
   which it fights standing still with the rifle alone. Guardians sense intruders anywhere in
   their crypt (hiding under a platform does not make them forget you and heal), and the
   colossus leaps down off a ledge to reach you. The bot is far
