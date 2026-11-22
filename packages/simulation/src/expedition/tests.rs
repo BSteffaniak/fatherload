@@ -240,6 +240,26 @@ fn sites_carve_a_room_on_a_floor_and_keep_off_the_landmarks() {
     }
 }
 
+/// Every one of the sixty sites, on every test seed, keeps clear of the strata's set pieces
+/// (the Wave 8 stamps and `DEEPER_SET_PIECES`) and of the older pilot spaces and tombs: the
+/// placement's "kept as rolled" fallback is never taken (Wave 9 review).
+#[test]
+fn every_site_keeps_off_the_set_pieces_on_every_seed() {
+    for seed in SEEDS {
+        let settings = v11(seed);
+        for site in sites::sites(&settings) {
+            let around = site.extent().expanded(3);
+            assert!(
+                !sites::crosses_strata_set_pieces(&settings, &around)
+                    && !sites::crosses_older_spaces(&settings, &around),
+                "seed {seed:#x}: log {} at {:?} crosses a set piece",
+                site.log + 1,
+                site.bounds
+            );
+        }
+    }
+}
+
 /// The rooms of a strip of columns either side of the town, down through Descents I-VI.
 fn rooms_of(settings: &WorldSettings) -> Vec<anomaly::AnomalyRoom> {
     let layout = layout(settings);
