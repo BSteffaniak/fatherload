@@ -579,3 +579,97 @@ fn a_rig_drills_down_through_a_brine_floor_without_bobbing_off() {
         "the rig drilled down through the floor ({dug} px)"
     );
 }
+
+/// Cost report for a big breached lake (`cargo test --release -p fatherload_simulation
+/// fluid_lake_cost_report -- --ignored --nocapture`): wall time per tick, tile writes (the op
+/// log a client receives) and how long until the lake sleeps.
+#[test]
+#[ignore = "a timing report, run by hand"]
+fn fluid_lake_cost_report() {
+    let mut world = arena();
+    let (width, height) = (world.terrain().width(), world.terrain().height());
+    // A cavern 100 x 50 (clamped to the world), its left half four-fifths full of water that
+    // is woken at once (a dam gone).
+    let (x0, y0) = (4, 40);
+    let x1 = (x0 + 99).min(width - 3);
+    let y1 = (y0 + 49).min(height - 3);
+    fill(
+        &mut world,
+        x0 - 1..=x1 + 1,
+        y0 - 1..=y1 + 1,
+        TileKind::Stone,
+    );
+    fill(&mut world, x0..=x1, y0..=y1, TileKind::Air);
+    let mid = (x0 + x1) / 2;
+    pour(&mut world, x0..=mid, y0 + 10..=y1, FluidKind::Water);
+    let area = rect(x0 - 1..=x1 + 1, y0 - 1..=y1 + 1);
+    let start = volume(&world, area, FluidKind::Water);
+    let cells_start = cells(&world, area).len();
+    let mut writes = 0_usize;
+    let mut peak_writes = 0_usize;
+    let mut slowest = std::time::Duration::ZERO;
+    let begin = std::time::Instant::now();
+    let mut ticks = 0_u32;
+    while !world.fluid_schedule().is_idle() && ticks < 60 * 600 {
+        let tick = world.simulation_tick();
+        let t = std::time::Instant::now();
+        let output = world.simulate_tick(tick, &idle());
+        slowest = slowest.max(t.elapsed());
+        writes += output.terrain_ops.len();
+        peak_writes = peak_writes.max(output.terrain_ops.len());
+        ticks += 1;
+    }
+    let total = begin.elapsed();
+    println!(
+        "lake {}x{} with {cells_start} full cells: idle after {ticks} ticks ({:.1} s game), \
+         {:.3} ms/tick avg, {:.3} ms slowest, {writes} tile writes ({peak_writes} peak per tick), \
+         volume {start} -> {}",
+        x1 - x0 + 1,
+        y1 - y0 + 1,
+        f64::from(ticks) / 60.0,
+        total.as_secs_f64() * 1000.0 / f64::from(ticks.max(1)),
+        slowest.as_secs_f64() * 1000.0,
+        volume(&world, area, FluidKind::Water)
+    );
+    assert_eq!(volume(&world, area, FluidKind::Water), start);
+}
+
+#[test]
+fn pilots_float_at_a_buoyant_surface_without_bobbing_out() {
+    for kind in FluidKind::ALL {
+        let mut world = arena();
+        let _ = run(&mut world, &idle(), 10);
+        let _ = run(
+            &mut world,
+            &TickInputs::default().act(PLAYER, PlayerCommand::TogglePilot),
+            1,
+        );
+        let _ = run(&mut world, &TickInputs::default(), 20);
+        // Invulnerable, so acid and molten metal leave the pilot afloat for the whole check.
+        world.enable_test_mode();
+        let _ = run(
+            &mut world,
+            &TickInputs::default().act(
+                PLAYER,
+                PlayerCommand::TestMode(TestModeAction::SetInvulnerable(true)),
+            ),
+            1,
+        );
+        pour(&mut world, 8..=40, 24..=31, kind);
+        let events = run(&mut world, &TickInputs::default(), 60 * 10);
+        let splashes = events
+            .iter()
+            .filter(|event| matches!(event, GameplayEventKind::PilotSplashed { .. }))
+            .count();
+        assert_eq!(splashes, 1, "{kind:?}: one splash going in, none bobbing");
+        let (_, body, state) = world.pilot_of(PLAYER).expect("pilot");
+        assert_eq!(state.mode, PilotMode::Swim, "{kind:?}");
+        if matches!(kind, FluidKind::Brine | FluidKind::LiquidMetal) {
+            assert!(
+                body.y < 28.0 * TILE_SIZE,
+                "{kind:?} floats the pilot up to its surface ({})",
+                body.y / TILE_SIZE
+            );
+        }
+    }
+}
