@@ -161,8 +161,8 @@ fn furnished_room(
         let plot = world.scenario_home(player, site, Some(blueprint));
         furnish(world, plot, room, pieces, look);
         park(world, player, site.right() + 4, site.ground_row);
-        let door = world.homes().plot(plot).map_or(
-            site.middle(),
+        let door = world.homes().plot(plot).map_or_else(
+            || site.middle(),
             fatherload_simulation::home::Plot::door_column,
         );
         pilot_at(world, player, door, site.ground_row);
@@ -267,16 +267,13 @@ pub const WAVE6_SCENES: &[Scene] = &[
                 let built = sites[sites.len() - 1];
                 let _ = world.scenario_home(player, built, Some(Blueprint::CloudCottage));
                 let column = if built.middle() < found.center_column() {
-                    built.right() + 10
+                    built.right()
                 } else {
-                    built.left - 10
+                    built.left
                 };
                 park(world, player, column, built.ground_row);
-                if let Some(rig) = world.player_mut(player) {
-                    rig.y -= 4.0 * TILE_SIZE;
-                }
             });
-            stage.settle(150);
+            stage.settle(30);
             stage.seat(0).village.banner = None;
             stage.settle(1);
         },
