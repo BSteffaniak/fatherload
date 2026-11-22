@@ -532,14 +532,14 @@ pub fn upgrade_lock_for(
     }
     let layout = crate::depth_progression::layout_for(settings);
     if let Some(system) = offer.kind.rig_system() {
-        let row = system.sold_from_row(layout);
+        let row = system.sold_from_row(&layout);
         return (deepest_row < row).then_some(UpgradeLock::Depth {
             row,
             descent: system.sold_from_descent(),
         });
     }
     if offer.kind.is_core() {
-        let reached = layout.descent_at(deepest_row);
+        let reached = crate::depth_progression::DescentLayout::descent_at(&layout, deepest_row);
         let next = offer.level.saturating_add(1);
         if next > crate::depth_progression::core_tier_cap(reached) {
             return Some(UpgradeLock::Descent(

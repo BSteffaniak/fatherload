@@ -241,6 +241,12 @@ impl WorldState {
             bomb.detonation_tick = SimulationTick::new(ticks(bomb.timer_seconds));
             world.insert_charge(bomb);
         }
+        if world.terrain.settings().generator.has_descents() {
+            // The generator carved the outposts and ancient lifts (Wave 7 integration).
+            let sites =
+                crate::worldgen::descent::landmarks::logistics_sites(world.terrain.settings());
+            world.install_logistics_sites(&sites, false);
+        }
         world
     }
 }

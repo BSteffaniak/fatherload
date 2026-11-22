@@ -320,7 +320,7 @@ fn descent_shop(stage: &mut SceneStage<'_>) {
         world.set_progression_rules(ProgressionRules::Descent);
         park_rig(world, player, 97, 4);
         let row = RigSystem::PressureHull
-            .sold_from_row(world.descent_layout())
+            .sold_from_row(&world.descent_layout())
             .max(0);
         if let Some(fatherload_simulation::SectionPayload::Progression(mut progression)) =
             world.section(fatherload_simulation::SectionKey::Progression)

@@ -323,13 +323,20 @@ fn every_descent_has_an_outpost_and_a_gate_chamber() {
         // The Hollow World's outpost stands on the cavern's ground.
         let hollow = outpost(&settings, &layout, Descent::HollowWorld).expect("an outpost");
         assert_eq!(hollow.stratum, Stratum::InnerSky);
-        let below = TilePosition {
-            x: hollow.bounds.min.x + 4,
-            y: hollow.bounds.max.y + 1,
-        };
+        // Most of its floor rests on rock (a cave may run under part of it: the plated floor
+        // holds).
+        let resting = (hollow.bounds.min.x..=hollow.bounds.max.x)
+            .filter(|x| {
+                let below = TilePosition {
+                    x: *x,
+                    y: hollow.bounds.max.y + 1,
+                };
+                generated_tile(&settings, below).kind != TileKind::Air
+            })
+            .count();
         assert!(
-            generated_tile(&settings, below).kind != TileKind::Air,
-            "seed {seed}"
+            resting * 2 > usize::try_from(OUTPOST_SIZE.0).unwrap_or(0),
+            "seed {seed}: {resting} columns rest on rock"
         );
     }
 }
@@ -543,8 +550,9 @@ fn v11_generation_is_pinned() {
     );
 }
 
-/// The digest [`v11_generation_is_pinned`] expects.
-const GOLDEN_V11_DIGEST: u64 = 0xa6a0_afc2_2f79_6f2f;
+/// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
+/// pockets, the outposts on the builders' cable and the ancient lifts' carve).
+const GOLDEN_V11_DIGEST: u64 = 0x0c5f_b99d_3d82_b654;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]

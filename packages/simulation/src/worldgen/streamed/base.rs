@@ -165,6 +165,9 @@ pub struct Ctx {
     pub tiers: Vec<Tier>,
     /// A V11 world's stratum layout ([`descent::layout`]); `None` before V11.
     pub descent: Option<DescentLayout>,
+    /// A V11 world's depth logistics sites (outposts and the ancient lifts' rail and stations,
+    /// [`descent::landmarks::logistics_sites`]), carved over the landmarks; empty before V11.
+    pub logistics: crate::logistics::sites::LogisticsSites,
 }
 
 impl Ctx {
@@ -239,6 +242,7 @@ impl Ctx {
             deepest_surface: deepest_surface_row(settings),
             tiers,
             descent,
+            logistics: descent::landmarks::logistics_sites(settings),
         }
     }
 

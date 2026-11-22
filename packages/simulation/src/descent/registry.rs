@@ -12,6 +12,11 @@ use crate::{
     worldgen::{Band, HazardKind},
 };
 
+use crate::fluid::{
+    FluidKind::{Acid, Brine, LiquidMetal, Water},
+    FluidPocketRule,
+};
+
 use super::{
     AmbienceCue, Descent, DescentBoss, DescentKey, FieldProfile, FieldRegions, GateDef,
     GateRequirement, LandmarkKind, LayerResource, MusicCue, OreCurve, Rgb, ScreenEffect,
@@ -86,6 +91,7 @@ const TEMPLATE: StratumDef = StratumDef {
     landmarks: &[LandmarkKind::Prefabs, LandmarkKind::CaveEcosystems],
     variants: &[],
     gate: None,
+    fluids: &[],
 };
 
 /// Landmarks of a stratum holding its Descent's outpost.
@@ -294,6 +300,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ],
         music: MusicCue::OldDeep,
         variants: &["Amber Reefs", "Bone Fields"],
+        fluids: &[FluidPocketRule::sealed(Water, 60)],
         ..TEMPLATE
     },
     StratumDef {
@@ -448,6 +455,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::PressureHull],
         }),
+        fluids: &[FluidPocketRule::sealed(LiquidMetal, 30)],
         ..TEMPLATE
     },
     // --- Descent III: The Living Dark ----------------------------------------------------------
@@ -556,6 +564,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::LivingDark,
         ambience: AmbienceCue::Living,
         variants: &["Throbbing Halls", "Acid Gullets"],
+        fluids: &[FluidPocketRule::cave_pools(Acid, 120)],
         ..TEMPLATE
     },
     StratumDef {
@@ -591,6 +600,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::BioFilter, Key::LampII],
         }),
+        fluids: &[
+            FluidPocketRule::cave_pools(Water, 220),
+            FluidPocketRule::sealed(Water, 80),
+        ],
         ..TEMPLATE
     },
     // --- Descent IV: The Drowned and Frozen ---------------------------------------------------
@@ -619,6 +632,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::DrownedAndFrozen,
         ambience: AmbienceCue::Water,
         variants: &["Kelp Trench", "Current Gyres"],
+        fluids: &[
+            FluidPocketRule::sealed(Water, 260),
+            FluidPocketRule::cave_pools(Water, 300),
+        ],
         ..TEMPLATE
     },
     StratumDef {
@@ -646,6 +663,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::DrownedAndFrozen,
         ambience: AmbienceCue::Ice,
         variants: &["Blue Ice", "Brine Channels"],
+        fluids: &[
+            FluidPocketRule::sealed(Brine, 200),
+            FluidPocketRule::cave_pools(Brine, 160),
+        ],
         ..TEMPLATE
     },
     StratumDef {
@@ -672,6 +693,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::DrownedAndFrozen,
         ambience: AmbienceCue::Water,
         variants: &["Steam Vents", "Mud Pots"],
+        fluids: &[
+            FluidPocketRule::sealed(Water, 160),
+            FluidPocketRule::cave_pools(Water, 120),
+        ],
         ..TEMPLATE
     },
     StratumDef {
@@ -699,6 +724,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             LandmarkKind::Prefabs,
         ],
         variants: &["Bubble Domes", "Reef Terraces"],
+        fluids: &[FluidPocketRule::cave_pools(Water, 200)],
         ..TEMPLATE
     },
     StratumDef {
@@ -738,6 +764,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::SonarSuite, Key::CryoHull],
         }),
+        fluids: &[
+            FluidPocketRule::sealed(Water, 240),
+            FluidPocketRule::sealed(Brine, 100),
+        ],
         ..TEMPLATE
     },
     // --- Descent V: The Hollow World -----------------------------------------------------------
@@ -869,6 +899,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::GravityAnchor],
         }),
+        fluids: &[FluidPocketRule::sealed(LiquidMetal, 80)],
         ..TEMPLATE
     },
     // --- Descent VI: The Strange Layers --------------------------------------------------------
@@ -992,6 +1023,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ambience: AmbienceCue::Strange,
         landmarks: STRANGE,
         variants: &["Slow Pools", "Fast Lanes"],
+        fluids: &[FluidPocketRule::cave_pools(Acid, 80)],
         ..TEMPLATE
     },
     StratumDef {
@@ -1108,6 +1140,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::Ancients,
         ambience: AmbienceCue::Machines,
         variants: &["Crusher Lines", "Piston Shafts"],
+        fluids: &[FluidPocketRule::sealed(LiquidMetal, 90)],
         ..TEMPLATE
     },
     StratumDef {
@@ -1212,6 +1245,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ambience: AmbienceCue::Strange,
         landmarks: WITH_OUTPOST,
         variants: &["Black Veins", "Weightless Halls"],
+        fluids: &[FluidPocketRule::sealed(Acid, 120)],
         ..TEMPLATE
     },
     StratumDef {
@@ -1260,6 +1294,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         music: MusicCue::Heart,
         ambience: AmbienceCue::Lava,
         variants: &["Mercury Shallows", "Rail Spans"],
+        fluids: &[
+            FluidPocketRule::sealed(LiquidMetal, 240),
+            FluidPocketRule::cave_pools(LiquidMetal, 200),
+        ],
         ..TEMPLATE
     },
     StratumDef {
@@ -1296,6 +1334,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::StarDrive],
         }),
+        fluids: &[FluidPocketRule::sealed(LiquidMetal, 120)],
         ..TEMPLATE
     },
 ];

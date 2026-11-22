@@ -829,6 +829,10 @@ pub struct StratumDef {
     pub variants: &'static [&'static str],
     /// The gate that ends the Descent (only on a Descent's last stratum).
     pub gate: Option<GateDef>,
+    /// The fluid bodies generator V11 places in the stratum's chunks
+    /// ([`crate::fluid::fluid_pockets_in_chunk`], Wave 7 integration): sealed aquifers and
+    /// cave pools of water, brine, acid or liquid metal. Empty in most strata.
+    pub fluids: &'static [crate::fluid::FluidPocketRule],
 }
 
 impl StratumDef {

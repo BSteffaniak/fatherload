@@ -182,7 +182,7 @@ impl WorldState {
 
     /// The Descent layout this world's depth rules read.
     #[must_use]
-    pub fn descent_layout(&self) -> &'static dyn DescentLayout {
+    pub fn descent_layout(&self) -> crate::depth_progression::WorldLayout {
         layout_for(self.terrain.settings())
     }
 

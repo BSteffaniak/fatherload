@@ -2,10 +2,11 @@
 //! the generators behind the registry's [`LandmarkKind`]s.
 //!
 //! * **Outposts:** one hall per Descent in the stratum the registry marks with
-//!   [`LandmarkKind::Outpost`], a short way either side of the spawn column (plated walls,
-//!   glass skylights, doors on both sides). A placeholder for the deep outposts the logistics
-//!   track turns into claimable bases with fuel, repair, a shop and a respawn point. The
-//!   Hollow World's outpost stands on the cavern's ground.
+//!   [`LandmarkKind::Outpost`], all on one seeded column a short way to one side of the spawn
+//!   column (plated walls, glass skylights, doors on both sides). Each is a deep outpost of the
+//!   logistics track (fuel, repair, selling, a claim and a respawn point), linked by the
+//!   builders' cable of ancient lifts beside the halls ([`logistics_sites`]). The Hollow
+//!   World's outpost stands on the cavern's ground.
 //! * **Gate chambers:** a builder hall at the end of every Descent, just above its last
 //!   boundary (the Heart's above the bedrock floor), where the Descent's gate set piece goes.
 //!   Its masonry is ruin brick, which drills, so a gate never blocks the way down while gates
@@ -22,8 +23,9 @@ use crate::{
     base::BuiltTile,
     cave::CaveTile,
     descent::{Descent, LandmarkKind, Stratum},
+    logistics::sites::{ANCIENT_STATION_SPACING, LogisticsSites, OUTPOST_NAMES},
     terrain::{TileKind, TilePosition},
-    worldgen::{SPAWN_TILE_X, TileRect, WorldSettings, noise::hash2},
+    worldgen::{SPAWN_TILE_X, TileRect, WorldSettings, noise::hash2, strata::SKY_ROWS},
 };
 
 use super::{DescentLayout, hollow_rows, layout};
@@ -102,6 +104,70 @@ fn stratum_with(descent: Descent, kind: LandmarkKind) -> Option<Stratum> {
         .find(|stratum| stratum.def().landmarks.contains(&kind))
 }
 
+/// The column every outpost hall of a world is centred on: 60-139 columns to one side of the
+/// spawn column, by the seed (the builders' cable the ancient lifts run down beside).
+#[must_use]
+pub const fn outpost_column(settings: &WorldSettings) -> i32 {
+    let roll = hash2(settings.seed, SALT_OUTPOST, -1, 0);
+    let side = if roll.is_multiple_of(2) { 1 } else { -1 };
+    #[allow(clippy::cast_possible_truncation, reason = "below 80")]
+    let along = 60 + ((roll >> 8) % 80) as i32;
+    SPAWN_TILE_X + side * along
+}
+
+/// The column of the ancient lifts' rail: two columns outside the halls' door on the far side
+/// from the spawn, so a rig steps out of the hall into the lift's station pocket.
+#[must_use]
+pub const fn lift_column(settings: &WorldSettings) -> i32 {
+    let center = outpost_column(settings);
+    let half = OUTPOST_SIZE.0 / 2;
+    if center >= SPAWN_TILE_X {
+        // The hall spans `center - half ..= center + half - 1`.
+        center + half + 1
+    } else {
+        center - half - 2
+    }
+}
+
+/// The first station of the cable's top lift: a few rows under the ground line.
+pub const LIFT_TOP_ROW: i32 = SKY_ROWS + 6;
+
+/// The depth logistics sites of a Deep Descent world.
+///
+/// Wave 7 integration: F8's landmarks feed F10's generator hooks. Each Descent's outpost hall is a [`crate::logistics::Outpost`]
+/// (its floor is the hall's floor), and the builders' cable runs beside them, an ancient lift
+/// from just under the surface down to the first outpost and from each outpost down to the
+/// next. A pure function of the settings: the generator carves its tiles
+/// ([`LogisticsSites::tile_at`]) and world creation installs its records.
+#[must_use]
+pub fn logistics_sites(settings: &WorldSettings) -> LogisticsSites {
+    let mut sites = LogisticsSites::default();
+    if !settings.generator.has_descents() {
+        return sites;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    let column = lift_column(settings);
+    let mut previous_station = LIFT_TOP_ROW;
+    for descent in Descent::ALL {
+        let Some(hall) = outpost(settings, &layout, descent) else {
+            continue;
+        };
+        let floor_row = hall.bounds.max.y;
+        let index = descent.index();
+        let name = OUTPOST_NAMES[index.min(OUTPOST_NAMES.len() - 1)];
+        sites.place_outpost(
+            outpost_column(settings),
+            floor_row,
+            u8::try_from(index).unwrap_or(u8::MAX),
+            name,
+        );
+        let station = floor_row - 1;
+        sites.place_ancient_lift(column, previous_station, station, ANCIENT_STATION_SPACING);
+        previous_station = station;
+    }
+    sites
+}
+
 /// The outpost of `descent` (`None` only if the registry gives the Descent none).
 #[must_use]
 pub fn outpost(
@@ -116,9 +182,9 @@ pub fn outpost(
         i32::try_from(descent.index()).unwrap_or(0),
         0,
     );
-    let side = if roll.is_multiple_of(2) { 1 } else { -1 };
-    let along = 40 + i32::try_from((roll >> 8) % 120).unwrap_or(0);
-    let center = SPAWN_TILE_X + side * along;
+    // Every outpost stands on the builders' cable: one column for the whole world, the
+    // ancient lifts beside the halls (Wave 7 integration, `logistics_sites`).
+    let center = outpost_column(settings);
     let x = center - OUTPOST_SIZE.0 / 2;
     let (top, bottom) = layout.rows(stratum);
     let y = if stratum == Stratum::InnerSky {

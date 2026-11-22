@@ -239,6 +239,15 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if !ctx.logistics.lifts.is_empty() || !ctx.logistics.outposts.is_empty() {
+        // Depth logistics (V11, Wave 7 integration): the outposts' floors and the builders'
+        // cable of ancient lifts, over the landmarks.
+        for position in rect.positions() {
+            if let Some(kind) = ctx.logistics.tile_at(position) {
+                chunk_kinds.set(position.x, position.y, kind);
+            }
+        }
+    }
     if ctx.settings.generator.has_tombs() {
         // Tomb and crypt entrances (V10, WP-TOMBS) after everything, in the ground and on
         // the sky lands alike.
@@ -257,14 +266,38 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
-    chunk_kinds
+    // Fluid bodies (V11, Wave 7 integration) last, over the finished chunk: sealed aquifers
+    // keep a rock rim and cave pools sit on floors, judged against everything stamped above.
+    let fluids = match ctx.stratum(
+        rect.min.x + CHUNK_SIZE_TILES / 2,
+        rect.min.y + CHUNK_SIZE_TILES / 2,
+    ) {
+        Some(stratum) if !stratum.def().fluids.is_empty() => crate::fluid::fluid_pockets_in_chunk(
+            ctx.settings.seed,
+            chunk,
+            stratum.def().fluids,
+            |at| {
+                chunk_kinds
+                    .slot(at.x, at.y)
+                    .map_or(TileKind::Bedrock, |slot| chunk_kinds.kinds[slot])
+            },
+        ),
+        _ => Vec::new(),
+    };
+    let mut tiles: Vec<Tile> = chunk_kinds
         .kinds
-        .into_iter()
-        .map(|kind| Tile {
+        .iter()
+        .map(|&kind| Tile {
             kind,
             durability: tile_durability(kind),
         })
-        .collect()
+        .collect();
+    for (at, tile) in fluids {
+        if let Some(slot) = chunk_kinds.slot(at.x, at.y) {
+            tiles[slot] = tile;
+        }
+    }
+    tiles
 }
 
 /// Ore and artifacts, in the V4 order: motherlodes, clusters, veins, the starter field, artifact

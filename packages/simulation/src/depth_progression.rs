@@ -278,11 +278,91 @@ impl DescentLayout for PlanLayout {
     }
 }
 
-/// The Descent layout a world's depth rules read. The stratum registry (F8) replaces the plan
-/// table here for V11 worlds; classic worlds never consult it.
+/// A world's real Descent layout from the stratum registry (F8, Wave 7 integration).
+///
+/// The seeded rows of its eight Descents and 41 strata, as terrain rows (the strata start at the
+/// ground line, [`crate::worldgen::strata::SKY_ROWS`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegistryLayout {
+    descents: [DescentSpan; DESCENT_COUNT],
+    strata: Vec<StratumSpan>,
+}
+
+impl RegistryLayout {
+    /// The layout of a Deep Descent world with `settings`.
+    #[must_use]
+    pub fn of(settings: &WorldSettings) -> Self {
+        use crate::descent::{Descent, Stratum};
+        let layout = crate::descent::fields::cached_layout(settings);
+        let descents = Descent::ALL.map(|descent| {
+            let (top, bottom) = layout.descent_rows(descent);
+            DescentSpan {
+                index: u8::try_from(descent.index()).unwrap_or(u8::MAX),
+                name: descent.name(),
+                top,
+                bottom: bottom + 1,
+            }
+        });
+        let strata = Stratum::ALL
+            .iter()
+            .map(|stratum| {
+                let (top, bottom) = layout.rows(*stratum);
+                StratumSpan {
+                    descent: u8::try_from(stratum.descent().index()).unwrap_or(u8::MAX),
+                    name: stratum.name(),
+                    top,
+                    bottom: bottom + 1,
+                }
+            })
+            .collect();
+        Self { descents, strata }
+    }
+}
+
+impl DescentLayout for RegistryLayout {
+    fn descents(&self) -> &[DescentSpan] {
+        &self.descents
+    }
+
+    fn strata(&self) -> Vec<StratumSpan> {
+        self.strata.clone()
+    }
+}
+
+/// The Descent layout a world's depth rules read.
+///
+/// The stratum registry's (F8) for a Deep Descent world, the plan's table otherwise (classic worlds never consult it; scenarios and
+/// tests that switch a classic world to the Descent rules read the plan).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WorldLayout {
+    Plan(PlanLayout),
+    Registry(Box<RegistryLayout>),
+}
+
+impl DescentLayout for WorldLayout {
+    fn descents(&self) -> &[DescentSpan] {
+        match self {
+            Self::Plan(plan) => plan.descents(),
+            Self::Registry(registry) => registry.descents(),
+        }
+    }
+
+    fn strata(&self) -> Vec<StratumSpan> {
+        match self {
+            Self::Plan(plan) => plan.strata(),
+            Self::Registry(registry) => registry.strata(),
+        }
+    }
+}
+
+/// The Descent layout a world with `settings` reads ([`WorldLayout`]).
 #[must_use]
-pub fn layout_for(_settings: &WorldSettings) -> &'static dyn DescentLayout {
-    &PlanLayout
+pub fn layout_for(settings: &WorldSettings) -> WorldLayout {
+    if settings.generator.has_descents() {
+        WorldLayout::Registry(Box::new(RegistryLayout::of(settings)))
+    } else {
+        WorldLayout::Plan(PlanLayout)
+    }
 }
 
 /// Roman numeral of Descent `index` (0 = "I").
