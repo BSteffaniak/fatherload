@@ -9,8 +9,9 @@
 use crate::{
     base::BuiltTile,
     depth_progression::{
-        BIO_FILTER_GAS_PERCENT, DescentLayout, GATE_DAMAGE_PER_SECOND, ProgressionRules, RigSystem,
-        SONAR_SUITE_SCAN_BONUS_TILES, layout_for, missing_gate,
+        BIO_FILTER_GAS_PERCENT, DescentLayout, LAMP_II_FELT_LIGHT, ProgressionRules, RigSystem,
+        SONAR_SUITE_SCAN_BONUS_TILES, descent_index_at_row, gate_damage_per_second, layout_for,
+        missing_gate,
     },
     event::{GameplayEventKind, TickOutput},
     ids::{PlayerId, SimulationTick},
@@ -79,6 +80,18 @@ pub enum LogisticsRefusal {
     NotEnoughFuel {
         need: u32,
     },
+    /// The shop will not sell that tier (Wave 8 deep shops; the lock says why).
+    Locked(crate::economy::UpgradeLock),
+    /// That line is already at its top tier.
+    Maxed,
+    UnknownRecipe,
+    /// The workshop here does not know that recipe (a deeper outpost does).
+    NotCraftedHere,
+    /// Not enough of a layer resource aboard.
+    MissingResource {
+        stratum: crate::descent::Stratum,
+        need: u32,
+    },
 }
 
 impl LogisticsRefusal {
@@ -118,6 +131,17 @@ impl LogisticsRefusal {
             Self::NothingToCut => "Nothing below to dive through.".to_owned(),
             Self::NotEnoughCredits { need } => format!("Needs {need} credits."),
             Self::NotEnoughFuel { need } => format!("Needs {need} fuel."),
+            Self::Locked(lock) => format!("{}.", lock.reason()),
+            Self::Maxed => "Already at its top tier.".to_owned(),
+            Self::UnknownRecipe => "No such recipe.".to_owned(),
+            Self::NotCraftedHere => {
+                "This workshop does not know that recipe: a deeper outpost does.".to_owned()
+            }
+            Self::MissingResource { stratum, need } => format!(
+                "Needs {need} {} (dug out of the {}).",
+                stratum.def().layer_resource.name,
+                stratum.name()
+            ),
         }
     }
 }
@@ -576,6 +600,162 @@ impl WorldState {
                 }
                 Ok(LogisticsQuote::default())
             }
+            LogisticsCommand::OutpostUpgrade { outpost, offer } => {
+                let found = self.outpost_for(player_id, outpost)?;
+                let (_, price) = self.outpost_offer(player_id, found, usize::from(offer))?;
+                self.afford(player_id, price)?;
+                Ok(LogisticsQuote::credits(price))
+            }
+            LogisticsCommand::Craft { outpost, recipe } => {
+                let found = self.outpost_for(player_id, outpost)?;
+                self.check_craft(player_id, found, recipe)
+            }
+        }
+    }
+
+    /// The upgrade line `index` as outpost `outpost`'s counter sells it to `player_id` now: the
+    /// offer and the counter's price (Wave 8 deep shops).
+    ///
+    /// # Errors
+    ///
+    /// Returns why the counter will not sell it: a maxed line, the shop's own lock, or a tier
+    /// this outpost does not stock.
+    pub fn outpost_offer(
+        &self,
+        player_id: PlayerId,
+        outpost: &Outpost,
+        index: usize,
+    ) -> Result<(crate::economy::UpgradeOffer, u32), LogisticsRefusal> {
+        use crate::economy::{UpgradeLock, upgrade_lock_for, upgrade_maxed, upgrade_offers_for};
+        let player = self
+            .players
+            .get(&player_id)
+            .ok_or(LogisticsRefusal::UnknownPlayer)?;
+        let rules = self.logistics.rules;
+        let offer = upgrade_offers_for(player, rules)
+            .get(index)
+            .copied()
+            .filter(|_| index < crate::economy::shop_line_count(rules))
+            .ok_or(LogisticsRefusal::NothingToDo)?;
+        if upgrade_maxed(&offer) {
+            return Err(LogisticsRefusal::Maxed);
+        }
+        if let Some(lock) = upgrade_lock_for(
+            &offer,
+            self.terrain.settings(),
+            self.progression.deepest_tile_reached,
+            rules,
+            self.logistics.felt_systems,
+        ) {
+            return Err(LogisticsRefusal::Locked(lock));
+        }
+        if !crate::depth_progression::outpost_stocks(
+            outpost.descent,
+            offer.kind,
+            offer.level.saturating_add(1),
+        ) {
+            return Err(LogisticsRefusal::Locked(UpgradeLock::NotStockedHere));
+        }
+        let percent = crate::depth_progression::OUTPOST_SHOP_PERCENT[outpost.tier()];
+        let price =
+            u32::try_from(u64::from(offer.cost) * u64::from(percent) / 100).unwrap_or(u32::MAX);
+        Ok((offer, price))
+    }
+
+    /// The verdict and price of working `recipe` at `outpost` for `player_id`.
+    fn check_craft(&self, player_id: PlayerId, outpost: &Outpost, recipe: u8) -> Verdict {
+        use crate::workshop::{CraftOutput, outpost_crafts, part_credits};
+        let player = self
+            .players
+            .get(&player_id)
+            .ok_or(LogisticsRefusal::UnknownPlayer)?;
+        let found = crate::workshop::recipe(recipe).ok_or(LogisticsRefusal::UnknownRecipe)?;
+        if !outpost_crafts(outpost.descent, found) {
+            return Err(LogisticsRefusal::NotCraftedHere);
+        }
+        for (stratum, count) in found.inputs {
+            if player.carried(crate::item::ItemKind::Layer(*stratum)) < *count {
+                return Err(LogisticsRefusal::MissingResource {
+                    stratum: *stratum,
+                    need: *count,
+                });
+            }
+        }
+        match found.output {
+            CraftOutput::Repair { .. } => {
+                if player.hull >= player.max_hull() {
+                    return Err(LogisticsRefusal::NothingToDo);
+                }
+                Ok(LogisticsQuote::default())
+            }
+            CraftOutput::Refuel { .. } => {
+                if player.fuel >= player.fuel_capacity {
+                    return Err(LogisticsRefusal::NothingToDo);
+                }
+                Ok(LogisticsQuote::default())
+            }
+            CraftOutput::DiveCharges(count) => {
+                if self
+                    .logistics
+                    .dive_charges_of(player_id)
+                    .saturating_add(count)
+                    > MAX_DIVE_CHARGES
+                {
+                    return Err(LogisticsRefusal::ChargesFull);
+                }
+                Ok(LogisticsQuote::default())
+            }
+            CraftOutput::Bombs(_) => Ok(LogisticsQuote::default()),
+            CraftOutput::Part(kind) => {
+                let index = crate::economy::UpgradeKind::ALL
+                    .iter()
+                    .position(|line| *line == kind)
+                    .ok_or(LogisticsRefusal::NothingToDo)?;
+                let (offer, _) = self.outpost_offer(player_id, outpost, index)?;
+                let credits = part_credits(offer.cost);
+                self.afford(player_id, credits)?;
+                Ok(LogisticsQuote::credits(credits))
+            }
+        }
+    }
+
+    /// Works `recipe` for `player_id` (checked and charged already).
+    fn apply_craft(&mut self, player_id: PlayerId, recipe: u8) {
+        use crate::workshop::CraftOutput;
+        let Some(found) = crate::workshop::recipe(recipe) else {
+            return;
+        };
+        let Some(player) = self.players.get_mut(&player_id) else {
+            return;
+        };
+        for (stratum, count) in found.inputs {
+            let _ = player
+                .cargo_bay
+                .remove(crate::item::ItemKind::Layer(*stratum), *count);
+        }
+        match found.output {
+            CraftOutput::Repair { percent } => {
+                #[allow(clippy::cast_precision_loss, reason = "a percentage")]
+                let share = percent as f32 / 100.0;
+                let max = player.max_hull();
+                player.hull = quantize_simulation_scalar(max.mul_add(share, player.hull).min(max));
+            }
+            CraftOutput::Refuel { percent } => {
+                #[allow(clippy::cast_precision_loss, reason = "a percentage")]
+                let share = percent as f32 / 100.0;
+                player.fuel = quantize_simulation_scalar(
+                    player
+                        .fuel_capacity
+                        .mul_add(share, player.fuel)
+                        .min(player.fuel_capacity),
+                );
+            }
+            CraftOutput::Bombs(count) => player.bombs = player.bombs.saturating_add(count),
+            CraftOutput::Part(kind) => crate::economy::fit_next_tier(player, kind),
+            CraftOutput::DiveCharges(count) => {
+                let charges = self.logistics.dive_charges.entry(player_id).or_insert(0);
+                *charges = charges.saturating_add(count).min(MAX_DIVE_CHARGES);
+            }
         }
     }
 
@@ -918,6 +1098,15 @@ impl WorldState {
                     });
                 }
             }
+            LogisticsCommand::OutpostUpgrade { offer, .. } => {
+                if let (Some(player), Some(kind)) = (
+                    self.players.get_mut(&player_id),
+                    crate::economy::UpgradeKind::ALL.get(usize::from(offer)),
+                ) {
+                    crate::economy::fit_next_tier(player, *kind);
+                }
+            }
+            LogisticsCommand::Craft { recipe, .. } => self.apply_craft(player_id, recipe),
         }
         PlayerScopedCommandOutcome::Applied
     }
@@ -1114,15 +1303,19 @@ impl WorldState {
             return;
         }
         let delta = self.timing.delta_seconds;
+        let settings = *self.terrain.settings();
         for (player_id, tile) in tiles {
-            let descent = self.descent_of_row(tile.y);
+            let descent = descent_index_at_row(&settings, tile.y);
             let systems = self
                 .players
                 .get(&player_id)
                 .map_or(0, |player| player.hazard_gear.rig_systems);
+            self.feel_companion_systems(player_id, tile);
             let Some(missing) = missing_gate(systems, descent) else {
                 continue;
             };
+            // Wave 8: the crush is the need felt; the shop sells its system from now on.
+            self.logistics.felt_systems |= missing.bit();
             let warned = self.logistics.gate_warned.get(&player_id).copied();
             if warned.is_none_or(|warned| warned < descent) {
                 self.logistics.gate_warned.insert(player_id, descent);
@@ -1132,8 +1325,129 @@ impl WorldState {
                     system: missing,
                 });
             }
-            if self.damage_player(player_id, GATE_DAMAGE_PER_SECOND * delta) {
+            // The crush ramps up over the first rows past the gate (a dip is survivable).
+            let top = self
+                .descent_layout()
+                .descent(descent)
+                .map_or(tile.y, |span| span.top);
+            if self.damage_player(player_id, gate_damage_per_second(tile.y - top) * delta) {
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+            }
+        }
+    }
+
+    /// Wave 8, Descent worlds: what drilling `mined` out of `target` adds besides its drop. Ore
+    /// marks the haul with its Descent (buyers pay that Descent's premium,
+    /// [`Self::haul_premium_percent`]); rock now and then yields its stratum's layer resource
+    /// ([`crate::workshop::layer_yield`]), popped out as a drop beside the ore or block.
+    pub(super) fn descent_dig_extras(
+        &mut self,
+        player_id: PlayerId,
+        target: TilePosition,
+        mined: TileKind,
+    ) {
+        if !self.logistics.rules.is_descent() {
+            return;
+        }
+        let settings = *self.terrain.settings();
+        if matches!(mined, TileKind::Ore(_)) {
+            let descent = descent_index_at_row(&settings, target.y);
+            let haul = self.logistics.haul_descent.entry(player_id).or_insert(0);
+            *haul = (*haul).max(descent);
+            return;
+        }
+        let rock = crate::item::BlockKind::from_tile(mined).is_some();
+        if !rock
+            || !settings.generator.has_descents()
+            || !crate::workshop::layer_yield(settings.seed, target)
+        {
+            return;
+        }
+        let stratum = self.terrain.stratum_at(target);
+        let (x, y) = self.frame().tile_center(target);
+        let _ = self.spawn_loot(
+            x,
+            y,
+            (0.0, -60.0),
+            crate::item::ItemStack::new(crate::item::ItemKind::Layer(stratum), 1),
+            None,
+        );
+    }
+
+    /// Percent of the ore price buyers pay `player_id` for the haul aboard (Wave 8, Descent
+    /// worlds: the deepest Descent it came from, [`crate::depth_progression::descent_value_percent`];
+    /// 100 elsewhere).
+    #[must_use]
+    pub fn haul_premium_percent(&self, player_id: PlayerId) -> u32 {
+        if !self.logistics.rules.is_descent() {
+            return 100;
+        }
+        crate::depth_progression::descent_value_percent(
+            self.logistics
+                .haul_descent
+                .get(&player_id)
+                .copied()
+                .unwrap_or(0),
+        )
+    }
+
+    /// Wave 8, Descent worlds: the thruster fuel factor for `player_id`'s rig at its depth (1
+    /// where its Pressure Rating covers the Descent it is in, and on every older world).
+    #[must_use]
+    pub(super) fn pressure_burn_factor(&self, player_id: PlayerId) -> f32 {
+        if !self.logistics.rules.is_descent() {
+            return 1.0;
+        }
+        let Some(player) = self.players.get(&player_id) else {
+            return 1.0;
+        };
+        let row = player.tile_in(self.frame()).y;
+        let descent = descent_index_at_row(self.terrain.settings(), row);
+        let percent = crate::depth_progression::pressure_fuel_percent(
+            player.hazard_gear.pressure_rating,
+            descent,
+        );
+        #[allow(clippy::cast_precision_loss, reason = "a percentage")]
+        let factor = percent as f32 / 100.0;
+        factor
+    }
+
+    /// Wave 8: the most heat units the band heat at `center` may run above a rig's cooling on
+    /// a Deep Descent world's placeholder strata below Descent III
+    /// ([`crate::depth_progression::placeholder_heat_cap_units`]); no cap anywhere else.
+    #[must_use]
+    pub(super) fn placeholder_heat_excess_cap(
+        &self,
+        center: TilePosition,
+        radiator_level: u8,
+        heat_shield: u8,
+    ) -> u8 {
+        if !self.terrain.settings().generator.has_descents() {
+            return u8::MAX;
+        }
+        let descent = descent_index_at_row(self.terrain.settings(), center.y);
+        crate::depth_progression::placeholder_heat_cap_units(descent).map_or(u8::MAX, |cap| {
+            cap.saturating_sub(crate::protection::heat_cooling(radiator_level, heat_shield))
+        })
+    }
+
+    /// Wave 8: the companion systems' needs, felt where they bite (Descent worlds): Lamp II in
+    /// the dark ([`LAMP_II_FELT_LIGHT`]), the Sonar Suite on reaching the stratum that sells
+    /// it.
+    fn feel_companion_systems(&mut self, player_id: PlayerId, tile: TilePosition) {
+        let felt = self.logistics.felt_systems;
+        if felt & RigSystem::LampII.bit() == 0
+            && let Some(player) = self.players.get(&player_id)
+            && self.fields_at(player.x, player.y).light <= LAMP_II_FELT_LIGHT
+            && descent_index_at_row(self.terrain.settings(), tile.y)
+                >= RigSystem::LampII.sold_from_descent()
+        {
+            self.logistics.felt_systems |= RigSystem::LampII.bit();
+        }
+        if felt & RigSystem::SonarSuite.bit() == 0 {
+            let row = RigSystem::SonarSuite.sold_from_row(&self.descent_layout());
+            if tile.y >= row {
+                self.logistics.felt_systems |= RigSystem::SonarSuite.bit();
             }
         }
     }

@@ -81,6 +81,8 @@ impl WorldState {
             // blocks. The drop lands inside the rig's collect radius, so the pickup pass at the
             // end of the tick stows it (or leaves it floating when the bay is full).
             self.spawn_drill_drop(player_id, target, mined);
+            // Deep Descent worlds (Wave 8): the haul's Descent premium and layer resources.
+            self.descent_dig_extras(player_id, target, mined);
         }
         let player = self.players.get_mut(&player_id)?;
         let gear = player.hazard_gear;
@@ -409,6 +411,7 @@ impl WorldState {
                             self.terrain.settings(),
                             self.progression.deepest_tile_reached,
                             rules,
+                            self.logistics.felt_systems,
                         )
                         .is_some()
                     })

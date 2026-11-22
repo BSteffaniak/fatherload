@@ -634,6 +634,238 @@ pub const fn descent_price_percent(index: u8) -> u32 {
     100 + 60 * index as u32
 }
 
+// --- Wave 8: the Descent ladders for pressure and lighting, fair placeholders, deep shops ----
+
+/// Top tier of the two Descent-only lines, Pressure Rating and Headlamp: tier `n` is rated for
+/// Descent `n` (0 = the stock part, rated for the Crust), so tier 7 is rated for the Heart.
+pub const DEPTH_LINE_MAX_LEVEL: u8 = 7;
+
+/// The highest Pressure Rating or Headlamp tier on sale once someone has reached Descent
+/// `reached` (the tier rated for it): you feel a Descent's pressure and dark before its tier
+/// goes on sale.
+#[must_use]
+pub const fn depth_line_cap(reached: u8) -> u8 {
+    if reached > DEPTH_LINE_MAX_LEVEL {
+        DEPTH_LINE_MAX_LEVEL
+    } else {
+        reached
+    }
+}
+
+/// Extra fuel the thrusters burn, in percent, for each Descent a rig is deeper than its
+/// Pressure Rating covers (the pumps fight the pressure). Felt, never fatal.
+pub const PRESSURE_FUEL_PERCENT_PER_DEFICIT: u32 = 35;
+/// Deficits past this many cost nothing more (a rig three Descents underrated is already
+/// burning more than double).
+pub const PRESSURE_MAX_DEFICIT: u8 = 4;
+
+/// How many Descents `descent` lies below what a Pressure Rating of `rating` covers.
+#[must_use]
+pub const fn pressure_deficit(rating: u8, descent: u8) -> u8 {
+    let deficit = descent.saturating_sub(rating);
+    if deficit > PRESSURE_MAX_DEFICIT {
+        PRESSURE_MAX_DEFICIT
+    } else {
+        deficit
+    }
+}
+
+/// Thruster fuel burn in percent of normal for a rig with Pressure Rating `rating` in Descent
+/// `descent` (100 when rated).
+#[must_use]
+pub const fn pressure_fuel_percent(rating: u8, descent: u8) -> u32 {
+    100 + PRESSURE_FUEL_PERCENT_PER_DEFICIT * pressure_deficit(rating, descent) as u32
+}
+
+/// Headlamp radius gained per Headlamp tier (the renderer multiplies it with Lamp II's).
+pub const HEADLAMP_SCALE_PER_TIER: f32 = 0.15;
+
+/// Headlamp radius multiplier of Headlamp tier `level`.
+#[must_use]
+pub fn headlamp_light_scale(level: u8) -> f32 {
+    f32::from(level.min(DEPTH_LINE_MAX_LEVEL)).mul_add(HEADLAMP_SCALE_PER_TIER, 1.0)
+}
+
+/// Price of the Pressure Rating tier after `level`.
+const PRESSURE_RATING_PRICES: [u32; DEPTH_LINE_MAX_LEVEL as usize] =
+    [3_000, 14_000, 40_000, 90_000, 170_000, 320_000, 560_000];
+/// Price of the Headlamp tier after `level`.
+const HEADLAMP_PRICES: [u32; DEPTH_LINE_MAX_LEVEL as usize] =
+    [1_500, 8_000, 24_000, 55_000, 110_000, 200_000, 360_000];
+
+/// Price of the tier after `level` on a Descent-only line: `pressure` for the Pressure Rating,
+/// otherwise the Headlamp.
+#[must_use]
+pub const fn depth_line_cost(pressure: bool, level: u8) -> u32 {
+    let index = if level >= DEPTH_LINE_MAX_LEVEL {
+        DEPTH_LINE_MAX_LEVEL as usize - 1
+    } else {
+        level as usize
+    };
+    if pressure {
+        PRESSURE_RATING_PRICES[index]
+    } else {
+        HEADLAMP_PRICES[index]
+    }
+}
+
+/// Name of the Pressure Rating or Headlamp tier `level` (the Descent it is rated for).
+#[must_use]
+pub const fn depth_line_tier_name(pressure: bool, level: u8) -> &'static str {
+    match (pressure, level) {
+        (true, 0) => "Crust Seals",
+        (true, 1) => "Old Deep Seals",
+        (true, 2) => "Living Dark Seals",
+        (true, 3) => "Abyssal Seals",
+        (true, 4) => "Hollow Seals",
+        (true, 5) => "Shear Seals",
+        (true, 6) => "Builder Seals",
+        (true, _) => "Heart Seals",
+        (false, 0) => "Stock Lamp",
+        (false, 1) => "Lantern Array",
+        (false, 2) => "Lure Lamp",
+        (false, 3) => "Abyss Beam",
+        (false, 4) => "Sunlamp",
+        (false, 5) => "Prism Lamp",
+        (false, 6) => "Archive Lamp",
+        (false, _) => "Star Lamp",
+    }
+}
+
+/// The Descent (0 = I) that terrain `row` of a world with `settings` lies in, cheaply (the
+/// cached registry layout on Deep Descent worlds; the plan's table, read from the ground line,
+/// otherwise). The movement step and the tick read it every tick.
+#[must_use]
+pub fn descent_index_at_row(settings: &WorldSettings, row: i32) -> u8 {
+    if settings.generator.has_descents() {
+        let layout = crate::descent::fields::cached_layout(settings);
+        let mut index = 0_u8;
+        for descent in crate::descent::Descent::ALL {
+            if row <= layout.descent_rows(descent).1 {
+                return index;
+            }
+            index = index.saturating_add(1);
+        }
+        index.saturating_sub(1)
+    } else {
+        PlanLayout.descent_at(row)
+    }
+}
+
+/// Heat units the placeholder strata below Descent III run at most in Descent `descent`
+/// (`None`: Descents I-III, whose heat is authored). The radiator tier on sale before a
+/// Descent opens covers it with no heat shielding, so a rig that came through the gates is
+/// never cooked (Waves 9-10 author these strata's own heat).
+#[must_use]
+pub const fn placeholder_heat_cap_units(descent: u8) -> Option<u8> {
+    if descent < 3 {
+        return None;
+    }
+    Some(crate::protection::radiator_cooling(core_tier_cap(
+        descent - 1,
+    )))
+}
+
+/// Rows over which a gate's crush ramps up after a rig crosses into a Descent it lacks the
+/// system for: a dip to feel it is survivable, staying is not.
+pub const GATE_RAMP_ROWS: i32 = 40;
+/// Hull per second the crush starts at on the gate's first row.
+pub const GATE_DAMAGE_MIN_PER_SECOND: f32 = 3.0;
+
+/// Hull per second the gate crush takes from a rig `rows_into` rows past a gate it lacks the
+/// system for: from [`GATE_DAMAGE_MIN_PER_SECOND`] to [`GATE_DAMAGE_PER_SECOND`] over
+/// [`GATE_RAMP_ROWS`].
+#[must_use]
+pub fn gate_damage_per_second(rows_into: i32) -> f32 {
+    let share = rows_into.clamp(0, GATE_RAMP_ROWS) as f32 / GATE_RAMP_ROWS as f32;
+    (GATE_DAMAGE_PER_SECOND - GATE_DAMAGE_MIN_PER_SECOND).mul_add(share, GATE_DAMAGE_MIN_PER_SECOND)
+}
+
+impl RigSystem {
+    /// How the crew feels the need for this system before the shop sells it (the lock's
+    /// explanation, [`crate::economy::UpgradeLock::Unfelt`]).
+    #[must_use]
+    pub const fn felt_by(self) -> &'static str {
+        match self {
+            Self::PressureHull => "the hull groaning at the top of the Living Dark",
+            Self::BioFilter => "the spores and acid at the top of the Drowned and Frozen",
+            Self::LampII => "the dark of the Glow Sea",
+            Self::SonarSuite => "the black water of the Pearl Abyss",
+            Self::CryoHull => "the frost at the way into the Hollow World",
+            Self::GravityAnchor => "the pull at the top of the Strange Layers",
+            Self::PhaseDrill => "the builder alloy at the top of the Ancients",
+            Self::HeartKey => "the sealed door at the top of the Heart",
+        }
+    }
+}
+
+/// Light (per mille of daylight) at or below which a rig feels the need for Lamp II.
+pub const LAMP_II_FELT_LIGHT: f32 = 0.4;
+
+/// Percent of the town price an outpost asks for an upgrade: unclaimed, claimed (the counter's
+/// fee, like its fuel and repairs).
+pub const OUTPOST_SHOP_PERCENT: [u32; 2] = [115, 100];
+
+/// Whether an outpost in Descent `outpost_descent` stocks tier `next_level` of `kind` (the deep
+/// settlements sell the tiers their Descent needs: core tiers to the Descent's cap, the
+/// Pressure Rating and Headlamp to the tier rated for the Descent below, the hazard counters,
+/// scanner and bombs, and every rig system; never the sky and Moon gear or the drill mount).
+#[must_use]
+pub const fn outpost_stocks(
+    outpost_descent: u8,
+    kind: crate::economy::UpgradeKind,
+    next_level: u8,
+) -> bool {
+    use crate::economy::UpgradeKind as K;
+    match kind {
+        K::Drill | K::FuelTank | K::CargoBay | K::Engine | K::Hull | K::Radiator => {
+            next_level <= core_tier_cap(outpost_descent)
+        }
+        K::PressureRating | K::Headlamp => next_level <= outpost_descent.saturating_add(1),
+        K::Scanner
+        | K::BombPack
+        | K::HeatShield
+        | K::LavaPlating
+        | K::GasScrubber
+        | K::PressureBracing
+        | K::BoulderDeflector
+        | K::DescentPressureHull
+        | K::BioFilter
+        | K::LampII
+        | K::SonarSuite
+        | K::CryoHull
+        | K::GravityAnchor
+        | K::PhaseDrill
+        | K::HeartKey => true,
+        K::DrillMount | K::AltitudeIntake | K::DeIcer | K::PressurizedHull | K::LifeSupport => {
+            false
+        }
+    }
+}
+
+/// Classic sale value of a new deep ore that is the `rank`-th richest (0 = the commonest) of
+/// a stratum in Descent `descent`: the price curve new ores in the Descents take their values
+/// from (Descent I's commonest is worth a copper-and-iron haul, each rank about half again
+/// more, times the Descent value curve).
+#[must_use]
+pub const fn deep_ore_value(descent: u8, rank: u8) -> u32 {
+    let mut value = 40_u64;
+    let mut step = 0;
+    while step < rank {
+        value = value * 3 / 2;
+        step += 1;
+    }
+    let value = value * descent_value_percent(descent) as u64 / 100;
+    // Each Descent starts where the last one's third rank left off.
+    let floor = 40 * (1 + descent as u64 * 3);
+    let value = if value < floor { floor } else { value };
+    if value > u32::MAX as u64 {
+        u32::MAX
+    } else {
+        value as u32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

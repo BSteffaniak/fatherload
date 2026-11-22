@@ -316,7 +316,9 @@ const fn tiers_with(mut tiers: RigTiers, kind: UpgradeKind, level: u8) -> RigTie
         | UpgradeKind::CryoHull
         | UpgradeKind::GravityAnchor
         | UpgradeKind::PhaseDrill
-        | UpgradeKind::HeartKey => {}
+        | UpgradeKind::HeartKey
+        | UpgradeKind::PressureRating
+        | UpgradeKind::Headlamp => {}
     }
     tiers
 }

@@ -162,6 +162,19 @@ impl GeneratorVersion {
     /// (the new-game "World" option, `--deep-descent`, the screenshot and balance tools).
     pub const DEEP_DESCENT: Self = Self::V11;
 
+    /// The classic dig, still offered for new worlds as "Classic (V10)" (Wave 8).
+    pub const CLASSIC: Self = Self::V10;
+
+    /// The generator the new-game dialog starts a new world with (Wave 8): the Deep Descent
+    /// while [`DEEP_DESCENT_FOR_NEW_WORLDS`] holds, the classic dig otherwise. Saved worlds
+    /// always keep the generator they were made with; [`Self::CURRENT`] (what tests and tools
+    /// get from [`WorldSettings::new`]) stays V10.
+    pub const NEW_WORLD: Self = if DEEP_DESCENT_FOR_NEW_WORLDS {
+        Self::DEEP_DESCENT
+    } else {
+        Self::CLASSIC
+    };
+
     /// Whether this generator stamps points of interest.
     #[must_use]
     pub const fn has_points_of_interest(self) -> bool {
@@ -507,6 +520,12 @@ pub const WORLD_HEIGHT_TILES: i32 = 220;
 pub const SPAWN_TILE_X: i32 = 97;
 /// Columns either side of the town whose topsoil is plain dirt (no clay lumps).
 pub const TOWN_CLEAN_TOPSOIL_MARGIN: i32 = 20;
+
+/// Wave 8: whether new worlds default to the Deep Descent (generator V11) in the new-game
+/// dialog. The integrator keeps it on only if the descent probe's Descent I-III pacing check
+/// passes (`balance::descent::DescentRun::pacing_passes`); "Classic (V10)" stays selectable
+/// either way.
+pub const DEEP_DESCENT_FOR_NEW_WORLDS: bool = true;
 
 impl Default for WorldSettings {
     fn default() -> Self {

@@ -378,6 +378,13 @@ impl PlayerPresentation {
                 fatherload_simulation::depth_progression::LAMP_II_LIGHT_SCALE
             } else {
                 1.0
+            } * if world.progression_rules().is_descent() {
+                // Wave 8: the Headlamp line widens the lamp a little per tier.
+                fatherload_simulation::depth_progression::headlamp_light_scale(
+                    player.hazard_gear.headlamp,
+                )
+            } else {
+                1.0
             },
         }
     }

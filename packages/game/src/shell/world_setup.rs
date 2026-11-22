@@ -105,11 +105,16 @@ pub fn random_world_seed() -> u64 {
     crate::online::random_token_seed() & ((1 << RANDOM_SEED_BITS) - 1)
 }
 
-/// Whether new worlds should default to the Deep Descent preview (`--deep-descent`, a
-/// development flag; the dialog's World row switches it either way).
+/// The world type asked for on the command line, if any: `--deep-descent` (the Deep Descent)
+/// or `--classic` (the classic V10 dig). Without either the dialog starts on
+/// [`GeneratorVersion::NEW_WORLD`]; its World row switches it either way.
 #[must_use]
-pub fn deep_descent_requested() -> bool {
-    std::env::args().any(|argument| argument == "--deep-descent")
+pub fn deep_descent_requested() -> Option<bool> {
+    std::env::args().find_map(|argument| match argument.as_str() {
+        "--deep-descent" => Some(true),
+        "--classic" => Some(false),
+        _ => None,
+    })
 }
 
 /// Steps through `options` from `current` by `step` (wrapping).
@@ -124,12 +129,16 @@ fn cycle<T: Copy + PartialEq>(options: &[T], current: T, step: isize) -> T {
 }
 
 impl WorldSetup {
-    /// A dialog for `purpose` with standard settings and `seed`.
+    /// A dialog for `purpose` with standard settings and `seed`, on the new-world generator
+    /// ([`GeneratorVersion::NEW_WORLD`]: the Deep Descent, or the classic dig).
     #[must_use]
     pub const fn new(purpose: SetupPurpose, seed: u64) -> Self {
         Self {
             purpose,
-            settings: WorldSettings::new(seed),
+            settings: WorldSettings {
+                generator: GeneratorVersion::NEW_WORLD,
+                ..WorldSettings::new(seed)
+            },
             test_mode: false,
             enemies: EnemyDifficulty::Normal,
             day_length: DayLength::Standard,
@@ -144,13 +153,20 @@ impl WorldSetup {
         self.settings.generator.has_descents()
     }
 
-    /// Switches between the classic dig and the Deep Descent preview.
+    /// Switches between the classic dig ("Classic (V10)") and the Deep Descent.
     pub const fn toggle_deep_descent(&mut self) {
         self.settings.generator = if self.deep_descent() {
-            GeneratorVersion::CURRENT
+            GeneratorVersion::CLASSIC
         } else {
             GeneratorVersion::DEEP_DESCENT
         };
+    }
+
+    /// Sets the world type: the Deep Descent or the classic dig.
+    pub const fn set_deep_descent(&mut self, deep: bool) {
+        if self.deep_descent() != deep {
+            self.toggle_deep_descent();
+        }
     }
 
     /// The highlighted row.
@@ -392,14 +408,21 @@ mod tests {
         press(&mut setup, CONFIRM);
         assert_eq!(setup.day_length, DayLength::Long);
         press(&mut setup, DOWN);
-        // The World row switches to the Deep Descent preview and back.
+        // The World row switches between the Deep Descent (the new-world default while
+        // `DEEP_DESCENT_FOR_NEW_WORLDS` holds) and "Classic (V10)".
         assert_eq!(setup.row(), SetupRow::World);
-        assert!(!setup.deep_descent());
+        assert_eq!(setup.settings.generator, GeneratorVersion::NEW_WORLD);
+        assert_eq!(
+            setup.deep_descent(),
+            fatherload_simulation::worldgen::DEEP_DESCENT_FOR_NEW_WORLDS
+        );
+        setup.set_deep_descent(false);
+        assert_eq!(setup.settings.generator, GeneratorVersion::CLASSIC);
         press(&mut setup, CONFIRM);
         assert!(setup.deep_descent());
         assert_eq!(setup.settings.generator, GeneratorVersion::DEEP_DESCENT);
         press(&mut setup, CONFIRM);
-        assert_eq!(setup.settings.generator, GeneratorVersion::CURRENT);
+        assert_eq!(setup.settings.generator, GeneratorVersion::V10);
         press(&mut setup, CONFIRM);
         press(&mut setup, DOWN);
         assert_eq!(setup.row(), SetupRow::TestMode);
@@ -470,6 +493,31 @@ mod tests {
             ),
             SetupOutcome::Close
         );
+    }
+
+    #[test]
+    fn new_worlds_start_on_the_new_world_generator_and_classic_still_starts() {
+        let mut setup = WorldSetup::new(SetupPurpose::Local { seats: 1 }, 11);
+        assert_eq!(setup.settings.generator, GeneratorVersion::NEW_WORLD);
+        // "Classic (V10)" stays selectable and starts a V10 world.
+        setup.set_deep_descent(false);
+        setup.selected = SetupRow::ALL
+            .iter()
+            .position(|row| *row == SetupRow::Start)
+            .expect("start row");
+        match press(&mut setup, CONFIRM) {
+            SetupOutcome::Start(_, settings, ..) => {
+                assert_eq!(settings.generator, GeneratorVersion::V10);
+            }
+            other => panic!("expected a start, got {other:?}"),
+        }
+        setup.set_deep_descent(true);
+        match press(&mut setup, CONFIRM) {
+            SetupOutcome::Start(_, settings, ..) => {
+                assert_eq!(settings.generator, GeneratorVersion::V11);
+            }
+            other => panic!("expected a start, got {other:?}"),
+        }
     }
 
     #[test]

@@ -209,6 +209,11 @@ impl WorldState {
             .artifacts()
             .map(|(artifact, count)| artifact.value().saturating_mul(count))
             .sum::<u32>();
+        // Deep Descent worlds (Wave 8): ore from deeper Descents pays that Descent's premium.
+        let mineral_payout = u32::try_from(
+            u64::from(mineral_payout) * u64::from(self.haul_premium_percent(player_id)) / 100,
+        )
+        .unwrap_or(u32::MAX);
         let payout = mineral_payout.saturating_add(artifact_payout);
         let payout = payout.saturating_add(
             payout.saturating_mul(
@@ -227,6 +232,7 @@ impl WorldState {
         player.cargo_bay.clear_ore_and_artifacts();
         player.credits = player.credits.saturating_add(payout);
         self.progression.total_earnings = self.progression.total_earnings.saturating_add(payout);
+        self.logistics.haul_descent.remove(&player_id);
         record_service_transaction(
             &mut self.service_transactions,
             PlayerServiceTransaction {

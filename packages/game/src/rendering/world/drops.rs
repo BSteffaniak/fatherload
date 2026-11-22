@@ -35,6 +35,9 @@ pub const fn drop_sprite(item: ItemKind) -> &'static SpriteDef {
         ItemKind::Mineral(mineral) => icons::mineral(mineral),
         ItemKind::Artifact(artifact) => terrain_art::artifact_stamp(artifact),
         ItemKind::Block(block) => icons::block(block),
+        ItemKind::Layer(stratum) => {
+            crate::rendering::pixel_art::sprites::deep_gear::layer_resource(stratum)
+        }
         ItemKind::Material(_)
         | ItemKind::Module(_)
         | ItemKind::Weapon(_)
@@ -69,6 +72,12 @@ fn shine(item: ItemKind) -> (Color, u8) {
             // Cheap ore barely glows; jackpots shine.
             let strength = u8::try_from((value / 6).clamp(18, 80)).unwrap_or(80);
             (color, strength)
+        }
+        // Layer resources glow in their stratum's accent colour (Wave 8).
+        ItemKind::Layer(stratum) => {
+            let palette = stratum.def().palette;
+            let accent = palette.accent.unwrap_or(palette.rock);
+            (Color::new(accent.0, accent.1, accent.2, 255), 60)
         }
         _ => (CREAM, 40),
     }

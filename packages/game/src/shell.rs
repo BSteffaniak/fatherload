@@ -33,6 +33,7 @@ mod garage;
 pub mod homes;
 pub mod hopper;
 pub mod logistics;
+pub mod onboarding;
 pub mod options;
 mod pilot;
 mod pointer;
@@ -1087,6 +1088,8 @@ pub struct SeatUi {
     pub village: SeatVillage,
     /// The Deep Descent stratum the seat's rig is in and its "entering" banner.
     pub descent: descent::SeatDescent,
+    /// First-time Deep Descent hints this seat has shown (Wave 8 onboarding).
+    pub hints: onboarding::SeatHints,
     /// Build mode (WP-BASE): the selected piece and cursor while it is on.
     pub build: Option<BuildDraft>,
     /// The draft build mode had when it was last left (reopens where it was).
@@ -1152,6 +1155,7 @@ impl SeatUi {
             explosives: crate::input_mapping::ExplosiveSelection::new(),
             village: SeatVillage::new(),
             descent: descent::SeatDescent::new(),
+            hints: onboarding::SeatHints::new(),
             build: None,
             last_build: None,
             base_module: None,
@@ -2555,6 +2559,7 @@ impl ShellState {
                     let seat_ctx = ctx.seat(seat, self.prompt_device(seat));
                     self.seats[seat].track_village(seat_ctx, self.update_ticks);
                     self.seats[seat].track_stratum(seat_ctx, self.update_ticks);
+                    self.seats[seat].track_hints(seat_ctx, self.update_ticks);
                     let paused = self.seats[seat].update(
                         input,
                         delta_seconds,
@@ -2928,8 +2933,8 @@ impl ShellState {
     /// Opens the world setup dialog with a fresh random seed.
     pub fn open_world_setup(&mut self, purpose: SetupPurpose) {
         let mut setup = WorldSetup::new(purpose, random_world_seed());
-        if world_setup::deep_descent_requested() {
-            setup.toggle_deep_descent();
+        if let Some(deep) = world_setup::deep_descent_requested() {
+            setup.set_deep_descent(deep);
         }
         self.world_setup = Some(setup);
         self.open_modal(ModalScreen::WorldSetup);

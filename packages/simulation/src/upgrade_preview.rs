@@ -760,6 +760,36 @@ fn preview_lines(
                 }
             }
         }
+        UpgradeKind::PressureRating => {
+            bars.push(bar(
+                "Rated to Descent",
+                f32::from(from) + 1.0,
+                f32::from(to) + 1.0,
+                f32::from(top) + 1.0,
+                "",
+                0,
+            ));
+            changes.push(format!(
+                "Seals rated for Descent {}: no extra thruster burn down to there (each Descent \
+                 deeper burns {}% more)",
+                crate::depth_progression::numeral(to),
+                crate::depth_progression::PRESSURE_FUEL_PERCENT_PER_DEFICIT
+            ));
+        }
+        UpgradeKind::Headlamp => {
+            bars.push(bar(
+                "Lamp reach",
+                crate::depth_progression::headlamp_light_scale(from),
+                crate::depth_progression::headlamp_light_scale(to),
+                crate::depth_progression::headlamp_light_scale(top),
+                "x",
+                2,
+            ));
+            changes.push(format!(
+                "The headlamp lights {:.0}% further than stock",
+                (crate::depth_progression::headlamp_light_scale(to) - 1.0) * 100.0
+            ));
+        }
         UpgradeKind::Scanner => {
             bars.push(bar(
                 "Scanner",

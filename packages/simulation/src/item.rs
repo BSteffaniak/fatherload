@@ -197,6 +197,11 @@ pub enum ItemKind {
     Explosive(ExplosiveId),
     Cosmetic(CosmeticId),
     Quest(QuestItemId),
+    /// A stratum's layer resource (Wave 8, Deep Descent worlds): dug out of the stratum's rock
+    /// now and then ([`crate::workshop::layer_yield`]) and worked into consumables and upgrade
+    /// parts at the deep outposts' workshops ([`crate::workshop::RECIPES`]). Named by the
+    /// stratum registry ([`crate::descent::StratumDef::layer_resource`]).
+    Layer(crate::descent::Stratum),
 }
 
 impl ItemKind {
@@ -213,6 +218,7 @@ impl ItemKind {
             Self::Explosive(_) => ItemCategory::Explosive,
             Self::Cosmetic(_) => ItemCategory::Cosmetic,
             Self::Quest(_) => ItemCategory::Quest,
+            Self::Layer(_) => ItemCategory::Material,
         }
     }
 
@@ -238,7 +244,8 @@ impl ItemKind {
             | Self::Ammo(_)
             | Self::Explosive(_)
             | Self::Cosmetic(_)
-            | Self::Quest(_) => 0,
+            | Self::Quest(_)
+            | Self::Layer(_) => 0,
         }
     }
 
@@ -296,6 +303,7 @@ impl ItemKind {
             Self::Quest(QuestItemId(TEMPLE_KEYSTONE_ID)) => "Temple Keystone",
             Self::Quest(QuestItemId(TOMB_KEY_ID)) => "Tomb Key",
             Self::Quest(_) => "Quest Item",
+            Self::Layer(stratum) => stratum.def().layer_resource.name,
         }
     }
 

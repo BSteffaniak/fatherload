@@ -333,6 +333,13 @@ pub enum LogisticsCommand {
     BuyDiveCharges,
     /// Fire a dive charge straight down.
     FireDiveCharge,
+    /// Buy the next tier of shop line `offer` (an index of [`crate::economy::UpgradeKind::ALL`])
+    /// at the counter of outpost `outpost` (Wave 8: the deep shops; the outpost must stock the
+    /// tier, [`crate::depth_progression::outpost_stocks`]).
+    OutpostUpgrade { outpost: u32, offer: u8 },
+    /// Work recipe `recipe` ([`crate::workshop::RECIPES`]) at outpost `outpost`'s workshop
+    /// (Wave 8).
+    Craft { outpost: u32, recipe: u8 },
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.
@@ -366,6 +373,16 @@ pub struct Logistics {
     /// The deepest Descent each player has been warned about lacking a gate system for.
     #[serde(default)]
     pub gate_warned: BTreeMap<PlayerId, u8>,
+    /// Rig systems whose need the crew has felt (Wave 8, bits of
+    /// [`crate::depth_progression::RigSystem::bit`]): a gate's crush, the Glow Sea's dark. The
+    /// shop sells a rig system only once it is felt ("felt before you can buy it").
+    #[serde(default)]
+    pub felt_systems: u8,
+    /// The deepest Descent each player's haul has come from since their last sale (Wave 8):
+    /// buyers pay that Descent's premium on ore
+    /// ([`crate::depth_progression::descent_value_percent`]).
+    #[serde(default)]
+    pub haul_descent: BTreeMap<PlayerId, u8>,
     /// The next id for a lift, outpost or beacon.
     #[serde(default)]
     pub next_id: u32,

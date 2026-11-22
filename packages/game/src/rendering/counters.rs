@@ -317,6 +317,10 @@ pub(super) const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
         UpgradeKind::GravityAnchor => &menu_icons::GEAR,
         UpgradeKind::PhaseDrill => &rig::DRILL_DOWN,
         UpgradeKind::HeartKey => &icons::HEAT_SHIELD,
+        UpgradeKind::PressureRating => {
+            &crate::rendering::pixel_art::sprites::deep_gear::PRESSURE_RATING
+        }
+        UpgradeKind::Headlamp => &crate::rendering::pixel_art::sprites::deep_gear::HEADLAMP,
     }
 }
 
@@ -365,11 +369,19 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                 || offer.description.to_owned(),
                 |effect| format!("{effect}. {}.", offer.description),
             );
-            if let Some(lock) = upgrade_lock_for(offer, settings, deepest, rules) {
+            if let Some(lock) = upgrade_lock_for(
+                offer,
+                settings,
+                deepest,
+                rules,
+                ui.snapshot.logistics.felt_systems,
+            ) {
                 let tag = match lock {
-                    UpgradeLock::Band(_) | UpgradeLock::Descent(_) | UpgradeLock::Depth { .. } => {
-                        "LOCKED"
-                    }
+                    UpgradeLock::Band(_)
+                    | UpgradeLock::Descent(_)
+                    | UpgradeLock::Depth { .. }
+                    | UpgradeLock::NotStockedHere => "LOCKED",
+                    UpgradeLock::Unfelt(_) => "UNFELT",
                     UpgradeLock::NoSky => "NO SKY",
                     UpgradeLock::DescentOnly => "DEEP",
                 };

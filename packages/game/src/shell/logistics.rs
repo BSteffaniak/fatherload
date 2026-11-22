@@ -31,6 +31,10 @@ pub enum LogisticsGroup {
     Travel,
     /// Beacons, lift stations and dive charges, anywhere.
     FieldKit,
+    /// An outpost's upgrade counter (Wave 8 deep shops: the tiers its Descent needs).
+    Shop,
+    /// An outpost's workshop (Wave 8: layer resources into consumables and parts).
+    Workshop,
 }
 
 /// One row of the logistics dialog.
@@ -160,6 +164,10 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
                 },
             );
         }
+        // Wave 8: the deep shop and the workshop.
+        for (label, detail, command, group) in outpost_trade_rows(world, rig, outpost) {
+            row(group, label, detail, command);
+        }
     }
     // A lift station (chained lifts share one, so every shaft stopping here is listed).
     for (shaft, at) in logistics.stations_at(tile) {
@@ -287,6 +295,89 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
     }
 }
 
+/// An outpost's deep shop and workshop rows (Wave 8): every line whose next tier the outpost
+/// stocks (locked ones too, so the counter says why), then the recipes its workshop knows.
+fn outpost_trade_rows(
+    world: &WorldState,
+    rig: &fatherload_simulation::Player,
+    outpost: &fatherload_simulation::logistics::Outpost,
+) -> Vec<(String, String, LogisticsCommand, LogisticsGroup)> {
+    use fatherload_simulation::{
+        depth_progression::outpost_stocks,
+        economy::{
+            UpgradeKind, shop_line_count, upgrade_maxed, upgrade_offers_for, upgrade_tier_name,
+        },
+        item::ItemKind,
+        workshop::{CraftOutput, RECIPES, outpost_crafts},
+    };
+    let mut rows = Vec::new();
+    let rules = world.progression_rules();
+    if !rules.is_descent() {
+        return rows;
+    }
+    for (index, offer) in upgrade_offers_for(rig, rules)
+        .iter()
+        .enumerate()
+        .take(shop_line_count(rules))
+    {
+        let next = offer.level.saturating_add(1);
+        if upgrade_maxed(offer) || !outpost_stocks(outpost.descent, offer.kind, next) {
+            continue;
+        }
+        let detail = if offer.kind == UpgradeKind::BombPack {
+            upgrade_tier_name(offer.kind, offer.level).to_owned()
+        } else {
+            format!(
+                "Tier {next}/{} {}",
+                offer.max_level,
+                upgrade_tier_name(offer.kind, offer.level)
+            )
+        };
+        rows.push((
+            offer.name.to_owned(),
+            detail,
+            LogisticsCommand::OutpostUpgrade {
+                outpost: outpost.id,
+                offer: u8::try_from(index).unwrap_or(u8::MAX),
+            },
+            LogisticsGroup::Shop,
+        ));
+    }
+    for (index, recipe) in RECIPES.iter().enumerate() {
+        if !outpost_crafts(outpost.descent, recipe) {
+            continue;
+        }
+        let needs: Vec<String> = recipe
+            .inputs
+            .iter()
+            .map(|(stratum, count)| {
+                format!(
+                    "{count} {} ({} aboard)",
+                    stratum.def().layer_resource.name,
+                    rig.carried(ItemKind::Layer(*stratum))
+                )
+            })
+            .collect();
+        let makes = match recipe.output {
+            CraftOutput::Part(kind) => format!("the next {} tier", kind.name()),
+            CraftOutput::Repair { percent } => format!("patches {percent}% of the hull"),
+            CraftOutput::Refuel { percent } => format!("fills {percent}% of the tank"),
+            CraftOutput::DiveCharges(count) => format!("{count} dive charges"),
+            CraftOutput::Bombs(count) => format!("{count} blasting charges"),
+        };
+        rows.push((
+            recipe.name.to_owned(),
+            format!("{}; {makes}", needs.join(" + ")),
+            LogisticsCommand::Craft {
+                outpost: outpost.id,
+                recipe: u8::try_from(index).unwrap_or(u8::MAX),
+            },
+            LogisticsGroup::Workshop,
+        ));
+    }
+    rows
+}
+
 /// The use prompt at a logistics stop (an outpost, a lift station, one's own beacon), if the
 /// rig stands at one: what the use button opens there.
 #[must_use]
@@ -346,6 +437,19 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
         },
         LogisticsCommand::BuyDiveCharges => "Dive charges racked.".to_owned(),
         LogisticsCommand::FireDiveCharge => "Charge away: dive!".to_owned(),
+        LogisticsCommand::OutpostUpgrade { offer, .. } => {
+            fatherload_simulation::economy::UpgradeKind::ALL
+                .get(usize::from(offer))
+                .map_or_else(
+                    || "The outpost's mechanic gets to work.".to_owned(),
+                    |kind| format!("The outpost's mechanic fits the new {}.", kind.name()),
+                )
+        }
+        LogisticsCommand::Craft { recipe, .. } => fatherload_simulation::workshop::recipe(recipe)
+            .map_or_else(
+                || "The workshop hums.".to_owned(),
+                |found| format!("The workshop turns out {}.", found.name),
+            ),
     }
 }
 

@@ -309,7 +309,12 @@ impl WorldState {
                 self.terrain.band_at(center),
                 radiator_level,
                 gear.heat_shield,
-            );
+            )
+            .min(self.placeholder_heat_excess_cap(
+                center,
+                radiator_level,
+                gear.heat_shield,
+            ));
             let depth_damage = if excess > 0 {
                 HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
             } else {

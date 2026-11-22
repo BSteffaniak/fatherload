@@ -129,6 +129,7 @@ pub const fn drop_lifetime_millis(kind: ItemKind) -> Option<u64> {
         ItemKind::Artifact(_) | ItemKind::Quest(_) => None,
         ItemKind::Mineral(_)
         | ItemKind::Material(_)
+        | ItemKind::Layer(_)
         | ItemKind::Module(_)
         | ItemKind::Weapon(_)
         | ItemKind::Ammo(_)

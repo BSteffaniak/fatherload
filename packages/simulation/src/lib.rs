@@ -19,6 +19,7 @@ pub mod combat;
 pub mod command;
 pub mod contract;
 pub mod cosmetics;
+
 pub mod crew;
 pub mod depth_progression;
 pub mod descent;
@@ -66,6 +67,7 @@ pub mod tomb;
 pub mod upgrade_preview;
 pub mod village;
 pub mod weapon;
+pub mod workshop;
 pub mod world;
 pub mod worldgen;
 

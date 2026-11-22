@@ -83,6 +83,15 @@ pub struct HazardGear {
     /// [`crate::depth_progression::RigSystem::bit`]; only Descent worlds sell them).
     #[serde(default)]
     pub rig_systems: u8,
+    /// Pressure Rating tier (Wave 8, Descent worlds only): the Descent the rig's seals are
+    /// rated for (0 = the Crust). Deeper than that, the thrusters burn more fuel
+    /// ([`crate::depth_progression::pressure_fuel_percent`]).
+    #[serde(default)]
+    pub pressure_rating: u8,
+    /// Headlamp tier (Wave 8, Descent worlds only): a wider headlamp per tier
+    /// ([`crate::depth_progression::headlamp_light_scale`]).
+    #[serde(default)]
+    pub headlamp: u8,
 }
 
 impl HazardGear {
@@ -100,6 +109,8 @@ impl HazardGear {
         life_support: crate::moon::LIFE_SUPPORT_MAX_LEVEL,
         attitude: crate::attitude::AttitudeGear::MAXED,
         rig_systems: u8::MAX,
+        pressure_rating: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
+        headlamp: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
     };
 
     /// Whether the Deep Descent rig system `system` is fitted.

@@ -187,6 +187,8 @@ impl WorldState {
         let thrift = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Thrift);
         let settings = *self.terrain.settings();
         let drilling = self.active_drills.contains_key(&player_id);
+        // Wave 8, Descent worlds: thrusters below the rig's Pressure Rating burn more.
+        let pressure_burn = self.pressure_burn_factor(player_id);
         let player = self.players.get_mut(&player_id)?;
         // Field effects (F9): neutral everywhere without zones or stratum profiles.
         let field = crate::field::sample_in(
@@ -480,6 +482,7 @@ impl WorldState {
                 // Thin air runs the engine rich.
                 efficiency *= environment.burn_factor(thrust_efficiency);
             }
+            efficiency *= pressure_burn;
             player.fuel = quantize_simulation_scalar(
                 (AUTHORITATIVE_FUEL_BURN_PER_SECOND * efficiency)
                     .mul_add(-seconds, player.fuel)

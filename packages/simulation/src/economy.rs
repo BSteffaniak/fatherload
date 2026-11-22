@@ -172,6 +172,12 @@ pub enum UpgradeKind {
     PhaseDrill,
     /// Rig system: the Heart Key (opens the Heart).
     HeartKey,
+    // --- Wave 8: the Descent ladders for pressure and lighting (Descent worlds only). -------
+    /// Pressure Rating: seals rated one Descent deeper per tier (underrated rigs burn more
+    /// fuel, [`crate::depth_progression::pressure_fuel_percent`]).
+    PressureRating,
+    /// Headlamp: a wider headlamp per tier, one tier per Descent.
+    Headlamp,
 }
 
 impl UpgradeKind {
@@ -203,7 +209,30 @@ impl UpgradeKind {
         Self::GravityAnchor,
         Self::PhaseDrill,
         Self::HeartKey,
+        Self::PressureRating,
+        Self::Headlamp,
     ];
+
+    /// The line's display name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        upgrade_name(self)
+    }
+
+    /// Whether this line is sold only on Deep Descent worlds (the rig systems and the Wave 8
+    /// Pressure Rating and Headlamp ladders).
+    #[must_use]
+    pub const fn is_descent_only(self) -> bool {
+        self.rig_system().is_some() || self.is_depth_line()
+    }
+
+    /// Whether this is one of the Wave 8 Descent ladders (Pressure Rating, Headlamp): one tier
+    /// per Descent, on sale once that Descent is reached
+    /// ([`crate::depth_progression::depth_line_cap`]).
+    #[must_use]
+    pub const fn is_depth_line(self) -> bool {
+        matches!(self, Self::PressureRating | Self::Headlamp)
+    }
 
     /// The Deep Descent rig system this line sells, if it is one.
     #[must_use]
@@ -286,6 +315,7 @@ impl UpgradeKind {
             | Self::GravityAnchor
             | Self::PhaseDrill
             | Self::HeartKey => 1,
+            Self::PressureRating | Self::Headlamp => crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
             Self::Drill
             | Self::FuelTank
             | Self::CargoBay
@@ -326,7 +356,9 @@ impl UpgradeKind {
             | Self::CryoHull
             | Self::GravityAnchor
             | Self::PhaseDrill
-            | Self::HeartKey => 0,
+            | Self::HeartKey
+            | Self::PressureRating
+            | Self::Headlamp => 0,
         }
     }
 
@@ -365,7 +397,10 @@ pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
 /// Number of shop upgrade lines (the length of [`upgrade_offers`]).
-pub const UPGRADE_OFFER_COUNT: usize = 26;
+pub const UPGRADE_OFFER_COUNT: usize = 28;
+/// Shop lines a classic world lists: everything before the Deep Descent lines (rig systems,
+/// then the Wave 8 Pressure Rating and Headlamp), which are appended last.
+pub const CLASSIC_SHOP_LINES: usize = 18;
 /// Shop index of the drill mount line.
 pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
@@ -379,7 +414,7 @@ pub const fn shop_line_count(rules: ProgressionRules) -> usize {
     if rules.is_descent() {
         UPGRADE_OFFER_COUNT
     } else {
-        UPGRADE_OFFER_COUNT - RigSystem::ALL.len()
+        CLASSIC_SHOP_LINES
     }
 }
 
@@ -449,6 +484,12 @@ pub enum UpgradeLock {
     /// without a sky to climb into
     /// (generators before V8): there is nothing for it to do, so the shop does not sell it.
     NoSky,
+    /// Descent worlds: a rig system the crew has reached but not yet felt the need for (Wave 8:
+    /// "felt before you can buy it", [`RigSystem::felt_by`]).
+    Unfelt(RigSystem),
+    /// Descent worlds: an outpost's counter does not stock this tier (the town or a deeper
+    /// outpost does, [`crate::depth_progression::outpost_stocks`]).
+    NotStockedHere,
 }
 
 impl UpgradeLock {
@@ -472,6 +513,13 @@ impl UpgradeLock {
                 "Rig system: on sale once anyone reaches the last stratum of Descent {} (row {row})",
                 crate::depth_progression::numeral(descent)
             ),
+            Self::Unfelt(system) => format!(
+                "Rig system: on sale once the crew has felt why it is needed ({})",
+                system.felt_by()
+            ),
+            Self::NotStockedHere => {
+                "Not stocked at this outpost: the town or a deeper outpost sells it".to_owned()
+            }
         }
     }
 }
@@ -505,7 +553,7 @@ pub const fn upgrade_lock(
     if !upgrade_maxed(offer) && needs_sky(offer.kind) && !settings.generator.has_sky() {
         return Some(UpgradeLock::NoSky);
     }
-    if !upgrade_maxed(offer) && offer.kind.rig_system().is_some() {
+    if !upgrade_maxed(offer) && offer.kind.is_descent_only() {
         return Some(UpgradeLock::DescentOnly);
     }
     None
@@ -515,14 +563,17 @@ pub const fn upgrade_lock(
 /// worlds).
 ///
 /// On Descent worlds the core lines are capped by the deepest Descent reached
-/// ([`crate::depth_progression::core_tier_cap`]) and each rig system goes on sale at its
-/// stratum ([`RigSystem::sold_from_row`]).
+/// ([`crate::depth_progression::core_tier_cap`]), the Pressure Rating and Headlamp by
+/// [`crate::depth_progression::depth_line_cap`], and each rig system goes on sale at its
+/// stratum ([`RigSystem::sold_from_row`]) once the crew has felt its need (`felt`: bits of
+/// [`RigSystem::bit`], [`crate::logistics::Logistics::felt_systems`]).
 #[must_use]
 pub fn upgrade_lock_for(
     offer: &UpgradeOffer,
     settings: &WorldSettings,
     deepest_row: i32,
     rules: ProgressionRules,
+    felt: u8,
 ) -> Option<UpgradeLock> {
     if !rules.is_descent() {
         return upgrade_lock(offer, settings, deepest_row);
@@ -533,10 +584,19 @@ pub fn upgrade_lock_for(
     let layout = crate::depth_progression::layout_for(settings);
     if let Some(system) = offer.kind.rig_system() {
         let row = system.sold_from_row(&layout);
-        return (deepest_row < row).then_some(UpgradeLock::Depth {
-            row,
-            descent: system.sold_from_descent(),
-        });
+        if deepest_row < row {
+            return Some(UpgradeLock::Depth {
+                row,
+                descent: system.sold_from_descent(),
+            });
+        }
+        return (felt & system.bit() == 0).then_some(UpgradeLock::Unfelt(system));
+    }
+    if offer.kind.is_depth_line() {
+        let reached = crate::depth_progression::DescentLayout::descent_at(&layout, deepest_row);
+        let next = offer.level.saturating_add(1);
+        return (next > crate::depth_progression::depth_line_cap(reached))
+            .then_some(UpgradeLock::Descent(next));
     }
     if offer.kind.is_core() {
         let reached = crate::depth_progression::DescentLayout::descent_at(&layout, deepest_row);
@@ -714,6 +774,22 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
                 gear.rig_systems |= system.bit();
             }
         }
+        UpgradeKind::PressureRating => {
+            gear.pressure_rating =
+                (gear.pressure_rating + 1).min(crate::depth_progression::DEPTH_LINE_MAX_LEVEL);
+        }
+        UpgradeKind::Headlamp => {
+            gear.headlamp = (gear.headlamp + 1).min(crate::depth_progression::DEPTH_LINE_MAX_LEVEL);
+        }
+    }
+}
+
+/// Fits the next tier of `kind` without charging for it (Wave 8: an outpost counter that
+/// charged its own price, a workshop part). Maxed lines stay as they are.
+pub fn fit_next_tier(player: &mut Player, kind: UpgradeKind) {
+    let level = current_level(player, kind);
+    if kind == UpgradeKind::BombPack || level < kind.max_level_for(ProgressionRules::Descent) {
+        apply_upgrade(player, kind);
     }
 }
 
@@ -776,6 +852,8 @@ pub const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
             Some(system) if gear.has_system(system) => 1,
             _ => 0,
         },
+        UpgradeKind::PressureRating => gear.pressure_rating,
+        UpgradeKind::Headlamp => gear.headlamp,
     }
 }
 
@@ -796,6 +874,12 @@ fn offer(kind: UpgradeKind, current_level: u8, rules: ProgressionRules) -> Upgra
 /// [`crate::depth_progression::deep_tier_cost`] on Descent worlds.
 #[must_use]
 pub fn upgrade_cost_for(kind: UpgradeKind, level: u8, rules: ProgressionRules) -> u32 {
+    if kind.is_depth_line() {
+        return crate::depth_progression::depth_line_cost(
+            matches!(kind, UpgradeKind::PressureRating),
+            level,
+        );
+    }
     let deep_tier = kind.is_core() && level >= MAX_UPGRADE_LEVEL;
     if rules.is_descent() && deep_tier {
         return crate::depth_progression::deep_tier_cost(
@@ -835,6 +919,8 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::GravityAnchor => RigSystem::GravityAnchor.name(),
         UpgradeKind::PhaseDrill => RigSystem::PhaseDrill.name(),
         UpgradeKind::HeartKey => RigSystem::HeartKey.name(),
+        UpgradeKind::PressureRating => "Pressure Rating",
+        UpgradeKind::Headlamp => "Headlamp",
     }
 }
 
@@ -894,6 +980,13 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
         UpgradeKind::GravityAnchor => RigSystem::GravityAnchor.description(),
         UpgradeKind::PhaseDrill => RigSystem::PhaseDrill.description(),
         UpgradeKind::HeartKey => RigSystem::HeartKey.description(),
+        UpgradeKind::PressureRating => {
+            "Seals rated one Descent deeper per tier: below its rating the thrusters fight the \
+             pressure and burn more fuel"
+        }
+        UpgradeKind::Headlamp => {
+            "A wider, brighter headlamp per tier, one tier for each Descent's deeper dark"
+        }
     }
 }
 
@@ -1111,6 +1204,12 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
         | UpgradeKind::GravityAnchor
         | UpgradeKind::PhaseDrill
         | UpgradeKind::HeartKey => return upgrade_name(kind),
+        UpgradeKind::PressureRating | UpgradeKind::Headlamp => {
+            return crate::depth_progression::depth_line_tier_name(
+                matches!(kind, UpgradeKind::PressureRating),
+                level.saturating_add(1),
+            );
+        }
         UpgradeKind::DrillMount => {
             return if level == 0 {
                 "Gimbal Drill Mount"
@@ -1266,6 +1365,16 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
             crate::moon::life_support_reach_tiles(level),
             crate::moon::life_support_reach_tiles(next)
         ),
+        UpgradeKind::PressureRating => format!(
+            "Rated to Descent {} -> {}",
+            crate::depth_progression::numeral(level),
+            crate::depth_progression::numeral(next)
+        ),
+        UpgradeKind::Headlamp => format!(
+            "Lamp reach x{:.2} -> x{:.2}",
+            crate::depth_progression::headlamp_light_scale(level),
+            crate::depth_progression::headlamp_light_scale(next)
+        ),
         UpgradeKind::Scanner
         | UpgradeKind::BombPack
         | UpgradeKind::DrillMount
@@ -1317,6 +1426,12 @@ pub fn upgrade_cost(kind: UpgradeKind, level: u8) -> u32 {
         | UpgradeKind::PhaseDrill
         | UpgradeKind::HeartKey => {
             return kind.rig_system().map_or(0, RigSystem::price);
+        }
+        UpgradeKind::PressureRating | UpgradeKind::Headlamp => {
+            return crate::depth_progression::depth_line_cost(
+                matches!(kind, UpgradeKind::PressureRating),
+                level,
+            );
         }
     };
     // Tiers bought on this line so far (the stock part is free).

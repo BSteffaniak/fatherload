@@ -44,6 +44,24 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
             OutpostService::Claim => &menu_icons::SIGNAL,
             OutpostService::SetHome => &menu_icons::HOUSE,
         },
+        LogisticsCommand::OutpostUpgrade { offer, .. } => {
+            let lines = &fatherload_simulation::economy::UpgradeKind::ALL;
+            if (offer as usize) < lines.len() {
+                super::counters::upgrade_icon(lines[offer as usize])
+            } else {
+                &menu_icons::GEAR
+            }
+        }
+        LogisticsCommand::Craft { recipe, .. } => {
+            let recipes = &fatherload_simulation::workshop::RECIPES;
+            if (recipe as usize) < recipes.len() {
+                super::pixel_art::sprites::deep_gear::layer_resource(
+                    recipes[recipe as usize].inputs[0].0,
+                )
+            } else {
+                &super::pixel_art::sprites::deep_gear::WORKSHOP
+            }
+        }
     }
 }
 
@@ -72,8 +90,29 @@ pub(super) fn draw_logistics(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
     ];
     let mut about = None;
     let mut sections = vec![Section::new("Rig", SKY_LIGHT, status)];
+    // At a workshop: what the bay holds for it.
+    if menu
+        .rows
+        .iter()
+        .any(|row| row.group == LogisticsGroup::Workshop)
+    {
+        let held = layer_resource_items(ui.player);
+        sections.push(Section::new(
+            "Layer resources",
+            MINT,
+            if held.is_empty() {
+                vec![SectionItem::text(
+                    "None aboard yet: the drill digs them out of each stratum's rock now and then.",
+                )]
+            } else {
+                held
+            },
+        ));
+    }
     for (group, title, color) in [
         (LogisticsGroup::Here, "Here", MINT),
+        (LogisticsGroup::Shop, "Deep shop", GOLD),
+        (LogisticsGroup::Workshop, "Workshop", ORANGE),
         (LogisticsGroup::Travel, "Travel network", SKY_LIGHT),
         (LogisticsGroup::FieldKit, "Field kit", LIME),
     ] {
@@ -118,30 +157,46 @@ pub(super) fn draw_logistics(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
 pub(super) fn inventory_section(ui: &UiFrame<'_, '_>, row: usize) -> Section {
     let logistics = ui.snapshot.logistics;
     let player = ui.view.player_id;
-    Section::new(
-        "Depth Logistics",
-        SKY_LIGHT,
-        vec![
-            SectionItem::item(ItemEntry {
-                icon: Some(&rig::DRILL_DOWN),
-                label: "Depth logistics".to_owned(),
-                detail: "Beacons, lift stations, dive charges and travel".to_owned(),
-                value: String::new(),
-                value_color: GOLD,
-                coin: false,
-                selected: ui.seat.selected_menu_item == row,
-                disabled: false,
-            }),
-            SectionItem::stat(
-                "Dive charges",
-                logistics.dive_charges_of(player).to_string(),
-                ORANGE,
-            ),
-            SectionItem::stat(
-                "Beacons placed",
-                logistics.beacons_of(player).count().to_string(),
-                SKY_LIGHT,
-            ),
-        ],
-    )
+    let mut items = vec![
+        SectionItem::item(ItemEntry {
+            icon: Some(&rig::DRILL_DOWN),
+            label: "Depth logistics".to_owned(),
+            detail: "Beacons, lift stations, dive charges and travel".to_owned(),
+            value: String::new(),
+            value_color: GOLD,
+            coin: false,
+            selected: ui.seat.selected_menu_item == row,
+            disabled: false,
+        }),
+        SectionItem::stat(
+            "Dive charges",
+            logistics.dive_charges_of(player).to_string(),
+            ORANGE,
+        ),
+        SectionItem::stat(
+            "Beacons placed",
+            logistics.beacons_of(player).count().to_string(),
+            SKY_LIGHT,
+        ),
+    ];
+    // Wave 8: layer resources aboard, for the outposts' workshops.
+    items.extend(layer_resource_items(ui.player));
+    Section::new("Depth Logistics", SKY_LIGHT, items)
+}
+
+/// One stat per layer resource `player` carries (Wave 8), with its material's icon.
+fn layer_resource_items(player: &fatherload_simulation::Player) -> Vec<SectionItem> {
+    player
+        .cargo_bay
+        .iter()
+        .filter_map(|(kind, count)| match kind {
+            fatherload_simulation::item::ItemKind::Layer(stratum) => Some(SectionItem::icon_stat(
+                super::pixel_art::sprites::deep_gear::layer_resource(stratum),
+                stratum.def().layer_resource.name,
+                format!("x{count}"),
+                MINT,
+            )),
+            _ => None,
+        })
+        .collect()
 }

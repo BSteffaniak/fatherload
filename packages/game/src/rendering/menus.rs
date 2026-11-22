@@ -566,15 +566,15 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
             .value(cycler(setup.day_length.name()), GOLD),
         Entry::new(&menu_icons::GLOBE, "World")
             .detail(if setup.deep_descent() {
-                "Preview: 8 Descents, 41 strata, 13,000 rows"
+                "8 Descents, 41 strata, 13,000 rows to the Heart"
             } else {
-                "The classic dig"
+                "The original dig, 12 bands deep"
             })
             .value(
                 cycler(if setup.deep_descent() {
-                    "Deep Descent (preview)"
+                    "Deep Descent"
                 } else {
-                    "Classic"
+                    "Classic (V10)"
                 }),
                 if setup.deep_descent() {
                     LAVENDER

@@ -3,6 +3,7 @@
 //! so keep groups' lists complete).
 
 pub mod crypt;
+pub mod deep_gear;
 pub mod enemies;
 pub mod explosives;
 pub mod icons;
@@ -436,6 +437,15 @@ pub const ALL: &[&SpriteDef] = &[
     &crypt::SHOT_ARROW,
     &crypt::SHOT_ARROW_UP,
     &crypt::SHOT_BOULDER,
+    &deep_gear::PRESSURE_RATING,
+    &deep_gear::HEADLAMP,
+    &deep_gear::WORKSHOP,
+    &deep_gear::LAYER_FIBRE,
+    &deep_gear::LAYER_LUMP,
+    &deep_gear::LAYER_GEM,
+    &deep_gear::LAYER_RESIN,
+    &deep_gear::LAYER_SHARD,
+    &deep_gear::LAYER_RELIC,
 ];
 
 #[cfg(test)]

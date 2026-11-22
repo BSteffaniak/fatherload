@@ -640,7 +640,7 @@ fn classic_worlds_keep_their_ladders_and_never_sell_rig_systems() {
             assert_eq!(offer.max_level, MAX_UPGRADE_LEVEL);
         }
         let lock = upgrade_lock(&offer, world.world_settings(), 100_000);
-        if offer.kind.rig_system().is_some() {
+        if offer.kind.is_descent_only() {
             assert_eq!(lock, Some(UpgradeLock::DescentOnly));
         } else {
             assert_ne!(lock, Some(UpgradeLock::DescentOnly));
@@ -674,7 +674,7 @@ fn classic_worlds_keep_their_ladders_and_never_sell_rig_systems() {
     assert!(
         classic[lines..]
             .iter()
-            .all(|offer| offer.kind.rig_system().is_some())
+            .all(|offer| offer.kind.is_descent_only())
     );
     // A maxed classic core line previews nothing and still names its own top tier.
     let mut maxed = player.clone();
@@ -743,16 +743,16 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     let drill = upgrade_offers_for(&player, rules)[0];
     assert_eq!(drill.max_level, DESCENT_MAX_UPGRADE_LEVEL);
     assert_eq!(
-        upgrade_lock_for(&drill, &settings, 10, rules),
+        upgrade_lock_for(&drill, &settings, 10, rules, 0),
         Some(UpgradeLock::Descent(1))
     );
-    assert_eq!(upgrade_lock_for(&drill, &settings, 1_200, rules), None);
+    assert_eq!(upgrade_lock_for(&drill, &settings, 1_200, rules, 0), None);
     // Past the classic top the ladder keeps going, dearer each tier.
     player.drill_strength = MAX_UPGRADE_LEVEL;
     let deep = upgrade_offers_for(&player, rules)[0];
     assert!(deep.cost > upgrade_cost(UpgradeKind::Drill, MAX_UPGRADE_LEVEL - 1));
     assert_eq!(
-        upgrade_lock_for(&deep, &settings, 1_200, rules),
+        upgrade_lock_for(&deep, &settings, 1_200, rules, 0),
         Some(UpgradeLock::Descent(4))
     );
     let index = UpgradeKind::ALL
@@ -762,10 +762,24 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     let hull = upgrade_offers_for(&player, rules)[index];
     let sold_from = RigSystem::PressureHull.sold_from_row(&PlanLayout);
     assert!(matches!(
-        upgrade_lock_for(&hull, &settings, sold_from - 1, rules),
+        upgrade_lock_for(&hull, &settings, sold_from - 1, rules, 0),
         Some(UpgradeLock::Depth { .. })
     ));
-    assert_eq!(upgrade_lock_for(&hull, &settings, sold_from, rules), None);
+    // Wave 8: reached is not enough; the crew must have felt the crush first.
+    assert_eq!(
+        upgrade_lock_for(&hull, &settings, sold_from, rules, 0),
+        Some(UpgradeLock::Unfelt(RigSystem::PressureHull))
+    );
+    assert_eq!(
+        upgrade_lock_for(
+            &hull,
+            &settings,
+            sold_from,
+            rules,
+            RigSystem::PressureHull.bit()
+        ),
+        None
+    );
 }
 
 #[test]
