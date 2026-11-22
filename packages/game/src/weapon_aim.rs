@@ -314,16 +314,28 @@ pub fn reticle(
     }
     let weapon = player.mounted_weapon?.kind;
     let base = (player.x, player.y - MUZZLE_RISE);
+    // Mirrored controls (a mirror field or hall, a gazer, Wave 9) reverse the aim's sideways
+    // part in the simulation, so the reticle is reflected about the muzzle too: it sits where
+    // the shot really goes (on a mirrored screen, under the cursor).
+    let mirrored = world.rig_controls_mirrored(player_id);
     if let Some((x, y)) = aim.pointer {
         return Some(Reticle {
-            x,
+            x: if mirrored {
+                2.0f32.mul_add(base.0, -x)
+            } else {
+                x
+            },
             y,
             locked: false,
             auto: false,
             weapon,
         });
     }
-    let control = aim.control;
+    let mut control = aim.control;
+    if mirrored {
+        control.aim_x = control.aim_x.saturating_neg();
+    }
+    let control = control;
     let direction = fatherload_simulation::weapon::aim_vector(control.aim_x, control.aim_y)
         .unwrap_or((1.0, 0.0));
     if control.auto_aim {
@@ -550,5 +562,50 @@ mod tests {
             None,
             "rig-only key in the rig"
         );
+    }
+
+    #[test]
+    fn a_mirrored_rigs_reticle_shows_where_the_reversed_aim_really_goes() {
+        let player_id = fatherload_simulation::PlayerId::new(0);
+        let mut world = fatherload_simulation::WorldState::new_game(player_id);
+        let _ = world
+            .player_mut(player_id)
+            .expect("rig")
+            .receive_weapon(WeaponKind::RivetGun);
+        let rig = world.player(player_id).expect("rig").clone();
+        let base = (rig.x, rig.y - MUZZLE_RISE);
+        let pointed = SeatAim {
+            control: WeaponControl::default(),
+            pointer: Some((base.0 + 100.0, base.1 - 20.0)),
+        };
+        let stick = SeatAim {
+            control: WeaponControl {
+                aim_x: 127,
+                ..WeaponControl::default()
+            },
+            pointer: None,
+        };
+        let plain = reticle(&world, player_id, &pointed).expect("reticle");
+        assert!((plain.x - (base.0 + 100.0)).abs() < 0.01);
+        let plain_stick = reticle(&world, player_id, &stick).expect("reticle");
+        assert!(plain_stick.x > base.0);
+        // A mirror room around the rig.
+        let frame = world.frame();
+        let tile = (frame.col(rig.x), frame.row(rig.y));
+        let _ = world.place_field_zone(fatherload_simulation::field::FieldZone::of_preset(
+            fatherload_simulation::field::FieldPreset::Mirror,
+            tile,
+            (12, 12),
+        ));
+        assert!(world.rig_controls_mirrored(player_id));
+        let mirrored = reticle(&world, player_id, &pointed).expect("reticle");
+        assert!(
+            (mirrored.x - (base.0 - 100.0)).abs() < 0.01,
+            "reflected about the muzzle: {}",
+            mirrored.x
+        );
+        assert!((mirrored.y - plain.y).abs() < 0.01);
+        let mirrored_stick = reticle(&world, player_id, &stick).expect("reticle");
+        assert!(mirrored_stick.x < base.0, "the stick's aim reversed too");
     }
 }

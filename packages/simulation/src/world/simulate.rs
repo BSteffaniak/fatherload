@@ -57,8 +57,7 @@ impl WorldState {
             if let Some(controls) = input.controls.map(|controls| {
                 if on_foot {
                     ControlState::default().with_weapon(sentry.unwrap_or_default())
-                } else if self.fields_for(player_id).mirrored() || self.distortion_gazed(player_id)
-                {
+                } else if self.rig_controls_mirrored(player_id) {
                     // A mirror field (F9) swaps left and right for the rig's steering; the
                     // Mirror Strata's halls and gazers mirror its aim too, as the screen does
                     // (Wave 9).

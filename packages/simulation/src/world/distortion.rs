@@ -67,6 +67,14 @@ impl WorldState {
             .gazed_at(player_id, self.simulation_tick.next())
     }
 
+    /// Whether `player_id`'s rig steers (and aims) mirrored this tick: a mirror field (F9, a
+    /// mirror hall) or a gazer's hold. The game draws the seat's aim reticle through the same
+    /// reflection, so it shows where the shot will really go.
+    #[must_use]
+    pub fn rig_controls_mirrored(&self, player_id: PlayerId) -> bool {
+        self.fields_for(player_id).mirrored() || self.distortion_gazed(player_id)
+    }
+
     /// `controls` mirrored for `player_id`'s rig: the stick and the rotation thrusters swap,
     /// and so does its aim, since the seat's screen is mirrored too (a mouse or stick aimed at
     /// the screen's right points at the world's left).
