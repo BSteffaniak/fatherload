@@ -533,7 +533,11 @@ impl Patch {
                 .instances(3)
                 .send(0.3)
                 .jitter(0.05, 1.0),
-            Self::GeyserBlast | Self::HullGroan => PatchInfo::new(Impact)
+            Self::HullGroan => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.04, 0.8),
+            Self::GeyserBlast => PatchInfo::new(Big)
                 .instances(2)
                 .send(0.4)
                 .jitter(0.04, 0.8),

@@ -257,7 +257,17 @@ mod tests {
                 | Patch::HeartbeatLoop
                 | Patch::GlowSeaLoop
                 | Patch::RootLoop
-                | Patch::MindLoop => (40.0, 3_000.0),
+                | Patch::MindLoop
+                // The Drowned and Frozen (wave 9): the Leviathan's roar, the hull's groan,
+                // the geyser's blast, and the deep beds (the swelling sea, the geysers'
+                // kettle drums, the trench's drone and the Leviathan's theme).
+                | Patch::LeviathanRoar
+                | Patch::HullGroan
+                | Patch::GeyserBlast
+                | Patch::OceanLoop
+                | Patch::GeyserLoop
+                | Patch::AbyssLoop
+                | Patch::LeviathanLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

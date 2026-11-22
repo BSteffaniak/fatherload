@@ -17,15 +17,15 @@ pub(super) fn sonar_ping(rng: &mut Rng) -> Vec<f32> {
     let ping = |gain: f32, darkness: f32| {
         let mut tone = Osc::new(Wave::Sine);
         let mut shimmer = Osc::new(Wave::Sine);
-        render(1.2, move |t| {
-            let body = tone.next(pitch * (1.0 - 0.02 * t)) * perc(t, 0.002, 0.7);
+        render(0.9, move |t| {
+            let body = tone.next(pitch * (1.0 - 0.02 * t)) * perc(t, 0.002, 0.55);
             let overtone = shimmer.next(pitch * 2.01) * perc(t, 0.001, 0.15) * (1.0 - darkness);
             (body + overtone * 0.3) * gain
         })
     };
     let mut out = ping(0.8, 0.0);
-    mix_into(&mut out, &ping(0.3, 0.7), 0.55, 1.0);
-    mix_into(&mut out, &ping(0.12, 0.9), 1.05, 1.0);
+    mix_into(&mut out, &ping(0.3, 0.7), 0.45, 1.0);
+    mix_into(&mut out, &ping(0.12, 0.9), 0.8, 1.0);
     out
 }
 
