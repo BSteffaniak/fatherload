@@ -80,7 +80,19 @@ Modules:
   and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
   they show (`stage_poi`). The `enemies_*` scenes (`scene_capture/enemy_scenes.rs`) dig a
   cavern in each family's habitat band east of the town and show every kind (`enemies_lineup`),
-  their tells, a bite, a bomb fight, an EMP and a split-screen fight.
+  their tells, a bite, a bomb fight, an EMP and a split-screen fight. The `w6_*` scenes
+  (`scene_capture/wave6_scenes.rs`) show the Wave 6 content: a sky town's land office and its
+  isle plots with a cloud cottage, the Moon's colonists, the culture furniture and tomb
+  trophies inside homes, a longhouse at dusk, and a tomb-bound story at the tomb door and in
+  the journal.
+- Wave 6 content in the shell and renderer: the land office screen reads
+  `WorldState::land_office_listing` / `land_office_catalogue` (a sky town's hall titles itself
+  "Sky Land Office" and sells isle plots and the sky pieces), listed sky sites get FOR SALE
+  boards (`rendering::world::homes::listed_sites` adds `plot::sky_sites_of` of the sky towns
+  over the view), `rendering::interior::home::draw_wave6_piece` draws the 17 new pieces,
+  `house_look` and the wall and roof arms draw the four new plans (moon plans as domes),
+  `people_art` dresses Lunar colonists (jumpsuits) and the lunar trades, and the journal
+  colours the Tombs kind.
 - `rendering::world::enemies` — enemies and enemy shots (sprites in
   `pixel_art/sprites/enemies.rs`, one per kind; mode-driven frames, wind-up tells, health and
   shield bars, stun sparks, flames, burrowers churning through rock, hidden in undiscovered

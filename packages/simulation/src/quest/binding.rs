@@ -746,7 +746,12 @@ fn story_place(
             .or_else(|| feature_fallback(FeatureKind::Chamber, (6, 9)))
             .or_else(|| feature_fallback(FeatureKind::LargeCavern, (4, 9))),
         StoryPlace::Tomb | StoryPlace::Crypt => {
-            let style = (place == StoryPlace::Crypt).then_some(crate::tomb::SiteStyle::TopDown);
+            let style = if place == StoryPlace::Crypt {
+                crate::tomb::SiteStyle::TopDown
+            } else {
+                crate::tomb::SiteStyle::SideView
+            };
+            let style = Some(style);
             tomb_target(terrain, origin, style)
                 .or_else(|| tomb_target(terrain, origin, None))
                 .or_else(|| poi_fallback(PoiKind::Vault, (2, 5)))

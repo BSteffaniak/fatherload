@@ -1223,7 +1223,7 @@ fn draw_wave6_piece(
             let sway = (seconds.sin() * 2.0) as i32;
             let steps = (w - 16) / 4;
             for step in 0..steps {
-                let dip = (step * (steps - 1 - step)).clamp(0, 10);
+                let dip = (step * (steps - 1 - step) / 3).clamp(0, 12);
                 let sx = x + 8 + step * 4;
                 d.draw_rectangle(sx, f - 26 + dip / 2 + sway, 5, 4, SKY_LIGHT);
                 d.draw_rectangle(sx, f - 26 + dip / 2 + sway, 5, 1, BONE);
@@ -1304,16 +1304,17 @@ fn draw_wave6_piece(
             d.draw_rectangle(mid - 9, f - 12, 18, 2, CLAY);
             d.draw_rectangle(mid - 7, f - 15, 14, 3, INK);
             d.draw_rectangle(mid + 2, f - 28, 2, 14, GOLD);
+            // The horn (raylib fills counter-clockwise triangles only).
             d.draw_triangle(
                 Vector2::new((mid + 3) as f32, (f - 28) as f32),
-                Vector2::new((mid - 9) as f32, (f - 40) as f32),
                 Vector2::new((mid + 1) as f32, (f - 44) as f32),
+                Vector2::new((mid - 9) as f32, (f - 40) as f32),
                 GOLD,
             );
             d.draw_triangle(
                 Vector2::new((mid + 3) as f32, (f - 28) as f32),
-                Vector2::new((mid + 1) as f32, (f - 44) as f32),
                 Vector2::new((mid + 12) as f32, (f - 38) as f32),
+                Vector2::new((mid + 1) as f32, (f - 44) as f32),
                 AMBER,
             );
             if (seconds * 0.9).sin() > 0.2 {

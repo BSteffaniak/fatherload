@@ -1851,10 +1851,12 @@ index, the giver (rebuilt from the seed) and the player's `ArcLog`, so every pee
   slot's person). Text variables (`ARC_VARS`): giver, village, player, focus/focus_relation,
   other/other_word, place/band/depth (the first place slot's target), dest/where (target 0),
   dest2/where2 (target 1), contact.
-- **Content** (`story/arcs.rs`, `story/arcs/*.rs`): 67 arcs in batches (first 8; frontier 101-110;
+- **Content** (`story/arcs.rs`, `story/arcs/*.rs`): 92 arcs in batches (first 8; frontier 101-110;
   village 201-210; sky 301-308; mystery 401-408, a chain from "Blue Lights Below" to "The Heart
   of the Moon" that ties the deep's lights and hum to the Moon; home 501-506; night 601-607;
-  pilot 701-707; crew 801-803). `ARC_TEMPLATES` chains `arcs::BATCHES`; each arc runs on the
+  pilot 701-707; crew 801-803; Wave 6: tombs, crypts and ruins 901-908, the night market
+  1001-1006, far places 1101-1103, 1201-1204, 1301-1304, see "Wave 6 content" below).
+  `ARC_TEMPLATES` chains `arcs::BATCHES`; each arc runs on the
   quest engine as `QuestId(ARC_QUEST_BASE + id)` (`ARC_QUEST_BASE` 20,000;
   `QuestId::def`/`QuestId::arc`, `ArcId::quest`).
 - **Story places** (`quest::StoryPlace`, `TargetSpec::Story`, bound in `quest::binding`): the
@@ -1935,6 +1937,78 @@ determinism, two seats with their own stories).
 - **Formats:** `PROTOCOL_VERSION` 12 (the people commands, objectives, story places, arc log in
   the loadout, ledger story marks, events 260-265) and save format 10 (serde defaults: version
   8 and 9 files load).
+
+## Wave 6 content (W6 content track: stories, people, sky towns, the colony, homes)
+
+Data and runtime content only: no generated tile changes (the V1-V10 golden digests are
+unchanged); every new enum variant is appended, so old saves load.
+
+- **Story places** (`quest::StoryPlace`, appended; bound in `quest::binding::story_place`,
+  each with fallbacks so every arc binds on V5-V8 too): `Tomb` (the nearest side-view tomb
+  site on the ground or under it, `tomb_sites::sites_touching`, never the sky's; else any site,
+  a sealed vault, a cavern), `Crypt` (a top-down crypt first), `Ruin` (the nearest
+  `PilotSpaceKind::Ruin`, V9; else a derelict, a cavern), `NightMarket` (the trading post of
+  the nearest other surface village, a contact settlement; else the giver's own; else the
+  town), `Homestead` (the nearest listed plot, `plot::listed_sites_between`; else the giver's
+  home) and `SkyTown` (the nearest sky town of the lowest town row whose id names no sky
+  city, a contact settlement; else an island, the ridge; gated by
+  `milestone::sky_town_capable`). New `BoundTarget`s (`Tomb`, `Ruin`, `Market`, `Plot`,
+  `SkyTown`) name them in `describe_place`. The Moon's place now names the colony's
+  settlement on a filled Moon, so `Speak` beats there find a colonist.
+- **Objectives** (`quest::Objective`, appended): `NightHunt { count }` (WP-NIGHT's
+  `NightHook::Hunt`: the owner's or crew's kills of nocturnal kinds, read from `EnemyKilled`
+  events in `EventFacts`) and `Dawn { target }` (`NightHook::SurviveTheNight`: present at the
+  target, out of bed, on a night tick, and still there within `DAWN_GRACE_MILLIS` after the
+  night ends). `Gather` hooks are `Deliver` of night materials.
+- **Arc effects** (`people::story::ArcEffect`, appended): `Furniture(piece)` (the
+  `grant_furniture` seam) and `UnsealTomb` (every target that is a tomb door,
+  `tomb_sites::site_with_door`, opens through `unseal_tomb_site`; its `TombSeal` event is
+  raised). `ArcKind::Tomb` ("Tombs") must bind a tomb or crypt (lint).
+- **Arcs** (`story/arcs/{tombs,night_market,far_places}.rs`, ids 901-908, 1001-1006,
+  1101-1103, 1201-1204, 1301-1304): 25 arcs on those places, with furniture rewards and
+  night hooks. Triggers deliberately use wants whose existing arcs need no slot, so the old
+  slot-bound and weak-trigger arcs keep their givers (`every_arc_is_offered_by_someone`).
+- **People**: `Culture::Lunar` (appended, not in `Culture::ALL`; `Culture::EVERY` has all
+  nine) with its name table; lunar roles `Role::{Hydroponist, DomeTech, Selenographer,
+  Quartermaster}` (`Role::LUNAR`, `LUNAR_POOL`; not in `ALL` or `SKY_POOL`, so old worlds'
+  people are unchanged). `people::colony`: the colony settlement `LUNAR_COLONY`
+  (`colony_settlement_id`, six colonists in fixed trades, `Settlement::colony` with the dome,
+  the hab module they sleep in, a hydroponics bench and the stores) joins
+  `routine::settlement` and the people pass (`settlements_near_actors`). Local colour
+  (`dialogue::local`, `Topic::Local`): a line about home per culture on later visits (its own
+  roll, `LOCAL_PERCENT`). Culture furniture (`offers::signature_furniture`,
+  `sells_signature`): makers and traders of every culture append a `PersonDeal::Furniture`
+  row with their people's piece (hydroponists also sell grow racks).
+- **Sky town ids** (fix): `continent::sky_city` only decodes cells inside the streamed world,
+  so a sky town's id no longer names a far-off sky city and sky towns get their own folk.
+  Ids of sky towns in archipelago block column 0 still equal real sky cities' ids (the
+  cities keep them, as in old saves): those few towns above the spawn have no folk, and story
+  binding skips them (`world::wave6_content_tests::
+  sky_town_ids_only_collide_with_cities_above_the_spawn`). Disjoint id spaces need an id
+  change and a save migration (left to the integrator).
+- **Homes**: 17 `Furniture` pieces (culture pieces, `SKY_CATALOGUE`, `TOMB_TROPHIES`, story
+  rewards; `CACHE_FINDS` unchanged so old caches find the same antiques), four `Blueprint`s
+  (`CloudCottage` and `Aerie` for sky islands, `CraterDome` for the Moon, `Longhouse`
+  anywhere; `BlueprintSite::Moon` plans count as lunar habitats for `in_lunar_habitat`). A
+  cloud hammock sleeps (`Home::has_bed` reads the service), a relic plinth displays.
+  Guardians give a `GuardianMask` beside the trophy case; the first finished run a
+  `RelicPlinth`.
+- **Sky land office**: `SiteKey::SkyIsle(town, index)` sites (`plot::sky_sites_of`: one per
+  small isle beside a sky town's town isle with a level, open stretch of turf, never a
+  crumbling isle; medium or small; pure in the settings) are sold at the town's hall
+  (`WorldState::at_sky_land_office`, `land_office_listing`, `land_office_catalogue` with
+  the sky pieces); surveyed sky spots keep clear of them; sky plots refuse a basement; sky
+  towns' builders (and the colony's on the Moon) bid for sky and Moon plots.
+- **Formats**: `PROTOCOL_VERSION` 14 and save format 12 (both for the appended variants;
+  version 8-11 saves load).
+
+Tests: `people/story/arc_tests.rs` (the lints over all 92 arcs), `world/arc_tests.rs`
+(`every_wave6_arc_binds_to_its_real_places_and_plays_through_on_a_v10_world`: every new arc
+binds the real tomb, crypt, ruin, night market, homestead, sky town and colony contact on a
+V10 world and a bot plays it to its climax; `a_tomb_story_ending_breaks_the_seal_and_pays_furniture`),
+`world/quests.rs` `night_hook_tests`, `world/wave6_content_tests.rs` (the sky land office,
+sky town folk, colonists talking and trading, culture furniture), `people/colony.rs`,
+`people/dialogue/local.rs`, `home/decor.rs` `wave6_tests` (furniture and blueprint tables).
 
 ## Tombs and crypts (`src/tomb.rs`, `src/tomb/`, `src/world/tombs.rs`, `src/worldgen/streamed/tomb_sites.rs`, generator V10)
 

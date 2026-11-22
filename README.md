@@ -315,6 +315,13 @@ de-icers at the monasteries; the markets buy skystone and cloud silver dear. The
 names the nearest sky town or buoy; up among the islands the music turns airy and you hear
 the waterfalls. On worlds without a sky the shop locks the Altitude Intake and De-Icer.
 
+A sky town's meeting hall is its **sky land office**: it sells plots on the small isles that
+float beside the town (small and medium plots only, never on a crumbling isle; their FOR SALE
+boards stand on the isle turf), the whole furniture catalogue plus a **cloud hammock** (sleeps
+like a bed) and a brass barometer, and the town's own builders take the work. Sky plots take
+the cloud cottage, the aerie and the sky villa (or any ground plan); nothing digs a cellar under
+a floating island. The sky town's folk come out to meet you like any villager's.
+
 **Sky enemies** (v9 worlds): the low isles stay calm, but from the cloud archipelago up the
 sky has its own hunters. **Sky rays** climb above you, hang for a beat and dive through;
 **wyverns** dive harder and spit fire from afar; **storm elementals** crackle and loose a
@@ -524,7 +531,13 @@ sites always does). Each village is generated from the world seed:
   settlements you will come across **wanderers' camps** around a campfire: a trader's wagon, a
   prospector's tent, a travelling surveyor or a smuggler's hideout, whose one to three
   wanderers talk, trade and remember you like anyone else. The meeting hall shows the village's prosperity, its trouble
-  and how it gets on with its neighbours.
+  and how it gets on with its neighbours. Now and then people end a chat with a line of
+  **local colour** about home and their people's ways, in every culture.
+- **The Moon's colonists**: the research station on the Moon has six colonists in station
+  jumpsuits (a quartermaster, a hydroponist, a dome tech, a selenographer, a healer and a
+  mechanic) who sleep in the hab module, work under the dome and on the pad, talk, trade
+  (moon globes, grow racks, map secrets of the Moon) and remember you; stories that go to the
+  Moon send you to them, and they build homes on the Moon.
 - **Every building with a door is enterable** (`E` at its door, as in town): rooms are dressed
   in the village's style and the building's trade. In split-screen each seat uses villages on
   its own.
@@ -540,7 +553,7 @@ People have things on their minds, and when they have a story for you the talk p
 row says so: **"Need a hand with anything?"** Ask, and they pitch it in their own voice, naming
 real places near their home (a derelict 116 m down in the Grey Stone, the village along the
 trail, the amber island up among the clouds); "I'll do it." writes it in your **journal**. There
-are 67 stories in eight kinds, each a few beats long with a twist and more than one ending:
+are 92 stories in nine kinds, each a few beats long with a twist and more than one ending:
 
 - **Frontier**: lost brass canaries, overdue library books, a digging machine that wandered off.
 - **Village**: letters between pen friends, a peace cake for two feuding families, a courier who
@@ -555,10 +568,21 @@ are 67 stories in eight kinds, each a few beats long with a twist and more than 
 - **On foot**: only the pilot can finish them: squeeze into a crevice, carry a wedding
   invitation in by hand.
 - **Crew**: twin bells rung together, a heat core passed from rig to rig.
+- **Tombs**: a lullaby carved on a tomb's seal, a lamp left at a crypt door for its builders, a
+  guardian's name scratched by a child, a lucky urn carried home. Some endings break the seal
+  of the tomb the story was about, which is how story-sealed tombs open.
+
+Newer stories go further afield: the old ruins' lever rooms, the **night market** (moth silk for
+its tailor, paper lanterns for its festival, a broker who sells tomorrow's secrets), empty
+homesteads on the land office's books, the **sky towns** (a monastery bell that rings itself, a
+smuggler's sticky parcel) and the Moon's colonists (letters, lettuce, earthrise). Night stories
+now also hunt night monsters and ask you to see a whole night through to dawn, and many endings
+pay a piece of furniture for your home.
 
 Beats are the quest engine's objectives (with markers on the map and minimap), plus a few
 new ones: reach a place on foot, hand-deliver at a door, keep watch at night, find a contact
-and talk to them, have a module standing in your claim. When the last beat is done a card tells
+and talk to them, have a module standing in your claim, bring down night monsters, be at a
+place when the night ends. When the last beat is done a card tells
 the climax; go back to whoever told it and pick how it ends. Endings pay credits and goods,
 warm the giver (and their circle), can lift a village's fortunes, mend a feud, open someone's
 special offers, unlock a garage look, or lead to a follow-up story. People remember the
@@ -736,7 +760,15 @@ off an artifact or a rare gem from the bay; a **workbench** crafts furniture fro
 telescope watches the Moon. Press use away from any furniture for the home menu: **decorate**
 the room (place pieces from your stock on the floor, the wall or the ceiling, pick them up again,
 change the wallpaper and the floor), the storage and the deed. Furniture comes from the land
-office catalogue, the workbench, and a housewarming gift from a builder proud of the work.
+office catalogue, the workbench, and a housewarming gift from a builder proud of the work;
+every culture's makers and traders also sell their people's signature piece (a Frontier
+rocking chair, a Highland loom, a Mesa clay oven that cooks, a Riverside fish tank, a Scrapper
+junk sculpture, a Deepfolk glowcap lamp, an Aeronaut model airship, Cloudborn wind chimes, and
+the Moon colonists' moon globe and hydroponic rack), stories pay pieces (a star chart, a
+moonflower that glows after dark, a gramophone), and tombs give trophies: a **guardian's mask**
+for every guardian brought down and a **relic plinth** (it shows off a relic like a trophy case)
+for the first tomb seen through to the end. Newer plans: a turf-roofed **longhouse**, a cloud
+cottage and an aerie (sky islands only) and a crater dome (the Moon only).
 
 Hire the builder again for **expansions**: more rooms, another floor, a garage bay (park the rig
 in it from outside and it is patched up at cost, 1 cr a point of hull), a basement with a hatch down into the mine

@@ -66,7 +66,7 @@ fn press(stage: &mut SceneStage<'_>, input: PlayerInput) {
 }
 
 /// Binds `arc` as told by the `index`th resident of `found` for `player`, as play would.
-fn bind_story(
+pub(super) fn bind_story(
     world: &WorldState,
     found: &Village,
     resident: usize,
