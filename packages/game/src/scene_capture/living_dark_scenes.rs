@@ -9,7 +9,6 @@ use fatherload_simulation::{
     PlayerId, WorldState,
     depth_progression::{ProgressionRules, RigSystem},
     enemy::EnemyKind,
-    position::Frame,
     terrain::{Terrain, TilePosition},
     worldgen::{
         GeneratorVersion, TileRect, WorldSettings,
@@ -76,14 +75,10 @@ fn stamp(kind: LivingStampKind) -> Option<LivingStamp> {
         .min_by_key(|found| (found.bounds.center().x - SCENE_X).abs() + found.bounds.min.y / 8)
 }
 
-/// The middle of tile `(x, y)` in the scene's (origin) frame.
-fn centre(x: i32, y: i32) -> (f32, f32) {
-    Frame::default().tile_center(TilePosition { x, y })
-}
-
-/// Spawns `kind` at tile `(x, y)`.
+/// Spawns `kind` at tile `(x, y)` (through the world's frame, so it works after the frame has
+/// followed the rig too).
 fn spawn(world: &mut WorldState, kind: EnemyKind, x: i32, y: i32) {
-    let (px, py) = centre(x, y);
+    let (px, py) = world.frame().tile_center(TilePosition { x, y });
     let _ = world.spawn_enemy(kind, px, py);
 }
 
@@ -141,11 +136,12 @@ fn root_labyrinth(stage: &mut SceneStage<'_>) {
         };
         let middle = heart.bounds.center();
         let floor = heart.bounds.max.y - 3;
-        let x = heart.bounds.min.x + 3;
+        let x = heart.bounds.min.x;
         stage_at(world, player, x, floor, false);
-        // The tunnel the rig came in by, a few tiles of it already grown shut.
+        // The tunnel the rig came in by, its far end already grown shut and new roots
+        // reaching into the rest.
         let tunnel_y = floor;
-        let start = heart.bounds.min.x - 22;
+        let start = heart.bounds.min.x - 14;
         world.dig_living_tiles(TileRect {
             min: TilePosition {
                 x: start,
@@ -156,17 +152,29 @@ fn root_labyrinth(stage: &mut SceneStage<'_>) {
                 y: tunnel_y,
             },
         });
-        for column in start..start + 12 {
-            if column % 3 != 0 || column < start + 6 {
+        let root = fatherload_simulation::terrain::TileKind::Cave(
+            fatherload_simulation::cave::CaveTile::Root,
+        );
+        for column in start..start + 10 {
+            // Shut near the far end, thinning toward the rig.
+            let grown = column < start + 5 || (column - start) % 2 == 0;
+            if grown {
                 world.terrain_mut().set_kind(
                     TilePosition {
                         x: column,
-                        y: tunnel_y - i32::from(column % 2 == 0),
+                        y: tunnel_y - i32::from(column >= start + 5),
                     },
-                    fatherload_simulation::terrain::TileKind::Cave(
-                        fatherload_simulation::cave::CaveTile::Root,
-                    ),
+                    root,
                 );
+                if column < start + 5 {
+                    world.terrain_mut().set_kind(
+                        TilePosition {
+                            x: column,
+                            y: tunnel_y - 1,
+                        },
+                        root,
+                    );
+                }
             }
         }
         spawn(world, EnemyKind::RootSnapper, middle.x + 5, floor);
@@ -195,8 +203,8 @@ fn hive_court(stage: &mut SceneStage<'_>, counter: bool) {
         let floor = hall.max.y - 2;
         let middle = hall.center();
         stage_at(world, player, middle.x - 4, floor, false);
-        for (dx, dy) in [(-18, -5), (-6, -7), (9, -4), (19, -6)] {
-            spawn(world, EnemyKind::HiveDrone, middle.x + dx, middle.y + dy);
+        for (dx, dy) in [(-12, -3), (-7, -5), (5, -2), (10, -4)] {
+            spawn(world, EnemyKind::HiveDrone, middle.x + dx, floor + dy);
         }
     });
     if counter {
@@ -219,12 +227,21 @@ fn hive_swarm(stage: &mut SceneStage<'_>) {
         let middle = gallery.bounds.center();
         let floor = gallery.bounds.max.y - 2;
         stage_at(world, player, middle.x - 6, floor, false);
-        for (dx, dy) in [(4, -3), (7, -5), (10, -2), (2, -6)] {
-            spawn(world, EnemyKind::HiveSoldier, middle.x + dx, middle.y + dy);
-        }
-        spawn(world, EnemyKind::AcidLancer, middle.x + 9, floor);
     });
-    stage.settle(120);
+    // Past the banner, then the Swarm comes for the rig.
+    stage.settle(250);
+    let Some(gallery) = stamp(LivingStampKind::BroodGallery) else {
+        return;
+    };
+    let middle = gallery.bounds.center();
+    let floor = gallery.bounds.max.y - 2;
+    stage.play_on(|world| {
+        for (dx, dy) in [(-2, -2), (0, -3), (2, -1), (-1, -4)] {
+            spawn(world, EnemyKind::HiveSoldier, middle.x + dx, floor + dy);
+        }
+        spawn(world, EnemyKind::AcidLancer, middle.x + 5, floor);
+    });
+    stage.settle(8);
 }
 
 /// The brood matriarch in her gallery, breeding soldiers.
@@ -237,9 +254,9 @@ fn hive_matriarch(stage: &mut SceneStage<'_>) {
             return;
         };
         let floor = gallery.max.y - 2;
-        stage_at(world, player, gallery.min.x + 5, floor, false);
+        stage_at(world, player, gallery.center().x - 9, floor, false);
     });
-    stage.settle(200);
+    stage.settle(280);
 }
 
 /// A Flesh Caverns gullet at high tide, its glands pumping acid, a polyp and a maw worm.

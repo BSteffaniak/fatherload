@@ -236,6 +236,21 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             LogisticsCommand::RemoveBeacon { beacon: beacon.id },
         );
     }
+    // The Amber Court's counter in its hall (Wave 8, Deep Descent worlds).
+    if world.at_court(player) {
+        let living = world.living_dark();
+        "The Amber Court".clone_into(&mut heading);
+        subtitle = court_subtitle(living);
+        for service in CourtService::ALL {
+            let detail = court_detail(living, service);
+            row(
+                LogisticsGroup::Here,
+                service.label().to_owned(),
+                detail,
+                LogisticsCommand::LivingDark(LivingDarkAction::Court(service)),
+            );
+        }
+    }
     // The travel network.
     let here = world.travel_stop_of(player);
     if here.is_some() {
@@ -294,22 +309,9 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             LogisticsCommand::BuyDiveCharges,
         );
     }
-    // The Living Dark (Wave 8): the Amber Court's counter and root axes (Deep Descent worlds).
+    // The Living Dark's root axes (Wave 8, Deep Descent worlds).
     if world.descent_strata_layout().is_some() {
         let living = world.living_dark();
-        if world.at_court(player) {
-            "The Amber Court".clone_into(&mut heading);
-            subtitle = court_subtitle(living);
-            for service in CourtService::ALL {
-                let detail = court_detail(living, service);
-                row(
-                    LogisticsGroup::Here,
-                    service.label().to_owned(),
-                    detail,
-                    LogisticsCommand::LivingDark(LivingDarkAction::Court(service)),
-                );
-            }
-        }
         row(
             LogisticsGroup::FieldKit,
             "Fire a root axe".to_owned(),
@@ -448,22 +450,22 @@ fn outpost_trade_rows(
     rows
 }
 
-/// The Amber Court's mood toward the crew, in words.
+/// The Amber Court's mood toward the crew, in its steward's words.
 fn court_subtitle(living: &LivingDark) -> String {
     let hive = &living.hive;
     let mood = if hive.court_hostile() {
-        "The Court's drones bristle: it remembers your theft."
+        "Steward Ixa clicks her mandibles: \"Thieves. Pay for what you took.\""
     } else if hive.honoured() {
-        "The Court honours the crew: jelly at half price."
+        "Steward Ixa bows her antennae: \"The Court honours you, digger.\""
     } else if hive.standing > 0 {
-        "The Court's workers hum a welcome."
+        "Steward Ixa hums: \"Welcome back to the Court, digger.\""
     } else {
-        "The Court watches the crew warily."
+        "Steward Ixa watches you: \"The Court does not know you yet.\""
     };
     let swarm = match hive.swarm {
         SwarmState::Raiding => "The Swarm raids the Hive.",
         SwarmState::Truce => "The Swarm keeps its bought peace.",
-        SwarmState::Broken => "The Swarm is broken; the Court holds the halls.",
+        SwarmState::Broken => "The Swarm is broken.",
     };
     format!("{mood} Standing {}. {swarm}", hive.standing)
 }

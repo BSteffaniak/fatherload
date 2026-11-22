@@ -4520,8 +4520,13 @@ strata.
 
 ### Descent probe
 
-`--balance-report --only descent` on the real registry (default seed): Descent III ends at
-**27.4 h** before the boss model and inside 22-29 h with it (the test above pins the window).
+`--balance-report --only descent` on the real registry (default seed, this branch): Descent III
+ends at **27.8 h** (§14: 22-29 h; it was 27.4 h with the Bio-Filter bought), the Mind's rewards
+won at the Descent's end, the whole run 75.7 h, every gap between new things 40 minutes or less. The
+Living Dark itself takes 6.3 h of the run (21.5 h to 27.8 h) because the registry's Crust still
+runs long (14.3 h against 5-8 h): once the Crust track's re-pacing lands, the window
+(`the_living_dark_ends_on_the_plans_hours_and_its_gate_is_won_not_bought`) needs a re-check at
+integration.
 
 ### Seams and known limits
 
