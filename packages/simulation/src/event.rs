@@ -1206,6 +1206,31 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    /// The crew read log `log` (1-based) of the Fathers' expedition; `player_id` opened the
+    /// canister (or reached a sealed one that the log before has just opened). Wave 8 story.
+    ExpeditionLogFound {
+        player_id: PlayerId,
+        log: u8,
+    },
+    /// `player_id` reached the canister of log `log` before the log before it was read: it
+    /// stays sealed until then.
+    ExpeditionLogSealed {
+        player_id: PlayerId,
+        log: u8,
+    },
+    /// Echo `echo` (1-based: a radio echo or ghost recording) played as `player_id`'s rig
+    /// reached its depth.
+    ExpeditionEcho {
+        player_id: PlayerId,
+        echo: u8,
+    },
+    /// `player_id` entered an anomaly room of `kind` for the first time (`first_of_kind`: the
+    /// crew had never entered one of that kind).
+    AnomalyEntered {
+        player_id: PlayerId,
+        kind: crate::expedition::anomaly::AnomalyKind,
+        first_of_kind: bool,
+    },
 }
 
 /// What a weapon shot struck.

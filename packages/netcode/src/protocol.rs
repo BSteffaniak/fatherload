@@ -176,6 +176,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `LogisticsCommand::LivingDark` (root axes and the Amber Court's counter),
 ///   `UpgradeLock::Boss` and the Living Dark events 440-459
 ///   (`GameplayEventKind::LivingDark`).
+/// * The Fathers' expedition (story): the `ExpeditionState` world field and `SectionKey::Expedition` section (the
+///   Fathers' expedition logs read, sealed canisters, echoes heard, anomaly rooms entered), the
+///   story events 490-493 (`ExpeditionLogFound`, `ExpeditionLogSealed`, `ExpeditionEcho`,
+///   `AnomalyEntered`), the story `Milestone`s and their `PaintColor` rewards.
 pub const PROTOCOL_VERSION: u8 = 16;
 
 /// One client input frame: the controls and actions for exactly one tick.

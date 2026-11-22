@@ -544,6 +544,8 @@ impl WorldState {
         // Descent II, the Old Deep (Wave 8): doses, machines, jets, storms, tides, the
         // Cathedral Lift and the Star Core (returns at once in worlds without Descents).
         self.advance_old_deep(next_tick, &mut output);
+        // The Fathers' expedition: canisters, echoes and anomaly rooms (Wave 8 story).
+        self.advance_expedition(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

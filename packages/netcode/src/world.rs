@@ -351,6 +351,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::LivingDark {
             what, player_id, ..
         } => (440 + what.code() as u32, player_id),
+        // The Fathers' expedition and anomaly rooms (wave 8 story): 490-493.
+        GameplayEventKind::ExpeditionLogFound { player_id, .. } => (490, Some(player_id)),
+        GameplayEventKind::ExpeditionLogSealed { player_id, .. } => (491, Some(player_id)),
+        GameplayEventKind::ExpeditionEcho { player_id, .. } => (492, Some(player_id)),
+        GameplayEventKind::AnomalyEntered { player_id, .. } => (493, Some(player_id)),
     }
 }
 

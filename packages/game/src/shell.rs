@@ -744,6 +744,14 @@ pub enum SoundCue {
     FleshSquelch,
     HiveChime,
     MindRoar,
+    /// Dov Halloran on the drop line: a voice through static (wave 8 story).
+    RadioEcho,
+    /// One of Dov's ghost recordings: a voice off an old tape.
+    GhostVoice,
+    /// An expedition log's cipher canister opening.
+    LogCanister,
+    /// Stepping into an anomaly room: a slow eerie swell.
+    AnomalyHum,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

@@ -29,6 +29,7 @@ pub mod enemy;
 pub mod entity;
 pub mod environment;
 pub mod event;
+pub mod expedition;
 pub mod explosive;
 pub mod field;
 pub mod fluid;

@@ -293,6 +293,14 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    // The Fathers' expedition (V11, Wave 8 story): its log sites and the anomaly rooms, a pass
+    // of their own after the landmarks and under the builders' cable.
+    let story = crate::expedition::sites::story_stamps(&ctx.settings, &rect);
+    for position in rect.positions() {
+        if let Some(kind) = story.tile_at(position) {
+            chunk_kinds.set(position.x, position.y, kind);
+        }
+    }
     if !ctx.logistics.lifts.is_empty() || !ctx.logistics.outposts.is_empty() {
         // Depth logistics (V11, Wave 7 integration): the outposts' floors and the builders'
         // cable of ancient lifts, over the landmarks.
@@ -347,6 +355,10 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
         })
         .collect();
     for (at, tile) in fluids {
+        // The expedition's rooms stay dry (their floors are basins to the pool rule).
+        if story.covers(at) {
+            continue;
+        }
         if let Some(slot) = chunk_kinds.slot(at.x, at.y) {
             tiles[slot] = tile;
         }

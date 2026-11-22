@@ -113,6 +113,20 @@ cosmetic_enum! {
         Abyss => ("Abyss Blue", false),
         /// Milestone reward (reach the Mantle Storm Zone): molten red and orange.
         Magma => ("Magma", false),
+        /// Milestone reward (read the first expedition log): the Fathers' faded field khaki.
+        Khaki => ("Expedition Khaki", false),
+        /// Milestone reward (read the Crust's logs): Ines Calloway's survey-chalk ochre.
+        Ochre => ("Survey Ochre", false),
+        /// Milestone reward (read the Old Deep's logs): the builders' dark bronze.
+        Bronze => ("Builder Bronze", false),
+        /// Milestone reward (read the Living Dark's logs): a glow-sea bioluminescent teal.
+        Lumen => ("Lumen", false),
+        /// Milestone reward (hear a ghost recording): pale tape-hiss white.
+        Phantom => ("Phantom", false),
+        /// Milestone reward (enter an anomaly room): a deep anomaly violet.
+        Anomaly => ("Anomaly Violet", false),
+        /// Milestone reward (enter every kind of anomaly room): a corrupted magenta-green.
+        Glitch => ("Glitch", false),
     }
 }
 
@@ -476,8 +490,8 @@ mod tests {
     #[test]
     fn options_cycle_both_ways() {
         assert_eq!(PaintColor::Gold.cycled(1), PaintColor::Tangerine);
-        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Magma);
-        assert_eq!(PaintColor::Magma.cycled(1), PaintColor::Gold);
+        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Glitch);
+        assert_eq!(PaintColor::Glitch.cycled(1), PaintColor::Gold);
         assert_eq!(PaintColor::Stealth.cycled(1), PaintColor::Jade);
         assert_eq!(RearAttachment::None.cycled(-1), RearAttachment::Lantern);
     }

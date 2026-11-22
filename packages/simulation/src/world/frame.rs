@@ -170,6 +170,8 @@ impl WorldState {
             // Living Dark state is tiles, ticks and entity ids (Wave 8).
             living_dark: _,
             living_schedule: _,
+            // The expedition's trail is counts and region keys.
+            expedition: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

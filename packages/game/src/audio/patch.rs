@@ -397,6 +397,12 @@ patches! {
     HeartbeatLoop => "loop_heartbeat",
     GlowSeaLoop => "loop_glow_sea",
     MindLoop => "loop_mind",
+    // The Fathers' expedition (wave 8 story), appended at the end so every earlier patch keeps
+    // its seeds.
+    RadioEcho => "radio_echo",
+    GhostVoice => "ghost_voice",
+    LogCanister => "log_canister",
+    AnomalyHum => "anomaly_hum",
 }
 
 /// Playback metadata of a patch.
@@ -733,6 +739,23 @@ impl Patch {
                 .instances(2)
                 .send(0.2)
                 .jitter(0.06, 1.0),
+            // The expedition (wave 8 story): a voice through static or out of an old tape,
+            // which hushes the rest of the mix a little so the words-that-aren't land, and the
+            // anomaly's swell are set pieces; the canister's clack is feedback.
+            Self::RadioEcho | Self::GhostVoice => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.5)
+                .ducking(0.3)
+                .priority(6),
+            Self::LogCanister => PatchInfo::new(Feedback)
+                .instances(1)
+                .send(0.25)
+                .jitter(0.03, 0.8),
+            Self::AnomalyHum => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.0, 0.5),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1287,6 +1310,10 @@ impl Patch {
             Self::HeartbeatLoop => heartbeat_loop(rng),
             Self::GlowSeaLoop => glow_sea_loop(rng),
             Self::MindLoop => mind_loop(rng),
+            Self::RadioEcho => expedition_voice(rng, true),
+            Self::GhostVoice => expedition_voice(rng, false),
+            Self::LogCanister => log_canister(rng),
+            Self::AnomalyHum => anomaly_hum(rng),
         }
     }
 }
@@ -6804,6 +6831,152 @@ fn mind_loop(rng: &mut Rng) -> Vec<f32> {
         );
     }
     out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The Fathers' expedition (wave 8 story)
+// ---------------------------------------------------------------------------------------------
+
+/// Vowel formants `(first, second)` in Hz: a, e, i, o, u.
+const VOWELS: [(f32, f32); 5] = [
+    (780.0, 1_250.0),
+    (520.0, 1_850.0),
+    (330.0, 2_250.0),
+    (540.0, 920.0),
+    (360.0, 820.0),
+];
+
+/// A voice that is not quite words: a buzzing glottal source through two moving formant
+/// filters, syllable by syllable, with a falling sentence contour. `radio` squeezes it into a
+/// telephone band with static bursts and a crushed edge; otherwise it is an old tape: wow and
+/// flutter, hiss and a slow echo (a ghost recording). Deterministic per seed, never words.
+fn expedition_voice(rng: &mut Rng, radio: bool) -> Vec<f32> {
+    let seconds = if radio { 2.2 } else { 2.8 };
+    let pitch = rng.range(105.0, 165.0);
+    let mut syllables: Vec<(f32, f32, usize)> = Vec::new();
+    let mut at = 0.12;
+    for _ in 0..24 {
+        if at >= seconds - 0.35 {
+            break;
+        }
+        let length = rng.range(0.11, 0.24);
+        syllables.push((at, length, rng.index(VOWELS.len())));
+        // Words of two or three syllables, then a breath.
+        at += length
+            + if rng.unit() < 0.3 {
+                rng.range(0.14, 0.26)
+            } else {
+                0.025
+            };
+    }
+    let mut glottis = Osc::new(Wave::Saw);
+    let mut first = Svf::new(FilterMode::BandPass, 600.0, 4.0);
+    let mut second = Svf::new(FilterMode::BandPass, 1_500.0, 5.0);
+    let mut breath = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut hiss = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band_low = Svf::new(FilterMode::HighPass, if radio { 380.0 } else { 160.0 }, 0.7);
+    let mut band_high = Svf::new(
+        FilterMode::LowPass,
+        if radio { 2_700.0 } else { 3_800.0 },
+        0.7,
+    );
+    let mut crush = Decimator::default();
+    let flutter = rng.range(5.5, 7.0);
+    let mut formant = VOWELS[0];
+    let mut out = render(seconds, |t| {
+        let current = syllables
+            .iter()
+            .find(|(start, length, _)| t >= *start && t < start + length + 0.06);
+        let (gate, target) = current.map_or((0.0, formant), |(start, length, vowel)| {
+            let local = t - start;
+            let level = (local / 0.025).min(1.0) * ((start + length + 0.06 - t) / 0.06).min(1.0);
+            (level.clamp(0.0, 1.0), VOWELS[*vowel])
+        });
+        // Formants glide toward the syllable's vowel (no zipper clicks).
+        formant.0 += (target.0 - formant.0) * 0.004;
+        formant.1 += (target.1 - formant.1) * 0.004;
+        // A sentence: rising a touch, then falling at its end; tape wow on the ghost.
+        let contour = 1.0 + 0.08 * sine(t, 0.4) - 0.12 * (t / seconds).powi(2);
+        let wow = if radio {
+            1.0
+        } else {
+            1.0 + 0.012 * sine(t, 0.7) + 0.004 * sine(t, flutter)
+        };
+        let source = glottis.next(pitch * contour * wow) * 0.6 + breath.next() * 0.08;
+        let voiced = first.run(source, formant.0, 4.0) + second.run(source, formant.1, 5.0) * 0.7;
+        let noise_bed = hiss.next() * if radio { 0.05 } else { 0.035 };
+        let sample = band_high.process(band_low.process(voiced * gate + noise_bed));
+        if radio {
+            saturate(crush.process(sample, 2.0), 1.8)
+        } else {
+            sample
+        }
+    });
+    if radio {
+        // Static bursts at the edges and once mid-sentence.
+        for start in [0.0, seconds * rng.range(0.35, 0.6), seconds - 0.18] {
+            let mut burst = Noise::new(NoiseColor::White, rng.next_u64());
+            let mut tone = Svf::new(FilterMode::BandPass, 2_200.0, 0.8);
+            let crackle = render(0.16, |t| tone.process(burst.next()) * perc(t, 0.004, 0.12));
+            mix_into(&mut out, &crackle, start, 0.5);
+        }
+    } else {
+        // The tape's slow echo, and a click as the recorder starts.
+        let mut delay = Delay::new(0.5).with_damping(0.4);
+        for sample in &mut out {
+            *sample += delay.process(*sample, 0.31, 0.35) * 0.45;
+        }
+        let mut click = Noise::new(NoiseColor::White, rng.next_u64());
+        let start = render(0.03, |t| click.next() * perc(t, 0.001, 0.02));
+        mix_into(&mut out, &start, 0.0, 0.4);
+    }
+    out
+}
+
+/// A cipher canister opening: two tumbler clicks, a soft metal clack and a paper rustle.
+fn log_canister(rng: &mut Rng) -> Vec<f32> {
+    let mut out = render(0.25, |t| {
+        partials(
+            t,
+            &[
+                (620.0, 0.5, 0.08),
+                (1_370.0, 0.3, 0.05),
+                (2_210.0, 0.2, 0.03),
+            ],
+        )
+    });
+    for (cutoff, at) in [(3_200.0, 0.0_f32), (3_800.0, 0.07)] {
+        let mut click = Noise::new(NoiseColor::White, rng.next_u64());
+        let mut tone = Svf::new(FilterMode::BandPass, cutoff, 3.0);
+        let tick = render(0.03, |t| tone.process(click.next()) * perc(t, 0.0005, 0.02));
+        mix_into(&mut out, &tick, at, 0.6);
+    }
+    let mut paper = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut shape = Svf::new(FilterMode::BandPass, 2_400.0, 0.9);
+    let rustle = render(0.45, |t| {
+        shape.process(paper.next()) * perc(t, 0.03, 0.3) * 0.4f32.mul_add(sine(t, 23.0).abs(), 0.6)
+    });
+    mix_into(&mut out, &rustle, 0.16, 0.45);
+    out
+}
+
+/// Stepping into an anomaly: a slow detuned swell with a glassy shimmer on top (steady:
+/// nothing pulses fast).
+fn anomaly_hum(rng: &mut Rng) -> Vec<f32> {
+    let root = rng.range(70.0, 90.0);
+    let seconds = 2.4;
+    let mut low = Osc::new(Wave::Saw);
+    let mut detuned = Osc::new(Wave::Saw);
+    let mut fifth = Osc::new(Wave::Triangle);
+    let mut filter = Svf::new(FilterMode::LowPass, 300.0, 1.2);
+    let mut shimmer = Fm::default();
+    render(seconds, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (1.4, 1.0), (seconds, 0.0)]);
+        let cutoff = 1_600.0f32.mul_add(swell, 260.0);
+        let body = low.next(root) + detuned.next(root * 1.012) + fifth.next(root * 1.5) * 0.6;
+        let glass = shimmer.next(root * 16.0, 1.41, 1.5) * 0.12 * swell;
+        filter.run(body * 0.4, cutoff, 1.2) * swell + glass
+    })
 }
 
 #[cfg(test)]

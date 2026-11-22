@@ -279,6 +279,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::CoreWake => Patch::CoreWake,
         SoundCue::DeepLog => Patch::DeepLog,
         SoundCue::BoneCrumble => Patch::BoneCrumble,
+        SoundCue::RadioEcho => Patch::RadioEcho,
+        SoundCue::GhostVoice => Patch::GhostVoice,
+        SoundCue::LogCanister => Patch::LogCanister,
+        SoundCue::AnomalyHum => Patch::AnomalyHum,
     }
 }
 
@@ -845,6 +849,25 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::GlowmotherDefeated { .. } => Some(SoundCue::CreatureDeath),
         // The Living Dark (Wave 8).
         GameplayEventKind::LivingDark { what, .. } => Some(living_dark_cue(*what)),
+        // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
+        // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
+        GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
+        GameplayEventKind::ExpeditionLogSealed { .. } => Some(SoundCue::LeverClunk),
+        GameplayEventKind::ExpeditionEcho { echo, .. } => {
+            let index = echo.saturating_sub(1) as usize;
+            let echoes = &fatherload_simulation::expedition::ECHOES;
+            if index < echoes.len()
+                && matches!(
+                    echoes[index].kind,
+                    fatherload_simulation::expedition::EchoKind::Ghost
+                )
+            {
+                Some(SoundCue::GhostVoice)
+            } else {
+                Some(SoundCue::RadioEcho)
+            }
+        }
+        GameplayEventKind::AnomalyEntered { .. } => Some(SoundCue::AnomalyHum),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1178,7 +1201,11 @@ mod tests {
             | GameplayEventKind::StarCoreBeaten { .. }
             | GameplayEventKind::GlowmotherAwoke { .. }
             | GameplayEventKind::GlowmotherDefeated { .. }
-            | GameplayEventKind::LivingDark { .. } => {}
+            | GameplayEventKind::LivingDark { .. }
+            | GameplayEventKind::ExpeditionLogFound { .. }
+            | GameplayEventKind::ExpeditionLogSealed { .. }
+            | GameplayEventKind::ExpeditionEcho { .. }
+            | GameplayEventKind::AnomalyEntered { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1596,7 +1623,18 @@ mod tests {
                 x: 0,
                 y: 0,
             },
+            GameplayEventKind::ExpeditionLogFound { player_id, log: 1 },
+            GameplayEventKind::ExpeditionLogSealed { player_id, log: 3 },
+            GameplayEventKind::ExpeditionEcho { player_id, echo: 1 },
+            GameplayEventKind::ExpeditionEcho { player_id, echo: 7 },
         ]);
+        for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {
+            events.push(GameplayEventKind::AnomalyEntered {
+                player_id,
+                kind,
+                first_of_kind: true,
+            });
+        }
         for service in fatherload_simulation::logistics::OutpostService::ALL {
             events.push(GameplayEventKind::OutpostServiced {
                 player_id,
@@ -2219,6 +2257,10 @@ mod tests {
             SoundCue::CoreWake,
             SoundCue::DeepLog,
             SoundCue::BoneCrumble,
+            SoundCue::RadioEcho,
+            SoundCue::GhostVoice,
+            SoundCue::LogCanister,
+            SoundCue::AnomalyHum,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

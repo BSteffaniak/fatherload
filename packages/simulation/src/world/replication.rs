@@ -225,6 +225,9 @@ pub enum SectionKey {
     /// The Living Dark (Wave 8): root axes, the Hive's politics, the Mycelial Mind's fight and
     /// the spore clouds' expiries (regrowth travels as terrain ops).
     LivingDark,
+    /// The Fathers' expedition: logs read, sealed canisters, echoes heard, anomaly rooms
+    /// entered (Wave 8 story; the crew shares one journal).
+    Expedition,
 }
 
 impl SectionKey {
@@ -244,7 +247,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 22] = [
+    pub const SHARED: [Self; 23] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -267,6 +270,7 @@ impl SectionKey {
         Self::Logistics,
         Self::OldDeep,
         Self::LivingDark,
+        Self::Expedition,
     ];
 }
 
@@ -298,6 +302,7 @@ pub enum SectionPayload {
     Crust(Box<crate::crust::CrustState>),
     OldDeep(Box<crate::old_deep::OldDeep>),
     LivingDark(Box<crate::living_dark::LivingDark>),
+    Expedition(Box<crate::expedition::ExpeditionState>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -491,6 +496,7 @@ impl WorldState {
             old_deep,
             living_dark,
             living_schedule: _,
+            expedition,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -592,6 +598,7 @@ impl WorldState {
             SectionKey::Crust => SectionPayload::Crust(Box::new(crust.clone())),
             SectionKey::OldDeep => SectionPayload::OldDeep(Box::new(old_deep.clone())),
             SectionKey::LivingDark => SectionPayload::LivingDark(Box::new(living_dark.clone())),
+            SectionKey::Expedition => SectionPayload::Expedition(Box::new(expedition.clone())),
         })
     }
 
@@ -763,6 +770,9 @@ impl WorldState {
             }
             (SectionKey::LivingDark, SectionPayload::LivingDark(living_dark)) => {
                 self.living_dark = *living_dark;
+            }
+            (SectionKey::Expedition, SectionPayload::Expedition(expedition)) => {
+                self.expedition = *expedition;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

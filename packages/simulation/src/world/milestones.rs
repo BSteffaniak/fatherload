@@ -118,6 +118,9 @@ impl WorldState {
                 deepest_band: records.deepest_band.map(usize::from),
                 owns_claim,
                 sky_bands,
+                expedition_logs: self.expedition.found,
+                expedition_echoes: self.expedition.echoes,
+                anomaly_kinds: self.expedition.anomaly_kinds,
             };
             let silent = !player.milestones.primed;
             player.milestones.primed = true;

@@ -74,6 +74,9 @@ mod enemy_tests;
 mod entities;
 #[cfg(test)]
 mod entity_tests;
+pub mod expedition;
+#[cfg(test)]
+mod expedition_tests;
 #[cfg(test)]
 mod explosive_tests;
 #[cfg(test)]
@@ -465,6 +468,10 @@ pub struct WorldState {
     /// the tides). Saved with the world, never hashed or replicated (like the fluids').
     #[serde(default)]
     living_schedule: crate::living_dark::LivingSchedule,
+    /// The Fathers' expedition (Wave 8 story, see [`crate::expedition`]): logs read, sealed
+    /// canisters, echoes heard and anomaly rooms entered, shared by the crew.
+    #[serde(default)]
+    expedition: crate::expedition::ExpeditionState,
 }
 
 impl WorldState {

@@ -89,6 +89,20 @@ pub enum Milestone {
     /// The Act I -> II unlock: tank and intake can cross the dead-air gap
     /// ([`crosses_dead_air`]).
     ActTwoUnlocked,
+    /// Read the first log of the Fathers' expedition (Wave 8 story).
+    TrailFound,
+    /// Read every expedition log of the Crust.
+    ShapedWorld,
+    /// Read every expedition log of the Old Deep.
+    BuildersCellar,
+    /// Read every expedition log of the Living Dark.
+    GrowsInTheDark,
+    /// Heard one of Dov Halloran's ghost recordings.
+    GhostVoices,
+    /// Stepped into an anomaly room.
+    FirstAnomaly,
+    /// Stepped into every kind of anomaly room.
+    EveryAnomaly,
 }
 
 /// A milestone's medal on the trophy shelf.
@@ -307,6 +321,22 @@ pub struct MilestoneFacts {
     /// The bands of the world's sky (`None` without one: the sky gates count only with a sky,
     /// against its own bands).
     pub sky_bands: Option<SkyBands>,
+    /// Expedition logs the crew has read (Wave 8 story; shared by the crew).
+    pub expedition_logs: u8,
+    /// Expedition echoes the crew has heard.
+    pub expedition_echoes: u8,
+    /// Kinds of anomaly room the crew has entered (bits of
+    /// [`crate::expedition::anomaly::AnomalyKind::bit`]).
+    pub anomaly_kinds: u8,
+}
+
+/// Whether a crew with `facts` has read every expedition log of `descent`'s chapter.
+fn chapter_done(facts: &MilestoneFacts, descent: crate::descent::Descent) -> bool {
+    let state = crate::expedition::ExpeditionState {
+        found: facts.expedition_logs,
+        ..crate::expedition::ExpeditionState::default()
+    };
+    state.chapter_read(descent)
 }
 
 /// The core upgrade lines (the ones that reach [`MAX_UPGRADE_LEVEL`]).
@@ -321,7 +351,7 @@ pub const CORE_LINES: [UpgradeKind; 6] = [
 
 impl Milestone {
     /// Every milestone, in progression-screen order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 26] = [
         Self::FirstUpgrade,
         Self::DrillTier5,
         Self::EngineTier5,
@@ -341,6 +371,13 @@ impl Milestone {
         Self::HighFlyer,
         Self::IslandCapableTank,
         Self::ActTwoUnlocked,
+        Self::TrailFound,
+        Self::ShapedWorld,
+        Self::BuildersCellar,
+        Self::GrowsInTheDark,
+        Self::GhostVoices,
+        Self::FirstAnomaly,
+        Self::EveryAnomaly,
     ];
 
     /// Display name.
@@ -366,6 +403,13 @@ impl Milestone {
             Self::HighFlyer => "High Flyer",
             Self::IslandCapableTank => "Island Hopper",
             Self::ActTwoUnlocked => "The Sky Opens",
+            Self::TrailFound => "The Fathers' Trail",
+            Self::ShapedWorld => "The Shaped World",
+            Self::BuildersCellar => "The Builders' Cellar",
+            Self::GrowsInTheDark => "What Grows in the Dark",
+            Self::GhostVoices => "Voices on the Cable",
+            Self::FirstAnomaly => "Something Is Wrong Here",
+            Self::EveryAnomaly => "Cracks in Reality",
         }
     }
 
@@ -394,6 +438,13 @@ impl Milestone {
             Self::ActTwoUnlocked => {
                 "Fit a tank and intake that can cross the dead-air gap to the sky lands."
             }
+            Self::TrailFound => "Read the first log of the Fathers' expedition.",
+            Self::ShapedWorld => "Read every expedition log in the Crust.",
+            Self::BuildersCellar => "Read every expedition log in the Old Deep.",
+            Self::GrowsInTheDark => "Read every expedition log in the Living Dark.",
+            Self::GhostVoices => "Hear one of Dov Halloran's ghost recordings.",
+            Self::FirstAnomaly => "Step into an anomaly room.",
+            Self::EveryAnomaly => "Step into all four kinds of anomaly room.",
         }
     }
 
@@ -415,7 +466,14 @@ impl Milestone {
             | Self::FirstCave
             | Self::FirstVillage
             | Self::FirstKill
-            | Self::FirstClaim => MilestoneGroup::Discoveries,
+            | Self::FirstClaim
+            | Self::TrailFound
+            | Self::ShapedWorld
+            | Self::BuildersCellar
+            | Self::GrowsInTheDark
+            | Self::GhostVoices
+            | Self::FirstAnomaly
+            | Self::EveryAnomaly => MilestoneGroup::Discoveries,
             Self::HighFlyer | Self::IslandCapableTank | Self::ActTwoUnlocked => MilestoneGroup::Sky,
         }
     }
@@ -430,16 +488,23 @@ impl Milestone {
             | Self::FirstVillage
             | Self::FirstKill
             | Self::FirstClaim
-            | Self::HighFlyer => Medal::Bronze,
+            | Self::HighFlyer
+            | Self::TrailFound
+            | Self::FirstAnomaly => Medal::Bronze,
             Self::DrillTier5
             | Self::EngineTier5
             | Self::FirstDeepLayer
-            | Self::IslandCapableTank => Medal::Silver,
+            | Self::IslandCapableTank
+            | Self::ShapedWorld
+            | Self::GhostVoices => Medal::Silver,
             Self::DrillTier10
             | Self::EngineTier10
             | Self::MaxedLine
             | Self::ReachedMachineLayer
-            | Self::ReachedMantle => Medal::Gold,
+            | Self::ReachedMantle
+            | Self::BuildersCellar
+            | Self::GrowsInTheDark
+            | Self::EveryAnomaly => Medal::Gold,
             Self::FullyLoaded | Self::ActTwoUnlocked => Medal::Platinum,
         }
     }
@@ -467,6 +532,13 @@ impl Milestone {
             Self::HighFlyer => &[CosmeticItem::Decal(Decal::Wings)],
             Self::IslandCapableTank => &[CosmeticItem::Flame(FlameColor::Aether)],
             Self::ActTwoUnlocked => &[CosmeticItem::Decal(Decal::Moon)],
+            Self::TrailFound => &[CosmeticItem::Paint(PaintColor::Khaki)],
+            Self::ShapedWorld => &[CosmeticItem::Paint(PaintColor::Ochre)],
+            Self::BuildersCellar => &[CosmeticItem::Paint(PaintColor::Bronze)],
+            Self::GrowsInTheDark => &[CosmeticItem::Paint(PaintColor::Lumen)],
+            Self::GhostVoices => &[CosmeticItem::Paint(PaintColor::Phantom)],
+            Self::FirstAnomaly => &[CosmeticItem::Paint(PaintColor::Anomaly)],
+            Self::EveryAnomaly => &[CosmeticItem::Paint(PaintColor::Glitch)],
         }
     }
 
@@ -528,6 +600,18 @@ impl Milestone {
             Self::ActTwoUnlocked => facts
                 .sky_bands
                 .is_some_and(|bands| crosses_dead_air(player, &bands)),
+            Self::TrailFound => facts.expedition_logs >= 1,
+            Self::ShapedWorld => chapter_done(facts, crate::descent::Descent::Crust),
+            Self::BuildersCellar => chapter_done(facts, crate::descent::Descent::OldDeep),
+            Self::GrowsInTheDark => chapter_done(facts, crate::descent::Descent::LivingDark),
+            Self::GhostVoices => crate::expedition::ECHOES
+                .iter()
+                .take(usize::from(facts.expedition_echoes))
+                .any(|echo| echo.kind == crate::expedition::EchoKind::Ghost),
+            Self::FirstAnomaly => facts.anomaly_kinds != 0,
+            Self::EveryAnomaly => crate::expedition::anomaly::AnomalyKind::ALL
+                .iter()
+                .all(|kind| facts.anomaly_kinds & kind.bit() != 0),
         }
     }
 

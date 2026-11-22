@@ -501,7 +501,8 @@ fn v11_generation_is_deterministic_and_cache_independent() {
 }
 
 /// The chunks the golden digest covers: the town's ground, the middle of every Descent, every
-/// Descent's outpost and gate chamber, the Hollow World cavern and an anomaly room.
+/// Descent's outpost and gate chamber, the Hollow World cavern, an anomaly room, and (Wave 8
+/// story) two expedition log sites and a story anomaly room.
 fn golden_chunks(settings: &WorldSettings) -> Vec<ChunkPosition> {
     let layout = layout(settings);
     let mut chunks = vec![ChunkPosition { x: 3, y: 0 }, ChunkPosition { x: 6, y: 1 }];
@@ -540,6 +541,14 @@ fn golden_chunks(settings: &WorldSettings) -> Vec<ChunkPosition> {
         x: 9,
         y: layout.floor - 1,
     }));
+    // Wave 8 story: the first and last expedition log sites and a story anomaly room.
+    let sites = crate::expedition::sites::sites(settings);
+    for site in [sites.first(), sites.last()].into_iter().flatten() {
+        chunks.push(ChunkPosition::of(site.interior().center()));
+    }
+    if let Some(room) = crate::expedition::anomaly::rooms_with(settings, &layout, &area).first() {
+        chunks.push(ChunkPosition::of(room.interior().center()));
+    }
     chunks
 }
 
@@ -563,8 +572,8 @@ fn v11_generation_is_pinned() {
 
 /// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
 /// pockets, the outposts on the builders' cable and the ancient lifts' carve; Wave 8: the
-/// Living Dark's authored strata, set pieces and living rock).
-const GOLDEN_V11_DIGEST: u64 = 0xf7eb_a7d0_2a09_fff0;
+/// authored Crust, Old Deep and Living Dark, the expedition's log sites and anomaly rooms).
+const GOLDEN_V11_DIGEST: u64 = 0x85a2_29d1_a342_837d;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]

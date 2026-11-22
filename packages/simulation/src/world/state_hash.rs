@@ -213,6 +213,11 @@ impl WorldState {
         if !self.living_dark.is_empty() {
             hash.write_serialized(&self.living_dark);
         }
+        // Absent until the crew finds something of the Fathers' expedition (Wave 8 story), so
+        // older worlds keep their hashes.
+        if !self.expedition.is_empty() {
+            hash.write_serialized(&self.expedition);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

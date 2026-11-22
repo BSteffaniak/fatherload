@@ -116,6 +116,8 @@ impl WorldState {
             // A leaving rig's root axes go with it; the Hive and the Mind belong to the world.
             living_dark,
             living_schedule: _,
+            // The expedition's trail is the crew's, not a player's.
+            expedition: _,
         } = self;
         logistics.forget_transient(player_id);
         crust.forget(player_id);

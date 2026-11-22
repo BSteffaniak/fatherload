@@ -220,6 +220,7 @@ impl WorldState {
             old_deep: crate::old_deep::OldDeep::default(),
             living_dark: crate::living_dark::LivingDark::default(),
             living_schedule: crate::living_dark::LivingSchedule::default(),
+            expedition: crate::expedition::ExpeditionState::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

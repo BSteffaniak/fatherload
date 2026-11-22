@@ -1037,6 +1037,10 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::DeepClaimGranted { player_id }
         | GameplayEventKind::DeepClaimMissing { player_id }
         | GameplayEventKind::LavaTubeEntered { player_id }
+        | GameplayEventKind::ExpeditionLogFound { player_id, .. }
+        | GameplayEventKind::ExpeditionLogSealed { player_id, .. }
+        | GameplayEventKind::ExpeditionEcho { player_id, .. }
+        | GameplayEventKind::AnomalyEntered { player_id, .. }
         | GameplayEventKind::PurchaseCompleted { player_id }
         | GameplayEventKind::CargoChanged { player_id }
         | GameplayEventKind::BombPlaced { player_id }
