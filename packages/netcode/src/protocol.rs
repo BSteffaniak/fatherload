@@ -151,7 +151,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `Logistics` world field and `SectionKey::Logistics` section (lifts, outposts, beacons,
 ///   rides, dives, dive charges, the progression rules), `HazardGear::rig_systems`, the eight
 ///   rig-system `UpgradeKind`s (shop offers 18-25), and the logistics events 390-399.
-pub const PROTOCOL_VERSION: u8 = 15;
+///
+/// Version 16 (wave 8 progression; the integrator collapses the wave's bumps into one):
+/// * `LogisticsCommand::{OutpostUpgrade, Craft}` (the deep shops and workshops),
+///   `ItemKind::Layer(Stratum)` (layer resources in bays, drops and events),
+///   `UpgradeKind::{PressureRating, Headlamp}` (shop offers 26-27), `HazardGear::
+///   {pressure_rating, headlamp}` in loadouts, and `Logistics::{felt_systems, haul_descent}`
+///   in the logistics section. No new events.
+pub const PROTOCOL_VERSION: u8 = 16;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

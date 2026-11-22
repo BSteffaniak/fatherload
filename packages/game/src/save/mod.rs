@@ -110,7 +110,16 @@ const SAVE_SLOTS: usize = 3;
 ///   outposts and claims, beacons, rides and dives in progress, dive charges, outpost homes,
 ///   the progression rules), `HazardGear::rig_systems`, and built lift floors in the terrain
 ///   diffs.
-pub const SAVE_VERSION: u32 = 13;
+///
+/// 14 (expansion wave 8 progression; the integrator collapses the wave's bumps into one); every
+/// new field has a serde default and every new enum variant is appended, so version 8 to 13
+/// files load as is:
+///
+/// * The Descent ladders: `HazardGear::{pressure_rating, headlamp}` and their shop lines.
+/// * Layer resources (`ItemKind::Layer(Stratum)`) in bays and drops.
+/// * The crew's felt rig systems and each player's haul Descent
+///   (`logistics.felt_systems`, `logistics.haul_descent`).
+pub const SAVE_VERSION: u32 = 14;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -385,9 +394,9 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 to 12 files have the current layout minus serde-defaulted wave 3 to 7
+        // Version 8 to 13 files have the current layout minus serde-defaulted wave 3 to 8
         // fields.
-        8..=12 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        8..=13 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)
@@ -1671,7 +1680,7 @@ mod tests {
         ));
     }
 
-    /// Wave 6 QA: a file of every supported save format (1 to 13) loads, plays two minutes with
+    /// Wave 6 QA: a file of every supported save format (1 to 14) loads, plays two minutes with
     /// the mining bot, saves, reloads as it was saved, and its rigs are sane (the capacity curve
     /// catch-up applied, fuel and cargo within their capacities).
     #[test]
@@ -1766,10 +1775,26 @@ mod tests {
             (10, as_version(&streamed, 10, &with_wave7(&["tombs"]))),
             (11, as_version(&streamed, 11, &with_wave7(&[]))),
             (12, as_version(&streamed, 12, &with_wave7(&[]))),
-            (13, as_version(&streamed, SAVE_VERSION, &[])),
-            // A Deep Descent world (generator V11, a floating frame, logistics sites) in the
-            // current format.
-            (13, as_version(&deep, SAVE_VERSION, &[])),
+            (
+                13,
+                as_version(
+                    &streamed,
+                    13,
+                    &["logistics.felt_systems", "logistics.haul_descent"],
+                ),
+            ),
+            (14, as_version(&streamed, SAVE_VERSION, &[])),
+            // A Deep Descent world (generator V11, a floating frame, logistics sites) in format
+            // 13 and in the current format.
+            (
+                13,
+                as_version(
+                    &deep,
+                    13,
+                    &["logistics.felt_systems", "logistics.haul_descent"],
+                ),
+            ),
+            (14, as_version(&deep, SAVE_VERSION, &[])),
         ];
         for (version, json) in files {
             let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));
