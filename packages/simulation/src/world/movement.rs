@@ -156,7 +156,19 @@ impl WorldState {
         let grounded = authoritative_player_collides(&self.terrain, player.x, player.y + 2.0);
         // Altitude physics (F6): thin air, wind, updrafts and gravity fields. Standard (and
         // so the classic path, bit for bit) everywhere but a V8 world's sky.
-        let environment = crate::environment::environment_at(&settings, player.x, player.y);
+        let mut environment = crate::environment::environment_at(&settings, player.x, player.y);
+        // Free lift is rationed like sky fuel (`milestone::free_lift_share`): a laden rig
+        // that cannot cross the dead-air gap is too heavy for the updraft.
+        if environment.updraft > 0.0
+            && let Some(bands) = crate::worldgen::sky::bands_of(&settings)
+        {
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "altitudes are a few thousand rows"
+            )]
+            let altitude = (-player.y / TILE_SIZE).floor() as i32;
+            environment.updraft *= crate::milestone::free_lift_share(player, altitude, &bands);
+        }
         let thin_air = !environment.is_standard();
         let efficiency = if thin_air {
             environment.thrust_efficiency(player.hazard_gear.altitude_intake)
@@ -242,11 +254,11 @@ impl WorldState {
                 clippy::cast_precision_loss,
                 reason = "pixel positions map to tiles; stream speeds are small integers"
             )]
-            let jet = crate::worldgen::sky::jet_stream_at(
+            let jet = crate::environment::jet_stream_in_air(
                 &settings,
                 (player.x / TILE_SIZE).floor() as i32,
                 (player.y / TILE_SIZE).floor() as i32,
-            ) as f32;
+            );
             if jet == 0.0 {
                 driven
             } else {

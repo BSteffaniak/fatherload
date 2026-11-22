@@ -6,12 +6,12 @@
 //! step, so they replicate, predict and replay like any other event and need no saved state.
 
 use crate::{
-    environment::environment_at,
+    environment::{environment_at, jet_stream_in_air},
     event::{GameplayEventKind, TickOutput},
     ids::PlayerId,
     sky::SkyBand,
     terrain::TILE_SIZE,
-    worldgen::sky::{jet_stream_at, updraft_at, vent_updraft_at},
+    worldgen::sky::{updraft_at, vent_updraft_at},
 };
 
 use super::WorldState;
@@ -66,15 +66,24 @@ impl WorldState {
                 band: to_band,
             });
         }
-        // Classic updrafts and (V9) island vents.
-        let lift =
-            |x: i32, row: i32| updraft_at(settings, x, row) + vent_updraft_at(settings, x, row);
-        if lift(column(before.0), from_row) == 0 && lift(column(player.x), to_row) > 0 {
+        // Classic updrafts and (V9) island vents that really lift this rig (free lift stops
+        // at the dead-air gap, `environment::gap_lift_share`, and lets go of a laden rig that
+        // cannot cross it, `milestone::free_lift_share`).
+        let lift = |x: i32, row: i32| {
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "altitudes are a few thousand rows"
+            )]
+            let share = crate::environment::gap_lift_share(-(row as f32), &bands)
+                * crate::milestone::free_lift_share(player, -row, &bands);
+            share > 0.0 && updraft_at(settings, x, row) + vent_updraft_at(settings, x, row) > 0
+        };
+        if !lift(column(before.0), from_row) && lift(column(player.x), to_row) {
             output.push_event(GameplayEventKind::UpdraftCaught { player_id });
         }
-        // V9 jet streams.
-        if jet_stream_at(settings, column(before.0), from_row) == 0
-            && jet_stream_at(settings, column(player.x), to_row) != 0
+        // V9 jet streams (none inside the gap).
+        if jet_stream_in_air(settings, column(before.0), from_row) == 0.0
+            && jet_stream_in_air(settings, column(player.x), to_row) != 0.0
         {
             output.push_event(GameplayEventKind::JetStreamCaught { player_id });
         }

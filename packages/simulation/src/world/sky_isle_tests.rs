@@ -386,6 +386,261 @@ fn buoys_never_open_the_dead_air_gap() {
     );
 }
 
+/// Every point under updraft columns, vents and jet streams of a wide strip of the V9 sky
+/// whose air reaches up to the dead-air gap: `(tile, raw lift, raw stream)`.
+fn free_lift_near_the_gap() -> Vec<(TilePosition, i32, i32)> {
+    let settings = settings();
+    let strip = TileRect {
+        min: TilePosition {
+            x: -60_000,
+            y: -(BANDS.dead_air + 400),
+        },
+        max: TilePosition {
+            x: 60_000,
+            y: -(BANDS.dead_air - sky::winds::VENT_RISE_ROWS - 300),
+        },
+    };
+    let near = |y: i32| -y >= BANDS.dead_air - environment::LIFT_FADE_ROWS;
+    let mut points = std::collections::BTreeSet::new();
+    for updraft in sky::updrafts_touching(&settings, &strip) {
+        let x = i32::midpoint(updraft.rect.min.x, updraft.rect.max.x);
+        for y in (updraft.rect.min.y..=updraft.rect.max.y).filter(|y| near(*y)) {
+            points.insert(TilePosition { x, y });
+        }
+    }
+    for land in sky::lands_touching(&settings, &strip) {
+        if let Some(vent) = land.content().and_then(|content| content.vent) {
+            for y in (vent.y - sky::winds::VENT_RISE_ROWS..vent.y).filter(|y| near(*y)) {
+                points.insert(TilePosition { x: vent.x, y });
+            }
+        }
+    }
+    for stream in sky::jet_streams_touching(&settings, &strip) {
+        let x = i32::midpoint(stream.rect.min.x, stream.rect.max.x);
+        for y in (stream.rect.min.y..=stream.rect.max.y).filter(|y| near(*y)) {
+            points.insert(TilePosition { x, y });
+        }
+    }
+    points
+        .into_iter()
+        .map(|tile| {
+            let lift = sky::updraft_at(&settings, tile.x, tile.y)
+                + sky::vent_updraft_at(&settings, tile.x, tile.y);
+            (tile, lift, sky::jet_stream_at(&settings, tile.x, tile.y))
+        })
+        .collect()
+}
+
+#[test]
+fn free_lift_never_reaches_into_the_dead_air_gap() {
+    // Updraft tops, island vents and jet stream ribbons of the highest isles stop under the
+    // gap; should any reach it, none of it lifts or carries a rig there: free lift fades over
+    // the rows under the gap's floor and stops at it, and no stream runs inside the gap.
+    let settings = settings();
+    let points = free_lift_near_the_gap();
+    for (tile, lift, _) in points {
+        let env = environment::environment_at(
+            &settings,
+            pixel(tile.x),
+            (tile.y as f32 + 0.5) * TILE_SIZE,
+        );
+        if -tile.y >= BANDS.dead_air {
+            assert!(
+                env.updraft.abs() < f32::EPSILON,
+                "{tile:?} lifts in the gap"
+            );
+            assert!(
+                environment::jet_stream_in_air(&settings, tile.x, tile.y).abs() < f32::EPSILON,
+                "{tile:?} streams in the gap"
+            );
+        } else {
+            assert!(env.updraft <= lift as f32 + 1e-3);
+        }
+    }
+    let share = |rows: i32| environment::gap_lift_share(rows as f32, &BANDS);
+    assert!((share(BANDS.dead_air - environment::LIFT_FADE_ROWS) - 1.0).abs() < f32::EPSILON);
+    assert!(share(BANDS.dead_air - environment::LIFT_FADE_ROWS / 2) < 1.0);
+    assert!(share(BANDS.dead_air).abs() < f32::EPSILON);
+    assert!(share(BANDS.dead_air + 3_000).abs() < f32::EPSILON);
+    assert!((share(BANDS.continents + 10) - 1.0).abs() < f32::EPSILON);
+}
+
+/// A near-gap loadout as a [`Player`] with `fuel` in the tank.
+fn loadout_player(loadout: (u8, u8, u8), fuel: f32) -> Player {
+    let mut player = Player::new(0.0, 0.0);
+    player.fuel_tank_level = loadout.0;
+    player.fuel_capacity = fuel_capacity_for_level(loadout.0);
+    player.fuel = fuel;
+    player.engine_level = loadout.1;
+    player.hazard_gear.altitude_intake = loadout.2;
+    player
+}
+
+#[test]
+fn free_lift_rides_never_open_the_dead_air_gap() {
+    // Riding updrafts and vents costs no fuel, so free lift lets go of a rig that cannot cross
+    // the gap as its tank nears what it would take to climb across from where it is
+    // (`milestone::free_lift_share`). The worst a free ride can do is carry such a rig to the
+    // very top of the free lift holding just under that limit; from there, measured with the
+    // real movement step, no such rig reaches the continents, so `crosses_dead_air` stays
+    // honest with free lift. (And from the middle of the archipelago too.)
+    let column = open_column();
+    let top_lift = free_lift_near_the_gap()
+        .into_iter()
+        .filter(|(_, lift, _)| *lift > 0)
+        .map(|(tile, _, _)| -tile.y)
+        .max()
+        .unwrap_or(BANDS.dead_air - environment::LIFT_FADE_ROWS)
+        .min(BANDS.dead_air);
+    let middle = i32::midpoint(BANDS.archipelago, BANDS.dead_air);
+    let mut measured = 0;
+    for (t, tank) in TANK_TIERS.iter().enumerate() {
+        for (e, engine) in ENGINE_TIERS.iter().enumerate() {
+            for (i, intake) in INTAKE_TIERS.iter().enumerate() {
+                let loadout = (*tank, *engine, *intake);
+                let player = loadout_player(loadout, 0.0);
+                if crosses_dead_air(&player, &BANDS) || CLIMB_CEILINGS[t][e][i] < 2_500 {
+                    continue;
+                }
+                let capacity = player.fuel_capacity;
+                for from in [top_lift, middle] {
+                    let limit = crate::milestone::free_lift_fuel_limit(&player, from, &BANDS)
+                        .expect("rationed in the island bands");
+                    // The most fuel free lift still carries here (any share at all).
+                    let carried = limit.min(capacity);
+                    let reached =
+                        fuel_left_at(loadout, column, from, carried, BANDS.dead_air_reach_rows());
+                    assert!(
+                        reached.is_none(),
+                        "tank {tank} engine {engine} intake {intake}: {carried} fuel carried \
+                         free to {from} rows crosses the gap"
+                    );
+                    // At the limit free lift lets go; well short of it, it pushes in full.
+                    let laden = loadout_player(loadout, limit);
+                    assert!(
+                        crate::milestone::free_lift_share(&laden, from, &BANDS).abs()
+                            < f32::EPSILON
+                    );
+                    let short =
+                        (-capacity * 1.01).mul_add(crate::milestone::FREE_LIFT_FUEL_MARGIN, limit);
+                    if short >= 0.0 {
+                        let light = loadout_player(loadout, short);
+                        assert!(
+                            (crate::milestone::free_lift_share(&light, from, &BANDS) - 1.0).abs()
+                                < f32::EPSILON
+                        );
+                    }
+                    measured += 1;
+                }
+            }
+        }
+    }
+    assert!(measured > 20, "only {measured} loadouts measured");
+    // Rigs that cross anyway ride with any tank, and so does a stock rig (far short).
+    let crosser = loadout_player((15, 15, 6), fuel_capacity_for_level(15));
+    assert!(crosses_dead_air(&crosser, &BANDS));
+    assert!(
+        (crate::milestone::free_lift_share(&crosser, middle, &BANDS) - 1.0).abs() < f32::EPSILON
+    );
+    let stock = loadout_player((1, 1, 0), fuel_capacity_for_level(1));
+    assert!((crate::milestone::free_lift_share(&stock, middle, &BANDS) - 1.0).abs() < f32::EPSILON);
+}
+
+/// A strong updraft column in the middle of the archipelago with no land in it: its centre
+/// column and the tile row a rig starts at (a third of the way up).
+fn open_updraft() -> (i32, i32) {
+    let settings = settings();
+    let middle = i32::midpoint(BANDS.archipelago, BANDS.dead_air);
+    let rect = TileRect {
+        min: TilePosition {
+            x: -40_000,
+            y: -(middle + 600),
+        },
+        max: TilePosition {
+            x: 40_000,
+            y: -(middle - 600),
+        },
+    };
+    sky::updrafts_touching(&settings, &rect)
+        .into_iter()
+        .filter(|updraft| updraft.strength >= 700 && updraft.rect.max.y - updraft.rect.min.y > 100)
+        .find(|updraft| {
+            let clear = TileRect {
+                min: TilePosition {
+                    x: updraft.rect.min.x - 6,
+                    y: updraft.rect.min.y - 40,
+                },
+                max: TilePosition {
+                    x: updraft.rect.max.x + 6,
+                    y: updraft.rect.max.y + 10,
+                },
+            };
+            sky::lands_touching(&settings, &clear).is_empty()
+        })
+        .map(|updraft| {
+            (
+                i32::midpoint(updraft.rect.min.x, updraft.rect.max.x),
+                updraft.rect.max.y - (updraft.rect.max.y - updraft.rect.min.y) / 3,
+            )
+        })
+        .expect("an open updraft")
+}
+
+/// Coasts (no thrust) `player`'s rig with `fuel` from `(column, row)` for `seconds`; the
+/// highest it rose (rows above the start).
+fn coast(loadout: (u8, u8, u8), fuel: f32, (column, row): (i32, i32), seconds: u32) -> f32 {
+    let mut world = world();
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.fuel_tank_level = loadout.0;
+        rig.fuel_capacity = fuel_capacity_for_level(loadout.0);
+        rig.fuel = fuel;
+        rig.engine_level = loadout.1;
+        rig.hazard_gear.altitude_intake = loadout.2;
+        rig.x = pixel(column);
+        rig.y = (row as f32 + 0.5) * TILE_SIZE;
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    let start = -(row as f32 + 0.5);
+    let mut highest = 0.0_f32;
+    for step in 0..60 * seconds {
+        if step % 32 == 0 {
+            let at = world.player(PLAYER).expect("rig").tile_position(TILE_SIZE);
+            let _ = world.terrain_mut().stream_around(&[at]);
+        }
+        let _ = world.step_authoritative_movement(PLAYER, 0.0, false);
+        let rig = world.player(PLAYER).expect("rig");
+        highest = highest.max(-rig.y / TILE_SIZE - start);
+    }
+    highest
+}
+
+#[test]
+fn an_updraft_will_not_lift_a_laden_rig_that_cannot_cross_the_gap() {
+    let at = open_updraft();
+    let near = (12, 12, 6);
+    let player = loadout_player(near, 0.0);
+    assert!(!crosses_dead_air(&player, &BANDS));
+    let capacity = fuel_capacity_for_level(12);
+    // Laden: the updraft cannot hold it up.
+    let laden = coast(near, capacity, at, 4);
+    assert!(
+        laden < 1.0,
+        "a laden near-crosser rose {laden} rows on free lift"
+    );
+    // Well short of crossing (a sky town's ration here): a free ride up.
+    let ration = crate::milestone::sky_refuel_level(&player, -at.1, Some(&BANDS));
+    let light = coast(near, ration * 0.9, at, 4);
+    assert!(light > 10.0, "a rationed rig rose only {light} rows");
+    // So does a stock rig on a full tank.
+    let stock = coast((1, 1, 0), fuel_capacity_for_level(1), at, 4);
+    assert!(stock > 10.0, "a stock rig rose only {stock} rows");
+    // A rig that crosses anyway rides with a full tank.
+    let crosser = coast((15, 15, 6), fuel_capacity_for_level(15), at, 4);
+    assert!(crosser > 10.0, "a crossing rig rose only {crosser} rows");
+}
+
 #[test]
 fn sky_refuels_never_open_the_dead_air_gap() {
     // Sky towns (and island fuel stations) sell fuel high in the archipelago, just under the

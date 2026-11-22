@@ -212,6 +212,60 @@ pub fn sky_refuel_level(player: &Player, altitude_rows: i32, bands: Option<&SkyB
 /// filled to in the sky ([`sky_refuel_level`]).
 pub const SKY_REFUEL_FLOOR_PERCENT: f32 = 25.0;
 
+/// The share of its tank by which a rig's fuel must fall short of crossing the dead-air gap
+/// from where it is for free lift to push it at full strength ([`free_lift_share`]).
+pub const FREE_LIFT_FUEL_MARGIN: f32 = 0.04;
+
+/// The fuel at and above which free lift lets go of `player`'s rig at `altitude_rows`.
+///
+/// That is the climb table's estimate of what it would take to climb from here to
+/// the continents' floor (`None` where free lift is never rationed: below the low isles,
+/// from the continents up, and for rigs that cross the gap anyway).
+///
+/// The estimate spreads the rig's full tank evenly over its [`climb_reach`] from the climb
+/// harness's start. Fuel per row only grows with altitude (thinner air), so the real climb
+/// from here costs at least this much: a rig held under the limit never holds enough to cross.
+#[must_use]
+pub fn free_lift_fuel_limit(player: &Player, altitude_rows: i32, bands: &SkyBands) -> Option<f32> {
+    if !(bands.low_isles..bands.dead_air_reach_rows()).contains(&altitude_rows)
+        || crosses_dead_air(player, bands)
+    {
+        return None;
+    }
+    // The climb harness starts at rest 100 rows up (`world::climb_tests::START_ALTITUDE_ROWS`).
+    let start = 100;
+    let reach = climb_reach(player, bands);
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "altitudes are a few thousand rows"
+    )]
+    let limit = player.fuel_capacity * (bands.dead_air_reach_rows() - altitude_rows) as f32
+        / (reach - start).max(1) as f32;
+    Some(limit)
+}
+
+/// The share of an updraft's or vent's push that lifts `player`'s rig at `altitude_rows` in a
+/// sky with `bands`.
+///
+/// The Act II gate ([`crosses_dead_air`]) is a full-tank climb from the ground in still air.
+/// Riding updrafts and vents up the archipelago costs no fuel, so a near-crossing rig (tier
+/// 10-12 tanks with top intakes) could ride to the gap's floor with a near-full tank and cross
+/// on it. So free lift lets go of a rig that cannot cross the gap as its tank nears what it
+/// would take to climb across from where it is ([`free_lift_fuel_limit`]): all of the push
+/// while it is [`FREE_LIFT_FUEL_MARGIN`] of its tank short or more, none at the limit (a
+/// laden tank is too heavy for the air). A free ride can therefore never leave such a rig
+/// holding enough to cross. Rigs far short of the gap (every rig of the island bands' own
+/// tiers) ride as before, and so do rigs that cross anyway and everything outside the island
+/// bands.
+#[must_use]
+pub fn free_lift_share(player: &Player, altitude_rows: i32, bands: &SkyBands) -> f32 {
+    let Some(limit) = free_lift_fuel_limit(player, altitude_rows, bands) else {
+        return 1.0;
+    };
+    let margin = player.fuel_capacity.max(1.0) * FREE_LIFT_FUEL_MARGIN;
+    ((limit - player.fuel) / margin).clamp(0.0, 1.0)
+}
+
 /// What the world knows about a player this tick beyond the [`Player`] itself.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MilestoneFacts {

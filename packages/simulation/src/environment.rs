@@ -20,7 +20,10 @@
 //!   crosswinds. An airborne rig moves relative to the air, so it coasts with the wind and
 //!   riding a layer is a free ride sideways.
 //! * **Updrafts** ([`crate::worldgen::sky::updraft_at`]): columns of rising air in the island
-//!   and continent bands, a free ride up.
+//!   and continent bands, a free ride up. **Free lift stops at the dead-air gap**
+//!   ([`gap_lift_share`]): updrafts and vents fade over the [`LIFT_FADE_ROWS`] under the gap's
+//!   floor and nothing lifts (and no jet stream runs, [`jet_stream_in_air`]) inside the gap,
+//!   so only the rig's own tank crosses it and `milestone::crosses_dead_air` stays honest.
 //! * **Gravity fields** ([`gravity_scale`]): normal on the ground and up through the island
 //!   bands, [`CONTINENT_GRAVITY`] in the sky continent band, near zero ([`ORBIT_GRAVITY`]) in
 //!   the orbit band, and [`MOON_GRAVITY`] on and around the Moon. Gravity applies to rigs,
@@ -496,9 +499,11 @@ pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
         )]
         {
             updraft = updraft.max(vent_updraft_at(settings, tile_x, tile_y) as f32);
-            wind_x += jet_stream_at(settings, tile_x, tile_y) as f32;
+            wind_x += jet_stream_in_air(settings, tile_x, tile_y);
         }
     }
+    // Free lift never carries a rig into (or across) the dead-air gap.
+    updraft *= gap_lift_share(altitude, &bands);
     Environment {
         gravity: gravity_scale(settings, tile_x, altitude),
         air_density: air_density(altitude, &bands),
@@ -508,6 +513,56 @@ pub fn environment_at(settings: &WorldSettings, x: f32, y: f32) -> Environment {
         updraft,
         thin_air_burn: thin_air_burn_of(settings.generator),
     }
+}
+
+/// Rows under the dead-air gap's floor over which updrafts and vents fade out
+/// ([`gap_lift_share`]).
+pub const LIFT_FADE_ROWS: i32 = 24;
+
+/// The share of an updraft's or vent's push that reaches `altitude_rows` in a sky with `bands`.
+///
+/// All of it up to [`LIFT_FADE_ROWS`] under the dead-air gap, fading to
+/// none at the gap's floor, none through the gap, and all of it again from the continents'
+/// floor up (their own updrafts lift as before).
+///
+/// The Act II gate (`milestone::crosses_dead_air`) is measured from the ground in still air,
+/// and a sky refuel is rationed to what that climb would hold (`milestone::sky_refuel_level`).
+/// Free lift in the gap would hand a rationed tank the rows it was rationed against: tier
+/// 10-12 tanks rode vents and updraft tops over the gap with fuel to spare.
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "band floors are a few thousand rows"
+)]
+pub fn gap_lift_share(altitude_rows: f32, bands: &SkyBands) -> f32 {
+    let floor = bands.dead_air as f32;
+    if altitude_rows >= bands.continents as f32 {
+        return 1.0;
+    }
+    ((floor - altitude_rows) / LIFT_FADE_ROWS as f32).clamp(0.0, 1.0)
+}
+
+/// The jet stream's speed (px/s, signed) at tile `(tile_x, tile_y)` as the air carries it.
+///
+/// That is [`jet_stream_at`], except that no stream runs inside the dead-air gap (a ribbon over a high
+/// isle's turf that pokes into the gap stops at its floor).
+#[must_use]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "stream speeds are small integers"
+)]
+pub fn jet_stream_in_air(settings: &WorldSettings, tile_x: i32, tile_y: i32) -> f32 {
+    let speed = jet_stream_at(settings, tile_x, tile_y);
+    if speed == 0 {
+        return 0.0;
+    }
+    if let Some(bands) = bands_of(settings) {
+        let altitude = -tile_y;
+        if (bands.dead_air..bands.continents).contains(&altitude) {
+            return 0.0;
+        }
+    }
+    speed as f32
 }
 
 #[cfg(test)]
