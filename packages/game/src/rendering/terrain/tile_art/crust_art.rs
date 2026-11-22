@@ -31,8 +31,10 @@ use super::{
 
 /// Adzed mine timber.
 const TIMBER: Ramp = ramp([SOIL_DARK, SOIL, LOAM, SAND]);
-/// Cabin logs (weathered, greyer than mine timber).
-const LOG: Ramp = ramp([NIGHT, SOIL_DARK, SOIL, LOAM]);
+/// Cabin logs (warm, oiled pine gone dark with age).
+const LOG: Ramp = ramp([SOIL_DARK, RUST, COPPER, SAND]);
+/// Rain-soaked mud.
+const MUD: Ramp = ramp([INK, NIGHT, SOIL_DARK, SOIL]);
 /// Slate sheets.
 const SLATE_SHEET: Ramp = ramp([NIGHT, SLATE_DARK, SLATE, SLATE_LIGHT]);
 /// Basalt columns.
@@ -485,6 +487,10 @@ fn stamp(canvas: &mut TileCanvas, rows: &[&str], top: i32) {
 /// Paints an open tile with a Crust backdrop: the posts of a timber set behind a mine gallery
 /// (and the lantern hung from its beam), or the cracked, glowing walls of a lava tube. Returns
 /// whether it painted.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one backdrop per Crust place: cabin and camp, lava tube, mine gallery"
+)]
 pub(super) fn paint_crust_air(
     canvas: &mut TileCanvas,
     terrain: &Terrain,
@@ -494,6 +500,48 @@ pub(super) fn paint_crust_air(
     let settings = terrain.settings();
     if !crust::crust_rules(settings) {
         return false;
+    }
+    // Inside the lost miner's cabin or the Fathers' camp: a plank wall and a lamp.
+    let indoors = crust::cabin(settings).is_some_and(|cabin| cabin.contains(position))
+        || crust::sinkhole_site(settings).is_some_and(|site| site.camp.contains(position));
+    if indoors {
+        for py in 0..TILE_ART {
+            for px in 0..TILE_ART {
+                let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+                let board = gx.rem_euclid(6);
+                let index = if board == 0 {
+                    index_of(NIGHT)
+                } else if board == 1 {
+                    index_of(RUST)
+                } else if noise(gx * 3, gy, 7, 907) > 0.7
+                    || (gy + gx.div_euclid(6) * 5).rem_euclid(23) == 0
+                {
+                    index_of(SOIL_DARK)
+                } else {
+                    index_of(SOIL)
+                };
+                canvas.set(px, py, index);
+            }
+        }
+        let under_roof = matches!(
+            kind_at(terrain, position.x, position.y - 1),
+            Some(TileKind::Crust(CrustTile::CabinLog))
+        );
+        if under_roof && position.x.rem_euclid(5) == 2 {
+            for (dx, dy, color) in [
+                (0, 2, STEEL_DARK),
+                (-1, 3, AMBER),
+                (0, 3, CREAM),
+                (1, 3, AMBER),
+                (-1, 4, AMBER),
+                (0, 4, GOLD),
+                (1, 4, AMBER),
+                (0, 5, STEEL_DARK),
+            ] {
+                canvas.set(8 + dx, dy, index_of(color));
+            }
+        }
+        return true;
     }
     if crust::lava_tube_at(settings, position.x, position.y) {
         for py in 0..TILE_ART {
@@ -610,4 +658,50 @@ pub(super) fn paint_seep(canvas: &mut TileCanvas, seed: u32) {
             }
         }
     }
+}
+
+/// Rain-soaked mud (the Topsoil of a Deep Descent world): dark, clumpy and wet, with glints
+/// of standing water, and a sheen of puddle on its top face.
+pub(super) fn paint_mud(canvas: &mut TileCanvas, strata: &Strata, edges: Edges) {
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (x, y) = (canvas.origin_x + px, canvas.origin_y + py);
+            let clump = noise(x, y, 5, 921) + f32::from(bayer4(x, y)) / 45.0;
+            // Streaks of standing water catch the light along the clumps' tops.
+            let streak = (y + (noise(x, y, 9, 925) * 6.0) as i32).rem_euclid(5) == 0
+                && noise(x, y, 4, 927) > 0.55;
+            let index = if hash(x / 2, y, 923).is_multiple_of(41) {
+                index_of(SKY_LIGHT)
+            } else if streak {
+                index_of(OCEAN)
+            } else if clump > 0.74 {
+                MUD[3]
+            } else if clump > 0.5 {
+                MUD[2]
+            } else if clump > 0.24 {
+                MUD[1]
+            } else {
+                MUD[0]
+            };
+            canvas.set(px, py, index);
+        }
+    }
+    if edges.up.is_open() {
+        for px in 1..TILE_ART - 1 {
+            let gx = canvas.origin_x + px;
+            canvas.set(
+                px,
+                2,
+                if gx.rem_euclid(7) < 4 {
+                    index_of(SKY)
+                } else {
+                    MUD[3]
+                },
+            );
+            if gx.rem_euclid(11) == 3 {
+                canvas.set(px, 3, index_of(SKY_LIGHT));
+            }
+        }
+    }
+    paint_edges(canvas, strata, edges, MUD[3], MUD[0], false);
 }

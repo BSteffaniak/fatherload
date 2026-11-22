@@ -909,6 +909,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         return canvas;
     }
 
+    if kind == TileKind::Surface(SurfaceMaterial::Mud)
+        && fatherload_simulation::crust::crust_rules(terrain.settings())
+        && up != Cell::Sky
+    {
+        // The Crust's rain-soaked mud looks wet (Wave 8).
+        crust_art::paint_mud(
+            &mut canvas,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
     if let TileKind::Crust(tile) = kind {
         crust_art::paint(
             &mut canvas,
