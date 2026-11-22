@@ -116,14 +116,13 @@ impl BodyParams {
         x: f32,
         y: f32,
     ) -> Self {
-        self.at(terrain, x, y)
-            .in_field(&crate::field::sample_in(
-                zones,
-                terrain.settings(),
-                terrain.frame(),
-                x,
-                y,
-            ))
+        self.at(terrain, x, y).in_field(&crate::field::sample_in(
+            zones,
+            terrain.settings(),
+            terrain.frame(),
+            x,
+            y,
+        ))
     }
 
     /// [`Self::in_environment`] at world pixel `(x, y)` of `terrain`'s world.

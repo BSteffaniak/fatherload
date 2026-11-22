@@ -11,11 +11,7 @@
 //! vacated by rigs that moved away are reused. Only when every slot is occupied does a rig spawn
 //! on the least crowded slot. Placement is O(slots tried x players) at join time, never per tick.
 
-use crate::{
-    ids::PlayerId,
-    player::Player,
-    terrain::TILE_SIZE,
-};
+use crate::{ids::PlayerId, player::Player, terrain::TILE_SIZE};
 
 use super::{
     WorldState,

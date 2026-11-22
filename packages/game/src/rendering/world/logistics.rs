@@ -309,10 +309,7 @@ fn draw_outpost(draw: &mut impl RaylibDraw, scene: &LogisticsScene<'_>, outpost:
 }
 
 fn draw_beacon(draw: &mut impl RaylibDraw, scene: &LogisticsScene<'_>, beacon: &DepthBeacon) {
-    let pen = Pen::at(
-        col_px(beacon.at.x),
-        row_px(beacon.at.y),
-    );
+    let pen = Pen::at(col_px(beacon.at.x), row_px(beacon.at.y));
     let accent = scene.accent_of(beacon.owner);
     // A tripod and mast with the owner's band, and a light that pulses.
     pen.rect(draw, 3, T - 2, 10, 2, INK);

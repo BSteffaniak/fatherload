@@ -1,10 +1,7 @@
 //! Deep Descent HUD (generator V11): the "entering <stratum>" banner and the stratum label
 //! beside the depth ruler's marker.
 
-use fatherload_simulation::{
-    terrain::Terrain,
-    worldgen::strata::SKY_ROWS,
-};
+use fatherload_simulation::{terrain::Terrain, worldgen::strata::SKY_ROWS};
 use raylib::prelude::*;
 
 #[allow(

@@ -23,9 +23,9 @@ use crate::{
         OutpostService, TOWN_TRAVEL_CEILING_ROWS, TOWN_TRAVEL_MARGIN, TravelNode, ride_millis,
         scaled_price, sites::LogisticsSites, travel_cost,
     },
+    position::Frame,
     quantize::quantize_simulation_scalar,
     summary::PlayerScopedCommandOutcome,
-    position::Frame,
     terrain::{TILE_SIZE, TileKind, TilePosition},
 };
 
