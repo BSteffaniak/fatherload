@@ -453,6 +453,13 @@ impl SceneStage<'_> {
     fn play(&mut self, seats: usize, arrange: impl FnOnce(&mut WorldState, &[LocalSeat])) {
         let shift = FRAME_SHIFT.with(std::cell::Cell::get);
         let report = self.game.stage_local_world(seats, |world, seats| {
+            // The Fathers' echoes are heard already, so a deep scene shows its own subject
+            // rather than the first echo's card (the expedition scenes set their own journal).
+            world.set_expedition(fatherload_simulation::expedition::ExpeditionState {
+                echoes: u8::try_from(fatherload_simulation::expedition::ECHOES.len())
+                    .unwrap_or(u8::MAX),
+                ..world.expedition().clone()
+            });
             arrange(world, seats);
             if let Some((x, y)) = shift {
                 // Relative to the staged frame (the origin for fixed worlds), keeping whether it

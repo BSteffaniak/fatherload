@@ -37,6 +37,11 @@ const fn settings() -> WorldSettings {
 
 pub const EXPEDITION_SCENES: &[Scene] = &[
     Scene {
+        name: "settlement_memory_cathedral",
+        summary: "Wave 8 integration: arriving at Cathedral Station, its prospectors' camp remembers the Fathers on a story card",
+        setup: memory_scene,
+    },
+    Scene {
         name: "expedition_camp",
         summary: "The Fathers' first camp beside the builders' cable: tent, lamp, sled, stove and the cipher canister waiting on its crate",
         setup: |stage| camp_scene(stage, 1, false),
@@ -276,4 +281,35 @@ fn anomaly_scene(stage: &mut SceneStage<'_>, kind: AnomalyKind) {
     });
     // Past the room's card and the stratum banner: the room and its rule on their own.
     stage.settle(600);
+}
+
+/// The rig at the Old Deep's outpost with the trail read past the Cathedral: the camp's
+/// memory of the Fathers goes up as a card (Wave 8 integration).
+fn memory_scene(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        world.grant_deep_claim();
+        let mut journal = read_up_to(21, 0);
+        journal.echoes = u8::try_from(ECHOES.len()).unwrap_or(u8::MAX);
+        world.set_expedition(journal);
+        let Some(outpost) = world
+            .logistics()
+            .outposts
+            .values()
+            .find(|outpost| outpost.descent == 1)
+            .cloned()
+        else {
+            return;
+        };
+        place_rig(world, player, outpost.column, outpost.floor_row - 1);
+        reveal(
+            world,
+            player,
+            outpost.column - 40..outpost.column + 40,
+            outpost.floor_row - 20..outpost.floor_row + 10,
+        );
+        world.stream_terrain_near_players();
+    });
+    stage.settle(40);
 }

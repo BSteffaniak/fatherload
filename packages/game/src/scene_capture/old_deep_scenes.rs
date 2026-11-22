@@ -461,6 +461,16 @@ fn log_scene(stage: &mut SceneStage<'_>) {
             Stratum::PressureCathedrals,
         )
         .expect("a camp");
+        // The crew has read the trail up to this camp's log, so its canister opens (the
+        // camps hold the expedition's own logs, Wave 8 integration).
+        let log = fatherload_simulation::old_deep::expedition_log_of_camp(sites::camp_log(
+            Stratum::PressureCathedrals,
+        ))
+        .unwrap_or(1);
+        world.set_expedition(fatherload_simulation::expedition::ExpeditionState {
+            found: log - 1,
+            ..world.expedition().clone()
+        });
         place_rig(world, player, cache.x, cache.y - 1);
         finish(
             world,
@@ -546,7 +556,7 @@ pub const OLD_DEEP_SCENES: &[Scene] = &[
     },
     Scene {
         name: "old_deep_fathers_log",
-        summary: "Wave 8 a Fathers' expedition cache drilled open: their log on the banner",
+        summary: "Wave 8 a Fathers' expedition cache drilled open: its expedition log card",
         setup: log_scene,
     },
 ];
