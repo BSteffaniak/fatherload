@@ -292,12 +292,12 @@ pub fn hall(settings: &WorldSettings, place: DeepSettlement) -> Option<(i32, i32
 #[must_use]
 pub fn settlement(settings: &WorldSettings, place: DeepSettlement) -> Option<Settlement> {
     let (ground, first, last) = hall(settings, place)?;
-    let middle = i32::midpoint(first, last);
+    // The plaza (where they lunch, stroll and sleep) spans the hall, so they spread out.
     Some(Settlement::deep_hall(
         place.id(),
         ground,
         (first, last),
-        (middle - 2, middle + 2),
+        (first + 1, last - 1),
         &population(settings.seed, place),
     ))
 }
@@ -365,6 +365,20 @@ mod tests {
                     );
                 }
             }
+            // At work they spread along the hall instead of standing in one heap.
+            let mut columns: Vec<i32> = (0..settlement.residents.len())
+                .filter_map(|index| settlement.stop_at(index, DayTime::at(1, 10, 0)))
+                .map(|stop| settlement.place_column(stop.place))
+                .collect();
+            columns.sort_unstable();
+            columns.dedup();
+            assert!(
+                columns.len() >= 4
+                    && columns.last().copied().unwrap_or(0) - columns[0]
+                        >= (settlement.last_column - settlement.first_column) / 2,
+                "{} works in a heap: {columns:?}",
+                place.name()
+            );
             // Never another kind of settlement.
             assert!(crate::village::village(&settings, place.id()).is_none());
             assert!(!crate::people::camps::is_camp(place.id()));

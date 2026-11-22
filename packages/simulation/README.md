@@ -5848,7 +5848,9 @@ players and join stories like any resident, single-player, split-screen and onli
   from the lift's door, so a rig off the lift meets the counter first.
 - **The Amber Court**: Thrum of the Comb (worker elder), Wrench-Thrice of the Nursery (pump
   tender), Hum-Softly of the Brood (nurse), Mandible of the Guard and the Voice of the Queen,
-  across the Court's hall. They are insects: the game draws them as hive workers half again a
+  across the Court's hall (each works their own stretch of it: `Settlement::deep_hall` spreads
+  the work spots and the plaza spans the hall, so five people never stand in one heap; review
+  fix). They are insects: the game draws them as hive workers half again a
   person's size (banded abdomen, six legs, compound eyes, feelers, mandibles that click as they
   talk, each holding their trade) with portraits of their own, and they keep to their own words
   (no village small talk). Nobody comes out while the Court is hostile. The Court's comb pillars

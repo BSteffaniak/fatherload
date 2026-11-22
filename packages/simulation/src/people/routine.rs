@@ -311,7 +311,7 @@ impl Settlement {
     ) -> Self {
         let homes = vec![None; population.characters.len()];
         let keepers = vec![None; population.characters.len()];
-        Self::assemble(
+        let mut settlement = Self::assemble(
             id,
             ground_row,
             span,
@@ -321,7 +321,19 @@ impl Settlement {
             &homes,
             &keepers,
             true,
-        )
+        );
+        // With no buildings everyone's trade would put them at the hall's middle, five people
+        // in one heap (Wave 9 review): each works their own stretch of the hall instead.
+        let count = i32::try_from(settlement.residents.len())
+            .unwrap_or(1)
+            .max(1);
+        let width = (span.1 - span.0).max(0);
+        for (index, resident) in (0_i32..).zip(settlement.residents.iter_mut()) {
+            if !matches!(resident.work, Work::Roam) {
+                resident.work = Work::Outdoors(span.0 + width * (2 * index + 1) / (2 * count));
+            }
+        }
+        settlement
     }
 
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
