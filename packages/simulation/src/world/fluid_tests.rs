@@ -600,7 +600,7 @@ fn fluid_lake_cost_report() {
         TileKind::Stone,
     );
     fill(&mut world, x0..=x1, y0..=y1, TileKind::Air);
-    let mid = (x0 + x1) / 2;
+    let mid = i32::midpoint(x0, x1);
     pour(&mut world, x0..=mid, y0 + 10..=y1, FluidKind::Water);
     let area = rect(x0 - 1..=x1 + 1, y0 - 1..=y1 + 1);
     let start = volume(&world, area, FluidKind::Water);
