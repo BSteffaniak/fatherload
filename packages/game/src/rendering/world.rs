@@ -45,6 +45,7 @@ mod fluids;
 mod fx;
 mod homes;
 mod lighting;
+mod living_dark;
 mod logistics;
 mod lunar;
 mod night;
@@ -203,6 +204,9 @@ pub(super) struct WorldScene<'a> {
     /// Descent II's live state and set pieces (Wave 8).
     pub old_deep: &'a fatherload_simulation::old_deep::OldDeep,
     pub deep_sites: &'a crate::render_snapshot::DeepSites,
+    /// How much of the screen and world effects the accessibility setting lets through (the
+    /// Flesh Caverns' pulse, Wave 8): 1 full, 0 off.
+    pub effects_strength: f32,
 }
 
 impl WorldScene<'_> {
@@ -347,6 +351,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     fx::draw_lava_glow(draw, scene.terrain, scene.explored, scene.visible, seconds);
     caves::draw_cave_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     crust::draw_crust_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
+    // The Flesh Caverns' walls swell with the heartbeat (Wave 8).
+    living_dark::draw_flesh_pulse(
+        draw,
+        scene.terrain,
+        scene.visible,
+        scene.world_millis,
+        scene.effects_strength,
+    );
     lunar::draw_lunar_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);
     lunar::draw_colony_props(draw, scene.terrain, scene.visible, seconds);
     // Descent II, the Old Deep (Wave 8): glows, jets, rams, belts, valves and the core.
@@ -588,6 +600,21 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
                 .stratum_at(crate::view_frame::frame().tile_at(local.x, local.y))
                 == fatherload_simulation::descent::Stratum::MantleStormZone
         }),
+    );
+    // The Glow Sea's dark: only living lights cut it back (Wave 8).
+    living_dark::draw_glow_sea_darkness(
+        draw,
+        &living_dark::GlowSeaScene {
+            terrain: scene.terrain,
+            visible: scene.visible,
+            players: scene.players,
+            pilots: scene.pilots,
+            facings: scene.facings,
+            bombs: scene.bombs,
+            explosions: scene.explosions,
+            enemies: scene.enemies,
+            seconds,
+        },
     );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);

@@ -47,8 +47,10 @@ pub const fn brood_of(kind: EnemyKind) -> EnemyKind {
 
 /// How far a possessed creature senses rigs, tiles.
 const POSSESSED_SENSE_TILES: f32 = 40.0;
+/// Most creatures the Mind holds at once.
+const MAX_THRALLS: usize = 3;
 /// Columns either side of the hollow's centre the nodes hang at.
-const NODE_SPREAD: [i32; MIND_NODES] = [-15, 0, 15];
+const NODE_SPREAD: [i32; MIND_NODES] = [-11, 0, 11];
 
 impl WorldState {
     /// The Living Dark's say on who `state`'s creature notices: `Some(answer)` overrides the
@@ -87,7 +89,7 @@ impl WorldState {
 
     /// Whether the Living Dark lets `kind` spawn roaming (the Swarm breeds no more once broken;
     /// bosses never roam).
-    pub(super) fn living_spawn_allowed(&self, kind: EnemyKind) -> bool {
+    pub(in crate::world) fn living_spawn_allowed(&self, kind: EnemyKind) -> bool {
         match kind {
             EnemyKind::HiveSoldier | EnemyKind::AcidLancer => {
                 self.living_dark.hive.swarm != SwarmState::Broken
@@ -132,12 +134,13 @@ impl WorldState {
     fn grow_nodes(&mut self, hollow: crate::worldgen::TileRect) {
         let frame = self.frame();
         let centre = hollow.center();
+        let floor = crate::worldgen::descent::living::mind_floor_row(&hollow);
         let tier = self.tier_at(centre);
         let mut nodes = Vec::new();
         for spread in NODE_SPREAD {
             let tile = TilePosition {
                 x: centre.x + spread,
-                y: centre.y + if spread == 0 { -5 } else { 1 },
+                y: floor - if spread == 0 { 9 } else { 3 },
             };
             let (x, y) = frame.tile_center(tile);
             let id = self.spawn_enemy_with(EnemyKind::MindNode, (x, y), tier, None, None);
@@ -174,11 +177,21 @@ impl WorldState {
             self.put_mind_to_sleep();
         }
         if !self.living_dark.mind.awake() {
+            // A peaceful world has no creatures, so no Mind to fight: it yields its gate to the
+            // first rig in its hollow.
+            if !self.enemies.difficulty.hostile() {
+                if let Some((player, _)) = inside.first().copied() {
+                    self.mind_fell(centre, Some(player), output);
+                }
+                return;
+            }
             if let Some((player, _)) = inside.first().copied() {
                 let tier = self.tier_at(centre);
+                // It looms over the hollow's floor.
+                let floor = crate::worldgen::descent::living::mind_floor_row(&hollow);
                 let (x, y) = frame.tile_center(TilePosition {
                     x: centre.x,
-                    y: centre.y - 2,
+                    y: floor - 5,
                 });
                 let id = self.spawn_enemy_with(EnemyKind::MycelialMind, (x, y), tier, None, None);
                 self.living_dark.mind.entity = Some(id.get());
@@ -263,6 +276,13 @@ impl WorldState {
     /// The Mind reaches for the nearest free creature within [`MIND_POSSESS_TILES`] of its
     /// hollow's centre; with none near it raises two spore thralls from the hollow's floor.
     fn possess(&mut self, hollow: crate::worldgen::TileRect, output: &mut TickOutput) {
+        let thralls = self
+            .enemies()
+            .filter(|(_, state)| state.phase == POSSESSED_PHASE)
+            .count();
+        if thralls >= MAX_THRALLS {
+            return;
+        }
         let frame = self.frame();
         let centre = hollow.center();
         let (cx, cy) = frame.tile_center(centre);
@@ -281,6 +301,8 @@ impl WorldState {
             .map(|(_, id)| id);
         let possessed = if let Some(id) = target {
             vec![id]
+        } else if thralls + 2 > MAX_THRALLS {
+            Vec::new()
         } else {
             let tier = self.tier_at(centre);
             [(EnemyKind::CapCrawler, -9), (EnemyKind::SporePuffer, 9)]

@@ -269,11 +269,18 @@ fn paint_back(
         })
     };
     let water = water_near(0, -1) || (water_near(-1, 0) && water_near(1, 0));
+    // Outside a cave ecosystem, the Living Dark's own wall stands behind (Wave 8).
+    let living = kind
+        .is_none()
+        .then(|| super::living_art::living_stratum(terrain, position))
+        .flatten();
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
             let index = if water {
                 water_pixel(gx, gy, py + TILE_ART)
+            } else if let Some(stratum) = living {
+                super::living_art::back_pixel(stratum, gx, gy)
             } else {
                 cave_back_pixel(kind, strata, band, gx, gy)
             };
@@ -380,22 +387,58 @@ pub(super) fn paint(
 
 // --- The Living Dark (Wave 8) ----------------------------------------------------------------
 
-/// Living root: gnarled, braided strands with pale bark ridges and moss in the cracks.
+/// One family of root strands at art pixel `(x, y)`: where a strand lies there, how far across
+/// it the pixel is (-1 at its lit top edge to 1 at its shaded underside). Strands run along a
+/// slope, bend with slow noise and swell and thin along their length.
+fn strand(x: i32, y: i32, slope: f32, pitch: f32, seed: u32) -> Option<f32> {
+    let bend = noise(x, y, 16, seed).mul_add(10.0, noise(x, y, 6, seed + 1) * 3.0);
+    let along = (x as f32).mul_add(slope, y as f32) + bend;
+    let cell = (along / pitch).floor();
+    let local = along - cell * pitch;
+    let half = noise(x, cell as i32 * 37, 9, seed + 2).mul_add(2.4, 1.8);
+    let across = local - pitch * 0.5;
+    (across.abs() < half).then(|| across / half)
+}
+
+/// Living root: a tangle of round, sinuous strands, each lit on top and shaded under with an
+/// ink rim, crossing one another over dark soil; pale rootlet hairs and moss in the gaps.
 fn root_pixel(x: i32, y: i32) -> PaletteIndex {
-    // Strands twist diagonally both ways; where they cross the wood is lit.
-    let wave = (noise(x, y, 6, 511) * 6.0) as i32;
-    let a = (x + y + wave).rem_euclid(7);
-    let b = (x - y + wave / 2).rem_euclid(9);
-    if hash(x, y, 513).is_multiple_of(53) {
+    let shade = |t: f32| {
+        if t < -0.75 {
+            index_of(SAND)
+        } else if t < -0.25 {
+            index_of(CLAY)
+        } else if t < 0.45 {
+            index_of(LOAM)
+        } else if t < 0.8 {
+            index_of(SOIL)
+        } else {
+            index_of(INK)
+        }
+    };
+    // The nearer strands (gently sloping) over the farther ones (steeper, darker).
+    if let Some(t) = strand(x, y, 0.35, 11.0, 511) {
+        return shade(t);
+    }
+    if let Some(t) = strand(x, y, -1.4, 13.0, 521) {
+        return if t > 0.6 {
+            index_of(INK)
+        } else if t < -0.3 {
+            index_of(LOAM)
+        } else {
+            index_of(SOIL)
+        };
+    }
+    if hash(x, y, 513).is_multiple_of(23) {
         return index_of(MOSS);
     }
-    match (a, b) {
-        (0, _) | (_, 0) => index_of(SOIL_DARK),
-        (1, 1 | 2) | (2, 1) => index_of(SAND),
-        (1, _) | (_, 1) => index_of(CLAY),
-        (2..=3, _) => index_of(LOAM),
-        _ if noise(x, y, 3, 515) > 0.62 => index_of(LOAM),
-        _ => index_of(SOIL),
+    if hash(x, y, 514).is_multiple_of(17) {
+        return index_of(STONE_LIGHT);
+    }
+    if noise(x, y, 5, 515) > 0.6 {
+        index_of(SOIL_DARK)
+    } else {
+        index_of(NIGHT)
     }
 }
 
@@ -415,23 +458,32 @@ fn charred_pixel(x: i32, y: i32) -> PaletteIndex {
     }
 }
 
-/// Flesh: wet rose meat with dark veins, pale fat and glistening highlights.
+/// Flesh: swollen lobes of dark red meat, each lit on its upper left and wet with a glint,
+/// sunk between maroon folds threaded with darker veins.
 fn flesh_pixel(x: i32, y: i32) -> PaletteIndex {
-    let (near, second, dx, dy) = super::worley(x, y, 7, 531, false);
-    if second - near < 0.8 {
-        // Veins between the lobes.
+    let (near, second, dx, dy) = super::worley(x, y, 8, 531, false);
+    let fold = second - near;
+    if fold < 0.7 {
+        return index_of(NIGHT);
+    }
+    if fold < 1.6 {
         return index_of(MAROON);
     }
-    if hash(x, y, 533).is_multiple_of(47) {
-        return index_of(CREAM);
+    // A vein crossing the lobe.
+    let vein = (noise(x, y, 9, 537) * 14.0) as i32;
+    if (x + y / 2 + vein).rem_euclid(13) == 0 && noise(x, y, 5, 539) > 0.45 {
+        return index_of(PLUM);
     }
     let lit = dx + dy;
-    let body = noise(x, y, 4, 535) + f32::from(bayer4(x, y)) / 50.0;
-    if lit <= -4 {
-        index_of(PINK)
-    } else if body > 0.66 {
-        index_of(PINK)
-    } else if body > 0.3 {
+    if lit <= -5 && hash(x, y, 533).is_multiple_of(5) {
+        // A wet glint on the swell.
+        return index_of(PINK);
+    }
+    if lit <= -3 {
+        index_of(ROSE)
+    } else if lit >= 4 {
+        index_of(MAROON)
+    } else if noise(x, y, 4, 535) + f32::from(bayer4(x, y)) / 50.0 > 0.62 {
         index_of(ROSE)
     } else {
         index_of(RED)

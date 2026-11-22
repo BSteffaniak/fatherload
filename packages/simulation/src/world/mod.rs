@@ -98,6 +98,8 @@ mod home_tests;
 mod homes;
 mod import;
 mod living_dark;
+#[cfg(test)]
+mod living_dark_tests;
 mod logistics;
 #[cfg(test)]
 mod logistics_tests;

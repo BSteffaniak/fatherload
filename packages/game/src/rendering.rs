@@ -775,6 +775,11 @@ impl GameRenderer {
             crust: snapshot.crust,
             old_deep: snapshot.old_deep,
             deep_sites: &snapshot.deep_sites,
+            effects_strength: match snapshot.effects {
+                crate::screen_fx::EffectsIntensity::Full => 1.0,
+                crate::screen_fx::EffectsIntensity::Reduced => 0.45,
+                crate::screen_fx::EffectsIntensity::Off => 0.0,
+            },
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

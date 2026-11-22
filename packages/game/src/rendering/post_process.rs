@@ -17,8 +17,8 @@
 //!    orientation the other way around the rig into a view-sized texture, so the world turns
 //!    around the craft and the craft stays upright on screen.
 //! 3. **Effect pass**: the view-sized picture is drawn onto the screen through one shader
-//!    that runs the stack in order: lensing, wobble / heat haze, pixelation, mirror,
-//!    chromatic aberration, bloom, exposure, the field's light, desaturation, colour grade,
+//!    that runs the stack in order: lensing, wobble / heat haze, pixelation, mirror, blur
+//!    (Wave 8), chromatic aberration, bloom, exposure, the field's light, desaturation, colour grade,
 //!    palette reduction, fog, scanlines, vignette. Every stage costs nothing at level 0, and
 //!    with every level at 0 the pass draws plainly (no shader).
 //!
@@ -95,6 +95,7 @@ struct Locations {
     b: i32,
     c: i32,
     d: i32,
+    e: i32,
     grade: i32,
     fog: i32,
     size: i32,
@@ -127,6 +128,7 @@ impl PostProcess {
                 b: location("uB"),
                 c: location("uC"),
                 d: location("uD"),
+                e: location("uE"),
                 grade: location("uGrade"),
                 fog: location("uFogColor"),
                 size: location("uSize"),
@@ -354,7 +356,7 @@ impl PostProcess {
         let fx = &plan.fx;
         let level = |effect: ScreenEffect| fx.level(effect);
         let vec4 = |values: [f32; 4]| values;
-        let uniforms: [(i32, [f32; 4], i32); 4] = [
+        let uniforms: [(i32, [f32; 4], i32); 5] = [
             (
                 self.locations.a,
                 vec4([
@@ -393,6 +395,11 @@ impl PostProcess {
                     fx.light,
                     plan.art_pixel.max(1.0),
                 ]),
+                4,
+            ),
+            (
+                self.locations.e,
+                vec4([level(ScreenEffect::Blur), 0.0, 0.0, 0.0]),
                 4,
             ),
         ];
@@ -492,6 +499,8 @@ uniform vec4 uB;
 uniform vec4 uC;
 // fog, wobble phase (cycles), light, one art pixel (texels)
 uniform vec4 uD;
+// blur (Wave 8 spore clouds), unused, unused, unused
+uniform vec4 uE;
 uniform vec3 uGrade;
 uniform vec3 uFogColor;
 uniform vec2 uSize;
@@ -529,6 +538,24 @@ void main() {
     vec3 colour = fetch(uv);
     if (uB.w > 0.0) {
         colour = mix(colour, fetch(mirrored), uB.w);
+    }
+    // Blur: a soft twelve-tap ring round the point, wider with the level (spore clouds).
+    if (uE.x > 0.0) {
+        vec2 r = (1.0 + 4.0 * uE.x) * max(uD.w, 1.0) * 0.7 / uSize;
+        vec3 sum = colour;
+        sum += fetch(suv + vec2(r.x, 0.0));
+        sum += fetch(suv - vec2(r.x, 0.0));
+        sum += fetch(suv + vec2(0.0, r.y));
+        sum += fetch(suv - vec2(0.0, r.y));
+        sum += fetch(suv + r * 0.7);
+        sum += fetch(suv - r * 0.7);
+        sum += fetch(suv + vec2(r.x, -r.y) * 0.7);
+        sum += fetch(suv + vec2(-r.x, r.y) * 0.7);
+        sum += fetch(suv + vec2(r.x * 2.0, 0.0));
+        sum += fetch(suv - vec2(r.x * 2.0, 0.0));
+        sum += fetch(suv + vec2(0.0, r.y * 2.0));
+        sum += fetch(suv - vec2(0.0, r.y * 2.0));
+        colour = mix(colour, sum / 13.0, clamp(uE.x * 1.3, 0.0, 1.0));
     }
     // Chromatic aberration: red and blue split outward.
     if (uB.z > 0.0) {
@@ -615,6 +642,7 @@ mod tests {
                 "uB",
                 "uC",
                 "uD",
+                "uE",
                 "uGrade",
                 "uFogColor",
                 "uSize",

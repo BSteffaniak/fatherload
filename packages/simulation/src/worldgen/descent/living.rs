@@ -200,6 +200,13 @@ pub fn mind_hollow(settings: &WorldSettings, layout: &DescentLayout) -> Option<T
     })
 }
 
+/// The floor row of the Mind's hollow (its mycelium floor; the last open row is above it).
+#[must_use]
+pub fn mind_floor_row(hollow: &TileRect) -> i32 {
+    let (_, cy, _, ry) = ellipse(hollow);
+    cy + ry * 7 / 10
+}
+
 /// The fixed stamps (the Court, the matriarch's gallery, the Mind's hollow).
 fn fixed_stamps(settings: &WorldSettings, layout: &DescentLayout) -> Vec<LivingStamp> {
     let mut stamps = Vec::new();
@@ -419,14 +426,17 @@ fn cap_grove(stamp: &LivingStamp, x: i32, y: i32) -> Option<TileKind> {
     // Mushrooms: two to four, spaced across the grove, taller deeper.
     let count = 2 + i32::try_from(stamp.seed % 3).unwrap_or(0);
     let spacing = (rx * 2) / (count + 1);
-    let tall = i32::from(stamp.along) / 140;
+    let tall = i32::from(stamp.along) / 250;
     for index in 0..count {
         let roll = hash2(stamp.seed, SALT_DECOR, index, 0);
         let stem_x = cx - rx + spacing * (index + 1) + roll_range(roll, 0, -1, 1);
-        let height = (roll_range(roll, 8, 3, 6) + tall).min(ry + ry / 2);
+        let height = (roll_range(roll, 8, 2, 4) + tall).min(ry);
         let cap_y = floor - height;
         let half = roll_range(roll, 16, 2, 4) + i32::from(stamp.along) / 400;
-        if y == cap_y && (x - stem_x).abs() <= half {
+        // A domed cap: a narrower crown over the full brim.
+        if (y == cap_y && (x - stem_x).abs() <= half)
+            || (y == cap_y - 1 && (x - stem_x).abs() <= half - 2)
+        {
             return Some(TileKind::Cave(CaveTile::MushroomCap));
         }
         if x == stem_x && y > cap_y && y <= floor {
@@ -582,8 +592,7 @@ fn mind_hollow_tile(stamp: &LivingStamp, x: i32, y: i32, base: TileKind) -> Opti
     if base == TileKind::Cave(CaveTile::RuinPillar) {
         return Some(base);
     }
-    let (_, cy, _, ry) = ellipse(&stamp.bounds);
-    let floor = cy + ry * 7 / 10;
+    let floor = mind_floor_row(&stamp.bounds);
     if inside >= 820 || y > floor {
         return Some(TileKind::Cave(CaveTile::Mycelium));
     }
@@ -663,3 +672,6 @@ pub fn living_tile(
     }
     living_rock(settings, layout, stratum, x, y, base)
 }
+
+#[cfg(test)]
+mod tests;

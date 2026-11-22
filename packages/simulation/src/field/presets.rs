@@ -196,10 +196,9 @@ impl FieldPreset {
             Self::Spores => {
                 let mut profile = neutral.with_screen(
                     none.with(ScreenEffect::Blur, 70)
-                        .with(ScreenEffect::ColourGrade, 60)
-                        .with(ScreenEffect::Fog, 30)
-                        .graded([190, 255, 150])
-                        .fogged([150, 110, 170]),
+                        .with(ScreenEffect::ColourGrade, 70)
+                        .with(ScreenEffect::Chromatic, 15)
+                        .graded([170, 255, 120]),
                 );
                 profile.sound_occlusion = 0.3;
                 profile

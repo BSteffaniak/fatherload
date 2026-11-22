@@ -42,6 +42,7 @@ mod built_art;
 mod cave_art;
 mod crust_art;
 mod deep_art;
+mod living_art;
 mod lunar_art;
 mod poi_art;
 mod sky_art;
@@ -811,7 +812,12 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         } else if crust_art::paint_crust_air(&mut canvas, terrain, position, &strata) {
             // The Crust's mine galleries and lava tubes (Wave 8).
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
-            paint_cave(&mut canvas, &strata, up, left, right);
+            // The Living Dark's open ground shows its stratum's own wall (Wave 8).
+            if let Some(stratum) = living_art::living_stratum(terrain, position) {
+                living_art::paint_back(&mut canvas, stratum, up, left, right);
+            } else {
+                paint_cave(&mut canvas, &strata, up, left, right);
+            }
             // Inside a side-view tomb run: the culture's back wall (WP-TOMBS T28).
             if built_art::paint_backdrop(
                 &mut canvas,

@@ -372,22 +372,9 @@ impl PlayerPresentation {
                 tether: player.weapon.tether.map(|tether| (tether.x, tether.y)),
             }),
             orientation: player.attitude.orientation,
-            lamp_scale: if world.progression_rules().is_descent()
-                && player
-                    .hazard_gear
-                    .has_system(fatherload_simulation::depth_progression::RigSystem::LampII)
-            {
-                fatherload_simulation::depth_progression::LAMP_II_LIGHT_SCALE
-            } else {
-                1.0
-            } * if world.progression_rules().is_descent() {
-                // Wave 8: the Headlamp line widens the lamp a little per tier.
-                fatherload_simulation::depth_progression::headlamp_light_scale(
-                    player.hazard_gear.headlamp,
-                )
-            } else {
-                1.0
-            },
+            // Lamp II's wider beam and the Headlamp line's tiers, and in the Glow Sea a candle
+            // without Lamp II (Wave 8).
+            lamp_scale: world.lamp_scale_for(player_id),
             riding_cart: player.cart.is_some(),
         }
     }
@@ -1111,11 +1098,18 @@ fn view_snapshot(
     )]
     let tile = crate::view_frame::frame().tile_at(focus_x, focus_y);
     let (depth, altitude) = depth_and_altitude(tile.y, world.terrain().surface_row(tile.x));
-    let fields = crate::rendering::old_deep_hud::deep_screen(
+    // The seat's fields (the Bio-Filter sees through spore clouds, Wave 8), with the Old
+    // Deep's screen on top (dose, storm).
+    let mut fields = crate::rendering::old_deep_hud::deep_screen(
         world,
         player_id,
-        world.fields_at(focus_x, focus_y),
+        world.view_fields_for(player_id, focus_x, focus_y),
     );
+    if world.glow_light_at(focus_x, focus_y).is_some() {
+        // The Glow Sea's dark is drawn in the world, cut back by its living lights (Wave 8):
+        // the post-process does not darken the screen again round a lamp of its own.
+        fields.light = 1.0;
+    }
     let roll = if pilot.is_some() {
         0.0
     } else {

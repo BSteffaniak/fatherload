@@ -180,10 +180,16 @@ impl WorldState {
             == crate::depth_progression::ProgressionRules::Descent
             && player.hazard_gear.has_system(RigSystem::LampII);
         let glow_sea = self.deep_stratum_at(player.tile_in(self.frame())) == Some(Stratum::GlowSea);
-        match (glow_sea, lamp_two) {
+        let beam = match (glow_sea, lamp_two) {
             (true, false) => GLOW_SEA_LAMP_SCALE,
             (_, true) => crate::depth_progression::LAMP_II_LIGHT_SCALE,
             (false, false) => 1.0,
+        };
+        // The Headlamp line widens whatever beam the rig has a little per tier (Wave 8).
+        if self.progression_rules().is_descent() {
+            beam * crate::depth_progression::headlamp_light_scale(player.hazard_gear.headlamp)
+        } else {
+            beam
         }
     }
 
@@ -494,6 +500,45 @@ impl WorldState {
             }
         }
         cut
+    }
+
+    // --- Staging (tests, scenes and dev tools) ----------------------------------------------
+
+    /// Releases a spore cloud centred on `tile` before play (scenes, tests).
+    pub fn release_spore_cloud(&mut self, tile: TilePosition) {
+        let mut output = TickOutput::default();
+        self.spawn_spore_cloud(tile, SPORE_CLOUD_MILLIS, None, &mut output);
+    }
+
+    /// Opens every tile of `rect` as if it had been dug this moment, scheduling the Root
+    /// Labyrinth's and the Flesh Caverns' regrowth for it (scenes, tests).
+    pub fn dig_living_tiles(&mut self, rect: TileRect) {
+        let Some(layout) = self.descent_strata_layout() else {
+            return;
+        };
+        self.terrain.start_journal();
+        for position in rect.positions() {
+            let _ = self.terrain.set_kind(position, TileKind::Air);
+        }
+        let mut output = TickOutput::default();
+        let now = self.simulation_tick;
+        self.note_openings(&layout, now, &mut output);
+        let _ = self.terrain.finish_journal();
+    }
+
+    /// Fills every gullet within reach of `tile` to the tide level `per_mille` of high water,
+    /// as the tide would (scenes, tests).
+    pub fn flood_gullets_near(&mut self, tile: TilePosition, per_mille: u32) {
+        let Some(layout) = self.descent_strata_layout() else {
+            return;
+        };
+        let settings = *self.terrain.settings();
+        let area = TileRect::around(tile, TIDE_REACH_TILES, TIDE_REACH_TILES);
+        for stamp in living::stamps_with(&settings, &layout, &area) {
+            if stamp.kind == LivingStampKind::Gullet {
+                self.set_gullet_tide(&stamp, per_mille);
+            }
+        }
     }
 
     // --- Hooks --------------------------------------------------------------------------------
@@ -995,62 +1040,64 @@ impl WorldState {
             output.push_event(living_dark_event(what, None, gullets[0].bounds.center()));
         }
         for stamp in gullets {
-            let Some((gland_row, _)) = stamp.gullet_glands() else {
-                continue;
-            };
-            let bounds = stamp.bounds;
-            // The basin: from the gullet's bottom up to its high water.
-            let floor = bounds.max.y;
-            let height = bounds.height();
-            let high = height * TIDE_HIGH_PERMILLE / 1_000;
-            #[allow(clippy::cast_possible_wrap, reason = "per mille")]
-            let surface = floor - (high * level as i32) / 1_000;
-            let _ = gland_row;
-            let key = bounds.min;
-            let applied = self.living_schedule.tides.get(&key).copied();
-            #[allow(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "rows"
-            )]
-            let wanted = (floor - surface) as u16;
-            if applied == Some(wanted) {
-                continue;
-            }
-            self.living_schedule.tides.insert(key, wanted);
-            let mut woke = false;
-            for y in bounds.min.y..=floor {
-                for x in bounds.min.x..=bounds.max.x {
-                    let position = TilePosition { x, y };
-                    let Some(tile) = self.terrain.tile(position) else {
-                        continue;
-                    };
-                    if y > surface {
-                        // Below the tide: open air in the gullet fills with acid.
-                        if tile.kind == TileKind::Air
-                            && living::stamp_tile(&stamp, x, y, TileKind::Stone)
-                                == Some(TileKind::Air)
-                        {
-                            let _ = self
-                                .terrain
-                                .set_kind(position, TileKind::Fluid(FluidKind::Acid));
-                            woke = true;
-                        }
-                    } else if tile.kind == TileKind::Fluid(FluidKind::Acid) {
-                        // Above it the glands drink the acid back.
-                        let _ = self.terrain.set_kind(position, TileKind::Air);
+            self.set_gullet_tide(&stamp, level);
+        }
+    }
+
+    /// Raises or lowers `stamp`'s (a gullet's) acid to `level` per mille of its high water:
+    /// open air under the surface fills with acid, acid above it drains (the glands drink it).
+    fn set_gullet_tide(&mut self, stamp: &living::LivingStamp, level: u32) {
+        let bounds = stamp.bounds;
+        // The basin: from the gullet's bottom up to its high water.
+        let floor = bounds.max.y;
+        let high = bounds.height() * TIDE_HIGH_PERMILLE / 1_000;
+        #[allow(clippy::cast_possible_wrap, reason = "per mille")]
+        let surface = floor - (high * level.min(1_000) as i32) / 1_000;
+        let key = bounds.min;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "rows"
+        )]
+        let wanted = (floor - surface) as u16;
+        if self.living_schedule.tides.get(&key).copied() == Some(wanted) {
+            return;
+        }
+        self.living_schedule.tides.insert(key, wanted);
+        let mut woke = false;
+        for y in bounds.min.y..=floor {
+            for x in bounds.min.x..=bounds.max.x {
+                let position = TilePosition { x, y };
+                let Some(tile) = self.terrain.tile(position) else {
+                    continue;
+                };
+                if y > surface {
+                    if tile.kind == TileKind::Air
+                        && living::stamp_tile(stamp, x, y, TileKind::Stone) == Some(TileKind::Air)
+                    {
+                        let _ = self
+                            .terrain
+                            .set_kind(position, TileKind::Fluid(FluidKind::Acid));
                         woke = true;
                     }
+                } else if tile.kind == TileKind::Fluid(FluidKind::Acid) {
+                    let _ = self.terrain.set_kind(position, TileKind::Air);
+                    woke = true;
                 }
             }
-            if woke {
-                self.wake_fluids(bounds.expanded(1));
-            }
+        }
+        if woke {
+            self.wake_fluids(bounds.expanded(1));
         }
     }
 
     /// The Mind fell: the gate opens and every rig of the crew gets the Bio-Filter and Lamp II.
-    fn mind_fell(&mut self, tile: TilePosition, by: Option<PlayerId>, output: &mut TickOutput) {
+    pub(super) fn mind_fell(
+        &mut self,
+        tile: TilePosition,
+        by: Option<PlayerId>,
+        output: &mut TickOutput,
+    ) {
         let nodes = std::mem::take(&mut self.living_dark.mind.nodes);
         for node in nodes {
             self.entities.despawn(crate::entity::EntityId(node));
