@@ -181,7 +181,8 @@ impl WorldState {
             .cloned()
             .unwrap_or_default();
         let mechanic_level = self.mechanic_levels.get(&player_id).copied().unwrap_or(0);
-        let immune = self.damage_immune();
+        // A dive charge's plunge lands without crash damage (Part III F10).
+        let immune = self.damage_immune() || self.logistics.is_diving(player_id);
         let god_mode = self.is_test_mode();
         let thrift = self.player_blessing(player_id) == Some(crate::village::BlessingKind::Thrift);
         let settings = *self.terrain.settings();

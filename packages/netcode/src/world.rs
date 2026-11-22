@@ -299,6 +299,17 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::FluidReacted { .. } => (381, None),
         GameplayEventKind::RigSubmerged { player_id, .. } => (382, Some(player_id)),
         GameplayEventKind::RigSurfaced { player_id, .. } => (383, Some(player_id)),
+        // Depth logistics (wave 7, Part III F10): 390-399.
+        GameplayEventKind::LiftRideStarted { player_id, .. } => (390, Some(player_id)),
+        GameplayEventKind::LiftArrived { player_id, .. } => (391, Some(player_id)),
+        GameplayEventKind::LiftRestored { player_id, .. } => (392, Some(player_id)),
+        GameplayEventKind::LogisticsPlaced { player_id, .. } => (393, Some(player_id)),
+        GameplayEventKind::OutpostReached { player_id, .. } => (394, Some(player_id)),
+        GameplayEventKind::OutpostClaimed { player_id, .. } => (395, Some(player_id)),
+        GameplayEventKind::OutpostServiced { player_id, .. } => (396, Some(player_id)),
+        GameplayEventKind::BeaconTravelled { player_id, .. } => (397, Some(player_id)),
+        GameplayEventKind::DiveChargeFired { player_id, .. } => (398, Some(player_id)),
+        GameplayEventKind::DescentGateBlocked { player_id, .. } => (399, Some(player_id)),
     }
 }
 

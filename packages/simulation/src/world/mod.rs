@@ -90,6 +90,9 @@ mod hazards;
 mod home_tests;
 mod homes;
 mod import;
+mod logistics;
+#[cfg(test)]
+mod logistics_tests;
 mod mechanisms;
 mod milestones;
 mod moon;
@@ -429,6 +432,10 @@ pub struct WorldState {
     /// fluid itself lives in the terrain). Saved with the world, never hashed or replicated.
     #[serde(default)]
     fluids: FluidSchedule,
+    /// Depth logistics and the progression rules (Part III F10, see [`crate::logistics`]):
+    /// lifts, outposts, beacons, rides, dives and dive charges.
+    #[serde(default)]
+    logistics: crate::logistics::Logistics,
 }
 
 impl WorldState {

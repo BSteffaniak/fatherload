@@ -725,6 +725,25 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         } => Some(SoundCue::AcidFizz),
         GameplayEventKind::RigSubmerged { .. } => Some(SoundCue::RigSplash),
         GameplayEventKind::RigSurfaced { .. } => Some(SoundCue::Splash),
+        // Depth logistics (Part III F10): the cab's machinery, a new stop on the network, the
+        // counter's own sounds, the jump's warp, the dive's blast and the gate's alarm.
+        GameplayEventKind::LiftRideStarted { .. } => Some(SoundCue::GateGrind),
+        GameplayEventKind::LiftArrived { .. } => Some(SoundCue::LeverClunk),
+        GameplayEventKind::LiftRestored { .. } => Some(SoundCue::MachineCharge),
+        GameplayEventKind::LogisticsPlaced { .. } => Some(SoundCue::BuildPlace),
+        GameplayEventKind::OutpostReached { .. } => Some(SoundCue::VillageArrival),
+        GameplayEventKind::OutpostClaimed { .. } => Some(SoundCue::ClaimStaked),
+        GameplayEventKind::OutpostServiced { service, .. } => Some(match service {
+            fatherload_simulation::logistics::OutpostService::Refuel => SoundCue::FuelPump,
+            fatherload_simulation::logistics::OutpostService::Repair => SoundCue::RepairWeld,
+            fatherload_simulation::logistics::OutpostService::SellCargo => SoundCue::Sell,
+            fatherload_simulation::logistics::OutpostService::BuyDiveCharges
+            | fatherload_simulation::logistics::OutpostService::Claim => SoundCue::Upgrade,
+            fatherload_simulation::logistics::OutpostService::SetHome => SoundCue::HomeSet,
+        }),
+        GameplayEventKind::BeaconTravelled { .. } => Some(SoundCue::UplinkWarp),
+        GameplayEventKind::DiveChargeFired { .. } => Some(SoundCue::ShapedBlast),
+        GameplayEventKind::DescentGateBlocked { .. } => Some(SoundCue::VacuumAlarm),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1012,7 +1031,17 @@ mod tests {
             | GameplayEventKind::FluidBreached { .. }
             | GameplayEventKind::FluidReacted { .. }
             | GameplayEventKind::RigSubmerged { .. }
-            | GameplayEventKind::RigSurfaced { .. } => {}
+            | GameplayEventKind::RigSurfaced { .. }
+            | GameplayEventKind::LiftRideStarted { .. }
+            | GameplayEventKind::LiftArrived { .. }
+            | GameplayEventKind::LiftRestored { .. }
+            | GameplayEventKind::LogisticsPlaced { .. }
+            | GameplayEventKind::OutpostReached { .. }
+            | GameplayEventKind::OutpostClaimed { .. }
+            | GameplayEventKind::OutpostServiced { .. }
+            | GameplayEventKind::BeaconTravelled { .. }
+            | GameplayEventKind::DiveChargeFired { .. }
+            | GameplayEventKind::DescentGateBlocked { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1358,7 +1387,59 @@ mod tests {
                 player_id,
                 kind: fatherload_simulation::fluid::FluidKind::Brine,
             },
+            GameplayEventKind::LiftRideStarted {
+                player_id,
+                shaft: 0,
+                to_row: 10,
+            },
+            GameplayEventKind::LiftArrived {
+                player_id,
+                shaft: 0,
+            },
+            GameplayEventKind::LiftRestored {
+                player_id,
+                shaft: 0,
+            },
+            GameplayEventKind::LogisticsPlaced {
+                player_id,
+                x: 0,
+                y: 0,
+                beacon: true,
+            },
+            GameplayEventKind::OutpostReached {
+                player_id,
+                outpost: 0,
+            },
+            GameplayEventKind::OutpostClaimed {
+                player_id,
+                outpost: 0,
+            },
+            GameplayEventKind::BeaconTravelled {
+                player_id,
+                from_x: 0,
+                from_y: 0,
+                to_x: 0,
+                to_y: 0,
+            },
+            GameplayEventKind::DiveChargeFired {
+                player_id,
+                x: 0,
+                y: 0,
+                rows: 20,
+            },
+            GameplayEventKind::DescentGateBlocked {
+                player_id,
+                descent: 2,
+                system: fatherload_simulation::depth_progression::RigSystem::PressureHull,
+            },
         ]);
+        for service in fatherload_simulation::logistics::OutpostService::ALL {
+            events.push(GameplayEventKind::OutpostServiced {
+                player_id,
+                outpost: 0,
+                service,
+            });
+        }
         for action in [
             fatherload_simulation::enemy::SkyEnemyAction::Swoop,
             fatherload_simulation::enemy::SkyEnemyAction::BoardersDropped,

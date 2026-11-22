@@ -696,6 +696,25 @@ fn preview_lines(
                 format!("The pilot breathes up to {next:.0} tiles from the rig (was {now:.0})")
             });
         }
+        // The Deep Descent's rig systems (Part III F10): one tier, one promise.
+        UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => {
+            if let Some(system) = kind.rig_system() {
+                changes.push(system.description().to_owned());
+                if let Some(descent) = system.gates_descent() {
+                    changes.push(format!(
+                        "Opens Descent {}: without it the depths there crush the rig",
+                        crate::depth_progression::numeral(descent)
+                    ));
+                }
+            }
+        }
         UpgradeKind::Scanner => {
             bars.push(bar(
                 "Scanner",

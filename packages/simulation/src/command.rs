@@ -96,6 +96,9 @@ pub enum PlayerCommand {
     /// floors. Entering, shrines, caches, the stairs and the way out are the use button
     /// ([`crate::pilot::PilotAction::Use`]).
     Tomb(crate::tomb::TombCommand),
+    /// A depth logistics action (Part III F10, see [`crate::logistics::LogisticsCommand`]):
+    /// lifts, beacons and travel, an outpost's counter, dive charges.
+    Logistics(crate::logistics::LogisticsCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

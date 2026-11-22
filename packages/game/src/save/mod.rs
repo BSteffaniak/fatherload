@@ -106,6 +106,10 @@ const SAVE_SLOTS: usize = 3;
 /// * F9 fluids: `TileKind::Fluid` tiles in the terrain diffs (kind code `0xA00 | fluid`, the
 ///   durability byte holding the level) and the world's fluid schedule (`fluids`: the cells
 ///   still moving and the round-robin cursor, so a save mid-flood resumes exactly).
+/// * F10 depth logistics and progression: the world's `logistics` (lifts and their stations,
+///   outposts and claims, beacons, rides and dives in progress, dive charges, outpost homes,
+///   the progression rules), `HazardGear::rig_systems`, and built lift floors in the terrain
+///   diffs.
 pub const SAVE_VERSION: u32 = 13;
 
 /// Persisted user settings.

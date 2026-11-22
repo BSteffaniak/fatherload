@@ -79,6 +79,10 @@ pub struct HazardGear {
     /// [`crate::attitude`]).
     #[serde(default)]
     pub attitude: crate::attitude::AttitudeGear,
+    /// The Deep Descent's rig systems fitted (bits of
+    /// [`crate::depth_progression::RigSystem::bit`]; only Descent worlds sell them).
+    #[serde(default)]
+    pub rig_systems: u8,
 }
 
 impl HazardGear {
@@ -95,7 +99,14 @@ impl HazardGear {
         pressurized_hull: crate::moon::PRESSURIZED_HULL_MAX_LEVEL,
         life_support: crate::moon::LIFE_SUPPORT_MAX_LEVEL,
         attitude: crate::attitude::AttitudeGear::MAXED,
+        rig_systems: u8::MAX,
     };
+
+    /// Whether the Deep Descent rig system `system` is fitted.
+    #[must_use]
+    pub const fn has_system(self, system: crate::depth_progression::RigSystem) -> bool {
+        crate::depth_progression::has_system(self.rig_systems, system)
+    }
 
     /// Cold levels this gear keeps off: the de-icer's cover plus the pressurized hull's
     /// (WP-SKY, [`crate::skycraft`]).

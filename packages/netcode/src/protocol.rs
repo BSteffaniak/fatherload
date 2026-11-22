@@ -147,6 +147,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   keyframes (the durability byte is the fluid's level), the fluid events 380-383
 ///   (`FluidBreached`, `FluidReacted`, `RigSubmerged`, `RigSurfaced`) and
 ///   `TestModeAction::PourTestPools`.
+/// * F10 depth logistics and progression: `PlayerCommand::Logistics(LogisticsCommand)`, the
+///   `Logistics` world field and `SectionKey::Logistics` section (lifts, outposts, beacons,
+///   rides, dives, dive charges, the progression rules), `HazardGear::rig_systems`, the eight
+///   rig-system `UpgradeKind`s (shop offers 18-25), and the logistics events 390-399.
 pub const PROTOCOL_VERSION: u8 = 15;
 
 /// One client input frame: the controls and actions for exactly one tick.

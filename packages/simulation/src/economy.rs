@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    depth_progression::{DESCENT_MAX_UPGRADE_LEVEL, ProgressionRules, RigSystem},
     player::{
         Player, cargo_capacity_for_level, drill_bite, drill_speed, engine_power,
         fuel_capacity_for_level, hull_capacity_for_level,
@@ -153,6 +154,24 @@ pub enum UpgradeKind {
     PressurizedHull,
     /// Moon gear: air for the crew in vacuum and an air line to the pilot on foot.
     LifeSupport,
+    // --- The Deep Descent's rig systems (Part III F10, [`crate::depth_progression`]): one tier
+    // each, sold only on Descent worlds. ------------------------------------------------------
+    /// Rig system: the Pressure Hull (Descent II's reward, opens the Living Dark).
+    DescentPressureHull,
+    /// Rig system: the Bio-Filter (opens the Drowned and Frozen).
+    BioFilter,
+    /// Rig system: Lamp II.
+    LampII,
+    /// Rig system: the Sonar Suite.
+    SonarSuite,
+    /// Rig system: the Cryo Hull (opens the Hollow World).
+    CryoHull,
+    /// Rig system: the Gravity Anchor (opens the Strange Layers).
+    GravityAnchor,
+    /// Rig system: the Phase Drill (opens the Ancients).
+    PhaseDrill,
+    /// Rig system: the Heart Key (opens the Heart).
+    HeartKey,
 }
 
 impl UpgradeKind {
@@ -176,7 +195,73 @@ impl UpgradeKind {
         Self::DeIcer,
         Self::PressurizedHull,
         Self::LifeSupport,
+        Self::DescentPressureHull,
+        Self::BioFilter,
+        Self::LampII,
+        Self::SonarSuite,
+        Self::CryoHull,
+        Self::GravityAnchor,
+        Self::PhaseDrill,
+        Self::HeartKey,
     ];
+
+    /// The Deep Descent rig system this line sells, if it is one.
+    #[must_use]
+    pub const fn rig_system(self) -> Option<RigSystem> {
+        Some(match self {
+            Self::DescentPressureHull => RigSystem::PressureHull,
+            Self::BioFilter => RigSystem::BioFilter,
+            Self::LampII => RigSystem::LampII,
+            Self::SonarSuite => RigSystem::SonarSuite,
+            Self::CryoHull => RigSystem::CryoHull,
+            Self::GravityAnchor => RigSystem::GravityAnchor,
+            Self::PhaseDrill => RigSystem::PhaseDrill,
+            Self::HeartKey => RigSystem::HeartKey,
+            _ => return None,
+        })
+    }
+
+    /// The shop line selling `system`.
+    #[must_use]
+    pub const fn for_rig_system(system: RigSystem) -> Self {
+        match system {
+            RigSystem::PressureHull => Self::DescentPressureHull,
+            RigSystem::BioFilter => Self::BioFilter,
+            RigSystem::LampII => Self::LampII,
+            RigSystem::SonarSuite => Self::SonarSuite,
+            RigSystem::CryoHull => Self::CryoHull,
+            RigSystem::GravityAnchor => Self::GravityAnchor,
+            RigSystem::PhaseDrill => Self::PhaseDrill,
+            RigSystem::HeartKey => Self::HeartKey,
+        }
+    }
+
+    /// Whether this is one of the six core lines (drill, fuel tank, cargo bay, engine, hull,
+    /// radiator): the ones that reach [`MAX_UPGRADE_LEVEL`] and, on Descent worlds, the deep
+    /// tiers up to [`DESCENT_MAX_UPGRADE_LEVEL`].
+    #[must_use]
+    pub const fn is_core(self) -> bool {
+        matches!(
+            self,
+            Self::Drill
+                | Self::FuelTank
+                | Self::CargoBay
+                | Self::Engine
+                | Self::Hull
+                | Self::Radiator
+        )
+    }
+
+    /// Highest level this line reaches under `rules` (the core lines run to
+    /// [`DESCENT_MAX_UPGRADE_LEVEL`] on Descent worlds).
+    #[must_use]
+    pub const fn max_level_for(self, rules: ProgressionRules) -> u8 {
+        if rules.is_descent() && self.is_core() {
+            DESCENT_MAX_UPGRADE_LEVEL
+        } else {
+            self.max_level()
+        }
+    }
 
     /// Highest level this upgrade line reaches.
     #[must_use]
@@ -193,6 +278,14 @@ impl UpgradeKind {
             Self::DeIcer => crate::environment::DE_ICER_MAX_LEVEL,
             Self::PressurizedHull => crate::moon::PRESSURIZED_HULL_MAX_LEVEL,
             Self::LifeSupport => crate::moon::LIFE_SUPPORT_MAX_LEVEL,
+            Self::DescentPressureHull
+            | Self::BioFilter
+            | Self::LampII
+            | Self::SonarSuite
+            | Self::CryoHull
+            | Self::GravityAnchor
+            | Self::PhaseDrill
+            | Self::HeartKey => 1,
             Self::Drill
             | Self::FuelTank
             | Self::CargoBay
@@ -225,7 +318,15 @@ impl UpgradeKind {
             | Self::AltitudeIntake
             | Self::DeIcer
             | Self::PressurizedHull
-            | Self::LifeSupport => 0,
+            | Self::LifeSupport
+            | Self::DescentPressureHull
+            | Self::BioFilter
+            | Self::LampII
+            | Self::SonarSuite
+            | Self::CryoHull
+            | Self::GravityAnchor
+            | Self::PhaseDrill
+            | Self::HeartKey => 0,
         }
     }
 
@@ -250,6 +351,8 @@ pub struct UpgradeOffer {
     pub level: u8,
     pub cost: u32,
     pub description: &'static str,
+    /// The line's top level under the world's rules ([`UpgradeKind::max_level_for`]).
+    pub max_level: u8,
 }
 
 /// Top tier of the core upgrade lines (drill, fuel tank, cargo bay, engine, hull, radiator).
@@ -262,13 +365,25 @@ pub const REFUEL_UNIT_COST: u32 = 1;
 pub const REPAIR_UNIT_COST: u32 = 2;
 
 /// Number of shop upgrade lines (the length of [`upgrade_offers`]).
-pub const UPGRADE_OFFER_COUNT: usize = 18;
+pub const UPGRADE_OFFER_COUNT: usize = 26;
 /// Shop index of the drill mount line.
 pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
+/// The shop's offers for `player` on a classic world ([`upgrade_offers_for`] with
+/// [`ProgressionRules::Classic`]).
 #[must_use]
 pub fn upgrade_offers(player: &Player) -> [UpgradeOffer; UPGRADE_OFFER_COUNT] {
-    UpgradeKind::ALL.map(|kind| offer(kind, current_level(player, kind)))
+    upgrade_offers_for(player, ProgressionRules::Classic)
+}
+
+/// The shop's offers for `player` under `rules` (offer `i` sells line `i` of
+/// [`UpgradeKind::ALL`]).
+#[must_use]
+pub fn upgrade_offers_for(
+    player: &Player,
+    rules: ProgressionRules,
+) -> [UpgradeOffer; UPGRADE_OFFER_COUNT] {
+    UpgradeKind::ALL.map(|kind| offer(kind, current_level(player, kind), rules))
 }
 
 /// The band a crew must have reached before the shop sells the level of `kind` after
@@ -307,6 +422,13 @@ pub const fn upgrade_locked_by(
 /// Why the shop will not sell an upgrade offer yet ([`upgrade_lock`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UpgradeLock {
+    /// A Deep Descent rig system on a classic world: only Descent worlds sell it.
+    DescentOnly,
+    /// Descent worlds: on sale once anyone reaches Descent `index` (a deep core tier).
+    Descent(u8),
+    /// Descent worlds: a rig system on sale once anyone reaches `row` (the last stratum of
+    /// Descent `descent`).
+    Depth { row: i32, descent: u8 },
     /// Late-game gear: on sale once someone reaches this band.
     Band(Band),
     /// Sky and Moon gear (Altitude Intake, De-Icer, Pressurized Hull, Life Support) on a world
@@ -327,6 +449,15 @@ impl UpgradeLock {
             Self::NoSky => {
                 "Sky gear: this world has no sky to climb into (new worlds do)".to_owned()
             }
+            Self::DescentOnly => "Deep Descent gear: only Deep Descent worlds sell it".to_owned(),
+            Self::Descent(index) => format!(
+                "Deep tier: on sale once anyone reaches Descent {}",
+                crate::depth_progression::numeral(index)
+            ),
+            Self::Depth { row, descent } => format!(
+                "Rig system: on sale once anyone reaches the last stratum of Descent {} (row {row})",
+                crate::depth_progression::numeral(descent)
+            ),
         }
     }
 }
@@ -360,13 +491,56 @@ pub const fn upgrade_lock(
     if !upgrade_maxed(offer) && needs_sky(offer.kind) && !settings.generator.has_sky() {
         return Some(UpgradeLock::NoSky);
     }
+    if !upgrade_maxed(offer) && offer.kind.rig_system().is_some() {
+        return Some(UpgradeLock::DescentOnly);
+    }
     None
+}
+
+/// What keeps the shop from selling `offer` under `rules` ([`upgrade_lock`] on classic
+/// worlds).
+///
+/// On Descent worlds the core lines are capped by the deepest Descent reached
+/// ([`crate::depth_progression::core_tier_cap`]) and each rig system goes on sale at its
+/// stratum ([`RigSystem::sold_from_row`]).
+#[must_use]
+pub fn upgrade_lock_for(
+    offer: &UpgradeOffer,
+    settings: &WorldSettings,
+    deepest_row: i32,
+    rules: ProgressionRules,
+) -> Option<UpgradeLock> {
+    if !rules.is_descent() {
+        return upgrade_lock(offer, settings, deepest_row);
+    }
+    if upgrade_maxed(offer) {
+        return None;
+    }
+    let layout = crate::depth_progression::layout_for(settings);
+    if let Some(system) = offer.kind.rig_system() {
+        let row = system.sold_from_row(layout);
+        return (deepest_row < row).then_some(UpgradeLock::Depth {
+            row,
+            descent: system.sold_from_descent(),
+        });
+    }
+    if offer.kind.is_core() {
+        let reached = layout.descent_at(deepest_row);
+        let next = offer.level.saturating_add(1);
+        if next > crate::depth_progression::core_tier_cap(reached) {
+            return Some(UpgradeLock::Descent(
+                crate::depth_progression::descent_for_core_tier(next),
+            ));
+        }
+        return None;
+    }
+    upgrade_lock(offer, settings, deepest_row)
 }
 
 /// Whether `offer` is already at its line's top level (bomb packs never max out).
 #[must_use]
 pub const fn upgrade_maxed(offer: &UpgradeOffer) -> bool {
-    !matches!(offer.kind, UpgradeKind::BombPack) && offer.level >= offer.kind.max_level()
+    !matches!(offer.kind, UpgradeKind::BombPack) && offer.level >= offer.max_level
 }
 
 pub fn refuel_amount(player: &mut Player, fraction: f32) -> u32 {
@@ -428,7 +602,22 @@ pub fn sell_cargo(player: &mut Player) -> u32 {
 /// Returns a [`PurchaseError`] when the offer does not exist, is already maxed, or the player
 /// cannot afford it.
 pub fn buy_upgrade(player: &mut Player, index: usize) -> Result<UpgradeOffer, PurchaseError> {
-    let offers = upgrade_offers(player);
+    buy_upgrade_for(player, index, ProgressionRules::Classic)
+}
+
+/// Buys the upgrade offer at `index` for `player` under `rules` (deep tiers and rig systems on
+/// Descent worlds). Locks are the caller's ([`upgrade_lock_for`]).
+///
+/// # Errors
+///
+/// Returns a [`PurchaseError`] when the offer does not exist, is already maxed, or the player
+/// cannot afford it.
+pub fn buy_upgrade_for(
+    player: &mut Player,
+    index: usize,
+    rules: ProgressionRules,
+) -> Result<UpgradeOffer, PurchaseError> {
+    let offers = upgrade_offers_for(player, rules);
     let Some(offer) = offers.get(index).copied() else {
         return Err(PurchaseError::InvalidSelection);
     };
@@ -499,7 +688,24 @@ fn apply_upgrade(player: &mut Player, kind: UpgradeKind) {
         UpgradeKind::DeIcer => gear.de_icer += 1,
         UpgradeKind::PressurizedHull => gear.pressurized_hull += 1,
         UpgradeKind::LifeSupport => gear.life_support += 1,
+        UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => {
+            if let Some(system) = kind.rig_system() {
+                gear.rig_systems |= system.bit();
+            }
+        }
     }
+}
+
+/// Fits a Deep Descent rig system without the shop (a gate boss's reward, a quest, a scenario).
+pub const fn grant_rig_system(player: &mut Player, system: RigSystem) {
+    player.hazard_gear.rig_systems |= system.bit();
 }
 
 /// Raises every upgrade line of `player` (hazard counters included) to its top level (test
@@ -545,17 +751,46 @@ pub const fn current_level(player: &Player, kind: UpgradeKind) -> u8 {
         UpgradeKind::DeIcer => gear.de_icer,
         UpgradeKind::PressurizedHull => gear.pressurized_hull,
         UpgradeKind::LifeSupport => gear.life_support,
+        UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => match kind.rig_system() {
+            Some(system) if gear.has_system(system) => 1,
+            _ => 0,
+        },
     }
 }
 
-fn offer(kind: UpgradeKind, current_level: u8) -> UpgradeOffer {
+fn offer(kind: UpgradeKind, current_level: u8, rules: ProgressionRules) -> UpgradeOffer {
     UpgradeOffer {
         kind,
         name: upgrade_name(kind),
         level: current_level,
-        cost: upgrade_cost(kind, current_level),
+        cost: upgrade_cost_for(kind, current_level, rules),
         description: upgrade_description(kind),
+        max_level: kind.max_level_for(rules),
     }
+}
+
+/// Price of the tier after `level` on the `kind` line under `rules`.
+///
+/// That is [`upgrade_cost`], with the deep tiers past [`MAX_UPGRADE_LEVEL`] priced by
+/// [`crate::depth_progression::deep_tier_cost`] on Descent worlds.
+#[must_use]
+pub fn upgrade_cost_for(kind: UpgradeKind, level: u8, rules: ProgressionRules) -> u32 {
+    let deep_tier = kind.is_core() && level >= MAX_UPGRADE_LEVEL;
+    if rules.is_descent() && deep_tier {
+        return crate::depth_progression::deep_tier_cost(
+            upgrade_cost(kind, MAX_UPGRADE_LEVEL - 1),
+            level,
+            MAX_UPGRADE_LEVEL,
+        );
+    }
+    upgrade_cost(kind, level)
 }
 
 const fn upgrade_name(kind: UpgradeKind) -> &'static str {
@@ -578,6 +813,14 @@ const fn upgrade_name(kind: UpgradeKind) -> &'static str {
         UpgradeKind::DeIcer => "De-Icer",
         UpgradeKind::PressurizedHull => "Pressurized Hull",
         UpgradeKind::LifeSupport => "Life Support",
+        UpgradeKind::DescentPressureHull => RigSystem::PressureHull.name(),
+        UpgradeKind::BioFilter => RigSystem::BioFilter.name(),
+        UpgradeKind::LampII => RigSystem::LampII.name(),
+        UpgradeKind::SonarSuite => RigSystem::SonarSuite.name(),
+        UpgradeKind::CryoHull => RigSystem::CryoHull.name(),
+        UpgradeKind::GravityAnchor => RigSystem::GravityAnchor.name(),
+        UpgradeKind::PhaseDrill => RigSystem::PhaseDrill.name(),
+        UpgradeKind::HeartKey => RigSystem::HeartKey.name(),
     }
 }
 
@@ -629,6 +872,14 @@ const fn upgrade_description(kind: UpgradeKind) -> &'static str {
             "Air for the crew in vacuum, and an air line that keeps the pilot breathing near \
              the rig on the Moon; each tier reaches further"
         }
+        UpgradeKind::DescentPressureHull => RigSystem::PressureHull.description(),
+        UpgradeKind::BioFilter => RigSystem::BioFilter.description(),
+        UpgradeKind::LampII => RigSystem::LampII.description(),
+        UpgradeKind::SonarSuite => RigSystem::SonarSuite.description(),
+        UpgradeKind::CryoHull => RigSystem::CryoHull.description(),
+        UpgradeKind::GravityAnchor => RigSystem::GravityAnchor.description(),
+        UpgradeKind::PhaseDrill => RigSystem::PhaseDrill.description(),
+        UpgradeKind::HeartKey => RigSystem::HeartKey.description(),
     }
 }
 
@@ -834,6 +1085,14 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
         UpgradeKind::PressurizedHull => &PRESSURIZED_HULL_TIERS,
         UpgradeKind::LifeSupport => &LIFE_SUPPORT_TIERS,
         UpgradeKind::BombPack => return "Pack of 3 Bombs",
+        UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => return upgrade_name(kind),
         UpgradeKind::DrillMount => {
             return if level == 0 {
                 "Gimbal Drill Mount"
@@ -842,9 +1101,79 @@ pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
             };
         }
     };
+    // The deep tiers of Descent worlds (Part III F10) have their own names.
+    if kind.is_core() && level >= MAX_UPGRADE_LEVEL {
+        let deep = usize::from(level - MAX_UPGRADE_LEVEL);
+        let names: &[&'static str] = match kind {
+            UpgradeKind::Drill => &DEEP_DRILL_TIERS,
+            UpgradeKind::FuelTank => &DEEP_FUEL_TANK_TIERS,
+            UpgradeKind::CargoBay => &DEEP_CARGO_BAY_TIERS,
+            UpgradeKind::Engine => &DEEP_ENGINE_TIERS,
+            UpgradeKind::Hull => &DEEP_HULL_TIERS,
+            _ => &DEEP_RADIATOR_TIERS,
+        };
+        return names[deep.min(names.len() - 1)];
+    }
     let next_level = level.saturating_add(1).clamp(1, kind.max_level());
     tiers[usize::from(next_level - 1).min(tiers.len() - 1)]
 }
+
+/// Deep tiers past the classic top on Descent worlds (tiers 16 to 22).
+const DEEP_TIERS: usize = (DESCENT_MAX_UPGRADE_LEVEL - MAX_UPGRADE_LEVEL) as usize;
+const DEEP_DRILL_TIERS: [&str; DEEP_TIERS] = [
+    "Living-Edge Drill",
+    "Tidecutter Drill",
+    "Sunforged Drill",
+    "Paradox Drill",
+    "Builder Drill",
+    "Archivist Drill",
+    "Heartseeker Drill",
+];
+const DEEP_FUEL_TANK_TIERS: [&str; DEEP_TIERS] = [
+    "Spore-Sealed Tank",
+    "Abyssal Bladder Tank",
+    "Inner-Sun Tank",
+    "Folded Tank",
+    "Builder Cell Tank",
+    "Archive Reactor Tank",
+    "Heart-Fed Tank",
+];
+const DEEP_CARGO_BAY_TIERS: [&str; DEEP_TIERS] = [
+    "Chitin Hold",
+    "Pressure Hold",
+    "Hollow Hold",
+    "Paradox Hold",
+    "Builder Vault Hold",
+    "Archive Hold",
+    "Star Hold",
+];
+const DEEP_ENGINE_TIERS: [&str; DEEP_TIERS] = [
+    "Mycelial Engine",
+    "Leviathan Engine",
+    "Solar Engine",
+    "Phase Engine",
+    "Builder Engine",
+    "Colossus Engine",
+    "Heart Engine",
+];
+const DEEP_HULL_TIERS: [&str; DEEP_TIERS] = [
+    "Carapace Hull",
+    "Abyssal Hull",
+    "Sunscale Hull",
+    "Mirror Hull",
+    "Builder Alloy Hull",
+    "Gatekeeper Hull",
+    "Heartshell Hull",
+];
+const DEEP_RADIATOR_TIERS: [&str; DEEP_TIERS] = [
+    "Spore Radiator",
+    "Brine Radiator",
+    "Inner-Sun Radiator",
+    "Time-Sink Radiator",
+    "Builder Radiator",
+    "Archive Radiator",
+    "Heart Radiator",
+];
 
 /// What the next tier of `kind` changes for `player`, as `"now -> next"` (for the shop's
 /// details footer), or `None` for maxed lines and lines without a single headline number.
@@ -922,7 +1251,15 @@ pub fn upgrade_effect(player: &Player, kind: UpgradeKind) -> Option<String> {
         UpgradeKind::Scanner
         | UpgradeKind::BombPack
         | UpgradeKind::DrillMount
-        | UpgradeKind::PressurizedHull => return None,
+        | UpgradeKind::PressurizedHull
+        | UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => return None,
     })
 }
 
@@ -953,6 +1290,16 @@ pub fn upgrade_cost(kind: UpgradeKind, level: u8) -> u32 {
         // void-rated plating, the last purchases before the trip up (12,000 and 30,000 cr).
         UpgradeKind::PressurizedHull => (4_800, 250),
         UpgradeKind::LifeSupport => (8_000, 220),
+        UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => {
+            return kind.rig_system().map_or(0, RigSystem::price);
+        }
     };
     // Tiers bought on this line so far (the stock part is free).
     let bought = level

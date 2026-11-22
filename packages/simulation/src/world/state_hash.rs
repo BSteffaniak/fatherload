@@ -194,6 +194,11 @@ impl WorldState {
         if !self.fields.is_empty() {
             hash.write_serialized(&self.fields);
         }
+        // Absent on a classic world that never used a lift, beacon or outpost (Part III F10),
+        // so older worlds keep their hashes.
+        if !self.logistics.is_empty() {
+            hash.write_serialized(&self.logistics);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

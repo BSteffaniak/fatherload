@@ -65,12 +65,17 @@ impl WorldState {
                 }
             }) {
                 let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
-                let _drill = self.apply_drill_intent(
-                    player_id,
-                    controls.horizontal(),
-                    controls.drill_down,
-                    controls.thrust,
-                );
+                // A rig riding a lift cab (Part III F10) neither drills nor flies: the cab
+                // carries it (`advance_logistics`).
+                let riding = self.logistics.is_riding(player_id);
+                if !riding {
+                    let _drill = self.apply_drill_intent(
+                        player_id,
+                        controls.horizontal(),
+                        controls.drill_down,
+                        controls.thrust,
+                    );
+                }
                 let target = self.active_drills.get(&player_id).map(|drill| drill.target);
                 if target.is_some() && target != previous_target {
                     output.push_event(GameplayEventKind::DrillStarted { player_id });
@@ -83,7 +88,7 @@ impl WorldState {
                 let no_clip = self.no_clip_active();
                 // WP-PILOT: a recalled rig flies itself to its pilot instead.
                 let recalled = on_foot && self.step_rig_recall(player_id, &mut output);
-                let _step = if recalled {
+                let _step = if recalled || riding {
                     None
                 } else if no_clip {
                     // Test-mode no-clip: thrust flies up, drill flies down.
@@ -134,7 +139,10 @@ impl WorldState {
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {
                     PlayerScopedCommandOutcome::UnknownPlayer
-                } else if !self.command_allowed_here(player_id, &action.command) {
+                } else if !self.command_allowed_here(player_id, &action.command)
+                    || (self.logistics.is_riding(player_id)
+                        && matches!(action.command, crate::PlayerCommand::TogglePilot))
+                {
                     // Building services only work at the building (validated here, inside the
                     // authoritative tick, so it holds for remote clients too).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
@@ -147,6 +155,9 @@ impl WorldState {
                 {
                     // Tomb runs (WP-TOMBS, `world/tombs.rs`): relic picks.
                     outcome
+                } else if let crate::PlayerCommand::Logistics(command) = action.command {
+                    // Depth logistics (Part III F10, `world/logistics.rs`): own events.
+                    self.apply_logistics_command(player_id, command, &mut output)
                 } else if let crate::PlayerCommand::Moon(command) = action.command {
                     // The Moon (WP-MOON, `world/moon.rs`): it reports its own events.
                     self.apply_moon_command(player_id, command, &mut output)
@@ -237,6 +248,8 @@ impl WorldState {
             let damage = self.players.get(&player_id).map_or(0.0, |player| {
                 player.hazard_gear.gas_damage(4.0 * delta_seconds)
             });
+            // The Bio-Filter (Descent worlds, Part III F10).
+            let damage = self.bio_filtered(player_id, damage);
             if in_cloud && self.damage_player(player_id, damage) {
                 output.push_event(GameplayEventKind::PlayerDamaged { player_id });
             }
@@ -481,6 +494,8 @@ impl WorldState {
         // WP-HOME: construction in world time, site crews, garage bays.
         self.advance_homes(next_tick, &mut output);
         self.advance_bases(next_tick);
+        // Lift rides, dives, outposts reached and the Descent gates (Part III F10).
+        self.advance_logistics(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

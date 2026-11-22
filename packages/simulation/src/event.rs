@@ -966,6 +966,68 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         kind: crate::fluid::FluidKind,
     },
+    // --- Depth logistics (Part III F10, Wave 7; netcode codes 390-399) -------------------
+    /// A rig boarded lift `shaft`'s cab for the station at `to_row`.
+    LiftRideStarted {
+        player_id: PlayerId,
+        shaft: u32,
+        to_row: i32,
+    },
+    /// A lift cab arrived with its rider.
+    LiftArrived {
+        player_id: PlayerId,
+        shaft: u32,
+    },
+    /// An ancient lift was restored and runs.
+    LiftRestored {
+        player_id: PlayerId,
+        shaft: u32,
+    },
+    /// A lift station (`beacon: false`) or depth beacon went up on tile `(x, y)`.
+    LogisticsPlaced {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        beacon: bool,
+    },
+    /// A rig reached a deep outpost for the first time (it joins the travel network).
+    OutpostReached {
+        player_id: PlayerId,
+        outpost: u32,
+    },
+    /// The crew claimed a deep outpost.
+    OutpostClaimed {
+        player_id: PlayerId,
+        outpost: u32,
+    },
+    /// A counter service at an outpost (`outpost: u32::MAX`: dive charges bought in town).
+    OutpostServiced {
+        player_id: PlayerId,
+        outpost: u32,
+        service: crate::logistics::OutpostService,
+    },
+    /// A rig travelled the beacon network from world pixel `(from_x, from_y)` to `(to_x,
+    /// to_y)`.
+    BeaconTravelled {
+        player_id: PlayerId,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+    },
+    /// A dive charge went off under the rig at world pixel `(x, y)`, cutting `rows` rows.
+    DiveChargeFired {
+        player_id: PlayerId,
+        x: i32,
+        y: i32,
+        rows: u8,
+    },
+    /// A rig went into Descent `descent` without `system` (Descent worlds): the depths crush it.
+    DescentGateBlocked {
+        player_id: PlayerId,
+        descent: u8,
+        system: crate::depth_progression::RigSystem,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1031,7 +1093,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::PilotPack { .. }
         | PlayerCommand::Moon(_)
         | PlayerCommand::Pilot(_)
-        | PlayerCommand::Tomb(_) => {
+        | PlayerCommand::Tomb(_)
+        | PlayerCommand::Logistics(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

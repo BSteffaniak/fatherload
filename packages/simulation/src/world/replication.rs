@@ -210,6 +210,9 @@ pub enum SectionKey {
     Tombs,
     /// Authored field zones (F9: anomaly rooms and dev zones; see [`crate::field`]).
     Fields,
+    /// Depth logistics: lifts, outposts, beacons, rides, dives, dive charges and the
+    /// progression rules (Part III F10; station floors travel as terrain ops).
+    Logistics,
 }
 
 impl SectionKey {
@@ -229,7 +232,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 19] = [
+    pub const SHARED: [Self; 20] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -249,6 +252,7 @@ impl SectionKey {
         Self::Homes,
         Self::Tombs,
         Self::Fields,
+        Self::Logistics,
     ];
 }
 
@@ -276,6 +280,7 @@ pub enum SectionPayload {
     Homes(Box<crate::home::Homes>),
     Tombs(Box<crate::tomb::Tombs>),
     Fields(Box<crate::field::FieldZones>),
+    Logistics(Box<crate::logistics::Logistics>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -461,6 +466,7 @@ impl WorldState {
             tombs,
             fields,
             fluids: _,
+            logistics,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -558,6 +564,7 @@ impl WorldState {
             SectionKey::Homes => SectionPayload::Homes(Box::new(homes.clone())),
             SectionKey::Tombs => SectionPayload::Tombs(Box::new(tombs.clone())),
             SectionKey::Fields => SectionPayload::Fields(Box::new(fields.clone())),
+            SectionKey::Logistics => SectionPayload::Logistics(Box::new(logistics.clone())),
         })
     }
 
@@ -717,6 +724,9 @@ impl WorldState {
             }
             (SectionKey::Fields, SectionPayload::Fields(fields)) => {
                 self.fields = *fields;
+            }
+            (SectionKey::Logistics, SectionPayload::Logistics(logistics)) => {
+                self.logistics = *logistics;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

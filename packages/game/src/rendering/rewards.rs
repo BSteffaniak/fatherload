@@ -17,7 +17,7 @@
 
 use fatherload_simulation::{
     CosmeticItem, Player,
-    economy::{UpgradeKind, current_level, upgrade_offers, upgrade_tier_name},
+    economy::{UpgradeKind, current_level, upgrade_offers_for, upgrade_tier_name},
     milestone::{Medal, Milestone, MilestoneGroup},
     upgrade_preview::{StatBar, UpgradePreview, preview_between, upgrade_preview},
 };
@@ -308,7 +308,15 @@ const fn tiers_with(mut tiers: RigTiers, kind: UpgradeKind, level: u8) -> RigTie
         | UpgradeKind::AltitudeIntake
         | UpgradeKind::DeIcer
         | UpgradeKind::PressurizedHull
-        | UpgradeKind::LifeSupport => {}
+        | UpgradeKind::LifeSupport
+        | UpgradeKind::DescentPressureHull
+        | UpgradeKind::BioFilter
+        | UpgradeKind::LampII
+        | UpgradeKind::SonarSuite
+        | UpgradeKind::CryoHull
+        | UpgradeKind::GravityAnchor
+        | UpgradeKind::PhaseDrill
+        | UpgradeKind::HeartKey => {}
     }
     tiers
 }
@@ -485,7 +493,7 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
         return;
     }
     let player = ui.player;
-    let offers = upgrade_offers(player);
+    let offers = upgrade_offers_for(player, ui.snapshot.logistics.rules);
     let index = ui.seat.selected_menu_item.min(offers.len() - 1);
     let kind = offers[index].kind;
     let now = ui.shell.update_ticks;

@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 
 use crate::{
     command::PlayerCommand,
-    economy::{buy_upgrade, refuel_amount, repair_amount, upgrade_lock, upgrade_offers},
+    economy::{
+        buy_upgrade_for, refuel_amount, repair_amount, upgrade_lock_for, upgrade_offers_for,
+    },
     hazard::{HazardCloud, PlacedBomb},
     ids::{PlayerId, SimulationTick},
     infrastructure::{InfrastructureKind, PlacedInfrastructure},
@@ -334,7 +336,9 @@ impl WorldState {
                 self.scanner_cooldowns.insert(player_id, 1.0);
                 self.scanner_cooldown_deadlines.insert(player_id, deadline);
                 let center = player.tile_in(frame);
-                let _revealed = self.reveal_scanner_area(player_id, center, 4);
+                // The Sonar Suite reaches further (Descent worlds, Part III F10).
+                let reach = 4 + self.sonar_bonus(player_id);
+                let _revealed = self.reveal_scanner_area(player_id, center, reach);
                 let _contacts = self.ping_pois(player_id, center);
                 PlayerScopedCommandOutcome::Applied
             }
@@ -395,19 +399,25 @@ impl WorldState {
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::BuyUpgrade { index } => {
-                if upgrade_offers(player).get(index).is_some_and(|offer| {
-                    upgrade_lock(
-                        offer,
-                        self.terrain.settings(),
-                        self.progression.deepest_tile_reached,
-                    )
-                    .is_some()
-                }) {
+                // Descent worlds sell deep tiers and rig systems (Part III F10).
+                let rules = self.logistics.rules;
+                if upgrade_offers_for(player, rules)
+                    .get(index)
+                    .is_some_and(|offer| {
+                        upgrade_lock_for(
+                            offer,
+                            self.terrain.settings(),
+                            self.progression.deepest_tile_reached,
+                            rules,
+                        )
+                        .is_some()
+                    })
+                {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
                 let credits_before = player.credits;
                 let cargo_before = player.cargo_used();
-                if buy_upgrade(player, index).is_err() {
+                if buy_upgrade_for(player, index, rules).is_err() {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
                 }
                 record_service_transaction(
@@ -445,7 +455,8 @@ impl WorldState {
             | PlayerCommand::People(_)
             | PlayerCommand::Moon(_)
             | PlayerCommand::Home(_)
-            | PlayerCommand::Tomb(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Tomb(_)
+            | PlayerCommand::Logistics(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

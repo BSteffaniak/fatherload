@@ -742,6 +742,8 @@ pub struct RenderSnapshot<'w> {
     pub homes: &'w fatherload_simulation::home::Homes,
     /// Tomb runs, seals, unlocks and summaries (WP-TOMBS).
     pub tombs: &'w fatherload_simulation::tomb::Tombs,
+    /// Lifts, outposts, beacons, rides, dives and the progression rules (Part III F10).
+    pub logistics: &'w fatherload_simulation::logistics::Logistics,
     /// The world day people live by (mood in the talk panel).
     pub people_day: u32,
     /// The base modules that have power this frame.
@@ -867,6 +869,7 @@ impl<'w> RenderSnapshot<'w> {
             people: world.people(),
             homes: world.homes(),
             tombs: world.tombs(),
+            logistics: world.logistics(),
             people_day: world.people_clock().day,
             powered_modules: world
                 .bases()

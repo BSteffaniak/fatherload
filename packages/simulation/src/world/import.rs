@@ -210,6 +210,12 @@ impl WorldState {
             tombs: crate::tomb::Tombs::default(),
             fields: crate::field::FieldZones::default(),
             fluids: super::FluidSchedule::default(),
+            logistics: crate::logistics::Logistics {
+                rules: crate::depth_progression::ProgressionRules::for_generator(
+                    import.terrain.settings().generator,
+                ),
+                ..crate::logistics::Logistics::default()
+            },
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

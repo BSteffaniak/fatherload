@@ -675,6 +675,29 @@ impl Effects {
                     }
                     continue;
                 }
+                // Depth logistics (Part III F10): the dive charge's blast under the rig, and a
+                // shower of sparks at both ends of a beacon jump. Their cues are the rig's own
+                // (below).
+                GameplayEventKind::DiveChargeFired { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (x, y) = (x as f32, y as f32 + 24.0);
+                    self.spawn_blast_debris(x, y);
+                    self.spawn_dust(x, y);
+                }
+                GameplayEventKind::BeaconTravelled {
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    ..
+                } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
+                    let (from_x, from_y, to_x, to_y) =
+                        (from_x as f32, from_y as f32, to_x as f32, to_y as f32);
+                    self.spawn_sparks(from_x, from_y);
+                    self.spawn_sparks(to_x, to_y);
+                    self.spawn_sparks(to_x, to_y - 8.0);
+                }
                 GameplayEventKind::EntityDestroyed { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded event world pixels")]
                     let (x, y) = (x as f32, y as f32);
@@ -993,6 +1016,16 @@ impl Effects {
 const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
     match *kind {
         GameplayEventKind::DrillStarted { player_id }
+        | GameplayEventKind::LiftRideStarted { player_id, .. }
+        | GameplayEventKind::LiftArrived { player_id, .. }
+        | GameplayEventKind::LiftRestored { player_id, .. }
+        | GameplayEventKind::LogisticsPlaced { player_id, .. }
+        | GameplayEventKind::OutpostReached { player_id, .. }
+        | GameplayEventKind::OutpostClaimed { player_id, .. }
+        | GameplayEventKind::OutpostServiced { player_id, .. }
+        | GameplayEventKind::BeaconTravelled { player_id, .. }
+        | GameplayEventKind::DiveChargeFired { player_id, .. }
+        | GameplayEventKind::DescentGateBlocked { player_id, .. }
         | GameplayEventKind::PurchaseCompleted { player_id }
         | GameplayEventKind::CargoChanged { player_id }
         | GameplayEventKind::BombPlaced { player_id }

@@ -123,7 +123,10 @@ impl WorldState {
             let y = (self.frame().rel_row(plot.site.ground_row) - 0.5) * TILE_SIZE;
             return Some((x, y));
         }
-        let home = self.bases.home_of(player_id)?;
+        let Some(home) = self.bases.home_of(player_id) else {
+            // A claimed deep outpost made home (Part III F10).
+            return self.outpost_rescue_home(player_id);
+        };
         let (width, _) = home.kind.footprint();
         let anchor = home.anchor();
         #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]

@@ -9,7 +9,7 @@ use fatherload_simulation::{
     ExplosiveKind, RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
-        UpgradeLock, upgrade_effect, upgrade_lock, upgrade_maxed, upgrade_offers,
+        UpgradeLock, upgrade_effect, upgrade_lock_for, upgrade_maxed, upgrade_offers_for,
         upgrade_tier_name,
     },
     explosive::EXPLOSIVE_OFFERS,
@@ -282,6 +282,10 @@ pub(super) fn draw_repair(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>)
 }
 
 /// The icon for an upgrade line in the shop.
+#[allow(
+    clippy::match_same_arms,
+    reason = "the rig systems borrow the kit's icons until their own art lands"
+)]
 pub(super) const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
     match kind {
         UpgradeKind::Drill => &rig::DRILL_DOWN,
@@ -304,6 +308,15 @@ pub(super) const fn upgrade_icon(kind: UpgradeKind) -> &'static SpriteDef {
             &crate::rendering::pixel_art::sprites::moon::PRESSURIZED_HULL
         }
         UpgradeKind::LifeSupport => &crate::rendering::pixel_art::sprites::moon::LIFE_SUPPORT,
+        // The Deep Descent's rig systems (Part III F10), placeholder icons from the kit.
+        UpgradeKind::DescentPressureHull => &icons::PRESSURE_BRACING,
+        UpgradeKind::BioFilter => &icons::GAS_SCRUBBER,
+        UpgradeKind::LampII => &icons::SCANNER,
+        UpgradeKind::SonarSuite => &icons::SCANNER,
+        UpgradeKind::CryoHull => &icons::DE_ICER,
+        UpgradeKind::GravityAnchor => &menu_icons::GEAR,
+        UpgradeKind::PhaseDrill => &rig::DRILL_DOWN,
+        UpgradeKind::HeartKey => &icons::HEAT_SHIELD,
     }
 }
 
@@ -311,11 +324,12 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
     let credits = ui.player.credits;
     let settings = ui.snapshot.terrain.settings();
     let deepest = ui.snapshot.progression.deepest_tile_reached;
-    upgrade_offers(ui.player)
+    let rules = ui.snapshot.logistics.rules;
+    upgrade_offers_for(ui.player, rules)
         .iter()
         .map(|offer| {
             let icon = upgrade_icon(offer.kind);
-            let max = offer.kind.max_level();
+            let max = offer.max_level;
             if upgrade_maxed(offer) {
                 return Offer::new(
                     icon,
@@ -348,10 +362,13 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                 || offer.description.to_owned(),
                 |effect| format!("{effect}. {}.", offer.description),
             );
-            if let Some(lock) = upgrade_lock(offer, settings, deepest) {
+            if let Some(lock) = upgrade_lock_for(offer, settings, deepest, rules) {
                 let tag = match lock {
-                    UpgradeLock::Band(_) => "LOCKED",
+                    UpgradeLock::Band(_) | UpgradeLock::Descent(_) | UpgradeLock::Depth { .. } => {
+                        "LOCKED"
+                    }
                     UpgradeLock::NoSky => "NO SKY",
+                    UpgradeLock::DescentOnly => "DEEP",
                 };
                 return Offer::new(icon, offer.name, tier)
                     .tag(tag, RED)

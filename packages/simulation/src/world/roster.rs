@@ -112,7 +112,10 @@ impl WorldState {
             // Zones belong to places, not players.
             fields: _,
             fluids: _,
+            // Beacons, built lifts and charges stay keyed by the player id.
+            logistics,
         } = self;
+        logistics.forget_transient(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

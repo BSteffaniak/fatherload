@@ -162,6 +162,8 @@ impl WorldState {
             fields: _,
             // The fluid schedule is woken tiles (F9 fluids live in the terrain).
             fluids: _,
+            // Lifts, outposts and beacons are tiles; a ride pins its rider every tick.
+            logistics: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);
