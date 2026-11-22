@@ -124,10 +124,23 @@ pub struct SkyArt {
 struct MoonDiscs {
     discs: std::cell::RefCell<Vec<MoonDisc>>,
     clock: std::cell::Cell<u64>,
+    /// `clock` when a disc was last rasterized (`None`: never).
+    built: std::cell::Cell<Option<u64>>,
 }
 
 /// How many Moon discs stay rasterized.
 const MOON_DISC_CACHE: usize = 4;
+
+/// Draws between two rasterizations while the disc keeps changing. Climbing or falling under
+/// the Moon changes its radius nearly every frame, and rebuilding (and uploading) a disc of a
+/// few hundred art pixels each frame was the browser's remaining spike under the Moon; in
+/// between, the cached disc nearest in size is stretched over the new one (a row or column off
+/// at most for a few frames), and the exact disc is drawn as soon as the view settles.
+const MOON_REBUILD_GAP: u64 = 8;
+
+/// How far (in `MOON_TERMINATOR_STEPS`) a stand-in disc's terminator may be from the one
+/// wanted: under an art pixel at the largest disc.
+const MOON_STAND_IN_TERMINATOR: u32 = 16;
 
 /// What a Moon disc's art depends on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -898,15 +911,6 @@ fn draw_stars(
     }
 }
 
-/// The Moon (WP-MOON): a huge body hanging still above its column, drawn as a backdrop. Seen
-/// from far off it rides low toward its side of the sky; under it, it is straight overhead,
-/// and it grows as the camera climbs toward it. The sun lights it in its phase (waxing lit on
-/// the right, toward the sunset); by day it is a pale ghost, at night it glows, with the dark
-/// part faintly earthlit. Colour runs draw as single rectangles (the browser feels every quad).
-#[allow(
-    clippy::too_many_lines,
-    reason = "placement, phase and the run-merged disc read best together"
-)]
 /// Where the Moon's disc sits in a view: centre (world pixels) and radius (art pixels). Seen
 /// from far off it rides low toward its side of the sky; under it, it is straight overhead, and
 /// it grows as the camera climbs toward it.
@@ -929,6 +933,10 @@ fn moon_disc(visible: Rectangle, moon: MoonAnchor) -> (f32, f32, i32) {
     (cx, cy, radius)
 }
 
+/// The Moon (WP-MOON): a huge body hanging still above its column, drawn as a backdrop (placed
+/// by [`moon_disc`]). The sun lights it in its phase (waxing lit on the right, toward the
+/// sunset); by day it is a pale ghost, at night it glows, with the dark part faintly earthlit.
+/// The disc is two cached textures ([`MoonDiscs`]): the browser feels every quad.
 fn draw_moon(
     draw: &mut impl RaylibDraw,
     discs: &MoonDiscs,
@@ -962,7 +970,9 @@ fn draw_moon(
     };
     discs.with(key, |disc| {
         let size = (2 * radius + 1) as f32;
-        let source = Rectangle::new(0.0, 0.0, size, size);
+        // The disc drawn may be a nearby cached one while the view moves (see `MoonDiscs`).
+        let texels = (2 * disc.key.radius + 1) as f32;
+        let source = Rectangle::new(0.0, 0.0, texels, texels);
         let dest = Rectangle::new(
             (-radius as f32).mul_add(ART, cx),
             (-radius as f32).mul_add(ART, cy),
@@ -988,13 +998,20 @@ fn draw_moon(
 }
 
 impl MoonDiscs {
-    /// Runs `draw` with the disc for `key`, rasterizing it first if it is not cached.
+    /// Runs `draw` with the disc for `key`, rasterizing it first if it is not cached; while
+    /// discs are being rasterized in quick succession, the cached disc nearest to `key` (same
+    /// side lit) stands in instead (see [`MOON_REBUILD_GAP`]).
     fn with(&self, key: MoonKey, draw: impl FnOnce(&MoonDisc)) {
         let now = self.clock.get().wrapping_add(1);
         self.clock.set(now);
         let mut discs = self.discs.borrow_mut();
-        let found = discs.iter().position(|disc| disc.key == key);
+        let recent = self
+            .built
+            .get()
+            .is_some_and(|built| now.wrapping_sub(built) < MOON_REBUILD_GAP);
+        let found = moon_disc_to_draw(discs.iter().map(|disc| disc.key), key, recent);
         let index = found.unwrap_or_else(|| {
+            self.built.set(Some(now));
             let (lit, dark) = moon_layers(key);
             let disc = MoonDisc {
                 key,
@@ -1018,6 +1035,37 @@ impl MoonDiscs {
         discs[index].used = now;
         draw(&discs[index]);
     }
+}
+
+/// Which cached disc (by position among `cached`) to draw for `key`: the exact one, or, when
+/// one was rasterized `recently`, the nearest that could pass for it (same side lit, a
+/// terminator within [`MOON_STAND_IN_TERMINATOR`] steps and a radius within a sixteenth);
+/// `None` rasterizes `key`. A jump in phase or size (a staged scene, a load, another view)
+/// always rasterizes the exact disc.
+fn moon_disc_to_draw(
+    cached: impl Iterator<Item = MoonKey> + Clone,
+    key: MoonKey,
+    recently: bool,
+) -> Option<usize> {
+    cached.clone().position(|cached| cached == key).or_else(|| {
+        if !recently {
+            return None;
+        }
+        cached
+            .enumerate()
+            .filter(|(_, cached)| {
+                cached.waxing == key.waxing
+                    && cached.terminator.abs_diff(key.terminator) <= MOON_STAND_IN_TERMINATOR
+                    && cached.radius.abs_diff(key.radius) <= (key.radius / 16).max(2).unsigned_abs()
+            })
+            .min_by_key(|(_, cached)| {
+                (
+                    cached.radius.abs_diff(key.radius),
+                    cached.terminator.abs_diff(key.terminator),
+                )
+            })
+            .map(|(index, _)| index)
+    })
 }
 
 /// Craters on the Moon's face: centre and size in disc radii.
@@ -1391,6 +1439,54 @@ pub fn hills_bottom(settings: &WorldSettings, visible: Rectangle) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_moving_moon_reuses_the_nearest_disc_between_rebuilds() {
+        use super::{MoonKey, moon_disc_to_draw};
+        let key = |radius, waxing, terminator| MoonKey {
+            radius,
+            waxing,
+            terminator,
+        };
+        let cached = [
+            key(100, true, 10),
+            key(120, true, 10),
+            key(110, false, 10),
+            key(116, true, 900),
+        ];
+        // The exact disc always wins.
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(120, true, 10), false),
+            Some(1)
+        );
+        // A new size right after a rebuild: the nearest disc lit on the same side stands in.
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(117, true, 11), true),
+            Some(1)
+        );
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(112, false, 11), true),
+            Some(2)
+        );
+        // Never one in another phase (a full moon must not borrow a crescent) or far in size.
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(116, true, 500), true),
+            None
+        );
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(160, true, 10), true),
+            None
+        );
+        // Once the view has settled (no rebuild lately) the exact disc is rasterized.
+        assert_eq!(
+            moon_disc_to_draw(cached.into_iter(), key(112, true, 11), false),
+            None
+        );
+        assert_eq!(
+            moon_disc_to_draw(std::iter::empty(), key(112, true, 11), true),
+            None
+        );
+    }
+
     use super::*;
 
     /// The near hills' texture ends in solid rows of the colour the backdrop fills the rest of

@@ -189,7 +189,13 @@ open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_act
   layer texture when its radius or phase changes (four recent discs cached for split-screen
   views) and drawn as two textures with the same alphas. The phase is quantized to 1/4096 of
   the disc, so a few terminator pixels can land one art pixel over (8 pixels of the
-  `sky_space` capture); everything else is pixel-identical.
+  `sky_space` capture); everything else is pixel-identical. Review follow-up: climbing or falling under the Moon changes its radius
+  nearly every frame, and rebuilding (and uploading) a disc of a few hundred art pixels each
+  frame was the remaining software-WebGL spike (26 ms mean against a 3.3 ms median). Discs
+  are now rasterized at most once per `MOON_REBUILD_GAP` (8) draws while the disc keeps
+  changing; in between the cached disc nearest in size (same side lit) is stretched over the
+  new one, and the exact disc is drawn as soon as the view settles
+  (`a_moving_moon_reuses_the_nearest_disc_between_rebuilds`).
 - **Robust real-network tests**: `online/tests.rs` and `online/persistence_tests.rs` wait for
   their conditions (every issued action resolved, more than ten authority hashes compared,
   server frames applied) with at least the old windows, under a one-minute bound, instead of
