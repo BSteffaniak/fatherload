@@ -64,7 +64,7 @@ fn deal(found: &Village, building: usize, offer: usize) -> PlayerCommand {
     PlayerCommand::Service(SessionServiceRequest::Village {
         village: found.id,
         building: u8::try_from(building).expect("index"),
-        offer: u8::try_from(offer).expect("index"),
+        deal: found.offers(building)[offer].deal,
         service: VillageService::of(found.buildings[building].kind).expect("service"),
     })
 }
@@ -146,7 +146,7 @@ fn trading_post_sells_cargo_and_pumps_fuel_only_at_its_door() {
     let forged = PlayerCommand::Service(SessionServiceRequest::Village {
         village: found.id,
         building: u8::try_from(market).expect("index"),
-        offer: 1,
+        deal: found.offers(market)[1].deal,
         service: VillageService::Shrine,
     });
     let refused = step(&mut world, &idle().act(PLAYER, forged));

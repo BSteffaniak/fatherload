@@ -750,14 +750,16 @@ impl SeatUi {
             cues.push(SoundCue::Ui);
             return;
         }
-        if offers.get(self.selected_menu_item).is_some() {
+        if let Some(offer) = offers.get(self.selected_menu_item) {
             let Some(service) = VillageService::of(lot.kind) else {
                 return;
             };
+            // By the deal itself, not its row: the stock may change at dusk or dawn before
+            // the tick resolves it.
             let request = SessionServiceRequest::Village {
                 village: found.id,
                 building: u8::try_from(building).unwrap_or(u8::MAX),
-                offer: u8::try_from(self.selected_menu_item).unwrap_or(u8::MAX),
+                deal: offer.deal,
                 service,
             };
             self.submit_service(request, ctx, requests);
@@ -779,20 +781,9 @@ impl SeatUi {
         request: SessionServiceRequest,
         ctx: SeatContext<'_>,
     ) -> Option<String> {
-        let SessionServiceRequest::Village {
-            village: id,
-            building,
-            offer,
-            ..
-        } = request
-        else {
+        let SessionServiceRequest::Village { deal, .. } = request else {
             return None;
         };
-        let found = ctx.world.village_now(id)?;
-        let deal = found
-            .offers_at(usize::from(building), ctx.world.market_time())
-            .get(usize::from(offer))?
-            .deal;
         if deal != VillageDeal::Room {
             return None;
         }
@@ -823,7 +814,7 @@ impl SeatUi {
         let SessionServiceRequest::Village {
             village: id,
             building,
-            offer,
+            deal,
             ..
         } = request
         else {
@@ -831,10 +822,6 @@ impl SeatUi {
         };
         let found = ctx.world.village_now(id)?;
         let building = usize::from(building);
-        let deal = found
-            .offers_at(building, ctx.world.market_time())
-            .get(usize::from(offer))?
-            .deal;
         let keeper = found
             .buildings
             .get(building)

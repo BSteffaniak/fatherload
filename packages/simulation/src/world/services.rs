@@ -220,11 +220,11 @@ impl WorldState {
         if let SessionServiceRequest::Village {
             village,
             building,
-            offer,
+            deal,
             service,
         } = request
         {
-            return self.apply_village_deal(player_id, village, building, offer, service);
+            return self.apply_village_deal(player_id, village, building, deal, service);
         }
         if let SessionServiceRequest::SkyBuoy { isle } = request {
             return self.apply_buoy_refill(player_id, isle);

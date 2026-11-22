@@ -119,7 +119,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   heading_y}`), `EnemyState::{phase, pattern, volley}`, the crypt `EnemyKind`s
 ///   (`CryptSkeleton` .. `CryptLord`) and `ShotKind::{CryptHex, CryptArrow, Boulder}`, and the
 ///   crypt events 290-296.
-pub const PROTOCOL_VERSION: u8 = 13;
+///
+/// Version 14 (wave 6; the integrator collapses the wave's bumps into one):
+/// * Fixes: `SessionServiceRequest::Village` names the deal it buys (`deal: VillageDeal`, its
+///   stable id) instead of the offer's row, so a purchase resolved on the tick dusk or dawn
+///   restocks a counter can never buy the wrong item.
+pub const PROTOCOL_VERSION: u8 = 14;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

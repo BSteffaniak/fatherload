@@ -784,7 +784,7 @@ fn deal(found: &Village, building: usize, offer: usize) -> PlayerCommand {
     PlayerCommand::Service(SessionServiceRequest::Village {
         village: found.id,
         building: u8::try_from(building).expect("index"),
-        offer: u8::try_from(offer).expect("index"),
+        deal: found.offers(building)[offer].deal,
         service: VillageService::of(found.buildings[building].kind).expect("service"),
     })
 }

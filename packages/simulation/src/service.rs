@@ -183,13 +183,18 @@ pub enum SessionServiceRequest {
     CustomizeRig {
         cosmetics: Option<RigCosmetics>,
     },
-    /// A deal at a village building's counter ([`crate::village`]): offer `offer` of building
-    /// `building` of `village`. Valid only while the rig stands at that building's door;
-    /// `service` names what the building is (for the event and its sound) and must match it.
+    /// A deal at a village building's counter ([`crate::village`]): deal `deal` of building
+    /// `building` of `village`. Valid only while the rig stands at that building's door and the
+    /// counter offers that deal at the tick it is resolved; `service` names what the building
+    /// is (for the event and its sound) and must match it.
+    ///
+    /// The deal names the item itself (its stable id), not its row: a counter's stock changes
+    /// at dusk and dawn (the night market), and a purchase by row resolved on that very tick
+    /// could buy whatever moved into the row. A deal the counter no longer offers is refused.
     Village {
         village: crate::village::VillageId,
         building: u8,
-        offer: u8,
+        deal: crate::village::VillageDeal,
         service: crate::village::VillageService,
     },
     /// The next tier of a piece of pilot gear (jetpack, suit) from the Explosives Shack's rack

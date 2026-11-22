@@ -83,14 +83,15 @@ impl WorldState {
         }
     }
 
-    /// Resolves offer `offer` of building `building` of village `village` for `player_id`
-    /// (the rig's position was validated by [`Self::command_allowed_here`]).
+    /// Resolves deal `wanted` of building `building` of village `village` for `player_id`
+    /// (the rig's position was validated by [`Self::command_allowed_here`]): only if the
+    /// counter offers that very deal now (stock changes at dusk and dawn).
     pub(crate) fn apply_village_deal(
         &mut self,
         player_id: PlayerId,
         village_id: VillageId,
         building: u8,
-        offer: u8,
+        wanted: VillageDeal,
         service: VillageService,
     ) -> PlayerScopedCommandOutcome {
         let Some(found) = self.village_now(village_id) else {
@@ -105,8 +106,8 @@ impl WorldState {
         }
         let Some(deal) = found
             .offers_at(building, self.market_time())
-            .get(usize::from(offer))
-            .copied()
+            .into_iter()
+            .find(|offer| offer.deal == wanted)
         else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };

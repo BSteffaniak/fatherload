@@ -645,7 +645,7 @@ fn the_night_market_opens_and_day_counters_close() {
         PlayerCommand::Service(SessionServiceRequest::Village {
             village: found.id,
             building: u8::try_from(market).expect("index"),
-            offer: u8::try_from(index).expect("index"),
+            deal: offers[index].deal,
             service: VillageService::TradingPost,
         }),
     );
@@ -659,6 +659,100 @@ fn the_night_market_opens_and_day_counters_close() {
         "paid at least full value"
     );
     assert_eq!(rig.cargo_bay.count(StrategicResourceKind::ShadowPelt), 0);
+}
+
+#[test]
+fn a_purchase_names_its_deal_so_the_dusk_restock_never_swaps_it() {
+    // A row picked by day and resolved on the tick the night market opens used to buy
+    // whatever moved into that row. A purchase names its deal: one the counter no longer
+    // offers is refused, and the night's own deals are bought by name.
+    let mut world = world();
+    let settings = *world.world_settings();
+    let (found, market) = (1..30)
+        .flat_map(|site| [site, -site])
+        .find_map(|site| {
+            let found = village::village(&settings, placement::surface_id(site))?;
+            let index = found
+                .buildings
+                .iter()
+                .position(|b| b.kind == BuildingKind::Market)?;
+            Some((found, index))
+        })
+        .expect("a market");
+    let day = found.offers_at(market, MarketTime::DAY);
+    let night_time = MarketTime {
+        night: true,
+        day: 4,
+    };
+    let night = found.offers_at(market, night_time);
+    // A day deal the night market does not stock, from a row that holds something else (or
+    // nothing) after dark: the restock this guards against.
+    let (row, by_day) = day
+        .iter()
+        .enumerate()
+        .find(|(_, offer)| night.iter().all(|other| other.deal != offer.deal))
+        .map(|(row, offer)| (row, offer.deal))
+        .expect("the night market drops a day deal");
+    assert!(night.get(row).is_none_or(|other| other.deal != by_day));
+    let column = found.buildings[market].first_column + 2;
+    let rig = world.player_mut(PLAYER).expect("rig");
+    #[allow(clippy::cast_precision_loss, reason = "small tile indices")]
+    {
+        rig.x = (column as f32 + 0.5) * TILE_SIZE;
+        rig.y = (found.ground_row as f32 - 0.5) * TILE_SIZE;
+    }
+    rig.velocity_x = 0.0;
+    rig.velocity_y = 0.0;
+    rig.credits = 100_000;
+    rig.cargo_bay.add(StrategicResourceKind::ShadowPelt, 2);
+    world.stream_terrain_near_players();
+    set_night(&mut world);
+    assert!(world.market_time().night);
+    let buy = |deal: VillageDeal| {
+        PlayerCommand::Service(SessionServiceRequest::Village {
+            village: found.id,
+            building: u8::try_from(market).expect("index"),
+            deal,
+            service: VillageService::TradingPost,
+        })
+    };
+    // The day's deal, chosen from row `row` by day, resolves after dark: refused, nothing
+    // else bought in its place.
+    {
+        let before = world.player(PLAYER).expect("rig").clone();
+        let output = act(&mut world, PLAYER, buy(by_day));
+        assert_eq!(
+            output.action_outcomes.first().expect("outcome").outcome,
+            PlayerScopedCommandOutcome::IgnoredUnavailable,
+            "row {row}'s day deal is gone after dark"
+        );
+        let after = world.player(PLAYER).expect("rig");
+        assert_eq!(after.credits, before.credits);
+        assert_eq!(
+            after.cargo_bay.count(StrategicResourceKind::ShadowPelt),
+            2,
+            "the night goods were not sold in its place"
+        );
+    }
+    // The night's deal, by name, goes through.
+    let sell = night
+        .iter()
+        .find(|offer| matches!(offer.deal, VillageDeal::SellNightGoods { .. }))
+        .expect("the night market buys night goods")
+        .deal;
+    let output = act(&mut world, PLAYER, buy(sell));
+    assert_eq!(
+        output.action_outcomes.first().expect("outcome").outcome,
+        PlayerScopedCommandOutcome::Applied
+    );
+    assert_eq!(
+        world
+            .player(PLAYER)
+            .expect("rig")
+            .cargo_bay
+            .count(StrategicResourceKind::ShadowPelt),
+        0
+    );
 }
 
 #[test]
