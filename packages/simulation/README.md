@@ -1273,9 +1273,8 @@ minutes (13-17 per stratum), no deaths; the whole run 73.0 h.
   box) is about 184 x 56: auto-aim and shots at its trunk land, a manual shot at the tip of
   its head or tail passes by. A hit shape of its own would touch every hit test.
 - The Underground Ocean is many separate basins (one region stamp per 72 x 48 at most), not
-  one connected sea; the Pressure Rating's Hollow Seals (sold at Merrow City's outpost, tier 4)
-  hold the whole Pearl Abyss as the Cryo Hull does, so the Cryo Hull's pressure role is felt
-  only by rigs that skip them (it stays the Descent V gate's key either way).
+  one connected sea. (The Hollow Seals, tier 4, would hold the whole abyss, but the depth-line
+  cap keeps them locked until a rig has reached Descent V, so the Cryo Hull is what lifts it.)
 
 ### Wave 9 drowned review
 
