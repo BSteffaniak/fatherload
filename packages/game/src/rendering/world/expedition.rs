@@ -744,7 +744,7 @@ fn draw_room(
             if !glow {
                 // Rubble heaped against the right wall: the floor, once down swings round.
                 for index in 0..14 {
-                    let y = spot(index, height - 8);
+                    let y = spot(index, height - height / 4 - 8);
                     let h = 3 + spot(index + 40, 6);
                     let w = 2 + spot(index + 80, 3);
                     pen.rect(draw, width - w, y, w, h, STONE_DARK);
@@ -753,9 +753,11 @@ fn draw_room(
                 }
                 return;
             }
-            // Dust streaming sideways toward the right wall, a short streak behind each mote.
+            // Dust streaming sideways toward the right wall, a short streak behind each mote,
+            // above the floor strip where down is still down (`SIDEWAYS_FLOOR_ROWS`).
+            let air = height - height / 4;
             for index in 0..26 {
-                let y = spot(index + 200, height - 2);
+                let y = spot(index + 200, air - 2);
                 let run = (seconds * 8.0 + spot(index + 300, width) as f32).rem_euclid(width as f32)
                     as i32;
                 pen.rect(draw, run - 6, y, 6, 1, with_alpha(ORANGE, 50));

@@ -5813,7 +5813,7 @@ saves show the same pages (`world::expedition_tests::the_codex_saves_loads_and_r
 
 | Kind | Rule (field) | Lining | Caches | Way in |
 |---|---|---|---|---|
-| `Sideways` "The Sideways Room" | gravity to the right (`GravityShear` + free rotation, warm grade), hard edge | builder pillars | on the right wall | one doorway, in the left wall at the floor |
+| `Sideways` "The Sideways Room" | gravity to the right (`GravityShear` + free rotation, warm grade), hard edge, above a two-row floor strip where down is still down (`SIDEWAYS_FLOOR_ROWS`) | builder pillars | on the right wall | one doorway, in the left wall at the floor |
 | `Sunlit` "The Sunlit Room" | exposure, bloom, a warm grade and a little haze | builder brick | on the floor | both side doorways |
 | `Weightless` "The Floating Room" | next to no gravity, free rotation, violet grade | volcanic glass | two, under the ceiling | both side doorways |
 | `Lensing` "The Bent Room" | lensing and a cold grade (`Lens`) | crystal | on the floor | both side doorways |
@@ -5822,9 +5822,15 @@ Each carries `AnomalyKind::inscription`, a builder line the room's card quotes a
 keeps. The game draws their tells (rubble on the right wall and dust streaming to it, light
 shafts and a brass sun-disc, drifting stones, rings of bent light round a dark knot), all slow
 and steady. `Milestone::EveryAnomaly` stays "all four kinds" (`SHALLOW`), so it is not pushed
-past Descent IV. Bots: `a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall` plays
-the way in; `entering_the_deeper_rooms_feels_their_rules_and_fills_the_codex` checks every
-rule and the codex.
+past Descent IV. Bots: `a_rig_falls_to_the_sideways_rooms_right_wall_and_finds_its_way_out`
+plays the way in and out; `entering_the_deeper_rooms_feels_their_rules_and_fills_the_codex`
+checks every rule and the codex.
+
+Review fix: without the floor strip the sideways room was a trap. A rig pinned to the right
+wall cannot turn (its corners swing into the wall) and cannot drive off it, and one resting
+on the floor under sideways gravity could neither turn nor move. Now the rig lifts off the
+strip into the sideways air, falls to the wall, and holding left slides it down the wall into
+the strip and out of the door.
 
 ### Residents of Cathedral Station and the Amber Court (`people::deep_folk`)
 

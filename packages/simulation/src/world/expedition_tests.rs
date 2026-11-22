@@ -707,10 +707,12 @@ fn a_rig_drives_into_the_mirror_room_through_a_doorway() {
 }
 
 /// Wave 9: a rig drives into a sideways room through its one doorway (in the left wall, at the
-/// floor), and the room takes it on across to the right wall, its floor once down swings
-/// round (played, not teleported inside).
+/// floor), lifts off the floor strip into the sideways air and falls across to the right wall,
+/// its floor once down swings round; then it slides down the wall into the floor strip and
+/// drives back out (played, not teleported inside). The review found the room a trap without
+/// the strip: pinned to the wall a rig can neither turn nor drive off it.
 #[test]
-fn a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall() {
+fn a_rig_falls_to_the_sideways_rooms_right_wall_and_finds_its_way_out() {
     let mut world = deep_world(0x5EED);
     let settings = *world.terrain().settings();
     let room = deep_room_of(&settings, anomaly::AnomalyKind::Sideways);
@@ -765,12 +767,19 @@ fn a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall() {
         world.actor_tile(PLAYER),
         room.bounds
     );
-    // Let go: the room's gravity carries the rig across to the right wall.
-    let idle = TickInputs::held(PLAYER, crate::ControlState::new(0.0, false, false));
-    for _ in 0..360 {
-        let tick = world.simulation_tick();
-        let _ = world.simulate_tick(tick, &idle);
-    }
+    let hold = |world: &mut WorldState, control: crate::ControlState, ticks: u32| {
+        let inputs = TickInputs::held(PLAYER, control);
+        for _ in 0..ticks {
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(tick, &inputs);
+        }
+    };
+    // On the floor strip down is still down: drive on in, then lift off into the sideways air
+    // and let go. The room's gravity carries the rig across to the right wall.
+    hold(&mut world, crate::ControlState::new(1.0, false, false), 60);
+    assert!(world.fields_for(PLAYER).gravity_y > 0.9, "the floor strip");
+    hold(&mut world, crate::ControlState::new(0.0, true, false), 60);
+    hold(&mut world, crate::ControlState::new(0.0, false, false), 360);
     let tile = world.actor_tile(PLAYER).expect("rig");
     assert!(
         room.interior().contains(tile) && tile.x >= room.interior().max.x - 2,
@@ -778,4 +787,17 @@ fn a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall() {
         room.interior()
     );
     assert!(world.fields_for(PLAYER).gravity_x > 0.9);
+    // Pinned there it cannot turn; holding left slides it down the wall into the floor strip,
+    // and on out of the door.
+    hold(
+        &mut world,
+        crate::ControlState::new(-1.0, false, false),
+        900,
+    );
+    let tile = world.actor_tile(PLAYER).expect("rig");
+    assert!(
+        tile.x < room.bounds.min.x,
+        "the rig drove back out: {tile:?} from {:?}",
+        room.bounds
+    );
 }

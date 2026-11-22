@@ -413,14 +413,25 @@ impl AnomalyRoom {
             | AnomalyKind::Weightless
             | AnomalyKind::Lensing => 1,
         };
+        // The sideways room keeps its bottom rows under ordinary gravity (Wave 9 review): a rig
+        // pinned to the right wall can neither turn (its corners swing into the wall) nor
+        // drive off it, so the way out is to slide down the wall into the floor strip and drive
+        // out of the door. Without the strip the room was a trap.
+        let bottom = match self.kind {
+            AnomalyKind::Sideways => inner.max.y - SIDEWAYS_FLOOR_ROWS,
+            _ => inner.max.y,
+        };
         FieldZone::new(
             (inner.min.x, inner.min.y),
-            (inner.max.x, inner.max.y),
+            (inner.max.x, bottom),
             feather,
             self.kind.profile(),
         )
     }
 }
+
+/// Rows at the bottom of the sideways room where down is still down ([`AnomalyRoom::zone`]).
+pub const SIDEWAYS_FLOOR_ROWS: i32 = 2;
 
 /// The regions rooms are placed per, `(columns, rows)`.
 pub const ANOMALY_REGION: (i32, i32) = (112, 96);
