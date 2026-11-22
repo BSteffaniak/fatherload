@@ -74,7 +74,6 @@ fn arena_world(sectors: i64, rate: u32) -> WorldState {
 /// Hover, fly up and right into the wall, back left, then let go and land.
 fn arena_inputs(tick: u64) -> TickInputs {
     let controls = match tick % 420 {
-        0..60 => ControlState::default(),
         60..150 => ControlState::new(1.0, true, false),
         150..210 => ControlState::new(-1.0, true, false),
         210..240 => ControlState::new(1.0, false, false),
@@ -308,7 +307,7 @@ fn old_generators_keep_the_fixed_frame() {
     assert_eq!(world.frame(), Frame::FIXED);
     let rig = world.player(PLAYER).expect("rig");
     assert!(
-        (rig.x - 4_000.0 * TILE_SIZE).abs() < 64.0,
+        (rig.x - 128_000.0).abs() < 64.0,
         "local pixels are world pixels"
     );
 }
@@ -349,6 +348,14 @@ fn a_replica_follows_a_frame_move() {
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     reason = "benchmark"
+)]
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_wrap,
+    clippy::items_after_statements,
+    clippy::suboptimal_flops,
+    clippy::precedence,
+    reason = "one self-contained benchmark"
 )]
 fn position_cost_report() {
     use std::time::{Duration, Instant};

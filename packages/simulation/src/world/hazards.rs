@@ -347,6 +347,6 @@ pub(super) fn mining_boulder_roll(seed: u64, target: TilePosition, chance: u64) 
 
 /// The centre height of a boulder hanging under the top of `tile`.
 #[allow(clippy::cast_precision_loss, reason = "tile coordinates are small")]
-fn hanging_y(frame: crate::position::Frame, tile: TilePosition) -> f32 {
-    (frame.rel_row(tile.y)).mul_add(TILE_SIZE, BOULDER_RADIUS)
+const fn hanging_y(frame: crate::position::Frame, tile: TilePosition) -> f32 {
+    frame.rel_row(tile.y).mul_add(TILE_SIZE, BOULDER_RADIUS)
 }

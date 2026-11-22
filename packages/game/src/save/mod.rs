@@ -1778,4 +1778,79 @@ mod tests {
             );
         }
     }
+
+    /// F7: a format 12 file (no frame in its terrain) loads into the fixed frame at the origin
+    /// with every `f32` world pixel exactly as saved, including positions far past where `f32`
+    /// resolves the sub-pixel grid; a floating frame off the origin round-trips in format 13.
+    #[test]
+    fn format_12_positions_load_into_the_origin_frame_exactly() {
+        use fatherload_simulation::position::{Frame, WorldPos};
+        let mut world = WorldState::new_game_with_settings(
+            LEGACY_PLAYER_ID,
+            &WorldSettings {
+                generator: GeneratorVersion::V9,
+                ..WorldSettings::new(0x5A7E_0012)
+            },
+            SimulationParams::default(),
+        );
+        let (x, y) = (4_194_303.5_f32, -330_000.25_f32);
+        if let Some(rig) = world.player_mut(LEGACY_PLAYER_ID) {
+            rig.x = x;
+            rig.y = y;
+        }
+        let _ = world.spawn_item_drop(
+            1_048_576.5,
+            77.5,
+            (0.0, 0.0),
+            fatherload_simulation::item::ItemStack::new(
+                fatherload_simulation::item::ItemKind::Mineral(MineralKind::Copper),
+                1,
+            ),
+            None,
+        );
+        let save = WorldSave {
+            world,
+            play_seconds: 1.0,
+        };
+        let mut file = serde_json::to_value(SaveFile { version: 12, save }).expect("json");
+        let terrain = file["save"]["world"]["terrain"]
+            .as_object_mut()
+            .expect("terrain");
+        let _ = terrain.remove("frame");
+        let _ = terrain.remove("column_limit");
+        let loaded = parse_save(&file.to_string()).expect("format 12 loads");
+        let world = &loaded.world;
+        assert_eq!(world.frame(), Frame::FIXED);
+        let rig = world.player(LEGACY_PLAYER_ID).expect("rig");
+        assert_eq!(
+            (rig.x.to_bits(), rig.y.to_bits()),
+            (x.to_bits(), y.to_bits())
+        );
+        let position = world.world_pos(rig.x, rig.y);
+        assert_eq!(position, WorldPos::from_legacy_px(x, y));
+        assert_eq!(position.px_f64(), (f64::from(x), f64::from(y)));
+        let drop = world.entities().iter().next().expect("drop");
+        assert_eq!(drop.body.x.to_bits(), 1_048_576.5_f32.to_bits());
+
+        // A floating frame on the rig's sector (4 million pixels out) survives a format 13
+        // round trip, and the rig is exactly where it was.
+        let mut moved = loaded.clone();
+        moved.world.relocate_frame(Frame::floating_at(255, -21));
+        let json = serde_json::to_string(&SaveFile {
+            version: SAVE_VERSION,
+            save: moved.clone(),
+        })
+        .expect("json");
+        let again = parse_save(&json).expect("format 13 loads");
+        assert_eq!(again.world.frame(), Frame::floating_at(255, -21));
+        let rig = again.world.player(LEGACY_PLAYER_ID).expect("rig");
+        assert_eq!(
+            again.world.world_pos(rig.x, rig.y),
+            WorldPos::from_legacy_px(x, y)
+        );
+        assert_eq!(
+            again.world.simulation_state_hash(),
+            moved.world.simulation_state_hash()
+        );
+    }
 }

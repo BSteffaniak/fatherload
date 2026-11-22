@@ -4,8 +4,8 @@
 //! is relative to its world's [`Frame`]: a sector that follows the anchor rig, so the camera's
 //! sector is the frame origin and `f32` drawing stays exact however far from the world origin
 //! play goes. Tiles stay absolute, so every tile-to-pixel conversion in presentation goes
-//! through the frame: [`frame`]`().col_px(column)`, `rel_col`, `rel_row`, `tile_center`,
-//! `tile_at`, ...
+//! through the frame: `frame().col_px(column)`, `rel_col`, `rel_row`, `tile_center`,
+//! `tile_at`, ... (see [`frame`]).
 //!
 //! The frame is set once per presented world ([`set`], from `RenderSnapshot::build` and after
 //! each runtime step), so renderers, effects, audio and touch hit tests read it without

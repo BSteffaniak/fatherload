@@ -2144,6 +2144,63 @@ pub const SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "far_billion_tiles",
+        summary: "F7: a billion tiles east of town in a floating frame: the surface, a dug shaft, the rig and the minimap drawn exactly as near spawn",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                use fatherload_simulation::position::WorldPos;
+                let player = seats[0].player;
+                world
+                    .terrain_mut()
+                    .set_column_limit_for_tests(2_100_000_000);
+                world.set_floating_frame(true);
+                let x = 1_000_000_000;
+                let surface = world.terrain().surface_row(x);
+                world.teleport_rig_to(
+                    player,
+                    WorldPos::tile_center(i64::from(x), i64::from(surface + 13)),
+                );
+                carve(world, x - 6..x + 7, surface + 12..surface + 15);
+                carve(world, x - 1..x + 2, surface..surface + 12);
+                reveal(world, player, x - 70..x + 70, surface - 20..surface + 40);
+                world.stream_terrain_near_players();
+            });
+            stage.settle(10);
+        },
+    },
+    Scene {
+        name: "far_frame_hop",
+        summary: "F7: a rig driving east across a sector edge in a floating frame, mid-hop: no jump in the rig, the terrain or the sky",
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                use fatherload_simulation::position::{SECTOR_TILES, WorldPos};
+                let player = seats[0].player;
+                world.set_floating_frame(true);
+                let edge = i32::try_from(3 * SECTOR_TILES).unwrap_or(i32::MAX);
+                let surface = world.terrain().surface_row(edge);
+                carve(world, edge - 40..edge + 40, surface - 3..surface);
+                world.teleport_rig_to(
+                    player,
+                    WorldPos::tile_center(i64::from(edge - 5), i64::from(surface - 1)),
+                );
+                reveal(
+                    world,
+                    player,
+                    edge - 70..edge + 70,
+                    surface - 20..surface + 30,
+                );
+                world.stream_terrain_near_players();
+            });
+            stage.hold(
+                150,
+                PlayerInput {
+                    horizontal: 1.0,
+                    ..PlayerInput::default()
+                },
+            );
+        },
+    },
+    Scene {
         name: "endless_far_out",
         summary: "Fifty thousand tiles east of town: streamed chunks, the surface swell, a dug shaft and the scrolling minimap",
         setup: |stage| {

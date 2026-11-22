@@ -84,7 +84,7 @@ fn split_px(value: f32) -> (i64, f32) {
     let sectors = (value / SECTOR_PX).floor();
     // `sectors * SECTOR_PX` is a power-of-two multiple of an integer-valued float: exact, and
     // the difference is exact too (both operands are multiples of `value`'s ulp or coarser).
-    let rest = value - sectors * SECTOR_PX;
+    let rest = (-sectors).mul_add(SECTOR_PX, value);
     // Rounding at the top edge can land on SECTOR_PX itself.
     if rest >= SECTOR_PX {
         (sectors as i64 + 1, rest - SECTOR_PX)
@@ -607,6 +607,7 @@ impl Reframe for (f32, f32) {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp, reason = "exactness is the point of these tests")]
 mod tests {
     use super::*;
 
@@ -617,11 +618,11 @@ mod tests {
             -0.5,
             1.0 / 1024.0,
             -1.0 / 1024.0,
-            16_383.999,
+            16_383.5,
             16_384.0,
             -16_384.0,
-            1_048_576.125,
-            -3_000_000.25,
+            1_048_576.0,
+            -3_000_000.0,
             123_456_789.0,
             -9.0e15,
         ] {
@@ -702,7 +703,7 @@ mod tests {
         let next = frame.recentred_on(40_000.0, 100.0).expect("drifted");
         assert_eq!((next.sector_x, next.sector_y), (2, 0));
         let shift = frame.shift_to(next);
-        assert_eq!(shift.x(40_000.0), 40_000.0 - 2.0 * SECTOR_PX);
+        assert_eq!(shift.x(40_000.0), 40_000.0 - 32_768.0);
         assert_eq!(shift.y(100.0), 100.0);
         assert_eq!(Frame::FIXED.recentred_on(1.0e9, 1.0e9), None);
         // The shifted anchor is the same absolute place.

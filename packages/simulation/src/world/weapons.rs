@@ -458,6 +458,7 @@ impl WorldState {
 
     /// One tick of a projectile's flight: gravity, swept substeps against terrain, damageable
     /// entities, live charges and (harpoons) loose drops.
+    #[allow(clippy::too_many_lines, reason = "one projectile step, phase by phase")]
     pub(super) fn advance_projectile(
         &mut self,
         id: EntityId,

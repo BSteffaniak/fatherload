@@ -525,8 +525,8 @@ impl WorldState {
         depth: i32,
         output: &mut TickOutput,
     ) {
-        let frame = self.frame();
         use crate::LegendaryBlueprint;
+        let frame = self.frame();
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
