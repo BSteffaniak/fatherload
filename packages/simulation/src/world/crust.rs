@@ -67,9 +67,11 @@ impl WorldState {
     }
 
     /// Grants the crew the Deep Claim (the Sinkhole's gate) without the set piece (tests,
-    /// tools and scenes that start below Descent I).
-    pub const fn grant_deep_claim(&mut self) {
+    /// tools and scenes that start below Descent I). The rigs already here keep their drills
+    /// (no Drill II); rigs that join later get it like any crew joining after the Sinkhole.
+    pub fn grant_deep_claim(&mut self) {
         self.crust.deep_claim = true;
+        self.crust.drill_ii.extend(self.players.keys().copied());
     }
 
     /// Heat units at `tile`: the stratum's own heat (plus a lava tube's) on a Deep Descent
@@ -680,7 +682,7 @@ impl WorldState {
                 .iter()
                 .filter(|(_, player)| {
                     let tile = player.tile_in(frame);
-                    site.zone.contains(tile) && tile.y >= front - 1
+                    site.collapses(tile) && tile.y >= front - 1
                 })
                 .map(|(id, _)| *id)
                 .collect();
@@ -695,10 +697,11 @@ impl WorldState {
                 for row in front..run.front_row {
                     for x in site.zone.min.x..=site.zone.max.x {
                         let at = TilePosition { x, y: row };
-                        if self
-                            .terrain
-                            .tile(at)
-                            .is_some_and(|tile| tile.kind.is_open())
+                        if site.collapses(at)
+                            && self
+                                .terrain
+                                .tile(at)
+                                .is_some_and(|tile| tile.kind.is_open())
                         {
                             let _ = self
                                 .terrain
@@ -748,14 +751,7 @@ impl WorldState {
                     });
                 } else {
                     self.crust.deep_claim = true;
-                    let crew: Vec<PlayerId> = self.players.keys().copied().collect();
-                    for player_id in crew {
-                        if self.crust.drill_ii.insert(player_id)
-                            && let Some(player) = self.players.get_mut(&player_id)
-                        {
-                            player.drill_strength = player.drill_strength.max(DRILL_II_LEVEL);
-                        }
-                    }
+                    self.grant_drill_ii();
                     output.push_event(GameplayEventKind::DeepClaimGranted {
                         player_id: run.started_by,
                     });
@@ -764,6 +760,23 @@ impl WorldState {
             }
         }
         self.crust.sinkhole = Some(run);
+    }
+
+    /// Every rig of a crew holding the Deep Claim that has not had its Drill II yet gets it
+    /// (the crew at the Sinkhole, and anyone who joins the world afterwards).
+    fn grant_drill_ii(&mut self) {
+        let crew: Vec<PlayerId> = self
+            .players
+            .keys()
+            .copied()
+            .filter(|player_id| !self.crust.drill_ii.contains(player_id))
+            .collect();
+        for player_id in crew {
+            self.crust.drill_ii.insert(player_id);
+            if let Some(player) = self.players.get_mut(&player_id) {
+                player.drill_strength = player.drill_strength.max(DRILL_II_LEVEL);
+            }
+        }
     }
 
     /// Sets a rig caught by the Sinkhole down in the expedition's camp at the adit's end,
@@ -817,6 +830,10 @@ impl WorldState {
             .iter()
             .map(|(id, player)| (*id, player.tile_in(frame), player.hazard_gear.rig_systems))
             .collect();
+        if self.crust.deep_claim {
+            // Rigs that joined after the Sinkhole fell get their Drill II too.
+            self.grant_drill_ii();
+        }
         let delta = self.timing.delta_seconds;
         for (player_id, tile, systems) in rigs {
             if crust::lava_tube_at(&settings, tile.x, tile.y) {

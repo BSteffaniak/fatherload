@@ -4028,14 +4028,21 @@ their log-walled camp.
 Drilling the core out starts the run (`SinkholeRun`, in `CrustState`): `SinkholeRumble`, then
 after `SINKHOLE_RUMBLE_MILLIS` (3 s) the collapse front climbs `SINKHOLE_FRONT_ROWS_PER_SECOND`
 (3 rows/s; a stock rig climbs about 6-7, a laden one more than 5) filling every open tile of
-the zone with rubble and shaking boulders off the walls a few rows above it. A rig that leaves
-the zone (above the lip, or out down the adit) is clear (`SinkholeEscaped`). A rig the front
+the zone with rubble and shaking boulders off the walls a few rows above it. A rig that gets
+above the lip, or into the adit past the funnel's wall (which the collapse never fills,
+`SinkholeSite::collapses`), is clear (`SinkholeEscaped`); slipping out of the zone's side down
+at the chamber or under it is not (`SinkholeSite::clear_of`). A rig the front
 reaches is dug out and set down in the camp with `SINKHOLE_CAUGHT_HULL_SHARE` of its hull lost,
 never wrecked (`SinkholeCaught`). When the front tops out: if anyone got clear the crew holds
 the **Deep Claim** and every rig gets **Drill II** (drill tier at least `DRILL_II_LEVEL`, 7):
-`DeepClaimGranted`; if nobody did, the zone is put back as generated, core and all, for another
+`DeepClaimGranted` (a rig joining the world later gets its Drill II on its first tick); if
+nobody did, the zone is put back as generated, core and all, for another
 try (`SinkholeReset`). No countdown can be lost by waiting: the front only moves once the core
-is out, and its speed is a fixed, fair share of the slowest rig's climb.
+is out, and its speed is a fixed, fair share of the slowest rig's climb: a stock engine with
+a half-full bay and the tier 2 radiator the Basalt Columns ask for still gets out
+(`a_stock_engine_rig_with_half_a_bay_still_outclimbs_the_sinkhole`; review fix: the adit
+inside the zone used to fill too, and the 30-odd tiles along it at a stock engine's 2.25
+tiles/s lost the race).
 
 ### Gravel Hollow
 
@@ -4052,7 +4059,7 @@ outpost's counter does the fuel, repairs and selling.
 Nine new kinds appended to `EnemyKind` (all follow the body rules: `step_body`,
 `free_from_rock`, `keep_off_bodies`, `site_fits`, contact boxes sized to their sprites, line of
 sight): **burrow mole** (burrows after the drill, rare digging, lunges from the wall), **mud
-leech** (slow; its bite drinks `MUD_LEECH_FUEL_SIP` fuel instead of hull: `CrustCreature
+leech** (slow; its bite barely dents the hull but drinks `MUD_LEECH_FUEL_SIP` fuel: `CrustCreature
 { LeechLatched }`), **potter wasp** (fast swarmer, drops a clay pot now and then), **mine bat**
 (colony bat of the works), **timber beetle** (at rest it chews through a timber set over it,
 which then fails like a cut beam: `CrustCreature { BeetleChewed }`), **slate skink** (fast,

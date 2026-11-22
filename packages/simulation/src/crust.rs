@@ -667,10 +667,32 @@ pub fn sinkhole_site(settings: &WorldSettings) -> Option<SinkholeSite> {
 }
 
 impl SinkholeSite {
-    /// Whether tile `tile` is clear of the collapse (above the lip, or out of the zone).
+    /// Whether tile `tile` lies in the Fathers' adit past the funnel's wall: the way out the
+    /// collapse never reaches.
+    #[must_use]
+    pub const fn in_adit_past_funnel(&self, tile: TilePosition) -> bool {
+        tile.y >= self.adit.min.y
+            && tile.y <= self.adit.max.y
+            && tile.x > self.core.x + funnel_half_width(self.chamber.min.y - tile.y) + 1
+            && tile.x <= self.adit.max.x
+    }
+
+    /// Whether the collapse fills (and catches a rig at) tile `tile`: the zone, less the adit
+    /// past the funnel's wall.
+    #[must_use]
+    pub const fn collapses(&self, tile: TilePosition) -> bool {
+        self.zone.contains(tile) && !self.in_adit_past_funnel(tile)
+    }
+
+    /// Whether tile `tile` is clear of the collapse: above the lip, into the Fathers' adit past
+    /// the funnel's wall, or out of the zone's side no lower than the adit. Slipping out of the
+    /// zone's side down at the chamber, or under it, is not an escape: the collapse has to be
+    /// outclimbed.
     #[must_use]
     pub const fn clear_of(&self, tile: TilePosition) -> bool {
-        tile.y < self.lip_row || tile.x < self.zone.min.x || tile.x > self.zone.max.x
+        tile.y < self.lip_row
+            || self.in_adit_past_funnel(tile)
+            || ((tile.x < self.zone.min.x || tile.x > self.zone.max.x) && tile.y <= self.adit.max.y)
     }
 
     /// Where a rig the collapse caught is set down: the middle of the camp's floor.

@@ -215,10 +215,10 @@ struct Intent {
     speed: f32,
 }
 
-/// Unit vector from `from` to `to` and the distance (straight up for coincident points).
 /// Fuel a mud leech drinks from a rig per bite (Wave 8, the Crust).
 pub const MUD_LEECH_FUEL_SIP: f32 = 9.0;
 
+/// Unit vector from `from` to `to` and the distance (straight up for coincident points).
 fn direction(from: (f32, f32), to: (f32, f32)) -> ((f32, f32), f32) {
     let dx = to.0 - from.0;
     let dy = to.1 - from.1;

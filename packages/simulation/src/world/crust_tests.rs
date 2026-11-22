@@ -643,6 +643,7 @@ fn at_the_core(seed: u64) -> (WorldState, crust::SinkholeSite) {
     };
     let mut world = world_at(seed, 60, beside);
     world.crust.deep_claim = false;
+    world.crust.drill_ii.clear();
     {
         let rig = world.player_mut(PLAYER).expect("rig");
         // A Descent I rig: tier 4 engine, stock everything else.
@@ -657,7 +658,73 @@ fn at_the_core(seed: u64) -> (WorldState, crust::SinkholeSite) {
 
 #[test]
 fn a_bot_pulls_the_sinkhole_core_and_climbs_out_before_the_collapse() {
-    let (mut world, site) = at_the_core(31);
+    let (world, site) = at_the_core(31);
+    bot_escapes_the_sinkhole(world, &site);
+}
+
+#[test]
+fn a_stock_engine_rig_with_half_a_bay_still_outclimbs_the_sinkhole() {
+    // The fairness floor: the stock engine, the tier 2 radiator the Basalt Columns ask for, and
+    // a half-full cargo bay.
+    let (mut world, site) = at_the_core(35);
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.engine_level = 1;
+        rig.radiator_level = 2;
+        for _ in 0..rig.cargo_capacity / 2 {
+            assert!(rig.add_cargo(crate::terrain::MineralKind::Iron));
+        }
+    }
+    bot_escapes_the_sinkhole(world, &site);
+}
+
+#[test]
+fn slipping_out_of_the_zone_under_the_funnel_is_not_an_escape() {
+    let site = crust::sinkhole_site(&v11(31)).expect("a sinkhole");
+    let beside_the_chamber = TilePosition {
+        x: site.zone.max.x + 4,
+        y: site.core.y,
+    };
+    assert!(!site.clear_of(beside_the_chamber));
+    let under_the_chamber = TilePosition {
+        x: site.zone.min.x - 2,
+        y: site.chamber.max.y + 3,
+    };
+    assert!(!site.clear_of(under_the_chamber));
+    // Out along the Fathers' adit past the funnel's wall (which the collapse never fills),
+    // or over the lip, is.
+    let adit = TilePosition {
+        x: site.zone.max.x - 2,
+        y: site.adit.max.y,
+    };
+    assert!(site.clear_of(adit) && !site.collapses(adit));
+    assert!(site.collapses(TilePosition {
+        x: site.core.x,
+        y: site.adit.max.y,
+    }));
+    assert!(site.clear_of(TilePosition {
+        x: site.core.x,
+        y: site.lip_row - 1,
+    }));
+}
+
+#[test]
+fn a_rig_joining_after_the_sinkhole_gets_drill_ii() {
+    let (mut world, _) = at_the_core(36);
+    world.crust.deep_claim = true;
+    world.crust.drill_ii.insert(PLAYER);
+    let late = PlayerId::new(2);
+    world.add_player(late);
+    assert!(world.player(late).expect("joined").drill_strength < DRILL_II_LEVEL);
+    let _ = step(&mut world, hold(0.0, false, false));
+    assert!(world.player(late).expect("joined").drill_strength >= DRILL_II_LEVEL);
+    // The crew already rewarded keeps what it has.
+    assert_eq!(world.player(PLAYER).expect("rig").drill_strength, 4);
+}
+
+/// Drills the core out, climbs the funnel to the adit and runs east down it to the camp, and
+/// checks the crew won the Deep Claim and Drill II.
+fn bot_escapes_the_sinkhole(mut world: WorldState, site: &crust::SinkholeSite) {
     let mut rumbled = false;
     let mut escaped = false;
     let mut claimed = false;
@@ -675,7 +742,15 @@ fn a_bot_pulls_the_sinkhole_core_and_climbs_out_before_the_collapse() {
             #[allow(clippy::cast_precision_loss, reason = "a sign")]
             hold(toward as f32 * 0.3, true, false)
         } else {
-            hold(1.0, tile.y > site.lip_row + 2, false)
+            // Along the adit: lifted over the step up out of the funnel's mouth, then driven
+            // along its floor.
+            let mouth =
+                tile.x <= site.core.x + crust::funnel_half_width(crust::SINKHOLE_DEPTH_ROWS);
+            hold(
+                1.0,
+                tile.y > site.lip_row + 2 || (mouth && tile.y > site.lip_row + 1),
+                false,
+            )
         };
         for event in step(&mut world, control) {
             match event.kind {
