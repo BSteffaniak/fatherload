@@ -8,6 +8,11 @@
 //! message, and at most one every [`HINT_SPACING_TICKS`] frames. Hints only run on Deep Descent
 //! worlds, and a hint whose lesson the rig already shows (a Pressure Rating bought, a beacon
 //! planted) is skipped. Everything reads the replicated world, so hints work the same online.
+//!
+//! Wave 9 adds the Drowned and Frozen's, the Hollow World's and the Strange Layers' firsts:
+//! submarine water, deep cold, the inner sky, the inner sun's glare, turned gravity, mirrored
+//! controls, slow time and the deep supplies. Their words name no key or button (the use and
+//! thruster controls read the same on a keyboard, a pad and the touch screen).
 
 use std::collections::BTreeSet;
 
@@ -43,17 +48,35 @@ pub enum Hint {
     Slippery,
     Fluid,
     Beacon,
+    // Wave 9: Descents IV-VI.
+    Submarine,
+    DeepCold,
+    InnerSky,
+    Glare,
+    TurnedGravity,
+    Mirrored,
+    TimeZone,
+    Supplies,
 }
 
 impl Hint {
     /// Every hint, in the order they are checked (the most urgent first).
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 19] = [
         Self::GateCrush,
         Self::Pressure,
         Self::SystemOnSale,
         Self::Outpost,
         Self::AncientLift,
         Self::LayerResource,
+        // Wave 9: the deep rules before the general ones they refine.
+        Self::DeepCold,
+        Self::Glare,
+        Self::Submarine,
+        Self::InnerSky,
+        Self::TurnedGravity,
+        Self::Mirrored,
+        Self::TimeZone,
+        Self::Supplies,
         Self::Fluid,
         Self::LowGravity,
         Self::Slippery,
@@ -107,6 +130,9 @@ pub fn due_hint(
     for hint in Hint::ALL {
         if seen.contains(&hint) {
             continue;
+        }
+        if let Some(text) = deep_hint(world, player, hint) {
+            return Some((hint, text));
         }
         let text = match hint {
             Hint::GateCrush => missing_gate(rig.hazard_gear.rig_systems, descent).map(|system| {
@@ -198,12 +224,94 @@ pub fn due_hint(
                  later."
                     .to_owned()
             }),
+            // Wave 9: answered by `deep_hint` above.
+            Hint::Submarine
+            | Hint::DeepCold
+            | Hint::InnerSky
+            | Hint::Glare
+            | Hint::TurnedGravity
+            | Hint::Mirrored
+            | Hint::TimeZone
+            | Hint::Supplies => None,
         };
         if let Some(text) = text {
             return Some((hint, text));
         }
     }
     None
+}
+
+/// The text of Wave 9's `hint` (Descents IV-VI) for `player` in `world` now, if it is due
+/// (`None` for the earlier hints, which [`due_hint`] answers itself).
+#[must_use]
+pub fn deep_hint(world: &WorldState, player: PlayerId, hint: Hint) -> Option<String> {
+    use fatherload_simulation::{
+        depth_progression::deep_climate, descent::Stratum, fluid::FluidKind, workshop::DeepSupply,
+    };
+    let rig = world.player(player)?;
+    let tile = rig.tile_in(world.frame());
+    let stratum = world.deep_stratum_at(tile)?;
+    let fields = world.fields_at(rig.x, rig.y);
+    match hint {
+        Hint::Submarine => (stratum.descent().index() >= 3
+            && matches!(
+                world.terrain().fluid_at(tile).map(|cell| cell.kind),
+                Some(FluidKind::Water | FluidKind::Brine)
+            ))
+        .then(|| {
+            "Tip: under water the rig runs as a submarine. Thrust to swim; ballast tanks from the              deep counters sink or surface it at once."
+                .to_owned()
+        }),
+        Hint::DeepCold => deep_climate(stratum)
+            .filter(|climate| climate.cold_units > 0)
+            .filter(|_| !rig.hazard_gear.has_system(RigSystem::CryoHull))
+            .map(|_| {
+                format!(
+                    "Tip: hull frost in the {}. Light a frost heater (deep counters and                      workshops) or warm up by a thermal vent.",
+                    stratum.name()
+                )
+            }),
+        Hint::InnerSky => (stratum == Stratum::InnerSky && !world.terrain().is_solid_at(tile))
+            .then(|| {
+                "Tip: the inner sky. Fly from stone to stone, ride the wind and keep fuel for the                  way back up."
+                    .to_owned()
+            }),
+        Hint::Glare => (fields.light > 1.3).then(|| {
+            "Tip: the inner sun's glare and heat. Hop between shadows; shade canopies and Heat              Shielding keep the rig cool."
+                .to_owned()
+        }),
+        Hint::TurnedGravity => (fields.gravity_y < -0.2 || fields.gravity_x.abs() > 0.5).then(|| {
+            "Tip: down points another way here. Turn the rig with its rotation thrusters to land              on walls and ceilings."
+                .to_owned()
+        }),
+        Hint::Mirrored => (fields.mirror > 0.5).then(|| {
+            "Tip: a mirror zone. Left is right in here: the controls and the screen flip back              when you leave it."
+                .to_owned()
+        }),
+        Hint::TimeZone => ((fields.time_scale - 1.0).abs() > 0.1).then(|| {
+            if fields.time_scale < 1.0 {
+                "Tip: time runs slow here. Everything, you too, moves slower; time-bubble bombs                  make pockets of it."
+                    .to_owned()
+            } else {
+                "Tip: time runs fast here. Creatures and hazards come quicker: keep moving."
+                    .to_owned()
+            }
+        }),
+        Hint::Supplies => DeepSupply::ALL
+            .into_iter()
+            .find(|supply| {
+                supply.stratum() == stratum && world.supplies_of(player, *supply) == 0
+            })
+            .map(|supply| {
+                format!(
+                    "Tip: the {} asks for a {}. Deep counters sell them; workshops make them from                      {}.",
+                    stratum.name(),
+                    supply.name(),
+                    stratum.def().layer_resource.name
+                )
+            }),
+        _ => None,
+    }
 }
 
 impl SeatUi {
@@ -303,6 +411,54 @@ mod tests {
             due_hint(&world, player, &seen).map(|(hint, _)| hint),
             Some(hint)
         );
+    }
+
+    #[test]
+    fn descents_four_to_six_explain_their_supplies_and_cold() {
+        use fatherload_simulation::descent::Stratum;
+        let (mut world, player) = deep_world();
+        let layout = world.descent_layout();
+        let brine = layout.strata()[Stratum::BrineGlaciers.index()];
+        park(&mut world, player, 40, brine.top + 40);
+        {
+            let rig = world.player_mut(player).expect("rig");
+            rig.hazard_gear.rig_systems = !RigSystem::CryoHull.bit();
+            rig.hazard_gear.pressure_rating = 7;
+            rig.hazard_gear.headlamp = 7;
+        }
+        // Every earlier hint is learned: the frost comes first, then the heaters.
+        let mut seen: BTreeSet<Hint> = Hint::ALL
+            .into_iter()
+            .filter(|hint| {
+                !matches!(
+                    hint,
+                    Hint::DeepCold | Hint::Supplies | Hint::Submarine | Hint::TurnedGravity
+                )
+            })
+            .collect();
+        let (hint, text) = due_hint(&world, player, &seen).expect("a hint");
+        assert_eq!(hint, Hint::DeepCold, "{text}");
+        assert!(text.contains("frost heater"), "{text}");
+        seen.insert(Hint::DeepCold);
+        let (hint, text) = due_hint(&world, player, &seen).expect("a hint");
+        assert_eq!(hint, Hint::Supplies, "{text}");
+        assert!(
+            text.contains("Frost Heater") && text.contains("Brine Ice"),
+            "{text}"
+        );
+        // With the Cryo Hull the frost is no news.
+        world
+            .player_mut(player)
+            .expect("rig")
+            .hazard_gear
+            .rig_systems = u8::MAX;
+        assert_eq!(deep_hint(&world, player, Hint::DeepCold), None);
+        // The words never name a key: they read the same by touch.
+        for hint in Hint::ALL {
+            if let Some(text) = deep_hint(&world, player, hint) {
+                assert!(!text.contains("press") && !text.contains("click"), "{text}");
+            }
+        }
     }
 
     #[test]
