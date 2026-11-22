@@ -34,35 +34,44 @@ pub fn dawn_detail(kills: u32) -> String {
 }
 
 /// Who should see tonight's "DAWN" banner ("You made it through the night"): nobody when the
-/// night was slept away (skipped), and never a player who lay in bed through it (a player
-/// who slept while a crewmate kept watch did not make it through anything).
+/// night was slept away (skipped), and never a player still in bed when it ended (a player who
+/// slept through it while a crewmate kept watch did not make it through anything).
 ///
-/// Presentation only: the game watches who is in bed each frame while a night is on.
+/// "Through" means in bed as the night lifted: the sim gets every sleeper up on the dawn tick,
+/// so the game remembers who was in bed on the frame before as well as this one. A player who
+/// lay down for a moment early on and then got up again (a vote that never passed) stayed up
+/// for the rest of the night and still sees the banner.
+///
+/// Presentation only: the game reports who is in bed each frame while it runs.
 #[derive(Clone, Debug, Default)]
 pub struct DawnWitnesses {
-    slept: BTreeSet<PlayerId>,
+    /// In bed on the previous frame.
+    before: BTreeSet<PlayerId>,
+    /// In bed this frame.
+    now: BTreeSet<PlayerId>,
 }
 
 impl DawnWitnesses {
     /// A night fell: nobody has slept in it yet.
     pub fn night_fell(&mut self) {
-        self.slept.clear();
+        self.before.clear();
     }
 
-    /// `in_bed` are in bed this frame.
+    /// `in_bed` are in bed this frame (call once a frame, before the frame's events).
     pub fn observe(&mut self, in_bed: impl IntoIterator<Item = PlayerId>) {
-        self.slept.extend(in_bed);
+        self.before = std::mem::replace(&mut self.now, in_bed.into_iter().collect());
     }
 
     /// Whether `player` sees the dawn banner (`night_skipped`: the night was slept away).
     #[must_use]
     pub fn sees_dawn(&self, player: PlayerId, night_skipped: bool) -> bool {
-        !night_skipped && !self.slept.contains(&player)
+        !night_skipped && !self.before.contains(&player) && !self.now.contains(&player)
     }
 
     /// The dawn came: the next night starts afresh.
     pub fn dawn(&mut self) {
-        self.slept.clear();
+        self.before.clear();
+        self.now.clear();
     }
 }
 
@@ -75,19 +84,25 @@ mod tests {
 
     #[test]
     fn the_dawn_banner_skips_sleepers_and_skipped_nights() {
-        let (watch, sleeper) = (PlayerId::new(0), PlayerId::new(1));
+        let (watch, sleeper, napper) = (PlayerId::new(0), PlayerId::new(1), PlayerId::new(2));
         let mut witnesses = DawnWitnesses::default();
         witnesses.night_fell();
+        // The napper lies down for a moment early in the night, then gets up and keeps watch.
+        witnesses.observe([sleeper, napper]);
         witnesses.observe([sleeper]);
+        witnesses.observe([sleeper]);
+        // The dawn tick gets every sleeper up before the game sees the frame.
         witnesses.observe([]);
-        // The one who kept watch made it through; the one in bed slept through it.
+        // The ones who stayed up made it through; the one in bed as night lifted slept.
         assert!(witnesses.sees_dawn(watch, false));
+        assert!(witnesses.sees_dawn(napper, false));
         assert!(!witnesses.sees_dawn(sleeper, false));
         // A night slept away shows nobody the banner.
         assert!(!witnesses.sees_dawn(watch, true));
         // The next night starts afresh.
         witnesses.dawn();
         witnesses.night_fell();
+        witnesses.observe([]);
         assert!(witnesses.sees_dawn(sleeper, false));
     }
 

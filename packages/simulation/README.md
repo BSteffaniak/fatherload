@@ -2221,7 +2221,8 @@ screen with mixed view modes and the crypt touch layout.
   pilot space by origin, a tomb run slot, or the open world): a lever or plate never works a
   gate of the neighbouring space (`a_lever_never_reaches_a_gate_in_the_neighbouring_space`).
 - **Dawn banner** (game, `night_text::DawnWitnesses`): no "DAWN" banner after a night slept away,
-  nor for a seat whose player lay in bed through the night.
+  nor for a seat whose player was still in bed as the night lifted (one who lay down for a
+  moment and got up again stayed up and still sees it).
 - **Crypt trap shots** honour Sandwalker Sandals per pilot hit (see "Wave 5 integrated").
 - **Rock mimic**: contact 8 (was 14) every 2 s (was 1.3 s): with its lunge now connecting it
   cost a third of a band's typical hull in a starter-gun duel (46 of 140 in the grey stone, 412
