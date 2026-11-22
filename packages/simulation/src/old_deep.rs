@@ -657,6 +657,8 @@ impl Mutation {
 pub const MUTATION_MILLIS: u64 = 300_000;
 /// Dose a mutation relic gives as it breaks.
 pub const MUTATION_DOSE: u16 = 150;
+/// Dose a glow grub's bite adds.
+pub const GLOW_GRUB_BITE_DOSE: u16 = 40;
 /// Hull a second Regrowth mends.
 pub const REGROWTH_PER_SECOND: f32 = 1.5;
 /// Fuel a second a Fuel Gland makes.

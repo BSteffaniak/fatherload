@@ -2052,6 +2052,9 @@ impl WorldState {
                 now,
                 output,
             );
+            if landed && state.kind == EnemyKind::GlowGrub {
+                self.glow_grub_bite(player_id);
+            }
             (landed, at)
         } else if let Some((pilot, middle)) = self
             .pilots_near(body.x, body.y, spec.radius + PILOT_HALF_WIDTH + 14.0)

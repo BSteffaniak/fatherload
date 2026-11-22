@@ -884,3 +884,63 @@ fn the_descent_probe_paces_the_old_deep_like_the_plan() {
         );
     }
 }
+
+#[test]
+fn a_glow_grubs_bite_raises_the_dose_and_a_lift_ride_keeps_it() {
+    let hz = 30;
+    let mut world = deep_world(0x0D05_E0B1, hz);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    // Out of the hollow (no glow, no hollow gain): only a bite can raise the meter.
+    let row = middle_row(&world, Stratum::CrystalFaults);
+    room(
+        &mut world,
+        (FAR - 8, row - 3),
+        (FAR + 2, row),
+        TileKind::Stone,
+    );
+    stand(&mut world, FAR, row);
+    // On the left: the depth reward drops its ore just right of a rig reaching a new depth.
+    let (gx, gy) = world
+        .frame()
+        .tile_center(TilePosition { x: FAR - 4, y: row });
+    let _ = world.spawn_enemy(crate::enemy::EnemyKind::GlowGrub, gx, gy);
+    let mut bitten = false;
+    for _ in 0..hz * 20 {
+        let _ = idle(&mut world, 1);
+        if world.old_deep().dose(PLAYER).level > 0 {
+            bitten = true;
+            break;
+        }
+    }
+    assert!(bitten, "the grub's bite raised the dose");
+
+    // A rig riding a lift is out of the rules' reach, but it keeps its dose.
+    world.set_dose_for_tests(PLAYER, 500);
+    let lift = world
+        .logistics
+        .lifts
+        .values()
+        .next()
+        .cloned()
+        .expect("a V11 world has ancient lifts");
+    let top = *lift.stations.first().expect("a station");
+    let bottom = *lift.stations.last().expect("a station");
+    let start_tick = world.simulation_tick();
+    world.logistics.rides.insert(
+        PLAYER,
+        crate::logistics::LiftRide {
+            shaft: lift.id,
+            from_row: top,
+            to_row: bottom,
+            start_tick,
+            ticks: u64::from(hz) * 60,
+        },
+    );
+    let _ = idle(&mut world, hz * 2);
+    assert!(world.logistics.is_riding(PLAYER), "still riding");
+    assert!(
+        world.old_deep().dose(PLAYER).level >= 500,
+        "the ride kept the dose: {:?}",
+        world.old_deep().dose(PLAYER)
+    );
+}

@@ -28,6 +28,10 @@ use crate::{
 
 use super::{WorldState, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
+/// How close (in tiles, each axis) to the Glowmother's den a rig must be for her vanishing to
+/// count as her fall: well inside the director's despawn reach, so a despawn never counts.
+const GLOWMOTHER_WITNESS_TILES: i32 = 30;
+
 /// A rig as the Old Deep's rules see it this tick.
 #[derive(Clone, Copy)]
 struct Rig {
@@ -245,10 +249,10 @@ impl WorldState {
                 self.old_deep.doses.insert(rig.id, dose);
             }
         }
-        // Players who left the world keep nothing.
-        self.old_deep
-            .doses
-            .retain(|id, _| rigs.iter().any(|rig| rig.id == *id));
+        // Players who left the world keep nothing (a rig riding a lift is still here: it
+        // keeps its dose for when it steps off).
+        let players = &self.players;
+        self.old_deep.doses.retain(|id, _| players.contains_key(id));
     }
 
     fn advance_mutations(&mut self, rigs: &[Rig], next_tick: SimulationTick) {
@@ -1046,8 +1050,13 @@ impl WorldState {
                 return;
             }
             self.old_deep.glowmother.entity = None;
-            if let Some(rig) = near.first() {
-                // Gone with a rig at the den: she fell.
+            // Gone with a rig still well inside the despawn reach: she fell (a bomb or a long
+            // chase can finish her from beyond the den's mouth).
+            let witness = rigs.iter().find(|rig| {
+                (rig.tile.x - centre.x).abs() <= GLOWMOTHER_WITNESS_TILES
+                    && (rig.tile.y - centre.y).abs() <= GLOWMOTHER_WITNESS_TILES
+            });
+            if let Some(rig) = witness {
                 self.old_deep.glowmother.defeated = true;
                 output.push_event(GameplayEventKind::GlowmotherDefeated { player_id: rig.id });
             }
@@ -1245,6 +1254,16 @@ impl WorldState {
             shattered: u8::try_from(shattered.len()).unwrap_or(u8::MAX),
             harvested: harvest,
         });
+    }
+
+    /// A glow grub's bite: it raises the bitten rig's dose (Radioactive Hollow).
+    pub(super) fn glow_grub_bite(&mut self, player: PlayerId) {
+        if !self.terrain.settings().generator.has_descents() {
+            return;
+        }
+        let mut dose = self.old_deep.dose(player);
+        dose.level = (dose.level + old_deep::GLOW_GRUB_BITE_DOSE).min(old_deep::DOSE_MAX);
+        self.old_deep.doses.insert(player, dose);
     }
 
     /// Staging for tests and scenes: `player`'s dose meter.
