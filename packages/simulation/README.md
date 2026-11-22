@@ -2943,6 +2943,26 @@ gameplay event codes. The Sun Colossus' art was redrawn to its existing
   underside (`y` past -100,000 px), on a 60 ms, 10 ms jitter, 2 % loss link: every client
   converges on the host and every queue stays bounded.
 
+## Wave 6 integration
+
+The four wave 6 tracks (collected fixes, art and audio, QA, content) sit on one linear branch
+in that order.
+
+- **Formats**: one `PROTOCOL_VERSION` bump for the wave (13 to 14; its doc lists the fixes'
+  deal-by-id village purchase and the content's new variants) and one save bump (11 to 12,
+  content only; formats 8 to 11 load as is). The QA round-trip test covers format 11 and 12
+  files separately.
+- **Worldgen**: no change; the V1-V10 golden digests stand. The only worldgen-side edit is the
+  content's range check in `continent::sky_city`, which answers `None` only outside the
+  streamed world.
+- **Event codes**: no track added gameplay event codes.
+- **Seams**: `milestone` holds both the fixes' `island_hopper` (sky calibration) and the
+  content's `sky_town_capable`. The art pass's colossus fits the unchanged
+  `EnemyKind::contact_half`; the fixes' rock mimic retune touches only its bite. Village deals
+  are bought by id (fixes); content's furniture rows are person trades (`PersonDeal::Furniture`,
+  appended, still by row). The tomb balance (fixes) is unchanged by QA, whose timer audit made
+  no simulation change.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
