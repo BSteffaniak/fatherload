@@ -526,7 +526,11 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
 /// half as large again, towering over a pilot on foot.
 const fn sprite_scale(kind: EnemyKind) -> f32 {
     match kind {
-        EnemyKind::SunColossus | EnemyKind::HollowMatriarch | EnemyKind::MycelialMind => ART * 1.5,
+        // The eel-dragon is a mini-boss, drawn half again larger too (Wave 9 review).
+        EnemyKind::SunColossus
+        | EnemyKind::HollowMatriarch
+        | EnemyKind::MycelialMind
+        | EnemyKind::EelDragon => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
         _ => ART,

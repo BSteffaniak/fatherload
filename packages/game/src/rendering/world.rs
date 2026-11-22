@@ -673,6 +673,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             },
         );
     }
+    // ... and so are the submarines themselves: under the water's tint and the deep's dark a
+    // rig all but vanished, and Descent IV is played under water (Wave 9 review).
+    if scene.drowned_sites.arena.is_some() {
+        for player in scene.players.iter().filter(|player| player.submerged) {
+            let _turned = TurnedAbout::new(player.orientation, player.x, player.y);
+            rig::draw_rig(draw, scene.terrain, player, scene.facings, scene.ticks);
+        }
+    }
     drowned::draw_drowned_lights(draw, &drowned_scene);
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);

@@ -2344,7 +2344,8 @@ impl EnemyKind {
             // The Drowned and Frozen (Wave 9), sized to their art.
             Self::ReefShark => (19.0, 8.0),
             Self::InkSquid => (10.0, 11.0),
-            Self::EelDragon => (36.0, 10.0),
+            // Drawn half again larger, a mini-boss (Wave 9 review).
+            Self::EelDragon => (54.0, 15.0),
             Self::FrostMite => (7.0, 6.0),
             Self::TuskSeal => (18.0, 10.0),
             Self::ScaldBeetle => (11.0, 7.0),
