@@ -60,11 +60,13 @@ pub(super) fn draw_heat_warning_for_view(
     view: &ViewSnapshot<'_>,
 ) {
     let tile = view.player.tile_in(crate::view_frame::frame());
-    let depth_heat = fatherload_simulation::protection::heat_excess(
-        terrain.band_at(tile),
-        view.player.radiator_level,
-        view.player.hazard_gear.heat_shield,
-    ) > 0;
+    // The heat the rig takes damage from: band heat, or the stratum's own on a Deep Descent
+    // world (Wave 8).
+    let depth_heat = fatherload_simulation::crust::heat_units(terrain, tile)
+        > fatherload_simulation::protection::heat_cooling(
+            view.player.radiator_level,
+            view.player.hazard_gear.heat_shield,
+        );
     let near_lava = (-2..=2).any(|dy| {
         (-2..=2).any(|dx| {
             matches!(
@@ -1002,7 +1004,18 @@ fn hud_warnings(
     } else {
         snapshot.terrain.nominal_row(view.hud.row.max(0))
     };
-    if depth >= 60 {
+    // A Deep Descent world warns where its strata run hot (Wave 8: heat per stratum); older
+    // worlds by depth as before.
+    let hot = if fatherload_simulation::crust::crust_rules(snapshot.terrain.settings()) {
+        depth > 0
+            && fatherload_simulation::crust::heat_units(
+                snapshot.terrain,
+                player.tile_in(crate::view_frame::frame()),
+            ) > 0
+    } else {
+        depth >= 60
+    };
+    if hot {
         warnings.push(("HEAT", &icons::HEAT));
     }
     if view.deep_instability >= 60.0 {

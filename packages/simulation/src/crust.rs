@@ -488,6 +488,24 @@ pub fn lava_tube_at(settings: &WorldSettings, x: i32, y: i32) -> bool {
     )
 }
 
+/// Heat units at `tile` of `terrain`.
+///
+/// The stratum's own heat (plus a lava tube's) on a Deep Descent world, the classic band heat
+/// elsewhere: what the rig's heat damage, a pilot's exposure and the game's heat warnings read.
+#[must_use]
+pub fn heat_units(terrain: &crate::terrain::Terrain, tile: TilePosition) -> u8 {
+    let settings = terrain.settings();
+    if !crust_rules(settings) {
+        return crate::protection::band_heat_units(terrain.band_at(tile));
+    }
+    let tube = if lava_tube_at(settings, tile.x, tile.y) {
+        LAVA_TUBE_HEAT_UNITS
+    } else {
+        0
+    };
+    stratum_heat_units(terrain.stratum_at(tile)).saturating_add(tube)
+}
+
 /// Heat units of `stratum` on a Deep Descent world.
 ///
 /// The Crust is authored: cool down to the slate, then the first heat in the Basalt Columns

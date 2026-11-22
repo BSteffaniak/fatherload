@@ -77,17 +77,7 @@ impl WorldState {
     /// Heat units at `tile`: the stratum's own heat (plus a lava tube's) on a Deep Descent
     /// world, the classic band heat elsewhere.
     pub(super) fn heat_units_at(&self, tile: TilePosition) -> u8 {
-        let settings = self.terrain.settings();
-        if !crust_rules(settings) {
-            return crate::protection::band_heat_units(self.terrain.band_at(tile));
-        }
-        let stratum = self.terrain.stratum_at(tile);
-        let tube = if crust::lava_tube_at(settings, tile.x, tile.y) {
-            crust::LAVA_TUBE_HEAT_UNITS
-        } else {
-            0
-        };
-        crust::stratum_heat_units(stratum).saturating_add(tube)
+        crust::heat_units(&self.terrain, tile)
     }
 
     /// Whether `player_id`'s rig rides a mine cart.
