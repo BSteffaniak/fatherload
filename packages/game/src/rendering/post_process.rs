@@ -143,6 +143,7 @@ impl PostProcess {
     }
 
     /// Whether the effect shader compiled (scene capture reports it).
+    #[cfg(not(target_os = "emscripten"))]
     #[must_use]
     pub const fn shader_ready(&self) -> bool {
         self.shader.is_some()

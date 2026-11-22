@@ -1038,6 +1038,12 @@ world generation changes):
 - `E` / `Enter`: interact with buildings/interior counters, talk to the person beside you
   ("Talk to Mara"), confirm menus, or start game; with nothing else to use, climb out of the
   rig (and board it again on foot, see On foot)
+- `,` / `.`: rotation thrusters: turn the rig left / right (the camera turns with the craft and
+  the world turns around it; the HUD stays upright). On the home world a flying rig leans up
+  to about 35 degrees and settles level when it lands or drills; strange fields (gravity
+  shear, upside-down rooms, weightlessness) let it turn all the way round. Nothing ever tilts
+  the rig for you: the gyro stabiliser and horizon hold assists (Options, off by default)
+  work only once fitted to the rig.
 - `Space`: on foot, jump (held in the air: the jetpack)
 - `R`: on foot, the rope (grapple / the rig's winch / let go)
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
@@ -1059,7 +1065,8 @@ last device used: keyboard keys as keycaps, or the controller's own button glyph
 
 | Action | Controller (Xbox names) | Keyboard |
 | --- | --- | --- |
-| Move / drill sideways | Left stick or d-pad left/right | `A` / `D` |
+| Move / drill sideways | Left stick (on foot and in menus also the d-pad) | `A` / `D` |
+| Turn the rig (rotation thrusters) | d-pad left / right (in the rig) | `,` / `.` |
 | Thrust | `A`, or up on stick / d-pad (`RT` too while no weapon is mounted) | `W` / Space |
 | Fire weapon | `RT` (held) | left mouse button / `V` |
 | Aim weapon | Right stick (released: auto-aim at the nearest target ahead) | Mouse |
@@ -1105,6 +1112,7 @@ appear when the screen is touched and go away when a key or controller button is
 | Fire the weapon | Hold `FIRE` (auto-aims); drag it to aim |
 | Detonate | `DET` (shown while charges wait): tap for all, hold for one after another |
 | Scanner | `SCAN` |
+| Turn the rig (rotation thrusters) | Hold `<ROT` / `ROT>` at the top of the stick side |
 | Infrastructure kits, build mode | `KIT` opens them |
 | Enter / use / call rescue | Tap the prompt under the rig |
 | Inventory, pause, map | `BAG`, `II`, `MAP` along the top |
@@ -1235,6 +1243,17 @@ Multiplayer is being rebuilt per `multiplayer-architecture-plan.md`:
   title menu's "Local Split-Screen" starts with two) run on `HostSession` with local seats.
 
 Online host/join is hidden in the menus until it is wired onto the same runtime.
+
+### Screen effects (accessibility)
+
+Strange fields deep down can pixelate, mirror, tint, fog, darken or ripple the screen
+(the post-process stack, per split-screen view). Options > Screen effects sets them to Full
+(default), Reduced or Off. Whatever the setting, effects never flash or strobe: every level
+eases in over a fraction of a second and changes at a capped rate, exposure and bloom are
+capped, ripples stay under one cycle a second and scanlines never move. A dark field still
+darkens the view with effects off (darkness is gameplay); a mirror field still mirrors the
+controls. Test-mode worlds can place field zones from the pause menu (Place Field Zone cycles
+the presets, Clear Field Zones removes them).
 
 ## Saves and Settings
 

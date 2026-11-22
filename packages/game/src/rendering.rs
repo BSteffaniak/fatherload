@@ -265,6 +265,8 @@ impl GameRenderer {
             self.terrain.mark_all_dirty();
             self.explored_drawn = DiscoveredTiles::default();
             self.rig_facings.clear();
+            // A new world shows its screen effects at once.
+            self.post.reset();
         }
         self.rig_facings.update(&snapshot.players);
         for tile in &report.changed_tiles {

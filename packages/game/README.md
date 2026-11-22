@@ -210,6 +210,68 @@ dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host whi
 open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_active`). The
 `FATHERLOAD_NET_SIM` link conditioner applies to every online session.
 
+## Wave 7 effects (F9: post-process pipeline, rolling camera, rotation controls)
+
+- **Pipeline** (`rendering/post_process.rs`): a view whose seat sees screen effects, a darkened
+  field or a rolled camera is drawn into its own render texture (world pass), turned around the
+  rig into a view-sized texture when the camera rolls (roll pass), then put on screen through
+  one shader running the stack in order: lensing, wobble, pixelation, mirror, chromatic
+  aberration, bloom, exposure, the field's light, desaturation, colour grade, palette
+  reduction, fog, scanlines, vignette. GLSL 330 on the desktop and GLSL ES 100 in the browser
+  come from one body (`fragment_source`; a unit test checks both are well formed, scene capture
+  prints whether the desktop shader compiled, the browser build compiles the ES variant at
+  start). Views with nothing to do draw straight to the screen as before, so every older scene
+  is pixel-identical. The HUD is drawn afterwards on the seat canvas (upright, untouched).
+  Each split-screen seat has its own textures, levels and roll; the view scissor is lifted
+  during the texture passes.
+- **Levels** (`screen_fx.rs`, pure and unit tested): the view's `FieldSample` (at the seat's rig
+  or pilot, `ViewSnapshot::fields`) times `EffectsIntensity` (Options: full / reduced / off),
+  eased (0.3 s) and always rate-limited (`MAX_LEVEL_RATE`, brightness-changing effects and the
+  light `MAX_LUMINANCE_RATE`), exposure and bloom capped, the wobble phase under 0.8 Hz: no
+  flash or strobe is possible whatever a field does (`a_strobing_field_never_flashes_the_screen`).
+- **Rolling camera**: `ViewSnapshot::roll` is the seat's rig orientation while in the rig (0 on
+  foot: the pilot stays upright). Rigs are drawn turned about their middle
+  (`rendering/world.rs::TurnedAbout`, rlgl matrix stack), so the seat's own craft looks upright
+  while the world turns; other rigs show their own lean (`PlayerPresentation::orientation`).
+- **Controls**: `PlayerInput::{rotate, dpad_rotates, stick_horizontal}`: keyboard `,` / `.`,
+  the arrow-keys seat Numpad `/` `*`, a controller's d-pad left/right in the rig (the stick
+  drives meanwhile; on foot and in menus the d-pad walks and steps), touch `<ROT` / `ROT>`
+  (`TouchControl::{RotateLeft, RotateRight}`, top inner corner of the stick zone, below any
+  dropped top-row button). Options gains Screen effects, Gyro stabiliser and Horizon hold
+  (`SettingsFile::{effects, assists}`, defaults full / off); the assists ride along in every
+  `ControlState`.
+- **Dev zones**: test-mode pause entries Place Field Zone (cycles `FieldPreset`s around the
+  seat's rig) and Clear Field Zones, both `TestModeAction`s (so online too).
+- **Scenes** (`scene_capture/field_scenes.rs`): `fx_pixelate`, `fx_palette`, `fx_exposure`,
+  `fx_bloom`, `fx_desaturate`, `fx_grade`, `fx_chromatic`, `fx_mirror`, `fx_wobble`,
+  `fx_lensing`, `fx_scanlines`, `fx_vignette`, `fx_fog`, `fx_combined`, `fx_dark`,
+  `fx_pixel_rot_cavern`, `fx_split_screen` (per-seat effects, seat 2 rolled),
+  `rotate_home_flying` (35 degree lean over town), `rotate_shear_wall` (standing on a wall),
+  `rotate_upside_down` (on the ceiling), `rotate_spinning_weightless`.
+
+- **Browser** (WebGL1): the ES 100 shader compiles and draws the same picture as the desktop
+  (`target/web-perf/fx_combined.png` matches `fx_combined`). Frame budget, `node
+  scripts/perf-web.cjs` on saves exported from the scenes above (5 s each, 1280 x 720, Chrome
+  on an Apple Silicon Mac under heavy load from parallel builds):
+
+  | Scene | GPU: frames in 5 s / mean JS work (ms) | Software WebGL: frames in 5 s / mean JS work (ms) |
+  |---|---|---|
+  | town_market (no effects, straight to screen) | 300 / 1.09 | 26 / 2.52 |
+  | fx_combined (every effect, all stages on) | 300 / 1.20 | 41 / 1.15 |
+  | fx_pixelate | 300 / 1.24 | 49 / 1.08 |
+  | fx_wobble | 300 / 1.20 | 35 / 1.22 |
+  | fx_dark (light only) | 300 / 1.02 | 66 / 1.16 |
+  | rotate_shear_wall (world, roll and effect passes) | 300 / 1.05 | 19 / 1.17 |
+
+  On a GPU every state holds the display's 60 Hz with about 1 ms of JavaScript-side work, the
+  same as a plain scene: the extra passes are GPU fill (one view-sized texture, plus a
+  roughly 2x square while rolled) and one full-screen fragment pass of at most 14 texture
+  reads. Software WebGL is bound by rasterization outside the measured callback; its frame
+  counts swing with the machine's load (the plain scene drew fewer frames than the effect
+  scenes in this run), and the rolled view, which rasterizes about three times the pixels,
+  is the slowest there. Budget: keep the stack one pass; a rolled view is the cost to watch on
+  weak devices.
+
 ## Wave 6 QA (presentation, tests and browser timing)
 
 - **Presentation clock** (`ShellState::update_ticks`): toasts, banners and every world
