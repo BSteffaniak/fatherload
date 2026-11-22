@@ -2842,7 +2842,13 @@ gameplay event codes. The Sun Colossus' art was redrawn to its existing
   chunks grow, with ground explored; the entity store stays at 10-90 entities; service
   transactions level off at about 7 KB; people memories (`MEMORY_EVENTS`), conversations
   (`CONVERSATION_LINES`), the no-repeat window, the host's late actions, the client's event
-  dedup set and the input buffers are all capped already.
+  dedup set and the input buffers are all capped already. Review follow-up: the roamer used to
+  hop into the first cliff each way and shuttle over the same ~300 tiles (x -12..286) all
+  session, so the surface (villages, camps, night monsters further out) was barely soaked. It
+  now cruises a few tiles above the highest ground just ahead, kept fuelled and whole, on legs
+  90 s longer each time; over 12 days it sweeps about 3,100 tiles (x -1,430..1,673), and the
+  report fails if it covers under 1,500. Same result with that coverage: only discovered tiles
+  and terrain chunks grow, entities stay at 27-82, service transactions flat at about 7 KB.
 - **Saves across versions** (game crate, see its README): every save format 1-11 and every
   generator (legacy, V1-V10) loads, plays, saves and reloads exactly; a V10 world saved
   mid-crypt continues identically. No V1-V10 digest changed (no worldgen change in wave 6).
