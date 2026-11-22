@@ -1997,7 +1997,8 @@ unchanged); every new enum variant is appended, so old saves load.
   small isle beside a sky town's town isle with a level, open stretch of turf, never a
   crumbling isle; medium or small; pure in the settings) are sold at the town's hall
   (`WorldState::at_sky_land_office`, `land_office_listing`, `land_office_catalogue` with
-  the sky pieces); surveyed sky spots keep clear of them; sky plots refuse a basement; sky
+  the sky pieces) and only there (`BuyPlot` of a `SkyIsle` key elsewhere is
+  `NotAtLandOffice`); surveyed sky spots keep clear of them; sky plots refuse a basement; sky
   towns' builders (and the colony's on the Moon) bid for sky and Moon plots.
 - **Formats**: `PROTOCOL_VERSION` 14 and save format 12 (both for the appended variants;
   version 8-11 saves load).

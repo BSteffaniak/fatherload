@@ -93,6 +93,7 @@ fn folk_of(
 }
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "one walk through the land office")]
 fn sky_towns_list_isle_plots_at_their_land_office() {
     let mut world = world();
     let settings = *world.world_settings();
@@ -167,7 +168,7 @@ fn sky_towns_list_isle_plots_at_their_land_office() {
         builders.iter().any(|offer| offer.from == found.name),
         "{builders:?}"
     );
-    // A ground office doesn't sell sky furniture.
+    // A ground office doesn't sell sky furniture, nor the sky town's isle plots.
     let hq = crate::surface::SURFACE_BUILDINGS
         .iter()
         .find(|building| building.zone == crate::economy::SurfaceZone::Headquarters)
@@ -175,6 +176,18 @@ fn sky_towns_list_isle_plots_at_their_land_office() {
     let ground = world.terrain().surface_row(hq.tile_x + 2);
     park(&mut world, hq.tile_x + 2, ground);
     assert_eq!(world.at_sky_land_office(PLAYER), None);
+    // (Refused before the deed is looked up, so even the plot bought above answers this.)
+    let other = sites[sites.len() - 1];
+    assert_eq!(
+        world.check_home(
+            PLAYER,
+            &HomeCommand::BuyPlot {
+                site: other.key,
+                size: other.size,
+            },
+        ),
+        Err(HomeRefusal::NotAtLandOffice)
+    );
     assert_eq!(
         world.check_home(
             PLAYER,
@@ -309,6 +322,22 @@ fn colonists_live_talk_and_trade_at_the_moon_colony() {
     for person in &settlement.population.characters {
         assert!(crate::people::Role::LUNAR_POOL.contains(&person.role));
         assert_eq!(person.culture, crate::people::Culture::Lunar);
+    }
+    // The station's quartermaster and hydroponist always sell the moon globe.
+    for role in [
+        crate::people::Role::Quartermaster,
+        crate::people::Role::Hydroponist,
+    ] {
+        let person = settlement
+            .population
+            .characters
+            .iter()
+            .find(|person| person.role == role)
+            .expect("at every station");
+        assert!(offers::offers_of(person).iter().any(|offer| matches!(
+            offer.deal,
+            offers::PersonDeal::Furniture(crate::home::Furniture::MoonGlobe)
+        )));
     }
     // Saves keep the colony's people and what they remember.
     let json = serde_json::to_string(&world).expect("save");

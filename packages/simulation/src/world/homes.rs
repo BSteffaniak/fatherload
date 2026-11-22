@@ -668,6 +668,12 @@ impl WorldState {
                     if !self.at_land_office(player_id) {
                         return Err(HomeRefusal::NotAtLandOffice);
                     }
+                    // A sky town's isle plots are sold only at that town's own land office.
+                    if let SiteKey::SkyIsle(town, _) = site
+                        && self.at_sky_land_office(player_id) != Some(town)
+                    {
+                        return Err(HomeRefusal::NotAtLandOffice);
+                    }
                     let found = plot::listed_site(self.terrain.settings(), site)
                         .ok_or(HomeRefusal::NoSuchPlot)?;
                     if self.homes.plot_of_site(site).is_some() {

@@ -706,6 +706,11 @@ fn the_guardian_waits_in_its_room_and_its_fall_opens_the_way_out() {
         world.tombs().unlocks_of(PLAYER).expect("unlocks").trophies,
         1
     );
+    // Wave 6 trophies for the home: the guardian's mask comes with its fall, the relic plinth
+    // with the first run seen through.
+    let count = |world: &WorldState, piece| world.homes().furniture_count(PLAYER, piece);
+    assert_eq!(count(&world, crate::home::Furniture::GuardianMask), 1);
+    assert_eq!(count(&world, crate::home::Furniture::RelicPlinth), 0);
     world.scenario_tomb_stairs(PLAYER);
     assert!(world.tomb_run_of(PLAYER).is_none());
     assert_eq!(
@@ -716,6 +721,7 @@ fn the_guardian_waits_in_its_room_and_its_fall_opens_the_way_out() {
             .map(|summary| summary.outcome),
         Some(RunOutcome::Finished)
     );
+    assert_eq!(count(&world, crate::home::Furniture::RelicPlinth), 1);
 }
 
 #[test]
