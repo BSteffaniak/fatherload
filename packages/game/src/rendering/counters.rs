@@ -9,8 +9,8 @@ use fatherload_simulation::{
     ExplosiveKind, RecipeKind,
     economy::{
         DeepClaimStatus, REFUEL_UNIT_COST, REPAIR_UNIT_COST, TownBuilding, UpgradeKind,
-        UpgradeLock, upgrade_effect, upgrade_lock_for, upgrade_maxed, upgrade_offers_for,
-        upgrade_tier_name,
+        UpgradeLock, shop_line_count, upgrade_effect, upgrade_lock_for, upgrade_maxed,
+        upgrade_offers_for, upgrade_tier_name,
     },
     explosive::EXPLOSIVE_OFFERS,
     item::BlockKind,
@@ -325,8 +325,10 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
     let settings = ui.snapshot.terrain.settings();
     let deepest = ui.snapshot.progression.deepest_tile_reached;
     let rules = ui.snapshot.logistics.rules;
+    // Classic worlds list their own lines only: the rig systems are Deep Descent gear.
     upgrade_offers_for(ui.player, rules)
         .iter()
+        .take(shop_line_count(rules))
         .map(|offer| {
             let icon = upgrade_icon(offer.kind);
             let max = offer.max_level;
@@ -351,10 +353,11 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
             };
             // The measured headline of what the next tier changes (the showcase card beside
             // the panel shows the rest), then the line's description.
-            let about = fatherload_simulation::upgrade_preview::upgrade_preview(
+            let about = fatherload_simulation::upgrade_preview::upgrade_preview_for(
                 ui.player,
                 offer.kind,
                 settings.generator.sky_bands().as_ref(),
+                rules,
             )
             .and_then(|preview| preview.headline().map(str::to_owned))
             .or_else(|| upgrade_effect(ui.player, offer.kind))

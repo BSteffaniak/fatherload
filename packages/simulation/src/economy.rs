@@ -369,6 +369,20 @@ pub const UPGRADE_OFFER_COUNT: usize = 26;
 /// Shop index of the drill mount line.
 pub const DRILL_MOUNT_OFFER_INDEX: usize = 8;
 
+/// How many of the shop's offers a world's shop lists under `rules`.
+///
+/// Every line on Deep Descent worlds, and on classic worlds the lines before the rig systems
+/// (they are appended last, so offer indices stay the same either way and classic shops keep
+/// their 18 rows).
+#[must_use]
+pub const fn shop_line_count(rules: ProgressionRules) -> usize {
+    if rules.is_descent() {
+        UPGRADE_OFFER_COUNT
+    } else {
+        UPGRADE_OFFER_COUNT - RigSystem::ALL.len()
+    }
+}
+
 /// The shop's offers for `player` on a classic world ([`upgrade_offers_for`] with
 /// [`ProgressionRules::Classic`]).
 #[must_use]
@@ -1065,6 +1079,10 @@ const BOULDER_DEFLECTOR_TIERS: [&str; BOULDER_DEFLECTOR_MAX_LEVEL as usize] = [
 
 /// The name of the tier the shop sells next on the `kind` line, when `level` is fitted (the top
 /// tier's name once the line is maxed).
+///
+/// A core line's `level` of [`MAX_UPGRADE_LEVEL`] or more names a Deep Descent tier (tier 16
+/// and up), so a caller naming a *maxed* classic line passes `level` clamped below its
+/// [`UpgradeOffer::max_level`].
 #[must_use]
 pub fn upgrade_tier_name(kind: UpgradeKind, level: u8) -> &'static str {
     let tiers: &[&'static str] = match kind {

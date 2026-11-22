@@ -1520,9 +1520,14 @@ impl SeatUi {
         if self.switch_quest_tab(modal, input) {
             return true;
         }
-        let upgrade_count = ctx
-            .player()
-            .map_or(1, |player| upgrade_offers(player).len());
+        // Classic worlds' shops list no rig systems (Part III F10; they are the last lines).
+        let upgrade_count = ctx.player().map_or(1, |player| {
+            upgrade_offers(player)
+                .len()
+                .min(fatherload_simulation::economy::shop_line_count(
+                    ctx.world.progression_rules(),
+                ))
+        });
         let progression = ctx.world.progression();
         let max_item = match modal {
             // The depot's last row (index 5) sells the block hopper (WP-DROPS).

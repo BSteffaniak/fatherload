@@ -105,8 +105,25 @@ pub fn upgrade_preview(
     kind: UpgradeKind,
     sky: Option<&SkyBands>,
 ) -> Option<UpgradePreview> {
+    upgrade_preview_for(
+        player,
+        kind,
+        sky,
+        crate::depth_progression::ProgressionRules::Classic,
+    )
+}
+
+/// [`upgrade_preview`] under the world's `rules`: on Deep Descent worlds the core lines preview
+/// their deep tiers past the classic top (Part III F10).
+#[must_use]
+pub fn upgrade_preview_for(
+    player: &Player,
+    kind: UpgradeKind,
+    sky: Option<&SkyBands>,
+    rules: crate::depth_progression::ProgressionRules,
+) -> Option<UpgradePreview> {
     let level = current_level(player, kind);
-    if kind != UpgradeKind::BombPack && level >= kind.max_level() {
+    if kind != UpgradeKind::BombPack && level >= kind.max_level_for(rules) {
         return None;
     }
     let next = if kind == UpgradeKind::BombPack {
@@ -290,7 +307,12 @@ fn preview_lines(
     // The sky gates, against the world's own bands (none without a sky).
     let island = |rig: &Player| sky.is_some_and(|bands| island_capable(rig, bands));
     let crosses = |rig: &Player| sky.is_some_and(|bands| crosses_dead_air(rig, bands));
-    let top = kind.max_level();
+    // A deep tier (Deep Descent worlds, Part III F10) measures against the deep top tier.
+    let top = if kind.is_core() && to > kind.max_level() {
+        crate::depth_progression::DESCENT_MAX_UPGRADE_LEVEL
+    } else {
+        kind.max_level()
+    };
     let mut bars = Vec::new();
     let mut changes = Vec::new();
     match kind {

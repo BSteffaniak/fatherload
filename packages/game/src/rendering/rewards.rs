@@ -19,7 +19,7 @@ use fatherload_simulation::{
     CosmeticItem, Player,
     economy::{UpgradeKind, current_level, upgrade_offers_for, upgrade_tier_name},
     milestone::{Medal, Milestone, MilestoneGroup},
-    upgrade_preview::{StatBar, UpgradePreview, preview_between, upgrade_preview},
+    upgrade_preview::{StatBar, UpgradePreview, preview_between, upgrade_preview_for},
 };
 use raylib::prelude::*;
 
@@ -493,9 +493,12 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
         return;
     }
     let player = ui.player;
-    let offers = upgrade_offers_for(player, ui.snapshot.logistics.rules);
+    let rules = ui.snapshot.logistics.rules;
+    let offers = upgrade_offers_for(player, rules);
     let index = ui.seat.selected_menu_item.min(offers.len() - 1);
     let kind = offers[index].kind;
+    // The line's top under the world's rules (the deep tiers on Deep Descent worlds).
+    let top_level = offers[index].max_level;
     let now = ui.shell.update_ticks;
     let install = ui
         .seat
@@ -505,7 +508,7 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
         .cloned();
     let sky = ui.snapshot.terrain.settings().generator.sky_bands();
     let preview: Option<UpgradePreview> = install.as_ref().map_or_else(
-        || upgrade_preview(player, kind, sky.as_ref()),
+        || upgrade_preview_for(player, kind, sky.as_ref(), rules),
         |moment| {
             Some(preview_between(
                 player,
@@ -571,7 +574,9 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
         (None, None) => ("TOP OF THE LINE".to_owned(), LIME),
     };
     ui_kit::text(draw, &title, x + 8, y + 6, TextStyle::Bold, title_color);
-    let level = current_level(player, kind);
+    // A maxed line names its top tier (a classic world's maxed core line must not name the
+    // first deep tier, which only Deep Descent worlds sell).
+    let level = current_level(player, kind).min(top_level.saturating_sub(1));
     let part = install.as_ref().map_or_else(
         || upgrade_tier_name(kind, level),
         |moment| upgrade_tier_name(kind, moment.to_level.saturating_sub(1)),
