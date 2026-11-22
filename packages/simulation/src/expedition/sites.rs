@@ -252,6 +252,9 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
         || crate::worldgen::descent::far_strange::stamps_with(settings, &layout, &area.expanded(2))
             .iter()
             .any(|stamp| stamp.bounds.expanded(2).intersects(area))
+        // ... and the alloy seal over Descent VII: a room carved through it would be a way
+        // past The Glitch without the Phase Drill.
+        || crate::worldgen::descent::far_strange::crosses_alloy_seal(settings, &layout, area)
 }
 
 /// Whether `area` crosses a pilot-only space (V9+, stamped before the story pass) or a tomb

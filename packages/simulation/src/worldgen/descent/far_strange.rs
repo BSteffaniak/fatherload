@@ -711,6 +711,23 @@ pub const fn alloy_seal(settings: &WorldSettings, layout: &DescentLayout, x: i32
     y >= top && y < top + ALLOY_SEAL_ROWS
 }
 
+/// Whether `area` (grown by two tiles) touches a row of the alloy seal in any of its columns
+/// (later passes keep their rooms off it).
+#[must_use]
+pub fn crosses_alloy_seal(
+    settings: &WorldSettings,
+    layout: &DescentLayout,
+    area: &TileRect,
+) -> bool {
+    let index = Stratum::PrismDesert.index();
+    let (_, half) = super::boundary_shape(index);
+    let grown = area.expanded(2);
+    (grown.min.x..=grown.max.x).any(|x| {
+        let top = super::boundary_column_depth(settings, layout, index, x) + half;
+        top <= grown.max.y && top + ALLOY_SEAL_ROWS > grown.min.y
+    })
+}
+
 /// The far Strange Layers' tile at `(x, y)` over `base`: a stamp's tile, the alloy seal, else
 /// far rock, else `None` (leave `base`). `stamps` are the chunk's [`stamps_with`].
 #[must_use]
@@ -722,13 +739,15 @@ pub fn far_tile(
     y: i32,
     base: TileKind,
 ) -> Option<TileKind> {
+    // The seal first and over everything but bedrock: a vault's seal, a ruin's gate or a
+    // keycard door left in its rows would be a way into Descent VII without the Phase Drill.
+    if base != TileKind::Bedrock && alloy_seal(settings, layout, x, y) {
+        return Some(TileKind::Cave(CaveTile::BuilderAlloy));
+    }
     for stamp in stamps {
         if let Some(kind) = stamp_tile(stamp, x, y, base) {
             return Some(kind);
         }
-    }
-    if carvable(base) && alloy_seal(settings, layout, x, y) {
-        return Some(TileKind::Cave(CaveTile::BuilderAlloy));
     }
     let stratum = stratum_in(settings, layout, x, y);
     if !is_far(stratum) {
@@ -893,6 +912,64 @@ mod tests {
             assert_eq!(
                 super::super::stratum_in(&settings, &layout, x, rows[0]).descent(),
                 Descent::Ancients
+            );
+        }
+    }
+
+    /// The generated world, not just the seal's shape: after every later pass (the story's
+    /// rooms, the builders' lifts, tombs, fluids) no column leaves a way through the seal but
+    /// the Phase Drill (a ruin's gate, a keycard door or a vault seal once did).
+    #[test]
+    fn the_generated_seal_has_no_gap_in_any_column() {
+        for seed in [WorldSettings::default().seed, 0x0D3E_9DE5, 7] {
+            let settings = WorldSettings {
+                generator: GeneratorVersion::V11,
+                ..WorldSettings::new(seed)
+            };
+            let layout = super::super::layout(&settings);
+            let (bottom_top, bottom_end) = (
+                layout.rows(Stratum::PrismDesert).1 - 60,
+                layout.rows(Stratum::PrismDesert).1 + 80,
+            );
+            let mut gaps = Vec::new();
+            for x in -1_200..1_200 {
+                let rows: Vec<i32> = (bottom_top..bottom_end)
+                    .filter(|y| alloy_seal(&settings, &layout, x, *y))
+                    .collect();
+                let sealed = rows.iter().any(|y| {
+                    let kind = crate::worldgen::streamed::generated_tile(
+                        &settings,
+                        TilePosition { x, y: *y },
+                    )
+                    .kind;
+                    // An ancient lift's rail (ruin masonry, unbreakable and never opening)
+                    // may cross it: its lift is restored only from its station below.
+                    matches!(
+                        kind,
+                        TileKind::Cave(CaveTile::BuilderAlloy)
+                            | TileKind::Bedrock
+                            | TileKind::Built(crate::base::BuiltTile::RuinWall)
+                    )
+                });
+                if !sealed {
+                    let kinds: Vec<TileKind> = rows
+                        .iter()
+                        .map(|y| {
+                            crate::worldgen::streamed::generated_tile(
+                                &settings,
+                                TilePosition { x, y: *y },
+                            )
+                            .kind
+                        })
+                        .collect();
+                    gaps.push((x, kinds));
+                }
+            }
+            assert!(
+                gaps.is_empty(),
+                "seed {seed:#x}: {} gaps, first {:?}",
+                gaps.len(),
+                gaps.iter().take(6).collect::<Vec<_>>()
             );
         }
     }
