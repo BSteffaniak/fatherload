@@ -862,6 +862,14 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
         "too shallow"
     );
     world.progression.deepest_tile_reached = RigSystem::PressureHull.sold_from_row(&PlanLayout);
+    let inputs = TickInputs::default().act(PLAYER, buy.clone());
+    let output = world.simulate_tick(world.simulation_tick(), &inputs);
+    assert_eq!(
+        output.action_outcomes[0].outcome,
+        PlayerScopedCommandOutcome::IgnoredUnavailable,
+        "reached but not felt yet (Wave 8)"
+    );
+    world.logistics.felt_systems |= RigSystem::PressureHull.bit();
     let inputs = TickInputs::default().act(PLAYER, buy);
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
     assert_eq!(

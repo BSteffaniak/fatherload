@@ -48,6 +48,8 @@ mod crew;
 mod crypt_tests;
 mod crypts;
 #[cfg(test)]
+mod deep_progression_tests;
+#[cfg(test)]
 mod deep_wiring_tests;
 #[cfg(test)]
 mod descent_tests;

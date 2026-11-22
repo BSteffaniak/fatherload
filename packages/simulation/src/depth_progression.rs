@@ -849,16 +849,14 @@ pub const fn outpost_stocks(
 /// more, times the Descent value curve).
 #[must_use]
 pub const fn deep_ore_value(descent: u8, rank: u8) -> u32 {
-    let mut value = 40_u64;
+    // Each Descent's commonest ore starts about where the last one's fourth rank left off,
+    // times the Descent value curve; each rank is worth half again more.
+    let mut value = 40 * (1 + descent as u64 * 3) * descent_value_percent(descent) as u64 / 100;
     let mut step = 0;
     while step < rank {
         value = value * 3 / 2;
         step += 1;
     }
-    let value = value * descent_value_percent(descent) as u64 / 100;
-    // Each Descent starts where the last one's third rank left off.
-    let floor = 40 * (1 + descent as u64 * 3);
-    let value = if value < floor { floor } else { value };
     if value > u32::MAX as u64 {
         u32::MAX
     } else {
