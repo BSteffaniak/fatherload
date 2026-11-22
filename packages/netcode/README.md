@@ -64,6 +64,11 @@ Replica checks use `visible_state_hash(viewer)`: the host puts it in `debug_hash
 
 ## Tests
 
+Wave 6 QA added `world_pilots_on_the_moon_and_in_the_high_sky_predict_and_converge`: one
+crewmate on foot on the Moon's pad (low gravity) and one under the Moon's underside (the
+highest open sky) under a lossy, jittery link; it checks convergence, bounded queues and that
+the pilots really climbed out and jumped.
+
 `cargo test -p fatherload_netcode`: component tests, toy and real-world end-to-end harness runs
 (0 ms and lossy links, 30/60/120 Hz, 2/4/16 clients, join in progress, reconnect, epochs,
 private state reaching only its owner), and terrain relevance convergence with a finite radius.

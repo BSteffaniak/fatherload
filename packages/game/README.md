@@ -68,8 +68,13 @@ Modules:
   own icons), each row showing `Tier n/max` and the footer the next tier's effect
   (`economy::upgrade_effect`); the inventory lists every line's tier; HUD bars whose maximum
   passes 999 show just the reading (`ui_kit::compact_amount`) so large tanks and hulls fit.
-- `scene_capture` — `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]`
-  renders scripted scenes to PNGs (see the art guide). Scenes run in the default world (fixed
+- `scene_capture` — `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list]
+  [--frame-timing N] [--export-saves]` renders scripted scenes to PNGs (see the art guide).
+  `--frame-timing N` then draws N more frames per scene and prints the CPU time of the frame
+  work (snapshot, renderer sync and draw calls; not the swap): mean, median, p95 and max.
+  `--export-saves` opens no window and writes each scene's staged world as a save
+  (`<dir>/<scene>.json`) for `scripts/perf-web.cjs`, which loads them into the WASM build and
+  times every animation-frame callback (see "Browser frame timing" below). Scenes run in the default world (fixed
   seed `D111-6A4E`); scenes that need a particular place (`hazard_telltales`,
   `strata_boundary`) find it through the world's feature index rather than fixed coordinates,
   and the `poi_*` scenes swap in the first world from the default seed on that holds the POI
@@ -152,8 +157,13 @@ Modules:
     holds its own player's loadout and discovery (other rigs show their public build), so its
     F3 hash status compares the host's client-visible hash;
   - `lan` runs mDNS browsing and descriptor fetches on helper threads;
-  - `bots` + `headless`: `fatherload --headless-host [addr] [--lan] [--duration S]` and
-    `fatherload --bot-client <addr> [--count N] [--duration S]` (no window, periodic stats lines).
+  - `bots` + `headless`: `fatherload --headless-host [addr] [--lan] [--until-empty]
+    [--duration S]` and `fatherload --bot-client <addr> [--count N] [--duration S]` (no window,
+    periodic stats lines; the host also prints one whenever its client count changes). A bot's
+    `--duration` is play time, counted once every bot is in game (joining is bounded by its own
+    30 s timeout); `--until-empty` ends the host once a client has come and every client has
+    gone. The `tests/headless.rs` smoke test uses both, so a slow start on a loaded machine no
+    longer races fixed durations.
 
 Online flow: Title > Host Online Game (lobby with address, descriptor copy, roster, Start) or
 Join Online Game (address, pasted descriptor, or LAN list), lobby ready toggle, Leave/End,
@@ -164,3 +174,59 @@ and a periodic autosave); joined clients cannot save or load. F3 toggles the net
 dev builds F4 / Page Up / Page Down tune live `NetTuning` values on the host while the overlay is
 open (otherwise Page Up / Page Down scroll dialogs; `ShellState::tuning_keys_active`). The
 `FATHERLOAD_NET_SIM` link conditioner applies to every online session.
+
+## Wave 6 QA (presentation, tests and browser timing)
+
+- **Presentation clock** (`ShellState::update_ticks`): toasts, banners and every world
+  animation treat it as sixtieths of a second, but it counted frames. The browser build runs
+  one frame per display refresh, so on a 120 Hz screen all of it ran at double speed (half
+  speed at 30 fps). It now follows real time (`advance_presentation_clock`); a frame of about
+  1/60 s still counts exactly one, so 60 Hz displays behave as before. Regression test:
+  `shell::tests::the_presentation_clock_follows_real_time_at_any_frame_rate`.
+- **The backdrop Moon** (`rendering/world/sky.rs`, `MoonDiscs`): drawn every frame as runs of
+  rectangles broken by its speckles and dither (about ten thousand once it looms in the high
+  sky), it was the browser's worst frame by far. It is now rasterized into a lit and a dark
+  layer texture when its radius or phase changes (four recent discs cached for split-screen
+  views) and drawn as two textures with the same alphas. The phase is quantized to 1/4096 of
+  the disc, so a few terminator pixels can land one art pixel over (8 pixels of the
+  `sky_space` capture); everything else is pixel-identical.
+- **Robust real-network tests**: `online/tests.rs` and `online/persistence_tests.rs` wait for
+  their conditions (every issued action resolved, more than ten authority hashes compared,
+  server frames applied) with at least the old windows, under a one-minute bound, instead of
+  asserting after fixed windows; the loopback datagram burst in `quic_transport` is paced in
+  tens. No check was weakened.
+- **Saves across versions**: `save::tests::every_supported_save_format_loads_plays_and_round_trips`
+  (formats 1 to 11 load, play two minutes with the mining bot, save and reload exactly, rigs on
+  the current fuel and cargo curves) and
+  `save::cross_version_tests::every_generator_version_saves_mid_play_and_continues_identically`
+  (a two-rig world of every generator, legacy and V1 to V10, played a minute at dusk on the
+  short day, saved and loaded through the game's save code, then replayed 40 s into the night
+  next to the never-saved world: identical every second; V10 with a crew member saved
+  mid-crypt).
+
+### Browser frame timing
+
+```bash
+cargo run --release -p fatherload_game -- --screenshot-scenes target/perf-saves --export-saves \
+  --only night_town,night_full_moon,cave_dark_lamp,sky_archipelago,sky_city,sky_space,moon_colony,tomb_run_side_view_traps,side_tomb_sand,crypt_traps,crypt_skeleton_pack
+nix develop .#web --command bash scripts/build-web.sh
+FATHERLOAD_WEB_GPU=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome node scripts/perf-web.cjs target/perf-saves
+```
+
+Mean frame work per animation frame (ms, 5 s per scene, 1280 x 720, Chrome on an Apple
+Silicon Mac under heavy load from other builds), before / after the Moon fix:
+
+| Scene | GPU before | GPU after | Software WebGL before | Software WebGL after |
+|---|---|---|---|---|
+| sky_space (the Moon looming) | 4.74 (p95 6.3) | 2.73 (p95 4.2) | 190 (median 139) | 26 (median 3.3; texture rebuilds as the rig drifts) |
+| night_full_moon | 2.04 | - | 2.30 | 2.12 |
+| sky_city / sky_archipelago | 2.52 / 2.25 | - | 2.32 / 2.41 | 2.51 / 1.80 |
+| moon_colony | 1.74 | - | 1.67 | 2.02 |
+| night_town / cave_dark_lamp | 1.89 / 1.61 | - | 2.15 / 1.70 | 2.01 / 1.59 |
+| tomb_run_side_view_traps / side_tomb_sand | 1.04 / 2.81 | - | 1.93 / 1.54 | 1.23 / 1.27 |
+| crypt_traps / crypt_skeleton_pack | 1.22 / 1.00 | - | 1.54 / 1.30 | 1.37 / 1.11 |
+
+Every other state stays near 1-3 ms of frame work on both backends (software WebGL is bound
+by rasterizing, which happens outside the measured callback). Desktop `--frame-timing` agrees:
+`sky_space` 3.25 ms before and 1.69 ms after, most scenes 1-3 ms, `split_four_mixed` the
+heaviest at about 5.5 ms for four views.

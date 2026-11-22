@@ -65,6 +65,11 @@ npm --prefix web test
 # PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chrome npm --prefix web test
 ```
 
+Frame timing in staged states (night, sky chunks, the Moon, tombs and crypts):
+`--screenshot-scenes <dir> --export-saves --only ...` writes those states as saves and
+`node scripts/perf-web.cjs <dir>` times every animation frame of the WASM build in each (see
+`packages/game/README.md`, "Browser frame timing").
+
 The test serves the built bundle on a temporary loopback port, checks gameplay, exact save
 restoration, resume, suspension checkpoint, two-seat split-screen, resizing and runtime errors.
 Screenshots go to `target/web-test/`. Storage failure/transaction-ordering checks also run.

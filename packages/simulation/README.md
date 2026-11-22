@@ -2829,6 +2829,39 @@ the Moon layout's colony site, and the clock's `DayPhase` to pick and crossfade 
 gameplay event codes. The Sun Colossus' art was redrawn to its existing
 `EnemyKind::contact_half` (64 px wide at its 1.5x draw scale); its contact box is unchanged.
 
+## Wave 6 QA: long sessions, saves across versions and tomb timers
+
+- **Soak** (`world/soak_tests.rs`, `cargo test -p fatherload_simulation --release
+  soak_growth_report -- --ignored --nocapture`, `SOAK_DAYS` sets the length, 12 by default):
+  four rigs on the short day at 20 Hz (a prospector and a charges miner bot, one rig idle in
+  town, one roaming the surface) for 12 in-game days (about 50 s in release). It prints the
+  serialized size of every part of the world three levels deep at each midnight and fails if
+  any part not tied to exploration (discovered tiles, terrain chunks; live entities are
+  checked by count, under 2,000) more than doubles (and grows by more than 8 KB) through the
+  second half. Result: nothing grows without bound. Only the discovered tiles and the dug
+  chunks grow, with ground explored; the entity store stays at 10-90 entities; service
+  transactions level off at about 7 KB; people memories (`MEMORY_EVENTS`), conversations
+  (`CONVERSATION_LINES`), the no-repeat window, the host's late actions, the client's event
+  dedup set and the input buffers are all capped already.
+- **Saves across versions** (game crate, see its README): every save format 1-11 and every
+  generator (legacy, V1-V10) loads, plays, saves and reloads exactly; a V10 world saved
+  mid-crypt continues identically. No V1-V10 digest changed (no worldgen change in wave 6).
+- **Tomb timers and the tick rate**: every tomb and crypt timer is either a pure function of
+  `tomb::traps::world_millis(tick, hz)` (side-view traps, crumbling slabs) or a tick deadline
+  derived with `TickTiming::ticks_for_millis` (crypt plates, cracked floors and shots,
+  revives, the relic-pick timeout), so all of them are tick-rate safe within a session. A
+  world's rate is saved with it (`TickTiming`), and a load never changes it: `Runtime::load_world`
+  rebuilds the host at the save's rate (and refuses a save at another rate while remote
+  clients are connected). So a save loaded mid-run cannot shift a trap; the cross-version
+  test saves a 20 Hz world mid-crypt and replays it next to the unsaved one. (The trap
+  presentation also uses the world's tick rate; a frame-rate bug in the shell's animation
+  clock is fixed in the game crate.)
+- **Online at the far ends** (netcode
+  `world_pilots_on_the_moon_and_in_the_high_sky_predict_and_converge`): a crewmate on the
+  Moon's pad climbs out, walks and jumps in low gravity while another flies under the Moon's
+  underside (`y` past -100,000 px), on a 60 ms, 10 ms jitter, 2 % loss link: every client
+  converges on the host and every queue stays bounded.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
