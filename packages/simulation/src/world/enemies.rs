@@ -216,6 +216,9 @@ struct Intent {
 }
 
 /// Unit vector from `from` to `to` and the distance (straight up for coincident points).
+/// Fuel a mud leech drinks from a rig per bite (Wave 8, the Crust).
+pub const MUD_LEECH_FUEL_SIP: f32 = 9.0;
+
 fn direction(from: (f32, f32), to: (f32, f32)) -> ((f32, f32), f32) {
     let dx = to.0 - from.0;
     let dy = to.1 - from.1;
@@ -1149,6 +1152,10 @@ impl WorldState {
         let think_ticks = self.timing.ticks_for_millis(THINK_MILLIS).max(1);
         if (now.get() + id.get()).is_multiple_of(think_ticks) {
             self.think(id, &body, &mut state, now, output);
+            // A timber beetle at rest chews the mine timber over it (Wave 8, the Crust).
+            if state.kind == EnemyKind::TimberBeetle && !state.mode.hostile() {
+                self.beetle_chews(&body, &state, now, output);
+            }
         }
         self.free_from_rock(&mut body, state.kind);
         let intent = self.behave(id, &mut body, &mut state, now, output);
@@ -2153,7 +2160,59 @@ impl WorldState {
             }
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
         }
+        if kind == EnemyKind::MudLeech
+            && let Some(player) = self.players.get_mut(&player_id)
+        {
+            // A mud leech drinks fuel rather than denting the hull (Wave 8, the Crust).
+            player.fuel = quantize((player.fuel - MUD_LEECH_FUEL_SIP).max(0.0));
+            #[allow(clippy::cast_possible_truncation, reason = "world pixels fit i32")]
+            output.push_event(GameplayEventKind::CrustCreature {
+                action: crate::crust::CrustCreatureAction::LeechLatched,
+                x: from.0 as i32,
+                y: from.1 as i32,
+            });
+        }
         true
+    }
+
+    /// A resting timber beetle now and then chews through a timber set a few rows over it
+    /// (about one in six thoughts; the set then fails like any cut beam, see `world/crust.rs`).
+    fn beetle_chews(
+        &mut self,
+        body: &Body,
+        state: &EnemyState,
+        now: SimulationTick,
+        output: &mut TickOutput,
+    ) {
+        let roll = hash2(
+            u64::from(state.seed),
+            0xC705_BEE7,
+            i32::try_from(now.get() & 0x7FFF_FFFF).unwrap_or(0),
+            0,
+        );
+        if !roll.is_multiple_of(6) {
+            return;
+        }
+        let tile = self.frame().tile_at(body.x, body.y);
+        let beam = (1..=5).find_map(|rise| {
+            let at = TilePosition {
+                x: tile.x,
+                y: tile.y - rise,
+            };
+            (self.terrain.tile(at).map(|found| found.kind)
+                == Some(TileKind::Crust(crate::crust::CrustTile::Timber)))
+            .then_some(at)
+        });
+        if let Some(beam) = beam
+            && self.terrain.set_kind(beam, TileKind::Air)
+        {
+            #[allow(clippy::cast_possible_truncation, reason = "world pixels fit i32")]
+            output.push_event(GameplayEventKind::CrustCreature {
+                action: crate::crust::CrustCreatureAction::BeetleChewed,
+                x: body.x as i32,
+                y: body.y as i32,
+            });
+        }
     }
 
     /// Fires `count` shots of `shot` at `aim` (a lob for acid), spread in a volley.
@@ -2571,6 +2630,10 @@ fn enemy_event(id: EntityId, kind: EnemyKind, body: &Body, shape: EventShape) ->
 /// Whether a cave with spawn tags `tags` is home ground for `kind` (WP-CAVES): swarmers roost,
 /// burrowers tunnel soft walls, spitters and mimics nest, heat-lovers live by lava and machines
 /// guard built places.
+#[allow(
+    clippy::match_same_arms,
+    reason = "each family's habitat reads by itself"
+)]
 const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) -> bool {
     match kind {
         EnemyKind::CaveBat | EnemyKind::CrystalMite => tags.swarmers,
@@ -2585,6 +2648,13 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::DerelictAutomaton
         | EnemyKind::Warden => tags.machines,
         EnemyKind::BroodLord => tags.elite_lair,
+        // The Crust (Wave 8): moles in burrows, leeches and wasps by water, bats and beetles in
+        // the old works' caves, skinks and crabs on cave floors, tube things in the heat.
+        EnemyKind::BurrowMole => tags.burrowers,
+        EnemyKind::MudLeech | EnemyKind::PotterWasp => tags.aquatic || tags.swarmers,
+        EnemyKind::MineBat => tags.swarmers,
+        EnemyKind::TimberBeetle | EnemyKind::SlateSkink | EnemyKind::ShelfCrab => tags.nests,
+        EnemyKind::TubeCrawler | EnemyKind::CinderMoth => tags.heat,
         // Sky families never live in caves.
         EnemyKind::SkyRay
         | EnemyKind::Wyvern

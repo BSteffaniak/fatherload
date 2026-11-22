@@ -128,6 +128,10 @@ mod tests {
     };
 
     #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one bar per measure, every patch's exceptions listed"
+    )]
     fn every_patch_meets_the_quality_bar() {
         for &patch in Patch::ALL {
             let samples = render_patch(patch, variation_seed(11, patch, 0));

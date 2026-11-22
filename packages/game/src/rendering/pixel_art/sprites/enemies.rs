@@ -1373,3 +1373,414 @@ pub const SHOT_WISPFIRE: SpriteDef = SpriteDef {
     ],
     frame_seconds: 0.08,
 };
+
+// --- The Crust's creatures (Wave 8) --------------------------------------------------------
+
+/// A burrow mole: a velvet-dark tunneller with a pink star nose and big digging claws, facing
+/// right (jaws shut, then open for the bite).
+pub const BURROW_MOLE: SpriteDef = SpriteDef {
+    name: "enemy_burrow_mole",
+    legend: &[
+        ('o', INK),
+        ('d', SOIL_DARK),
+        ('m', SOIL),
+        ('l', LOAM),
+        ('p', PINK),
+        ('r', ROSE),
+        ('w', BONE),
+        ('e', CREAM),
+    ],
+    frames: &[
+        &[
+            "......oooooo......", //
+            "....oommmmmmoo....", //
+            "...ommlllllmmmo...", //
+            "..omllllllllmmmo..", //
+            ".omlllllllllmmmoo.", //
+            ".omllllllllemmmrpo", //
+            "odmmllllllmmmmorpp", //
+            "odmmmmmmmmmmmmoppo", //
+            ".oddmmmmmmmmddoo..", //
+            "..opopo..opopo....", //
+        ],
+        &[
+            "......oooooo......", //
+            "....oommmmmmoo....", //
+            "...ommlllllmmmo...", //
+            "..omllllllllmmmoo.", //
+            ".omlllllllllmmmorp", //
+            ".omllllllllemmowwp", //
+            "odmmllllllmmmo...o", //
+            "odmmmmmmmmmmmowwpp", //
+            ".oddmmmmmmmmddoopp", //
+            "..opopo...opopop..", //
+        ],
+    ],
+    frame_seconds: 0.0,
+};
+
+/// A mud leech: a fat, glistening ringed slug the colour of wet mud, a sucker mouth at its
+/// front, facing right (it humps along: two frames).
+pub const MUD_LEECH: SpriteDef = SpriteDef {
+    name: "enemy_mud_leech",
+    legend: &[
+        ('o', INK),
+        ('d', SOIL_DARK),
+        ('m', LOAM),
+        ('l', CLAY),
+        ('h', SAND),
+        ('r', MAROON),
+        ('p', ROSE),
+    ],
+    frames: &[
+        &[
+            "................", //
+            "......oooooo....", //
+            "....oommmmmmoo..", //
+            "...omlhhlmlmmmo.", //
+            "..omllmllmlmmrpo", //
+            ".omdmmdmmdmmdrpo", //
+            ".oddddddddddddo.", //
+            "..oooooooooooo..", //
+        ],
+        &[
+            "......oooo......", //
+            "....oommmmoo....", //
+            "...omlhhlmmmo...", //
+            "..omllmllmlmmoo.", //
+            ".omlmmdmmdmmmrpo", //
+            ".omdddmddmdddrpo", //
+            "..odddddddddddo.", //
+            "...oooooooooooo.", //
+        ],
+    ],
+    frame_seconds: 0.3,
+};
+
+/// A potter wasp: a clay-red striped abdomen, a black waist and glassy wings that blur
+/// (wings up, wings down).
+pub const POTTER_WASP: SpriteDef = SpriteDef {
+    name: "enemy_potter_wasp",
+    legend: &[
+        ('o', INK),
+        ('c', CLAY),
+        ('a', AMBER),
+        ('s', SKY_LIGHT),
+        ('i', ICE),
+        ('w', BONE),
+    ],
+    frames: &[
+        &[
+            "...oo..oo...", //
+            "..osio.oiso.", //
+            "..oisioisio.", //
+            "...ooioioo..", //
+            ".ooaco.oocwo", //
+            "ocacacoooaoo", //
+            ".ooacaoooo..", //
+            "...ooo..o.o.", //
+        ],
+        &[
+            "............", //
+            "............", //
+            "..oooo.oooo.", //
+            ".osiiiooiiso", //
+            ".ooaco.oocwo", //
+            "ocacacoooaoo", //
+            ".ooacaoooo..", //
+            "...ooo..o.o.", //
+        ],
+    ],
+    frame_seconds: 0.05,
+};
+
+/// A mine bat: a dusty grey colony bat with a lamp-pale belly, big ears and a squashed snout
+/// (wings spread, folded, and down).
+pub const MINE_BAT: SpriteDef = SpriteDef {
+    name: "enemy_mine_bat",
+    legend: &[
+        ('o', INK),
+        ('d', STONE_DARK),
+        ('m', STONE),
+        ('l', STONE_LIGHT),
+        ('e', AMBER),
+        ('w', BONE),
+    ],
+    frames: &[
+        &[
+            "oo.o......o.oo", //
+            "omoo.o..o.oomo", //
+            "ommmodooodommo", //
+            "ommmdelleddmmo", //
+            ".omdlllllldmo.", //
+            "..oodlwwldoo..", //
+            "....oddddo....", //
+            ".....o..o.....", //
+        ],
+        &[
+            "..............", //
+            "....o....o....", //
+            "...odooooodo..", //
+            "..odelleldo...", //
+            ".omdlllllldmo.", //
+            "ommodlwwldommo", //
+            "omo.oddddo.omo", //
+            "oo...o..o...oo", //
+        ],
+        &[
+            "....o....o....", //
+            "...odooooodo..", //
+            "..odelleldo...", //
+            "..omlllllldo..", //
+            ".ommdlwwldmmo.", //
+            "ommo.oddo.ommo", //
+            "omo........omo", //
+            "oo..........oo", //
+        ],
+    ],
+    frame_seconds: 0.09,
+};
+
+/// A timber beetle: a glossy chestnut shell with a gold seam, a horned head and strong
+/// mandibles, facing right (walk A/B, then jaws wide for the bite).
+pub const TIMBER_BEETLE: SpriteDef = SpriteDef {
+    name: "enemy_timber_beetle",
+    legend: &[
+        ('o', INK),
+        ('r', RUST),
+        ('c', COPPER),
+        ('g', GOLD),
+        ('d', SOIL_DARK),
+        ('k', MAROON),
+        ('w', BONE),
+    ],
+    frames: &[
+        &[
+            "....oooooooo......", //
+            "..oocccccgccoo....", //
+            ".occcgccccgcccoo..", //
+            ".ocrrrrrrgrrrrkoo.", //
+            "ocrrrrrrrgrrrrkdoo", //
+            "okkkkkkkkgkkkkdddw", //
+            ".oodddddddddddoowo", //
+            "..o.o.o.o.o.o.....", //
+            "..o..o..o..o......", //
+        ],
+        &[
+            "....oooooooo......", //
+            "..oocccccgccoo....", //
+            ".occcgccccgcccoo..", //
+            ".ocrrrrrrgrrrrkoo.", //
+            "ocrrrrrrrgrrrrkdoo", //
+            "okkkkkkkkgkkkkdddw", //
+            ".oodddddddddddoowo", //
+            "...o.o.o.o.o.o....", //
+            "....o..o..o..o....", //
+        ],
+        &[
+            "....oooooooo......", //
+            "..oocccccgccoo.ow.", //
+            ".occcgccccgcccoodo", //
+            ".ocrrrrrrgrrrrkdoo", //
+            "ocrrrrrrrgrrrrkdd.", //
+            "okkkkkkkkgkkkkdoow", //
+            ".oodddddddddddo.wo", //
+            "..o.o.o.o.o.o.....", //
+            "..o..o..o..o......", //
+        ],
+    ],
+    frame_seconds: 0.2,
+};
+
+/// A slate skink: a long, low lizard banded slate-blue and pale, a whip of a tail and bright
+/// gold eyes, facing right (running A/B, then rearing to lunge).
+pub const SLATE_SKINK: SpriteDef = SpriteDef {
+    name: "enemy_slate_skink",
+    legend: &[
+        ('o', INK),
+        ('d', SLATE_DARK),
+        ('m', SLATE),
+        ('l', SLATE_LIGHT),
+        ('s', SKY_LIGHT),
+        ('e', GOLD),
+        ('w', BONE),
+    ],
+    frames: &[
+        &[
+            "......................", //
+            "...........ooooooooo..", //
+            "oo......oooslmslmsleo.", //
+            "ommoooooddmlmmlmmlmmwo", //
+            ".oddmmmdddddddddddddo.", //
+            "..ooooooooddodoodo.o..", //
+            "..........o.o..o.o....", //
+        ],
+        &[
+            "......................", //
+            "...........ooooooooo..", //
+            ".oo.....oooslmslmsleo.", //
+            "..ommooooddmlmmlmmlmwo", //
+            "...ooddmddddddddddddo.", //
+            ".....oooooddodoodo.o..", //
+            "...........o.o..o.o...", //
+        ],
+        &[
+            "...................oo.", //
+            "..............ooooeso.", //
+            "............oolmslmwo.", //
+            "oo.......oooslmmlmoo..", //
+            "ommoooooddmlmmddoo....", //
+            ".oddmmmdddddddoo......", //
+            "..oooooooooddo.o......", //
+        ],
+    ],
+    frame_seconds: 0.12,
+};
+
+/// A shelf crab: a squat crab carrying a slab of slate for a shell, one claw bigger than the
+/// other, eyes on stalks (scuttle A/B, then the big claw raised).
+pub const SHELF_CRAB: SpriteDef = SpriteDef {
+    name: "enemy_shelf_crab",
+    legend: &[
+        ('o', INK),
+        ('d', SLATE_DARK),
+        ('m', SLATE),
+        ('l', SLATE_LIGHT),
+        ('s', SKY_LIGHT),
+        ('r', RUST),
+        ('c', COPPER),
+        ('e', CREAM),
+    ],
+    frames: &[
+        &[
+            "......oooooooooo........", //
+            "....oollslmmmmllmoo.....", //
+            "...ollmmmmlmmmmmmmdo.o.o", //
+            "...odddddddddddddddoeoeo", //
+            "..orcccccrrrrrccccroroo.", //
+            ".orccrrrrrrrrrrrrrrrcco.", //
+            "orrooorrrrrrrrrrrroocrro", //
+            ".o..o.o..o..o..o.o..ooo.", //
+            "...o.o..o..o..o..o......", //
+        ],
+        &[
+            "......oooooooooo........", //
+            "....oollslmmmmllmoo.....", //
+            "...ollmmmmlmmmmmmmdo.o.o", //
+            "...odddddddddddddddoeoeo", //
+            "..orcccccrrrrrccccroroo.", //
+            ".orccrrrrrrrrrrrrrrrcco.", //
+            "orrooorrrrrrrrrrrroocrro", //
+            ".o.o..o..o..o..o..o.ooo.", //
+            "..o..o..o..o..o..o......", //
+        ],
+        &[
+            "......oooooooooo....ooo.", //
+            "....oollslmmmmllmoooccro", //
+            "...ollmmmmlmmmmmmmdorrro", //
+            "...odddddddddddddddoeoo.", //
+            "..orcccccrrrrrccccrorr..", //
+            ".orccrrrrrrrrrrrrrrrro..", //
+            "orrooorrrrrrrrrrrrooo...", //
+            ".o..o.o..o..o..o.o......", //
+            "...o.o..o..o..o..o......", //
+        ],
+    ],
+    frame_seconds: 0.22,
+};
+
+/// A tube crawler: a many-legged basalt-black crawler with glowing seams of lava between its
+/// plates, facing right (crawl A/B, then its throat glows to spit).
+pub const TUBE_CRAWLER: SpriteDef = SpriteDef {
+    name: "enemy_tube_crawler",
+    legend: &[
+        ('o', INK),
+        ('n', NIGHT),
+        ('d', STONE_DARK),
+        ('m', MAROON),
+        ('r', RED),
+        ('a', ORANGE),
+        ('g', GOLD),
+    ],
+    frames: &[
+        &[
+            "......oooooooooo......", //
+            "....oondndndndndoo....", //
+            "...ondadndadndadndoo..", //
+            "..onddmddmddmddmddddo.", //
+            ".ondmmrmmrmmrmmrmmdgo.", //
+            ".onnnnnnnnnnnnnnnnnoo.", //
+            "..o.o.o.o.o.o.o.o.o...", //
+            ".o.o.o.o.o.o.o.o.o....", //
+        ],
+        &[
+            "......oooooooooo......", //
+            "....oondndndndndoo....", //
+            "...ondadndadndadndoo..", //
+            "..onddmddmddmddmddddo.", //
+            ".ondmmrmmrmmrmmrmmdgo.", //
+            ".onnnnnnnnnnnnnnnnnoo.", //
+            "...o.o.o.o.o.o.o.o.o..", //
+            "..o.o.o.o.o.o.o.o.o...", //
+        ],
+        &[
+            "......oooooooooo......", //
+            "....oondndndndndoo....", //
+            "...ondadndadndadndooo.", //
+            "..onddmddmddmddmddaago", //
+            ".ondmmrmmrmmrmmrmmagao", //
+            ".onnnnnnnnnnnnnnnnoaao", //
+            "..o.o.o.o.o.o.o.o.o...", //
+            ".o.o.o.o.o.o.o.o.o....", //
+        ],
+    ],
+    frame_seconds: 0.15,
+};
+
+/// A cinder moth: broad charcoal wings edged with glowing embers, a furry amber body and
+/// feathered feelers (wings up, out and down).
+pub const CINDER_MOTH: SpriteDef = SpriteDef {
+    name: "enemy_cinder_moth",
+    legend: &[
+        ('o', INK),
+        ('n', NIGHT),
+        ('d', STONE_DARK),
+        ('r', RED),
+        ('a', ORANGE),
+        ('g', GOLD),
+        ('c', CREAM),
+    ],
+    frames: &[
+        &[
+            ".o.........o.", //
+            "..o.......o..", //
+            "aoo.......ooa", //
+            "ardo.ooo.odra", //
+            "anddogcgoddna", //
+            ".anddgagddna.", //
+            "..onodadonoo.", //
+            "....oo.oo....", //
+        ],
+        &[
+            ".o.........o.", //
+            "..o.......o..", //
+            "...o.ooo.o...", //
+            "aaoodgcgdooaa", //
+            "arddnoagoddra", //
+            ".anddgagddna.", //
+            "..aanodonaa..", //
+            "....oo.oo....", //
+        ],
+        &[
+            ".o.........o.", //
+            "..o.......o..", //
+            "...o.ooo.o...", //
+            "....ogcgo....", //
+            "..oodgagdoo..", //
+            ".onddoaodddn.", //
+            "anddno.ondnna", //
+            "arra.....arra", //
+        ],
+    ],
+    frame_seconds: 0.07,
+};

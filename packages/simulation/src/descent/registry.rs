@@ -110,12 +110,33 @@ const WITH_GATE: &[LandmarkKind] = &[
 /// Landmarks of a Strange Layers stratum (anomaly rooms).
 const STRANGE: &[LandmarkKind] = &[LandmarkKind::AnomalyRoom, LandmarkKind::Prefabs];
 
-/// The Crust's creature tables (Wave 8).
-const CRUST_TOPSOIL: &[(EnemyKind, u32)] = band_roster(Band::Topsoil);
-const CRUST_CLAY: &[(EnemyKind, u32)] = band_roster(Band::Clay);
-const CRUST_STONE: &[(EnemyKind, u32)] = band_roster(Band::Stone);
-const CRUST_SLATE: &[(EnemyKind, u32)] = band_roster(Band::Slate);
-const CRUST_BASALT: &[(EnemyKind, u32)] = band_roster(Band::Basalt);
+/// The Crust's creature tables (Wave 8): each stratum's own natives, with a classic kind or two
+/// staying on from the stratum above or below.
+const CRUST_TOPSOIL: &[(EnemyKind, u32)] = &[
+    (EnemyKind::BurrowMole, 5),
+    (EnemyKind::MudLeech, 3),
+    (CaveBat, 1),
+];
+const CRUST_CLAY: &[(EnemyKind, u32)] = &[
+    (EnemyKind::PotterWasp, 4),
+    (EnemyKind::MudLeech, 3),
+    (Burrower, 1),
+];
+const CRUST_STONE: &[(EnemyKind, u32)] = &[
+    (EnemyKind::MineBat, 5),
+    (EnemyKind::TimberBeetle, 3),
+    (AcidSpitter, 1),
+];
+const CRUST_SLATE: &[(EnemyKind, u32)] = &[
+    (EnemyKind::SlateSkink, 4),
+    (EnemyKind::ShelfCrab, 3),
+    (RockMimic, 1),
+];
+const CRUST_BASALT: &[(EnemyKind, u32)] = &[
+    (EnemyKind::TubeCrawler, 4),
+    (EnemyKind::CinderMoth, 4),
+    (MiningDrone, 1),
+];
 
 /// Every stratum, in [`Stratum::ALL`] order.
 pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [

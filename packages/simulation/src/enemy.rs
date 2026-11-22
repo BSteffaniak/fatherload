@@ -155,6 +155,25 @@ pub enum EnemyKind {
     CryptGolem,
     /// The crypt's boss: three phases of hex volleys, charges and summons.
     CryptLord,
+    // --- The Crust's creatures (Wave 8, Deep Descent worlds; `crate::crust`), appended -----
+    /// Topsoil: a blind mole that tunnels after the sound of a drill and bites from the wall.
+    BurrowMole,
+    /// Topsoil and clay: a fat leech in the mud that latches on and drinks a rig's fuel.
+    MudLeech,
+    /// Clay Beds: a swarming wasp that builds clay nests in aquifer caves; stings in packs.
+    PotterWasp,
+    /// Grey Stone: a colony bat roosting in the old works, roused by lamps.
+    MineBat,
+    /// Grey Stone: a beetle that chews mine timber (it brings sets down) and bites if cornered.
+    TimberBeetle,
+    /// Slate Shelves: a quick lizard that runs the shelves and lunges from far off.
+    SlateSkink,
+    /// Slate Shelves: a crab under a plate of slate: slow, armoured, a heavy pinch.
+    ShelfCrab,
+    /// Basalt Columns: a crawler of the lava tubes that spits cinders.
+    TubeCrawler,
+    /// Basalt Columns: a moth drawn to heat and lamps, its wings smouldering.
+    CinderMoth,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -472,7 +491,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 39] = [
+    pub const ALL: [Self; 48] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -512,6 +531,15 @@ impl EnemyKind {
         Self::Cultist,
         Self::CryptGolem,
         Self::CryptLord,
+        Self::BurrowMole,
+        Self::MudLeech,
+        Self::PotterWasp,
+        Self::MineBat,
+        Self::TimberBeetle,
+        Self::SlateSkink,
+        Self::ShelfCrab,
+        Self::TubeCrawler,
+        Self::CinderMoth,
     ];
 
     /// Whether the creature goes into fluid (Part III F9). No creature does yet: every one
@@ -1185,6 +1213,140 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::CryptHex, 5),
                 )
             },
+            // The Crust (Wave 8): small, early creatures with one trick each.
+            Self::BurrowMole => EnemyStats {
+                radius: 8.0,
+                health: 22.0,
+                speed: 60.0,
+                dash_speed: 220.0,
+                sight_tiles: 4.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 22.0,
+                contact_damage: 4.0,
+                windup_millis: 900,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 3.0,
+                knockback: 120.0,
+                ..stats("Burrow Mole", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::MudLeech => EnemyStats {
+                radius: 7.0,
+                health: 18.0,
+                speed: 26.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 14.0,
+                contact_damage: 1.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 20.0,
+                ..stats("Mud Leech", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::PotterWasp => EnemyStats {
+                radius: 6.0,
+                health: 7.0,
+                speed: 170.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 20.0,
+                contact_damage: 2.5,
+                windup_millis: 0,
+                cooldown_millis: 800,
+                attack_range_tiles: 0.5,
+                knockback: 60.0,
+                ..stats("Potter Wasp", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::MineBat => EnemyStats {
+                radius: 6.0,
+                health: 11.0,
+                speed: 160.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 28.0,
+                contact_damage: 3.5,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Mine Bat", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::TimberBeetle => EnemyStats {
+                radius: 8.0,
+                health: 34.0,
+                speed: 34.0,
+                dash_speed: 150.0,
+                sight_tiles: 5.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 12.0,
+                contact_damage: 6.0,
+                windup_millis: 600,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 1.8,
+                knockback: 150.0,
+                ..stats("Timber Beetle", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::SlateSkink => EnemyStats {
+                radius: 7.0,
+                health: 24.0,
+                speed: 110.0,
+                dash_speed: 300.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 6.0,
+                windup_millis: 450,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 5.0,
+                knockback: 140.0,
+                ..stats("Slate Skink", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::ShelfCrab => EnemyStats {
+                radius: 10.0,
+                health: 80.0,
+                speed: 24.0,
+                dash_speed: 120.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 12.0,
+                contact_damage: 11.0,
+                windup_millis: 700,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 1.6,
+                knockback: 200.0,
+                ..stats("Shelf Crab", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::TubeCrawler => EnemyStats {
+                radius: 8.0,
+                health: 40.0,
+                speed: 50.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 6.0,
+                contact_damage: 5.0,
+                windup_millis: 800,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 9.0,
+                ..stats(
+                    "Tube Crawler",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Fireball, 1),
+                )
+            },
+            Self::CinderMoth => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 120.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 70.0,
+                ..stats("Cinder Moth", Creature, Flying, AttackStyle::Contact)
+            },
         }
     }
 
@@ -1309,6 +1471,16 @@ impl EnemyKind {
             Self::Cultist => (11.0, 11.0),
             Self::CryptGolem => (17.0, 16.0),
             Self::CryptLord => (22.0, 21.0),
+            // The Crust (Wave 8), sized to their art.
+            Self::BurrowMole => (11.0, 8.0),
+            Self::MudLeech => (10.0, 6.0),
+            Self::PotterWasp => (7.0, 6.0),
+            Self::MineBat => (10.0, 7.0),
+            Self::TimberBeetle => (11.0, 8.0),
+            Self::SlateSkink => (12.0, 6.0),
+            Self::ShelfCrab => (15.0, 10.0),
+            Self::TubeCrawler => (13.0, 8.0),
+            Self::CinderMoth => (9.0, 7.0),
         }
     }
 
@@ -1393,6 +1565,12 @@ impl EnemyKind {
             (Self::CryptGolem, DamageKind::Kinetic | DamageKind::Piercing) => 0.55,
             (Self::CryptGolem, DamageKind::Explosive) => 1.5,
             (Self::CryptSkeleton | Self::Spectre, DamageKind::Fire) => 1.4,
+            // The Crust (Wave 8): the crab's slate plate, fire-born tube creatures, and
+            // things of wood and wing that burn.
+            (Self::ShelfCrab, DamageKind::Kinetic) => 0.4,
+            (Self::ShelfCrab, DamageKind::Explosive) => 1.5,
+            (Self::TubeCrawler | Self::CinderMoth, DamageKind::Fire) => 0.0,
+            (Self::TimberBeetle | Self::PotterWasp | Self::MineBat, DamageKind::Fire) => 1.5,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -1898,6 +2076,10 @@ pub const fn tier_mineral(tier: u8) -> MineralKind {
 /// per-death hash (varies counts and the rare extras).
 #[must_use]
 #[allow(clippy::too_many_lines, reason = "the loot table, one arm per kind")]
+#[allow(
+    clippy::match_same_arms,
+    reason = "each kind's drops read next to its name"
+)]
 pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
     let mineral = ItemKind::Mineral(tier_mineral(tier));
     let richer = ItemKind::Mineral(tier_mineral(tier.saturating_add(1)));
@@ -2105,6 +2287,34 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         EnemyKind::CryptLord => {
             add(richer, 6 + extra);
             add(ItemKind::Artifact(ArtifactKind::Fossil), 1);
+        }
+        // The Crust's creatures (Wave 8): small drops, a pot or a find now and then.
+        EnemyKind::BurrowMole | EnemyKind::TimberBeetle => add(mineral, 1 + extra / 2),
+        EnemyKind::MudLeech => {
+            if rare < 30 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::PotterWasp => {
+            if rare < 8 {
+                add(ItemKind::Artifact(ArtifactKind::ClayPot), 1);
+            }
+        }
+        EnemyKind::MineBat | EnemyKind::CinderMoth => {
+            if rare < 35 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::SlateSkink => add(richer, 1),
+        EnemyKind::ShelfCrab => {
+            add(mineral, 1 + extra);
+            add(richer, 1);
+        }
+        EnemyKind::TubeCrawler => {
+            add(richer, 1 + extra / 2);
+            if rare < 15 {
+                add(ItemKind::Material(StrategicResourceKind::CoreShard), 1);
+            }
         }
         EnemyKind::UmbralAlpha => {
             add(ItemKind::Material(StrategicResourceKind::UmbralHeart), 1);

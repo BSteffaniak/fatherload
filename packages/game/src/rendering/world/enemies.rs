@@ -74,6 +74,15 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Cultist => &crypt_art::CULTIST,
         EnemyKind::CryptGolem => &crypt_art::CRYPT_GOLEM,
         EnemyKind::CryptLord => &crypt_art::CRYPT_LORD,
+        EnemyKind::BurrowMole => &art::BURROW_MOLE,
+        EnemyKind::MudLeech => &art::MUD_LEECH,
+        EnemyKind::PotterWasp => &art::POTTER_WASP,
+        EnemyKind::MineBat => &art::MINE_BAT,
+        EnemyKind::TimberBeetle => &art::TIMBER_BEETLE,
+        EnemyKind::SlateSkink => &art::SLATE_SKINK,
+        EnemyKind::ShelfCrab => &art::SHELF_CRAB,
+        EnemyKind::TubeCrawler => &art::TUBE_CRAWLER,
+        EnemyKind::CinderMoth => &art::CINDER_MOTH,
     }
 }
 
@@ -222,8 +231,29 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
     let moving = entity.body.velocity_x.abs() > 4.0;
     let attacking = matches!(state.mode, EnemyMode::Windup | EnemyMode::Strike);
     match state.kind {
-        EnemyKind::Burrower | EnemyKind::BroodLord | EnemyKind::DuneStalker => {
-            usize::from(attacking)
+        EnemyKind::Burrower
+        | EnemyKind::BroodLord
+        | EnemyKind::DuneStalker
+        | EnemyKind::BurrowMole => usize::from(attacking),
+        // The Crust's walkers (Wave 8): a stride while moving, the attack pose winding up.
+        EnemyKind::TimberBeetle
+        | EnemyKind::SlateSkink
+        | EnemyKind::ShelfCrab
+        | EnemyKind::TubeCrawler => {
+            if attacking {
+                2
+            } else if moving {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::MudLeech => {
+            if moving {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
         }
         EnemyKind::ShadowHound => {
             if attacking {
@@ -338,7 +368,10 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::Spectre
         | EnemyKind::Cultist
         | EnemyKind::CryptGolem
-        | EnemyKind::CryptLord => sprite.frame_at(phase),
+        | EnemyKind::CryptLord
+        | EnemyKind::PotterWasp
+        | EnemyKind::MineBat
+        | EnemyKind::CinderMoth => sprite.frame_at(phase),
     }
 }
 
@@ -371,6 +404,12 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::UmbralAlpha
             | EnemyKind::Mummy
             | EnemyKind::SkeletalArcher
+            | EnemyKind::BurrowMole
+            | EnemyKind::MudLeech
+            | EnemyKind::TimberBeetle
+            | EnemyKind::SlateSkink
+            | EnemyKind::ShelfCrab
+            | EnemyKind::TubeCrawler
     )
 }
 
@@ -555,19 +594,25 @@ fn draw_enemy(
             | EnemyKind::Mummy
             | EnemyKind::AnimatedStatue
             | EnemyKind::SunColossus => Some(AMBER),
-            EnemyKind::SentryTurret | EnemyKind::AncientGuardian | EnemyKind::MiningDrone => {
-                Some(GOLD)
-            }
+            EnemyKind::SentryTurret
+            | EnemyKind::AncientGuardian
+            | EnemyKind::MiningDrone
+            | EnemyKind::SlateSkink
+            | EnemyKind::TimberBeetle => Some(GOLD),
             EnemyKind::RegolithCrawler => Some(BONE),
             EnemyKind::RogueExcavator
             | EnemyKind::Shellback
             | EnemyKind::RockMimic
             | EnemyKind::DerelictAutomaton
             | EnemyKind::UmbralAlpha
-            | EnemyKind::SkeletalArcher => Some(RED),
+            | EnemyKind::SkeletalArcher
+            | EnemyKind::ShelfCrab
+            | EnemyKind::BurrowMole => Some(RED),
             EnemyKind::Warden | EnemyKind::ShadowHound | EnemyKind::WillOWisp => Some(MINT),
             EnemyKind::DuneStalker => Some(SAND),
             EnemyKind::HollowMatriarch => Some(LAVENDER),
+            // The Crust (Wave 8): the crawler's glowing throat.
+            EnemyKind::TubeCrawler => Some(ORANGE),
             _ => None,
         };
         if let Some(glow) = glow {

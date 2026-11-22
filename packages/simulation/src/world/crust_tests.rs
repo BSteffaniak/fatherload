@@ -743,3 +743,137 @@ fn a_rig_that_stays_put_is_caught_set_down_in_the_camp_and_the_sinkhole_resets()
         Some(TileKind::Crust(CrustTile::SinkholeCore))
     );
 }
+
+#[test]
+fn every_crust_stratum_has_natives_of_its_own() {
+    use crate::enemy::EnemyKind;
+    let natives = [
+        (Stratum::Topsoil, EnemyKind::BurrowMole),
+        (Stratum::Topsoil, EnemyKind::MudLeech),
+        (Stratum::ClayBeds, EnemyKind::PotterWasp),
+        (Stratum::GreyStone, EnemyKind::MineBat),
+        (Stratum::GreyStone, EnemyKind::TimberBeetle),
+        (Stratum::SlateShelves, EnemyKind::SlateSkink),
+        (Stratum::SlateShelves, EnemyKind::ShelfCrab),
+        (Stratum::BasaltColumns, EnemyKind::TubeCrawler),
+        (Stratum::BasaltColumns, EnemyKind::CinderMoth),
+    ];
+    for (stratum, kind) in natives {
+        assert!(
+            stratum
+                .def()
+                .creatures
+                .iter()
+                .any(|(each, _)| *each == kind),
+            "{kind:?} lives in {stratum:?}"
+        );
+        // Their contact boxes are at least their terrain boxes, and close to their art.
+        let (half_w, half_h) = kind.contact_half();
+        let radius = kind.stats().radius;
+        assert!(half_w >= radius && half_h >= radius * 0.75, "{kind:?}");
+    }
+    for stratum in crate::descent::Descent::Crust.strata() {
+        let creatures = stratum.def().creatures;
+        assert!((2..=4).contains(&creatures.len()), "{stratum:?}");
+    }
+}
+
+#[test]
+fn a_mud_leech_drinks_fuel_instead_of_denting_the_hull() {
+    use crate::enemy::EnemyKind;
+    let seed = 33;
+    let row = row_in(seed, Stratum::Topsoil);
+    let mut world = world_at(seed, 60, TilePosition { x: 30, y: row });
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    fill(&mut world, (20, row - 4), (44, row + 3), TileKind::Stone);
+    fill(&mut world, (22, row - 3), (42, row), TileKind::Air);
+    put(&mut world, TilePosition { x: 30, y: row });
+    settle(&mut world);
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.hazard_gear = crate::protection::HazardGear::default();
+    }
+    let (x, y) = world.frame().tile_center(TilePosition { x: 31, y: row });
+    let _ = world.spawn_enemy(EnemyKind::MudLeech, x, y);
+    let fuel = world.player(PLAYER).expect("rig").fuel;
+    let mut latched = false;
+    for _ in 0..60 * 8 {
+        latched |= step(&mut world, hold(0.0, false, false))
+            .iter()
+            .any(|event| {
+                matches!(
+                    event.kind,
+                    GameplayEventKind::CrustCreature {
+                        action: crust::CrustCreatureAction::LeechLatched,
+                        ..
+                    }
+                )
+            });
+        if latched {
+            break;
+        }
+    }
+    assert!(latched, "the leech latched on");
+    assert!(world.player(PLAYER).expect("rig").fuel < fuel - 5.0);
+}
+
+#[test]
+fn a_timber_beetle_chews_through_a_set_and_brings_it_down() {
+    use crate::enemy::EnemyKind;
+    let seed = 34;
+    let rail = row_in(seed, Stratum::GreyStone);
+    let x0 = 600;
+    let mut world = world_at(
+        seed,
+        60,
+        TilePosition {
+            x: x0 + 30,
+            y: rail - 1,
+        },
+    );
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    rail_line(&mut world, x0, x0 + 40, rail);
+    fill(
+        &mut world,
+        (x0, rail - 4),
+        (x0 + 40, rail - 4),
+        TileKind::Crust(CrustTile::Timber),
+    );
+    // The rig far off and out of sight behind a wall: the beetle stays at rest.
+    fill(
+        &mut world,
+        (x0 + 20, rail - 3),
+        (x0 + 20, rail - 1),
+        TileKind::Stone,
+    );
+    put(
+        &mut world,
+        TilePosition {
+            x: x0 + 36,
+            y: rail - 1,
+        },
+    );
+    let (x, y) = world.frame().tile_center(TilePosition {
+        x: x0 + 6,
+        y: rail - 1,
+    });
+    let _ = world.spawn_enemy(EnemyKind::TimberBeetle, x, y);
+    let mut chewed = false;
+    let mut collapsed = false;
+    for _ in 0..60 * 90 {
+        for event in step(&mut world, hold(0.0, false, false)) {
+            match event.kind {
+                GameplayEventKind::CrustCreature {
+                    action: crust::CrustCreatureAction::BeetleChewed,
+                    ..
+                } => chewed = true,
+                GameplayEventKind::SupportCollapsed { .. } => collapsed = true,
+                _ => {}
+            }
+        }
+        if collapsed {
+            break;
+        }
+    }
+    assert!(chewed && collapsed, "{chewed} {collapsed}");
+}
