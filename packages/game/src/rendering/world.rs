@@ -648,7 +648,31 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     // The Mycelial Mind's nerves: wired to its nodes while they shield it, a raw core when
     // exposed (Wave 8).
     living_dark::draw_mind_nerves(draw, scene.enemies, seconds, scene.effects_strength);
-    // Sonar rings and the frost on rigs, over the dark (Wave 9).
+    // The Drowned and Frozen's swimmers are drawn again over the water and the dark, so the
+    // deep's creatures and the Leviathan read (Wave 9); then sonar rings, tells and frost.
+    let swimmers: Vec<fatherload_simulation::entity::Entity> = scene
+        .enemies
+        .iter()
+        .filter(|entity| {
+            matches!(&entity.state, fatherload_simulation::entity::EntityState::Enemy(state)
+                if state.kind.is_drowned() && state.kind.can_swim())
+        })
+        .cloned()
+        .collect();
+    if !swimmers.is_empty() {
+        enemies::draw_enemies(
+            draw,
+            &enemies::EnemyScene {
+                entities: &swimmers,
+                terrain: scene.terrain,
+                explored: scene.explored,
+                visible: scene.visible,
+                alpha: scene.bomb_alpha,
+                world_tick: scene.world_tick,
+                ticks: scene.ticks,
+            },
+        );
+    }
     drowned::draw_drowned_lights(draw, &drowned_scene);
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);

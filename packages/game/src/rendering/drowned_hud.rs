@@ -56,9 +56,9 @@ pub fn drowned_screen(
         let deep = ((f32::from(pressure) - 250.0) / 750.0).clamp(0.0, 1.0);
         let desaturate = ScreenEffect::Desaturate.index();
         let vignette = ScreenEffect::Vignette.index();
-        fields.screen[desaturate] = fields.screen[desaturate].max(deep.mul_add(0.65, 0.1));
-        fields.screen[vignette] = fields.screen[vignette].max(deep.mul_add(0.55, 0.1));
-        fields.light *= deep.mul_add(-0.55, 1.0);
+        fields.screen[desaturate] = fields.screen[desaturate].max(deep.mul_add(0.45, 0.1));
+        fields.screen[vignette] = fields.screen[vignette].max(deep.mul_add(0.4, 0.1));
+        fields.light *= deep.mul_add(-0.2, 1.0);
     }
     let frost = f32::from(world.rig_water(player_id).frost_permille()) / f32::from(FROST_MAX);
     if frost > 0.0 {

@@ -149,8 +149,6 @@ pub(super) fn draw_drowned_world(draw: &mut impl RaylibDraw, scene: &DrownedScen
     }
     draw_currents(draw, scene);
     draw_city_sea(draw, scene);
-    draw_leviathan_tells(draw, scene);
-    draw_eel_tell(draw, scene);
 }
 
 /// Merrow City's sea round the bubble: little fish schooling past the glass, the light
@@ -416,7 +414,7 @@ fn draw_leviathan_tells(draw: &mut impl RaylibDraw, scene: &DrownedScene<'_>) {
         let (dx, dy) = (tx - body.x, ty - body.y);
         let length = dx.hypot(dy).max(1.0);
         let steps = (length / 18.0) as i32 + 6;
-        let pulse = (scene.seconds * 6.0).sin().mul_add(40.0, 140.0) as u8;
+        let pulse = (scene.seconds * 6.0).sin().mul_add(25.0, 225.0) as u8;
         for step in 0..steps {
             if step % 2 == 1 {
                 continue;
@@ -426,8 +424,8 @@ fn draw_leviathan_tells(draw: &mut impl RaylibDraw, scene: &DrownedScene<'_>) {
                 draw,
                 body.x + dx * t,
                 body.y + dy * t,
-                2,
-                with_alpha(RED, pulse),
+                3,
+                with_alpha(ORANGE, pulse),
             );
         }
         // Its eyes flare.
@@ -506,9 +504,38 @@ fn draw_eel_tell(draw: &mut impl RaylibDraw, scene: &DrownedScene<'_>) {
 }
 
 /// Sonar rings and their echoes, and frost on the rigs, drawn over the darkness.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one block per light: the bosses' tells, creature lights, sonar and frost"
+)]
 pub(super) fn draw_drowned_lights(draw: &mut impl RaylibDraw, scene: &DrownedScene<'_>) {
     if !scene.terrain.settings().generator.has_descents() {
         return;
+    }
+    // The bosses' tells read through any dark.
+    draw_leviathan_tells(draw, scene);
+    draw_eel_tell(draw, scene);
+    // Living lights of the deep: the angler's lure, the eel-dragon's crackle, the
+    // Leviathan's eyes.
+    for enemy in scene.enemies {
+        let EntityState::Enemy(state) = &enemy.state else {
+            continue;
+        };
+        let (dx, dy, color) = match state.kind {
+            EnemyKind::LureAngler => (14.0, -24.0, GOLD),
+            EnemyKind::EelDragon => (30.0, -4.0, MINT),
+            EnemyKind::Leviathan => (68.0, -16.0, AMBER),
+            _ => continue,
+        };
+        let facing = f32::from(state.facing.signum());
+        let pulse = (scene.seconds * 2.0).sin().mul_add(12.0, 50.0) as u8;
+        disc(
+            draw,
+            enemy.body.x + dx * facing,
+            enemy.body.y + dy,
+            9,
+            with_alpha(color, pulse),
+        );
     }
     let frame = crate::view_frame::frame();
     for ping in &scene.drowned.pings {
@@ -527,21 +554,36 @@ pub(super) fn draw_drowned_lights(draw: &mut impl RaylibDraw, scene: &DrownedSce
             .min(ping.reach as f32)
             * TILE_SIZE;
         let fade = 1.0 - elapsed as f32 / SONAR_PING_MILLIS as f32;
-        let steps = 64;
+        // A soft wake inside the front, then the bright front itself.
+        draw.draw_ring(
+            Vector2::new(px, py),
+            (ring - TILE_SIZE * 1.5).max(0.0),
+            ring,
+            0.0,
+            360.0,
+            96,
+            with_alpha(MINT, (fade * 50.0) as u8),
+        );
+        draw.draw_ring(
+            Vector2::new(px, py),
+            (ring - ART * 2.0).max(0.0),
+            ring,
+            0.0,
+            360.0,
+            96,
+            with_alpha(MINT, (fade * 210.0) as u8),
+        );
+        // The ring breaks on rock: the walls it touches light up.
+        let steps = 120;
         for step in 0..steps {
             let angle = step as f32 / steps as f32 * std::f32::consts::TAU;
             let (x, y) = (px + angle.cos() * ring, py + angle.sin() * ring);
-            let tile = frame.tile_at(x, y);
-            // The ring breaks on rock: it lights the walls it touches.
-            let color = if scene.terrain.is_solid_at(tile) {
-                ICE
-            } else {
-                MINT
-            };
-            draw.draw_rectangle_rec(
-                Rectangle::new(x, y, ART * 1.5, ART * 1.5),
-                with_alpha(color, (fade * 200.0) as u8),
-            );
+            if scene.terrain.is_solid_at(frame.tile_at(x, y)) {
+                draw.draw_rectangle_rec(
+                    Rectangle::new(x - ART, y - ART, ART * 2.0, ART * 2.0),
+                    with_alpha(ICE, (fade * 230.0) as u8),
+                );
+            }
         }
         // The creatures it echoes off show as bright outlines.
         for enemy in scene.enemies {
@@ -562,7 +604,7 @@ pub(super) fn draw_drowned_lights(draw: &mut impl RaylibDraw, scene: &DrownedSce
             draw.draw_rectangle_lines_ex(
                 Rectangle::new(enemy.body.x - hw, enemy.body.y - hh, hw * 2.0, hh * 2.0),
                 ART,
-                with_alpha(color, (light * 220.0) as u8),
+                with_alpha(color, (light.mul_add(155.0, 100.0)) as u8),
             );
         }
     }

@@ -119,18 +119,19 @@ fn ocean_basin(stage: &mut SceneStage<'_>, sonar: bool) {
         spawn(world, EnemyKind::InkSquid, middle.x - 10, middle.y + 2);
         spawn(world, EnemyKind::LureFish, middle.x + 2, middle.y + 4);
     });
-    stage.settle(150);
+    stage.settle(260);
     if sonar {
-        stage.play_on(|world| {
-            let player = world.players().keys().next().copied();
-            if let Some(player) = player {
-                let mut output = fatherload_simulation::TickOutput::default();
-                let _ = world.sonar_ping(player, &mut output);
-            }
-        });
-        stage.settle(40);
+        // The scanner under water pings the sonar.
+        stage.hold(
+            2,
+            crate::input::PlayerInput {
+                scan: true,
+                ..crate::input::PlayerInput::default()
+            },
+        );
+        stage.settle(36);
     } else {
-        stage.settle(90);
+        stage.settle(40);
     }
 }
 
@@ -206,7 +207,7 @@ fn glaciers(stage: &mut SceneStage<'_>) {
         spawn(world, EnemyKind::FrostMite, middle.x + 3, middle.y - 2);
         spawn(world, EnemyKind::TuskSeal, middle.x + 8, floor);
     });
-    stage.settle(160);
+    stage.settle(300);
 }
 
 /// The builder figures frozen in clear ice round the cable (the story card).
@@ -321,8 +322,14 @@ fn merrow_city(stage: &mut SceneStage<'_>, card: bool) {
             site.dome.min.x - 12..site.dome.max.x + 12,
             site.dome.min.y - 12..site.floor + 14,
         );
+        if !card {
+            // The city found before: no arrival card over the view.
+            let mut found = world.drowned().clone();
+            found.lore |= fatherload_simulation::drowned::DrownedLore::MerrowCity.bit();
+            world.set_drowned(found);
+        }
     });
-    stage.settle(if card { 40 } else { 300 });
+    stage.settle(if card { 40 } else { 320 });
 }
 
 /// The submarine surfacing into Merrow City through a moon pool from the harbour below.
@@ -362,7 +369,7 @@ fn pearl_abyss(stage: &mut SceneStage<'_>) {
         spawn(world, EnemyKind::LureAngler, middle.x + 7, middle.y - 1);
         spawn(world, EnemyKind::GulperEel, middle.x - 12, middle.y - 3);
     });
-    stage.settle(160);
+    stage.settle(300);
 }
 
 /// Descent IV's gate: the Leviathan awake in its flooded arena (its roar and the charge's red
@@ -379,8 +386,8 @@ fn leviathan(stage: &mut SceneStage<'_>, roar: bool, maw: bool) {
         stage_at(
             world,
             player,
-            middle.x - 14,
-            drowned::arena_floor_row(&arena) - 5,
+            middle.x + 18,
+            drowned::arena_floor_row(&arena) - 6,
         );
         reveal(
             world,
@@ -391,6 +398,15 @@ fn leviathan(stage: &mut SceneStage<'_>, roar: bool, maw: bool) {
         world.set_enemy_difficulty(EnemyDifficulty::Normal);
     });
     stage.settle(90);
+    // Frame the beast: the submarine a little way off its flank.
+    stage.play_on(|world| {
+        let pose = world.leviathan_pose().map(|(at, _)| at);
+        let player = world.players().keys().next().copied();
+        if let (Some((x, y)), Some(player)) = (pose, player) {
+            let tile = world.frame().tile_at(x, y);
+            put_rig(world, player, tile.x - 9, tile.y + 3);
+        }
+    });
     if roar || maw {
         stage.play_on(move |world| {
             let mut drowned = world.drowned().clone();
@@ -398,6 +414,34 @@ fn leviathan(stage: &mut SceneStage<'_>, roar: bool, maw: bool) {
             if maw {
                 drowned.leviathan.phase = fatherload_simulation::drowned::LeviathanPhase::Maelstrom;
                 drowned.leviathan.action = LeviathanMove::Maw;
+                // Wounded into the maelstrom, and the submarine a little way off its maw.
+                if let Some(entity) = drowned.leviathan.entity {
+                    let id = fatherload_simulation::entity::EntityId(entity);
+                    let max = world
+                        .entities()
+                        .get(id)
+                        .and_then(|found| found.state.health())
+                        .map_or(0.0, |health| health.max);
+                    let mut output = fatherload_simulation::TickOutput::default();
+                    let _ = world.damage_enemy(
+                        id,
+                        fatherload_simulation::enemy::Damage::new(
+                            max * 0.45,
+                            fatherload_simulation::enemy::DamageKind::Explosive,
+                            fatherload_simulation::enemy::DamageSource::World,
+                        ),
+                        &mut output,
+                    );
+                }
+                let settings = *world.terrain().settings();
+                let layout = descent::layout(&settings);
+                let player = world.players().keys().next().copied();
+                if let (Some(arena), Some(player)) =
+                    (drowned::leviathan_arena(&settings, &layout), player)
+                {
+                    let floor = drowned::arena_floor_row(&arena);
+                    put_rig(world, player, arena.center().x + 8, floor - 8);
+                }
             } else {
                 let player = world.players().values().next().map(|rig| (rig.x, rig.y));
                 let settings = *world.terrain().settings();
