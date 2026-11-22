@@ -1035,13 +1035,10 @@ impl WorldState {
         else {
             return;
         };
-        let near: Vec<&Rig> = rigs
-            .iter()
-            .filter(|rig| {
-                (rig.tile.x - centre.x).abs() <= half_w + 6
-                    && (rig.tile.y - centre.y).abs() <= half_h + 6
-            })
-            .collect();
+        let near = rigs.iter().any(|rig| {
+            (rig.tile.x - centre.x).abs() <= half_w + 6
+                && (rig.tile.y - centre.y).abs() <= half_h + 6
+        });
         if let Some(id) = self.old_deep.glowmother.entity {
             let alive = self.entities.get(EntityId(id)).is_some_and(|entity| {
                 matches!(entity.state, EntityState::Enemy(state) if state.kind == EnemyKind::Glowmother)
@@ -1061,8 +1058,7 @@ impl WorldState {
                 output.push_event(GameplayEventKind::GlowmotherDefeated { player_id: rig.id });
             }
         } else {
-            if near.is_empty() || self.enemies.difficulty == crate::enemy::EnemyDifficulty::Peaceful
-            {
+            if !near || self.enemies.difficulty == crate::enemy::EnemyDifficulty::Peaceful {
                 return;
             }
             let (x, y) = self.frame().tile_center(TilePosition {
