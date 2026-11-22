@@ -38,6 +38,8 @@ pub enum StoryMomentKind {
     GhostRecording,
     /// An anomaly room entered.
     Anomaly,
+    /// A deep settlement remembering the Fathers' expedition (Wave 8 integration).
+    Remembered,
 }
 
 /// A card across the seat's view telling a moment of a story.

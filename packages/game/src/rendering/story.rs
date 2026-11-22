@@ -240,12 +240,14 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::RadioEcho => ("A RADIO ECHO", SKY_LIGHT, PanelStyle::Standard),
         StoryMomentKind::GhostRecording => ("A GHOST RECORDING", MIST, PanelStyle::Standard),
         StoryMomentKind::Anomaly => ("AN ANOMALY", LAVENDER, PanelStyle::Accent),
+        StoryMomentKind::Remembered => ("THEY REMEMBER THE FATHERS", SAND, PanelStyle::Standard),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
     lines.truncate(match moment.kind {
         StoryMomentKind::ExpeditionLog
         | StoryMomentKind::RadioEcho
-        | StoryMomentKind::GhostRecording => 8,
+        | StoryMomentKind::GhostRecording
+        | StoryMomentKind::Remembered => 8,
         _ => 6,
     });
     let heading_y = 6;

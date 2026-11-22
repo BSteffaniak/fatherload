@@ -122,3 +122,40 @@ fn classic_worlds_keep_the_old_page_cycle() {
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
     assert!(game.world().expedition().is_empty());
 }
+
+#[test]
+fn arriving_at_the_old_deeps_outpost_its_camp_remembers_the_fathers() {
+    // Wave 8 integration: the deep settlements' memories of the expedition go up as a card,
+    // once a day, on the seat that arrives.
+    let mut world = deep_world();
+    world.set_expedition(ExpeditionState {
+        found: 21,
+        echoes: u8::try_from(ECHOES.len()).unwrap_or(u8::MAX),
+        ..ExpeditionState::default()
+    });
+    let outpost = world
+        .logistics()
+        .outposts
+        .values()
+        .find(|outpost| outpost.descent == 1)
+        .expect("the Old Deep's outpost")
+        .clone();
+    let mut game = playing(world, 1, "settlement-memory");
+    idle(&mut game, 2);
+    game.edit_world(|world| {
+        world.grant_deep_claim();
+        world.teleport_rig_to(
+            PLAYER,
+            WorldPos::tile_center(i64::from(outpost.column), i64::from(outpost.floor_row - 1)),
+        );
+    });
+    idle(&mut game, 3);
+    let moment = game.shell.seat(0).story_moment.clone().expect("a card");
+    assert_eq!(moment.kind, StoryMomentKind::Remembered);
+    assert_eq!(moment.title, "Cathedral Station");
+    assert!(moment.text.contains('"'), "{}", moment.text);
+    // Once a day: staying on adds no new card.
+    game.shell.seat_mut(0).story_moment = None;
+    idle(&mut game, 3);
+    assert!(game.shell.seat(0).story_moment.is_none());
+}

@@ -222,6 +222,6 @@ impl SettlementMemory {
         if let Some(first) = speaker.get_mut(..1) {
             first.make_ascii_uppercase();
         }
-        format!("{speaker}: \u{201c}{}\u{201d}", self.line)
+        format!("{speaker}: \"{}\"", self.line)
     }
 }

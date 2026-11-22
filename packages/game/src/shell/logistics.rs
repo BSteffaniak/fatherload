@@ -11,7 +11,6 @@
 //! refuse it, the reason ([`WorldState::check_logistics`], the same rule the tick applies), so
 //! the dialog works the same online, in split-screen and by touch.
 
-use fatherload_simulation::expedition::memories::{Settlement, SettlementMemory, line_for_visit};
 use fatherload_simulation::{
     PlayerCommand, PlayerId, WorldState,
     living_dark::{CourtService, LivingDark, LivingDarkAction, ROOT_AXE_PACK, SwarmState},
@@ -137,10 +136,6 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             "A deep outpost: fuel, repairs and a buyer, at a fee until the crew claims it."
                 .to_owned()
         };
-        // The prospectors' camp at the Old Deep's outpost remembers the Fathers (Wave 8).
-        if let Some(memory) = settlement_memory(world, outpost.descent) {
-            subtitle = format!("{subtitle} {}", memory.told());
-        }
         for service in OutpostService::ALL {
             let detail = match service {
                 OutpostService::Refuel => "Top up the tank".to_owned(),
@@ -246,9 +241,6 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
         let living = world.living_dark();
         "The Amber Court".clone_into(&mut heading);
         subtitle = court_subtitle(living);
-        if let Some(memory) = fathers_memory(world, Settlement::TheHive) {
-            subtitle = format!("{subtitle} {}", memory.told());
-        }
         for service in CourtService::ALL {
             let detail = court_detail(living, service);
             row(
@@ -456,21 +448,6 @@ fn outpost_trade_rows(
         ));
     }
     rows
-}
-
-/// What the deep settlement at Descent `descent`'s outpost remembers of the Fathers'
-/// expedition today, if it is one that does (the Old Deep's camp at Cathedral Station).
-fn settlement_memory(world: &WorldState, descent: u8) -> Option<&'static SettlementMemory> {
-    (descent == 1).then_some(())?;
-    fathers_memory(world, Settlement::OldDeepCamp)
-}
-
-/// Today's line `settlement` remembers of the Fathers' expedition on a Deep Descent world
-/// (Wave 8 integration: `expedition::memories`, opened as the crew reads the trail; a new
-/// line each day).
-fn fathers_memory(world: &WorldState, settlement: Settlement) -> Option<&'static SettlementMemory> {
-    world.descent_strata_layout()?;
-    line_for_visit(settlement, world.expedition(), world.people_clock().day)
 }
 
 /// The Amber Court's mood toward the crew, in its steward's words.

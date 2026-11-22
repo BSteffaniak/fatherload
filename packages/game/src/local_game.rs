@@ -543,6 +543,7 @@ impl LocalGame {
         self.announce_logistics(&players);
         self.announce_old_deep(&players);
         self.announce_living_dark(&players);
+        self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
         self.announce_stories(&players);
@@ -1128,6 +1129,58 @@ impl LocalGame {
     /// The Living Dark's news for local seats (Wave 8): the Mycelial Mind's fight and its
     /// rewards, the Amber Court's anger at theft, the Swarm's fall, and the acid tide turning
     /// for seats in the Flesh Caverns. News with no rig of its own reaches every local seat.
+    /// A card for each local seat arriving at a deep settlement that remembers the Fathers'
+    /// expedition (Wave 8 integration, `expedition::memories`): Gravel Hollow, the Old Deep's
+    /// camp at its outpost and the Amber Court. One line a settlement a day, opened as the
+    /// crew reads the trail; it reads only replicated state, so it works online too.
+    fn announce_settlement_memories(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::expedition::memories::{Settlement, line_for_visit};
+        let world = self.runtime.world();
+        if world.descent_strata_layout().is_none() {
+            return;
+        }
+        let day = world.people_clock().day;
+        let mut cards = Vec::new();
+        for (seat, player) in players.iter().enumerate() {
+            let Some(rig) = world.player(*player) else {
+                continue;
+            };
+            let tile = rig.tile_in(crate::view_frame::frame());
+            let settlement = if world.at_court(*player) {
+                Some(Settlement::TheHive)
+            } else {
+                world
+                    .logistics()
+                    .outpost_at(tile)
+                    .and_then(|outpost| match outpost.descent {
+                        0 => Some(Settlement::GravelHollow),
+                        1 => Some(Settlement::OldDeepCamp),
+                        _ => None,
+                    })
+            };
+            let Some(settlement) = settlement else {
+                continue;
+            };
+            if self.shell.seat(seat).remembered == Some((settlement, day)) {
+                continue;
+            }
+            let Some(memory) = line_for_visit(settlement, world.expedition(), day) else {
+                continue;
+            };
+            let place = match settlement {
+                Settlement::GravelHollow => "Gravel Hollow",
+                Settlement::OldDeepCamp => "Cathedral Station",
+                Settlement::TheHive => "The Amber Court",
+            };
+            cards.push((seat, settlement, place, memory.told()));
+        }
+        for (seat, settlement, place, text) in cards {
+            self.shell.seat_mut(seat).remembered = Some((settlement, day));
+            self.shell
+                .story_moment(seat, crate::shell::StoryMomentKind::Remembered, place, text);
+        }
+    }
+
     fn announce_living_dark(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::living_dark::LivingDarkEvent as E;
         let world = self.runtime.world();

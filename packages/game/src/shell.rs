@@ -1172,6 +1172,9 @@ pub struct SeatUi {
     pub tomb: tombs::SeatTomb,
     /// The depth logistics dialog's heading and rows (Part III F10).
     pub logistics: logistics::SeatLogistics,
+    /// The deep settlement and world day whose memory of the Fathers this seat was last told
+    /// (Wave 8 integration: one card a settlement a day).
+    pub remembered: Option<(fatherload_simulation::expedition::memories::Settlement, u32)>,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1221,6 +1224,7 @@ impl SeatUi {
             story_moment: None,
             tomb: tombs::SeatTomb::new(),
             logistics: logistics::SeatLogistics::new(),
+            remembered: None,
         }
     }
 
