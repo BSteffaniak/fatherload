@@ -176,10 +176,11 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
         .or(Some(first_try))
 }
 
-/// Whether `area` crosses one of the authored strata's set pieces (Wave 8 integration): the
-/// Crust's cabin, Gravel Hollow, the Sinkhole and its mine works; the Old Deep's Cathedral,
-/// Star Core arena, Glowmother's den and Fathers' camps; the Living Dark's stamps. The log
-/// sites keep off them (the story pass is stamped after them and would cut them open).
+/// Whether `area` crosses one of the authored strata's set pieces (Wave 8 integration).
+///
+/// They are the Crust's cabin, Gravel Hollow, the Sinkhole and its mine works; the Old Deep's
+/// Cathedral, Star Core arena, Glowmother's den and Fathers' camps; the Living Dark's stamps.
+/// The log sites keep off them (the story pass is stamped after them and would cut them open).
 #[must_use]
 pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> bool {
     use crate::{

@@ -195,9 +195,10 @@ pub fn memory(id: &str) -> Option<&'static SettlementMemory> {
     MEMORIES.iter().find(|memory| memory.id == id)
 }
 
-/// The line `settlement`'s people bring up for a crew with `state` on its `visit`-th visit:
-/// the open lines in turn, starting from the newest the crew has unlocked (Wave 8 integration:
-/// the settlements' people and counters speak them).
+/// The line `settlement`'s people bring up for a crew with `state` on its `visit`-th visit.
+///
+/// The open lines take turns, starting from the newest the crew has unlocked (Wave 8
+/// integration: the settlements' people and counters speak them).
 #[must_use]
 pub fn line_for_visit(
     settlement: Settlement,

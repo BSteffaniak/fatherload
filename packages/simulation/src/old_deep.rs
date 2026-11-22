@@ -903,9 +903,10 @@ pub const LOG_TABLET_FIRST: u8 = 7;
 pub const LOG_TABLETS: u8 = 4;
 pub const LOG_CORE_REVEAL: u8 = 11;
 
-/// The Fathers' expedition log ([`crate::expedition::LOGS`], 1-based) a Fathers' camp of the
-/// Old Deep holds: the story's first log of the camp's stratum (Wave 8 integration), or `None`
-/// for the builder tablets and the core's revelation.
+/// The Fathers' expedition log ([`crate::expedition::LOGS`], 1-based) a Fathers' camp holds.
+///
+/// It is the story's first log of the camp's stratum (Wave 8 integration); `None` for the
+/// builder tablets and the core's revelation.
 #[must_use]
 pub fn expedition_log_of_camp(log: u8) -> Option<u8> {
     if log >= LOG_TABLET_FIRST {
