@@ -1045,10 +1045,20 @@ world dug to the floor, the browser memory fixture) show it.
   per stratum, the Fathers' expedition logs in strongboxes, and at its end **the Sinkhole**:
   pull its core and climb out (or run down the Fathers' adit) before the collapse catches you
   to win the Deep Claim (the Old Deep's gate) and Drill II. Scenes: `crust_*`.
-- Descents I and II are the twelve classic layers, stretched to about 2,700 rows. Every stratum
-  below is a **placeholder**: its own rock colours, ores and hazards from the stratum registry,
-  creatures borrowed from the classic roster, and the rules of the classic layer it stands in
-  for. Strata meet in ragged transition zones, wider between Descents.
+- **Descent II, the Old Deep, is authored (Wave 8):** resonant crystal that rings its fault
+  and prisms that split the lamp into beams in the Crystal Faults; gas tides, amber and fossil
+  skeletons to dig out bone by bone in the Fossil Oceans; timed pressure jets and the
+  **Cathedral Lift** (three valves) in the Pressure Cathedrals, beside **Cathedral Station**;
+  a dose meter, mutation relics and the Glowmother in the Radioactive Hollow; builder halls
+  that wake, conveyors and pistons in the Ancient Machine Layer; low-gravity geodes in the Void
+  Geode Fields; heat storms and pouring storm vents in the Mantle Storm Zone. Eight creatures
+  of its own, a music bed per stratum, and at its end **the Star Core**: break its four pylons
+  to drop the shield, then strike the core. Beating it wins the **Pressure Hull** (never sold),
+  which Descent III needs. Scenes: `old_deep_*`.
+- Descents IV to VIII are still **placeholders**: their own rock colours, ores and hazards
+  from the stratum registry, creatures borrowed from the classic roster, and the rules of the
+  classic layer each stands in for. Strata meet in ragged transition zones, wider between
+  Descents.
 - Each Descent has an **outpost** hall (a working deep outpost: fuel, repair, selling, a
   claim and a respawn point) and a **gate chamber** at its end (the gates are open while they
   are placeholders). The halls stand on one column a short way off the spawn, and the
@@ -1110,10 +1120,14 @@ came back up. In a Deep Descent world their trail is the story's backbone:
   room (time all but frozen) and a mirror room (screen and controls mirrored). Each holds a
   cache placed where the rule makes it a small puzzle. Screen effects follow the effects
   intensity setting and never flash.
+- **The settlements remember them**: Gravel Hollow's people tell of the Fathers when asked for
+  news, and arriving at Gravel Hollow, Cathedral Station or the Amber Court puts up a card
+  with what they remember (more as the crew reads further). The Old Deep's Fathers' camps
+  hold the journal's own logs.
 - Seven story milestones (each unlocks a paint). Review scenes: `expedition_camp`,
   `expedition_log_read`, `expedition_cairn`, `expedition_journal`, `expedition_radio_echo`,
   `expedition_ghost_recording`, `anomaly_gravity_flip`, `anomaly_pixel_rot`,
-  `anomaly_time_frozen`, `anomaly_mirror`.
+  `anomaly_time_frozen`, `anomaly_mirror`, `settlement_memory_cathedral`.
 
 ### Fluids (wave 7, Part III F9)
 

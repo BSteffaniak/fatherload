@@ -4799,6 +4799,124 @@ tribes (Bran), the Megacity archive (Ines) and the Heart outpost (Amos's letters
 - The Strange Layers' own crystal anomaly rooms (Wave 7 landmarks) carry no rule yet; they could
   take an `AnomalyKind` the same way.
 
+
+## Wave 8 integration: Descents I-III stacked and wired
+
+The five Wave 8 tracks (progression, the Crust, the Old Deep, the Living Dark, the Fathers'
+expedition story) are stacked in that order on top of Wave 7, each track's commits picked
+linearly. What the integration changed and wired, besides resolving the shared files (enum
+`ALL` arrays and appended variants in stack order, event-code ranges 400-415 / 420-438 /
+440-459 / 490-493, `patches!` appended crust, old deep, living dark, story):
+
+### Formats
+
+- `PROTOCOL_VERSION` 16, one bump for the wave (its doc lists every track's additions). Save
+  format 14, one bump (progression's); every other track's fields are serde defaults, and the
+  every-format save test still loads formats 8-13 for classic and Deep Descent worlds.
+- `GOLDEN_V11_DIGEST` updated (`0xaa10_819f_130e_3f04`): the four content tracks' generation
+  plus the story sites kept off the strata's set pieces. V1-V10 digests unchanged.
+- Fixes found while stacking:
+  - `SectionKey::Crust` was never in `SectionKey::SHARED`, so online clients never saw the
+    Sinkhole run, the Deep Claim or the logs read. It is shared now.
+  - `CrustState::{collapses, slides}` and `LivingSchedule::{due, waiting, scorched, tides}`
+    were maps keyed by tiles. Saves are JSON and JSON keys must be strings, so a V11 save
+    failed while a timber set was failing or a root was waiting to regrow. They save as lists
+    of pairs now (`crate::pair_list`).
+  - The two tracks' private `after_millis` and `read_log` helpers collided; the Old Deep's
+    `after_millis` is shared and the story's is `read_expedition_log`.
+
+### Mechanics that met
+
+- **Heat**: the Crust's per-stratum heat (`crust::heat_units`) is what every V11 rig takes,
+  capped in the placeholder Descents by progression's `placeholder_heat_excess_cap`.
+- **The Deep Claim gate** crushes any rig below Descent I without it, so the Old Deep's,
+  Living Dark's and progression's test worlds now hold it (`grant_deep_claim`).
+- **Brood**: the Glowmother breeds glow grubs through the Living Dark's `living::brood_of`.
+- **Lamp**: `lamp_scale_for` multiplies the Headlamp line's tier scale into Lamp II's beam,
+  but no Headlamp tier lights the Glow Sea (only Lamp II does).
+- **Fields and effects**: the Old Deep's dose screen (`deep_screen`) is laid over the
+  Living Dark's per-seat view fields (the Bio-Filter's clear view).
+- **The creature body test** spaces the cave kinds 22 to a row, three columns apart, with
+  later rows half a gap over, so the Crust's and the Old Deep's kinds all fit the arena; the
+  Living Dark's keep their own arena.
+
+### The gates match the shops
+
+- **Drill II** is one tier past the Crust's drill cap (`core_tier_cap(0) + 1`): the shop
+  only sells it once the Old Deep is reached, and only the Sinkhole's Deep Claim gets a rig
+  there.
+- **The Pressure Hull is won from the Star Core** (`RigSystem::boss_reward` is
+  `DescentBoss::StarCore`, `UpgradeLock::Boss` in every shop), like the Mycelial Mind's
+  Bio-Filter and Lamp II. Before, the progression shop sold it at 60,000, which skipped the
+  Old Deep's gate. The descent probe fights each boss (`BOSS_FIGHT_MINUTES`) and grants every
+  reward of that boss. The shop and felt-need tests use the Cryo Hull instead.
+- Test: `wave8_seam_tests::the_shops_match_the_gates_the_descents_hold`.
+
+### The story in the strata
+
+- **The Old Deep's Fathers' camps** used to tell their own day-numbered logs, which
+  contradicted the story track's journal (the same days, different events). Each camp now
+  holds the expedition's first log of its stratum (`old_deep::expedition_log_of_camp`), and
+  drilling it reaches that canister through the journal (`reach_expedition_canister`). The
+  log opens in order or stays sealed, and the journal's card tells it. The builder tablets
+  and the core's revelation keep their own news. The Crust's strongbox logs stay a hired
+  hand's diary in their own voice.
+- **The expedition's camps and the anomaly rooms keep off the strata's set pieces**
+  (`expedition::sites::crosses_strata_set_pieces`): the cabin, Gravel Hollow, the Sinkhole,
+  the mine works, the Cathedral, the Star Core arena, the Glowmother's den, the Fathers'
+  camps and the Living Dark's stamps. The story pass is stamped after them; on seed 0 log
+  5's camp cut through the Grey Stone's mine works. A log site moves along its row, then to
+  other rows of its slot; a room is dropped.
+- **The settlements remember the Fathers** (`expedition::memories::line_for_visit`, opened as
+  the crew reads the trail, newest first):
+  - Gravel Hollow's people pass a line on when asked for news, and on every other chat.
+  - A seat arriving at Gravel Hollow's or Cathedral Station's outpost, or at the Amber
+    Court, gets a "They remember the Fathers" story card (`StoryMomentKind::Remembered`).
+    It shows one line a settlement a day and reads only replicated state, so it works
+    online and per seat.
+- The descent probe's story sources include the expedition's logs and echoes
+  (`STORY_LOG_SOURCES`).
+
+### Music
+
+Each of the 17 strata of Descents I-III plays its own bed: the Crust's five, the Old Deep's
+seven, the Living Dark's five. The Sinkhole, Star Core and Mycelial Mind themes take over in
+their fights. Test: `audio::director::tests::every_stratum_of_descents_one_to_three_plays_its_own_piece`.
+
+### The descent probe and the default world
+
+`cargo test --release -p fatherload_simulation descent_report -- --ignored --nocapture` on the
+integrated registry (default seed):
+
+| Descent | Ends at (h) | §14 target (h) | Everyday trip fuel (max % of tank) | Deaths |
+|---|---|---|---|---|
+| I The Crust | 6.4 | 5-8 | 49 | 0 |
+| II The Old Deep | 16.0 | 13-18 | 15 | 0 |
+| III The Living Dark | 23.0 | 22-29 | 17 | 0 |
+| (whole run, VIII The Heart) | 71.4 | 60-90 | 12 | 2 |
+
+All 17 strata of Descents I-III pass the 20-40 minute check (the longest wait is 14 minutes,
+in the Void Geode Fields and the Mantle Storm Zone), with no deaths. The Star Core's Pressure
+Hull is won at 14.5 h and the Mind's Bio-Filter at 21.7 h. Descents IV-VIII still end 1-6 h
+early, and seven of their placeholder strata wait more than 40 minutes; Waves 9-10 author
+them. Since I-III pass, **new worlds start on V11**: `GeneratorVersion::NEW_WORLD`, from the
+progression track. "Classic (V10)" stays selectable in the New World dialog, and
+`GeneratorVersion::CURRENT` stays V10.
+
+### Scenes
+
+Deep scenes start with the Fathers' echoes heard, so the first echo's card no longer covers
+them. `old_deep_fathers_log` reads its camp's expedition log, and
+`settlement_memory_cathedral` shows Cathedral Station's camp remembering the Fathers.
+
+### Still open
+
+- The Crust's strongbox diary and the Old Deep's builder tablets are separate from the
+  journal (they are not numbered expedition logs).
+- Cathedral Station's camp and the Hive have no resident people: their memories are cards,
+  not conversations.
+- The probe models every gate fight as fixed minutes.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
