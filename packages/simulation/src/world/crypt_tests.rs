@@ -875,3 +875,46 @@ fn sandwalker_sandals_blunt_crypt_traps_as_in_side_view_tombs() {
         "Sandwalker halves crypt spikes: {shod} vs {bare}"
     );
 }
+
+/// Wave 6: a trap's arrows are spawned once for the whole party, so the sandals are applied per
+/// pilot when an arrow lands: Sandwalker halves the arrow for its wearer.
+#[test]
+fn sandwalker_sandals_blunt_crypt_trap_arrows_for_their_wearer() {
+    let lost = |sandals: bool| {
+        let site = crypt(1);
+        let mut world = quiet_crypt(&site, 60);
+        if sandals {
+            world.scenario_edit_tomb_member(PLAYER, |member| {
+                member.relics.push(crate::tomb::relic::Relic::Sandwalker);
+            });
+        }
+        let interior = room(&world, RoomKind::Entry);
+        let plate = CryptTrap {
+            at: interior.center(),
+            kind: CryptTrapKind::ArrowPlate,
+            dir: (0, 1),
+            phase: 0,
+            hidden: false,
+            room: 0,
+        };
+        world.scenario_crypt_traps(PLAYER, vec![plate], 0);
+        stand_at(&mut world, plate.at);
+        let still = TickInputs::held(PLAYER, ControlState::default());
+        let mut lost = 0.0_f32;
+        for _ in 0..90 {
+            let _ = tick(&mut world, &still);
+            let (id, _, state) = world.pilot_of(PLAYER).expect("pilot");
+            lost += state.max_health - state.health;
+            world.edit_pilot(id, |_, state| state.health = state.max_health);
+            stand_at(&mut world, plate.at);
+        }
+        lost
+    };
+    let bare = lost(false);
+    let shod = lost(true);
+    assert!(bare > 0.0, "the plate's arrows bite");
+    assert!(
+        (shod / bare - 0.5).abs() < 0.05,
+        "Sandwalker halves crypt arrows: {shod} vs {bare}"
+    );
+}

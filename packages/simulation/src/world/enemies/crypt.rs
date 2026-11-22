@@ -955,10 +955,28 @@ impl WorldState {
                 })
                 .collect();
             for pilot in victims {
+                // A trap's arrow or boulder is spawned once for the whole party: Sandwalker
+                // Sandals (and their synergies) blunt it for the pilot it hits.
+                let damage = if matches!(shot.kind, ShotKind::CryptArrow | ShotKind::Boulder) {
+                    let owner = match self.entities.get(pilot).map(|entity| entity.state) {
+                        Some(EntityState::Pilot(state)) => Some(state.owner),
+                        _ => None,
+                    };
+                    owner.map_or(shot.damage, |owner| {
+                        quantize(
+                            shot.damage
+                                * crate::tomb::relic::RelicEffects::scale(
+                                    self.tombs.effects_of(owner).trap_pct,
+                                ),
+                        )
+                    })
+                } else {
+                    shot.damage
+                };
                 let _landed = self.strike_pilot_as(
                     Some(shot.shooter),
                     pilot,
-                    shot.damage,
+                    damage,
                     (body.x, body.y),
                     knock,
                     output,
