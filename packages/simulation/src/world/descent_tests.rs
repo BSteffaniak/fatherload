@@ -83,7 +83,9 @@ fn deep_strata_spawn_their_registry_creatures() {
 #[test]
 fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
     let settings = v11(0x00C0_FFEE);
-    // A low tick rate keeps the run short (the simulation is tick-rate safe).
+    // A low tick rate keeps the run short. 20 Hz is below the 30-240 Hz range the tick-rate
+    // tests cover: test-mode drilling already stalls at 10 Hz in V10 worlds too (a rig holding
+    // "drill down" from the spawn never gets past row 5), so this is not a V11 matter.
     let mut world =
         WorldState::new_game_with_settings(PLAYER, &settings, crate::SimulationParams::new(20));
     world.enable_test_mode();
