@@ -277,6 +277,17 @@ pub trait StratumRegistry {
     fn descents(&self) -> Vec<DescentSpan> {
         PlanLayout.descents().to_vec()
     }
+
+    /// The row (from the ground line) of Descent `descent`'s outpost, where the bot sells and
+    /// refuels once it holds a claim: 40 rows under the Descent's top by default, and none in
+    /// Descent I unless the registry has one (Gravel Hollow, Wave 8).
+    fn outpost_row(&self, descent: u8) -> Option<i32> {
+        (descent > 0).then(|| {
+            self.descents()
+                .get(usize::from(descent))
+                .map_or(0, |span| span.top + 40)
+        })
+    }
 }
 
 /// The real stratum registry ([`crate::descent`]) on a Deep Descent world's seeded layout, as
@@ -316,17 +327,14 @@ impl StratumRegistry for RegistryStrata {
         let ground = self.ground();
         let plan = PlanStrata.strata();
         let markers = registry_markers();
-        let last = (Stratum::ALL.len() - 1) as f64;
         Stratum::ALL
             .iter()
             .zip(&plan)
             .zip(markers)
-            .enumerate()
-            .map(|(index, ((stratum, modelled), markers))| {
+            .map(|((stratum, modelled), markers)| {
                 let def = stratum.def();
                 let (top, bottom) = layout.rows(*stratum);
                 let descent = u8::try_from(stratum.descent().index()).unwrap_or(u8::MAX);
-                let share = index as f64 / last;
                 // The registry's ores through the middle of the stratum, by weight.
                 let weights = def.ore_weights(500);
                 let total: u32 = weights.iter().sum();
@@ -358,7 +366,17 @@ impl StratumRegistry for RegistryStrata {
                         .count(),
                 )
                 .unwrap_or(u8::MAX);
-                let mechanic = u8::from(!def.field.is_neutral() || !def.fluids.is_empty());
+                // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
+                let mechanic = u8::from(
+                    !def.field.is_neutral()
+                        || !def.fluids.is_empty()
+                        || stratum.descent() == crate::descent::Descent::Crust,
+                );
+                // The radiator tier the stratum's own heat asks for (Wave 8: per stratum).
+                let heat = crate::crust::stratum_heat_units(*stratum);
+                let heat_tier = (1..=crate::depth_progression::DESCENT_MAX_UPGRADE_LEVEL)
+                    .find(|tier| crate::protection::radiator_cooling(*tier) >= heat)
+                    .unwrap_or(crate::depth_progression::DESCENT_MAX_UPGRADE_LEVEL);
                 DescentStratum {
                     descent,
                     name: def.name,
@@ -371,7 +389,7 @@ impl StratumRegistry for RegistryStrata {
                     ore_share: 0.2,
                     hazard_per_minute: modelled.hazard_per_minute
                         * (0.5 + f64::from(hazard_weight) / 16.0).min(2.0),
-                    heat_tier: (1.0 + 20.0 * share).round() as u8,
+                    heat_tier,
                     novelties: u8::try_from(markers.len()).unwrap_or(u8::MAX),
                     content_minutes: 7.0f64.mul_add(
                         f64::from(creatures),
@@ -381,6 +399,22 @@ impl StratumRegistry for RegistryStrata {
                 }
             })
             .collect()
+    }
+
+    fn outpost_row(&self, descent: u8) -> Option<i32> {
+        if descent == 0 {
+            // Gravel Hollow's outpost in the Grey Stone (Wave 8).
+            let layout = crate::descent::fields::cached_layout(&self.settings);
+            return crate::worldgen::descent::landmarks::outpost(
+                &self.settings,
+                &layout,
+                crate::descent::Descent::Crust,
+            )
+            .map(|hall| hall.bounds.max.y - self.ground());
+        }
+        self.descents()
+            .get(usize::from(descent))
+            .map(|span| span.top + 40)
     }
 
     fn descents(&self) -> Vec<DescentSpan> {
@@ -877,9 +911,8 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         let descent = stratum.descent;
         // New things met in this stratum, in minutes since it began.
         let mut events: Vec<(f64, NoveltyKind, String)> = Vec::new();
-        let outpost_row = descents
-            .get(usize::from(descent))
-            .map_or(0, |span| if descent == 0 { 0 } else { span.top + 40 });
+        let outpost = registry.outpost_row(descent);
+        let outpost_row = outpost.unwrap_or(i32::MAX);
         // The stratum's content minutes, and digging through it.
         let rows = f64::from(stratum.rows());
         let dig_minutes = rows * tile_seconds(stratum, rig.drill, overhead) / 60.0;
@@ -939,9 +972,13 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 rig.credits -= beacon_price;
                 beacon_rows.push(next_beacon);
             }
+            // The nearest base over the face: a beacon, or the crew's claimed outpost.
+            let claimed_outpost =
+                (claimed.contains(&descent) && outpost_row <= face).then_some(outpost_row);
             let base = beacon_rows
                 .iter()
                 .copied()
+                .chain(claimed_outpost)
                 .filter(|row| *row <= face)
                 .max()
                 .unwrap_or(0);
@@ -1056,7 +1093,7 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                     break;
                 }
             }
-            if !claimed.contains(&descent) && outpost_row <= face && descent > 0 {
+            if !claimed.contains(&descent) && outpost.is_some() && outpost_row <= face {
                 let price = f64::from(scaled_price(OUTPOST_CLAIM_PRICE, descent));
                 if rig.credits >= price * 3.0 {
                     rig.credits -= price;
@@ -1150,6 +1187,10 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         deaths_total += deaths;
         if leaving_descent {
             descent_hours[usize::from(descent)] = clock_minutes / 60.0;
+            if descent == 0 {
+                // The Sinkhole's reward (Wave 8): Drill II.
+                rig.drill = rig.drill.max(crate::crust::DRILL_II_LEVEL);
+            }
             if let Some(span) = descents.get(usize::from(descent)) {
                 let rows = f64::from(span.rows() - 40);
                 let climb = STOCK_CLIMB_ROWS_PER_SECOND
@@ -1564,6 +1605,44 @@ mod tests {
         );
         let failures = run.pacing_failures(PACING_DESCENTS);
         assert_eq!(run.pacing_passes(PACING_DESCENTS), failures.is_empty());
+    }
+
+    #[test]
+    fn the_authored_crust_takes_five_to_eight_hours_on_sane_trips() {
+        // Wave 8: the registry's Crust (its own ores, Gravel Hollow as a base, per-stratum heat,
+        // the Sinkhole's Drill II) paces Descent I to the plan's hours.
+        let config = DescentConfig {
+            strata_limit: Some(6),
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&RegistryStrata::default_world(), &config);
+        let crust = run.descent_hours[0];
+        assert!(
+            (5.0..=8.0).contains(&crust),
+            "Descent I ends at {crust:.1} h"
+        );
+        for stratum in run.strata.iter().take(5) {
+            assert!(
+                stratum.everyday_fuel_percent < 80.0,
+                "{}: everyday trips burn {:.0}% of the tank",
+                stratum.stratum.name,
+                stratum.everyday_fuel_percent
+            );
+            assert!(
+                (30.0..=150.0).contains(&stratum.minutes),
+                "{} takes {:.0} min",
+                stratum.stratum.name,
+                stratum.minutes
+            );
+            assert!(
+                stratum.longest_gap_minutes <= 40.0,
+                "{}",
+                stratum.stratum.name
+            );
+        }
+        // Drill II from the Sinkhole carries into the Old Deep.
+        assert!(run.strata[5].drill_tier >= crate::crust::DRILL_II_LEVEL);
     }
 
     #[test]
