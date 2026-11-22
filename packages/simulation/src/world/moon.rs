@@ -191,7 +191,7 @@ impl WorldState {
             return;
         };
         let (x, y, vy) = (player.x, player.y, player.velocity_y);
-        if !self.terrain.settings().generator.has_sky() || y > 0.0 {
+        if !self.terrain.settings().generator.has_sky() || self.frame().legacy_y(y) > 0.0 {
             return;
         }
         if let Some(breach) = vacuum_breach(player)

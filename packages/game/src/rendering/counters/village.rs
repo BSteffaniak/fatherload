@@ -98,7 +98,7 @@ fn quote(snapshot: &RenderSnapshot<'_>, player: &Player, offer: VillageOffer) ->
         VillageDeal::Refuel { percent } => {
             // Up in the sky, rigs that cannot cross the dead-air gap only top up partway
             // (the same rule the tick applies).
-            let altitude = (-player.y / fatherload_simulation::TILE_SIZE).floor() as i32;
+            let altitude = (-crate::view_frame::frame().legacy_y(player.y) / fatherload_simulation::TILE_SIZE).floor() as i32;
             let sky = snapshot.terrain.settings().generator.sky_bands();
             let level =
                 fatherload_simulation::milestone::sky_refuel_level(player, altitude, sky.as_ref());

@@ -192,7 +192,9 @@ impl BaseModuleView {
                         || "No lunar uplink".to_owned(),
                         |(_, y)| {
                             if world.on_moon(module.anchor()) {
-                                if y > -40.0 * fatherload_simulation::TILE_SIZE {
+                                if world.frame().legacy_y(y)
+                                    > -40.0 * fatherload_simulation::TILE_SIZE
+                                {
                                     "Down to town".to_owned()
                                 } else {
                                     "Down to your uplink".to_owned()

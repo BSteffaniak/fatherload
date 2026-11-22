@@ -596,7 +596,8 @@ fn draw_layer(
     if bottom < visible.y || bottom - height > visible.y + visible.height {
         return;
     }
-    let origin = snap(visible.x * (1.0 - parallax));
+    // `x * (1 - p)` with the parallax term on the absolute place (F7: no jump on a frame move).
+    let origin = snap(crate::view_frame::parallax_x(visible.x, parallax));
     let first = ((visible.x - origin) / width).floor() as i32;
     let last = ((visible.x + visible.width - origin) / width).ceil() as i32;
     for repeat in first..=last {
@@ -832,7 +833,10 @@ fn draw_stars(
         let (dx, dy) = (x - pole.x, y - pole.y);
         (pole.x + dx * cos - dy * sin, pole.y + dx * sin + dy * cos)
     };
-    let (origin_x, origin_y) = (visible.x * (1.0 - PARALLAX), visible.y * (1.0 - PARALLAX));
+    let (origin_x, origin_y) = (
+        crate::view_frame::parallax_x(visible.x, PARALLAX),
+        crate::view_frame::parallax_y(visible.y, PARALLAX),
+    );
     // The view's corners turned back into the unrotated field bound the cells to visit.
     let corners = [
         (visible.x, visible.y),
@@ -1290,7 +1294,7 @@ fn draw_clouds(
             continue;
         }
         let width = CLOUD_WIDTH as f32 * ART * band.scale * band.stretch;
-        let origin = visible.x * (1.0 - band.parallax) + seconds * band.drift;
+        let origin = crate::view_frame::parallax_x(visible.x, band.parallax) + seconds * band.drift;
         let first = ((visible.x - origin - width) / band.period).floor() as i32 - 1;
         let last = ((visible.x + visible.width - origin) / band.period).ceil() as i32;
         let span = (band.low - band.high).max(1.0) as u32;
@@ -1345,8 +1349,7 @@ fn draw_hills(
     visible: Rectangle,
     look: &DayLook,
 ) {
-    let center = ((visible.x + visible.width * 0.5) / fatherload_simulation::terrain::TILE_SIZE)
-        .floor() as i32;
+    let center = crate::view_frame::frame().col(visible.x + visible.width * 0.5);
     let blend = biome::biome_blend(settings, center);
     let index = |biome: Biome| BACKDROPS.iter().position(|b| *b == biome).unwrap_or(0);
     let anchor = hills_bottom(settings, visible);
@@ -1431,7 +1434,7 @@ pub fn hills_bottom(settings: &WorldSettings, visible: Rectangle) -> f32 {
     let (mut sum, mut weights) = (0.0_f32, 0.0_f32);
     for x in (center - REACH..=center + REACH).step_by(STEP) {
         let weight = (REACH + 1 - (x - center).abs()) as f32;
-        sum += biome::surface_row(settings, x) as f32 * weight;
+        sum += crate::view_frame::frame().rel_row(biome::surface_row(settings, x)) * weight;
         weights += weight;
     }
     snap((sum / weights.max(1.0)).mul_add(TILE_SIZE, ART * 2.0))

@@ -70,6 +70,8 @@ mod explosive_tests;
 #[cfg(test)]
 mod flight_tests;
 mod frame;
+#[cfg(test)]
+mod frame_tests;
 mod garage;
 #[cfg(test)]
 mod god_mode_tests;

@@ -65,8 +65,8 @@ fn in_isle_bands(settings: &WorldSettings, visible: Rectangle) -> bool {
         return false;
     };
     settings.generator.has_sky_isles()
-        && visible.y < -((bands.low_isles - 40) as f32) * TILE_SIZE
-        && visible.y + visible.height > -(bands.dead_air as f32) * TILE_SIZE
+        && visible.y < crate::view_frame::frame().row_px(-(bands.low_isles - 40))
+        && visible.y + visible.height > crate::view_frame::frame().row_px(-bands.dead_air)
 }
 
 fn tile_is(terrain: &Terrain, position: TilePosition, kind: TileKind) -> bool {

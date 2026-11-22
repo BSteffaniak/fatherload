@@ -651,8 +651,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     let host = ground.unwrap_or_else(|| host_material(band));
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
-        origin_x: position.x * TILE_ART,
-        origin_y: position.y * TILE_ART,
+        // Absolute art pixels key the texture noise; far columns wrap instead of overflowing.
+        origin_x: position.x.wrapping_mul(TILE_ART),
+        origin_y: position.y.wrapping_mul(TILE_ART),
     };
     let (x, y) = (position.x, position.y);
     let up = cell_at(terrain, x, y - 1);

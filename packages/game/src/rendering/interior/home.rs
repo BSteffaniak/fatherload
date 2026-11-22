@@ -595,7 +595,7 @@ fn draw_garage(
     let parked = snapshot.players.iter().find(|player| {
         player.player_id == view.player_id
             && plot.garage_columns().is_some_and(|(first, last)| {
-                let column = (player.x / fatherload_simulation::TILE_SIZE).floor() as i32;
+                let column = crate::view_frame::frame().col(player.x);
                 column >= first && column < last
             })
     });

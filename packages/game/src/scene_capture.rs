@@ -1,4 +1,5 @@
-//! `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list] [--frame-timing N]`:
+//! `fatherload --screenshot-scenes <dir> [--size WxH] [--only a,b] [--list] [--frame-timing N]
+//! [--frame-shift X,Y]`:
 //! renders scripted game states to PNG files without user input, then exits. With
 //! `--frame-timing N` each scene then draws N more frames and prints the CPU time of the frame
 //! work (snapshot, renderer sync and draw calls, not the buffer swap): a quick way to find
@@ -6,6 +7,11 @@
 //! With `--export-saves` no window opens: each selected scene's staged world is written as a
 //! save file `<dir>/<scene name>.json` instead (the browser frame-timing script,
 //! `scripts/perf-web.cjs`, loads them to time the WASM build in those states).
+//!
+//! With `--frame-shift X,Y` every staged world is re-expressed in a fixed frame X sectors right
+//! and Y sectors down of the origin before its frames run (F7): nothing moves in the world, so a
+//! frame-relative renderer draws the same picture. Diff the PNGs against an unshifted run to
+//! find any drawing that still reads positions as world pixels.
 //!
 //! Each [`Scene`] builds a deterministic state through the same [`LocalGame`] the app runs (fixed
 //! frame time, fixed world seed), renders it with the real [`GameRenderer`] for a few frames and
@@ -79,6 +85,14 @@ pub struct CaptureOptions {
     pub timing_frames: usize,
     /// Write each scene's world as a save file instead of capturing it (`--export-saves`).
     pub export_saves: bool,
+    /// Re-express every staged world in a fixed frame this many sectors off the origin
+    /// (`--frame-shift X,Y`, F7).
+    pub frame_shift: Option<(i64, i64)>,
+}
+
+thread_local! {
+    /// The `--frame-shift` of the running capture.
+    static FRAME_SHIFT: std::cell::Cell<Option<(i64, i64)>> = const { std::cell::Cell::new(None) };
 }
 
 /// Parses the scene-capture flags. `Ok(None)` when `--screenshot-scenes` is absent.
@@ -101,6 +115,7 @@ pub fn parse_args(args: &[String]) -> Result<Option<CaptureOptions>, String> {
         list: false,
         timing_frames: 0,
         export_saves: false,
+        frame_shift: None,
     };
     let mut iter = args
         .iter()
@@ -119,6 +134,14 @@ pub fn parse_args(args: &[String]) -> Result<Option<CaptureOptions>, String> {
                 options.only = Some(value.split(',').map(str::to_owned).collect());
             }
             "--list" => options.list = true,
+            "--frame-shift" => {
+                let (_, value) = iter.next().ok_or("--frame-shift needs X,Y sectors")?;
+                let parsed = value
+                    .split_once(',')
+                    .and_then(|(x, y)| Some((x.trim().parse().ok()?, y.trim().parse().ok()?)));
+                options.frame_shift =
+                    Some(parsed.ok_or_else(|| format!("invalid --frame-shift {value}"))?);
+            }
             "--export-saves" => options.export_saves = true,
             "--frame-timing" => {
                 let (_, value) = iter.next().ok_or("--frame-timing needs a frame count")?;
@@ -164,6 +187,7 @@ fn parse_size(value: &str) -> Result<(i32, i32), String> {
     reason = "one capture loop: stage, draw, save, optionally time"
 )]
 pub fn run(options: &CaptureOptions) -> Result<(), String> {
+    FRAME_SHIFT.with(|shift| shift.set(options.frame_shift));
     let scenes: Vec<&Scene> = all_scenes()
         .filter(|scene| {
             options
@@ -408,7 +432,17 @@ pub struct SceneStage<'g> {
 impl SceneStage<'_> {
     /// Enters a fresh local world with `seats` seats arranged by `arrange`.
     fn play(&mut self, seats: usize, arrange: impl FnOnce(&mut WorldState, &[LocalSeat])) {
-        let report = self.game.stage_local_world(seats, arrange);
+        let shift = FRAME_SHIFT.with(std::cell::Cell::get);
+        let report = self.game.stage_local_world(seats, |world, seats| {
+            arrange(world, seats);
+            if let Some((x, y)) = shift {
+                world.relocate_frame(fatherload_simulation::position::Frame {
+                    sector_x: x,
+                    sector_y: y,
+                    floating: false,
+                });
+            }
+        });
         self.absorb(report);
     }
 

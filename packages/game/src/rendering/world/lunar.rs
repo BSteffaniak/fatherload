@@ -43,7 +43,9 @@ pub(super) fn draw_lunar_glows(
     visible: Rectangle,
     seconds: f32,
 ) {
-    if !terrain.settings().generator.has_moon_content() || visible.y > 0.0 {
+    if !terrain.settings().generator.has_moon_content()
+        || crate::view_frame::frame().legacy_y(visible.y) > 0.0
+    {
         return;
     }
     let first = TilePosition {
@@ -103,7 +105,9 @@ pub(super) fn draw_colony_props(
     visible: Rectangle,
     seconds: f32,
 ) {
-    if !terrain.settings().generator.has_moon_content() || visible.y > 0.0 {
+    if !terrain.settings().generator.has_moon_content()
+        || crate::view_frame::frame().legacy_y(visible.y) > 0.0
+    {
         return;
     }
     let Some(layout) = fatherload_simulation::worldgen::moon::layout(terrain.settings()) else {

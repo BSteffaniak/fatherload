@@ -148,6 +148,8 @@ impl WorldState {
     pub fn player_surface_zone(&self, player_id: PlayerId) -> Option<SurfaceZone> {
         // On foot the pilot is the one at the counter (Part II F5).
         let (x, y) = self.actor_position(player_id)?;
+        // The town is a place: read the actor's absolute position (F7).
+        let (x, y) = self.frame().legacy_px(x, y);
         surface_zone_at(x, y, TILE_SIZE)
     }
 

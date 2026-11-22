@@ -52,6 +52,14 @@ impl WorldState {
         }
     }
 
+    /// Re-expresses every position of this world in `frame`, keeping its floating flag as
+    /// given (tools and tests: the screenshot `--frame-shift` check renders a scene in a frame
+    /// off the origin to prove presentation is frame-relative). Nothing moves in absolute terms.
+    #[doc(hidden)]
+    pub fn relocate_frame(&mut self, frame: Frame) {
+        self.move_frame(frame);
+    }
+
     /// Places `player_id`'s rig (and the frame, in a floating world) at absolute position
     /// `position`, for tests and tools that start far from the origin. The frame re-centres on
     /// the rig at once, so the rig's local position is exact.

@@ -215,7 +215,7 @@ fn draw_cloud_seas(draw: &mut impl RaylibDraw, bands: &SkyBands, visible: Rectan
                 with_alpha(sea.body, 215),
             );
         }
-        let origin = visible.x * (1.0 - SEA_PARALLAX) + seconds * 5.0;
+        let origin = crate::view_frame::parallax_x(visible.x, SEA_PARALLAX) + seconds * 5.0;
         let first = ((visible.x - origin) / PUFF_STEP).floor() as i32 - 2;
         let last = ((visible.x + visible.width - origin) / PUFF_STEP).ceil() as i32 + 2;
         for index in first..=last {

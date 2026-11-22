@@ -73,7 +73,7 @@ pub fn draw_lava_glow(
     visible: Rectangle,
     seconds: f32,
 ) {
-    if visible.y + visible.height < 48.0 * TILE_SIZE {
+    if visible.y + visible.height < crate::view_frame::frame().row_px(48) {
         return;
     }
     for position in visible_tiles(visible) {

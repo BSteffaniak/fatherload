@@ -461,8 +461,10 @@ impl Effects {
                     // A keystone breaking: sparks of aether and the groan, from the island.
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
                     );
                     self.spawn_sparks(x, y);
                     if impact_cues < 4 {
@@ -475,8 +477,10 @@ impl Effects {
                     // Tile coordinates: crack at the tile's centre.
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
                     );
                     self.spawn_sparks(x, y);
                     if impact_cues < 4 {
@@ -553,8 +557,10 @@ impl Effects {
                 GameplayEventKind::ChestOpened { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
                     );
                     self.spawn_sparks(x, y - 8.0);
                     self.spawn_sparks(x, y - 8.0);
@@ -570,8 +576,10 @@ impl Effects {
                     // Grit shaken off the lintel as the gate moves.
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::terrain::TILE_SIZE,
-                        (y as f32 + 1.0) * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::terrain::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 1.0)
+                            * fatherload_simulation::terrain::TILE_SIZE,
                     );
                     self.spawn_dust(x, y);
                 }
@@ -631,8 +639,10 @@ impl Effects {
                 | GameplayEventKind::CryptPitFall { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
                     );
                     if matches!(gameplay.kind, GameplayEventKind::CryptPitFall { .. }) {
                         self.spawn_dust(x, y);
@@ -678,8 +688,10 @@ impl Effects {
                 | GameplayEventKind::BaseRemoved { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
                     );
                     self.spawn_sparks(x, y + 8.0);
                     if impact_cues < 4
@@ -774,8 +786,10 @@ impl Effects {
                 | GameplayEventKind::RelicChestOpened { x, y, .. } => {
                     #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
                     let (x, y) = (
-                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
-                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_col(x) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
+                        (crate::view_frame::frame().rel_row(y) + 0.5)
+                            * fatherload_simulation::TILE_SIZE,
                     );
                     self.spawn_sparks(x, y);
                     if let Some(cue) = event_cue(&gameplay.kind) {

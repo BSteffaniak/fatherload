@@ -37,3 +37,27 @@ pub fn set(frame: Frame) -> fatherload_simulation::position::FrameShift {
         previous.shift_to(frame)
     }
 }
+
+/// The origin of a parallax layer that moves `1 - parallax` as fast as the camera at local `x`:
+/// `x * (1 - parallax)` in world terms. The parallax term reads the camera's absolute place, so
+/// the layer never jumps when the frame moves (and is the old expression in the origin frame).
+#[must_use]
+pub fn parallax_x(x: f32, parallax: f32) -> f32 {
+    let frame = frame();
+    if frame.at_origin() {
+        x * (1.0 - parallax)
+    } else {
+        frame.legacy_x(x).mul_add(-parallax, x)
+    }
+}
+
+/// [`parallax_x`] for a vertical camera position.
+#[must_use]
+pub fn parallax_y(y: f32, parallax: f32) -> f32 {
+    let frame = frame();
+    if frame.at_origin() {
+        y * (1.0 - parallax)
+    } else {
+        frame.legacy_y(y).mul_add(-parallax, y)
+    }
+}

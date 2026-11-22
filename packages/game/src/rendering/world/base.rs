@@ -240,8 +240,8 @@ pub(in crate::rendering) fn draw_base_lights(draw: &mut impl RaylibDraw, scene: 
             && scene.seen(tile)
         {
             let (lx, ly) = lamp_bulb(facing);
-            let x = (tile.x * T + lx) as f32 * ART;
-            let y = (tile.y * T + ly) as f32 * ART;
+            let (x, y) = crate::view_frame::frame().tile_origin(tile);
+            let (x, y) = (x + lx as f32 * ART, y + ly as f32 * ART);
             let glow = 1.0 + flicker;
             disc(draw, x, y, (34.0 * glow) as i32, with_alpha(AMBER, 14));
             disc(draw, x, y, (22.0 * glow) as i32, with_alpha(GOLD, 20));
@@ -254,8 +254,8 @@ pub(in crate::rendering) fn draw_base_lights(draw: &mut impl RaylibDraw, scene: 
         }
         let powered = scene.powered.contains(&module.id);
         let (w, h) = module.kind.footprint();
-        let cx = (module.origin.x as f32 + w as f32 * 0.5) * TILE_SIZE;
-        let cy = (module.origin.y as f32 + h as f32 * 0.5) * TILE_SIZE;
+        let cx = (crate::view_frame::frame().rel_col(module.origin.x) + w as f32 * 0.5) * TILE_SIZE;
+        let cy = (crate::view_frame::frame().rel_row(module.origin.y) + h as f32 * 0.5) * TILE_SIZE;
         match module.kind {
             ModuleKind::Beacon => {
                 let pulse = ((scene.seconds * 2.0).sin() * 0.5 + 0.5) * 30.0;

@@ -493,8 +493,8 @@ fn gather_lights(scene: &LightScene<'_>) -> Vec<Light> {
     }
     for module in scene.bases.modules() {
         let (w, h) = module.kind.footprint();
-        let x = (module.origin.x as f32 + w as f32 * 0.5) * TILE_SIZE;
-        let y = (module.origin.y as f32 + h as f32 * 0.5) * TILE_SIZE;
+        let x = (crate::view_frame::frame().rel_col(module.origin.x) + w as f32 * 0.5) * TILE_SIZE;
+        let y = (crate::view_frame::frame().rel_row(module.origin.y) + h as f32 * 0.5) * TILE_SIZE;
         if !near(x, y) {
             continue;
         }
