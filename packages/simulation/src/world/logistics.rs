@@ -20,8 +20,8 @@ use crate::{
         DepthBeacon, DiveState, LIFT_STATION_PRICE, LiftOrigin, LiftRide, LiftShaft, Logistics,
         LogisticsCommand, MAX_BEACONS_PER_PLAYER, MAX_BUILT_LIFTS_PER_PLAYER, MAX_DIVE_CHARGES,
         MAX_LIFT_STATIONS, OUTPOST_FUEL_UNIT, OUTPOST_REPAIR_UNIT, OUTPOST_SALE_PERCENT, Outpost,
-        OutpostService, TOWN_TRAVEL_MARGIN, TravelNode, ride_millis, scaled_price,
-        sites::LogisticsSites, travel_cost,
+        OutpostService, TOWN_TRAVEL_CEILING_ROWS, TOWN_TRAVEL_MARGIN, TravelNode, ride_millis,
+        scaled_price, sites::LogisticsSites, travel_cost,
     },
     quantize::quantize_simulation_scalar,
     summary::PlayerScopedCommandOutcome,
@@ -263,8 +263,9 @@ impl WorldState {
     /// Whether a rig on `tile` is in the town for travel and shopping.
     fn in_town(&self, tile: TilePosition) -> bool {
         let (first, last) = crate::surface::town_span();
+        let ground = self.terrain.surface_row(tile.x);
         (first - TOWN_TRAVEL_MARGIN..=last + TOWN_TRAVEL_MARGIN).contains(&tile.x)
-            && tile.y <= self.terrain.surface_row(tile.x)
+            && (ground - TOWN_TRAVEL_CEILING_ROWS..=ground).contains(&tile.y)
     }
 
     /// The travel stop `player_id`'s rig is at, if any.

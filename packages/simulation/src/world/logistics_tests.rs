@@ -14,8 +14,8 @@ use crate::{
         core_tier_cap,
     },
     economy::{
-        MAX_UPGRADE_LEVEL, UpgradeKind, UpgradeLock, upgrade_cost, upgrade_lock, upgrade_lock_for,
-        upgrade_offers, upgrade_offers_for,
+        MAX_UPGRADE_LEVEL, UpgradeKind, UpgradeLock, shop_line_count, upgrade_cost, upgrade_lock,
+        upgrade_lock_for, upgrade_offers, upgrade_offers_for, upgrade_tier_name,
     },
     logistics::{
         BEACON_PRICE, DIVE_CHARGE_PACK, LIFT_STATION_PRICE, LogisticsCommand, OUTPOST_FUEL_UNIT,
@@ -23,6 +23,7 @@ use crate::{
     },
     summary::PlayerScopedCommandOutcome,
     terrain::{MineralKind, TILE_SIZE, TileKind, TilePosition},
+    upgrade_preview::{upgrade_preview, upgrade_preview_for},
     worldgen::GeneratorVersion,
 };
 
@@ -657,6 +658,78 @@ fn classic_worlds_keep_their_ladders_and_never_sell_rig_systems() {
     }
     // A classic world never hashes the (empty) logistics.
     assert!(world.logistics().is_empty());
+    // Its shop lists its own 18 lines: the rig systems are the trailing offers it hides.
+    let lines = shop_line_count(ProgressionRules::Classic);
+    assert_eq!(lines, 18);
+    assert_eq!(
+        shop_line_count(ProgressionRules::Descent),
+        classic.len(),
+        "Deep Descent shops list every line"
+    );
+    assert!(
+        classic[..lines]
+            .iter()
+            .all(|offer| offer.kind.rig_system().is_none())
+    );
+    assert!(
+        classic[lines..]
+            .iter()
+            .all(|offer| offer.kind.rig_system().is_some())
+    );
+    // A maxed classic core line previews nothing and still names its own top tier.
+    let mut maxed = player.clone();
+    maxed.drill_strength = MAX_UPGRADE_LEVEL;
+    assert!(upgrade_preview(&maxed, UpgradeKind::Drill, None).is_none());
+    let offer = upgrade_offers(&maxed)[0];
+    let top = upgrade_tier_name(UpgradeKind::Drill, offer.level.min(offer.max_level - 1));
+    assert_ne!(
+        top,
+        upgrade_tier_name(UpgradeKind::Drill, MAX_UPGRADE_LEVEL),
+        "a maxed classic drill must not be named after the first deep tier"
+    );
+}
+
+#[test]
+fn descent_worlds_preview_the_deep_tiers() {
+    let world = world_at(60);
+    let mut player = world.player(PLAYER).expect("player").clone();
+    player.drill_strength = MAX_UPGRADE_LEVEL;
+    player.fuel_tank_level = MAX_UPGRADE_LEVEL;
+    assert!(
+        upgrade_preview_for(&player, UpgradeKind::Drill, None, ProgressionRules::Classic).is_none()
+    );
+    for kind in [UpgradeKind::Drill, UpgradeKind::FuelTank] {
+        let preview = upgrade_preview_for(&player, kind, None, ProgressionRules::Descent)
+            .expect("a deep tier to preview");
+        assert_eq!(preview.to_level, MAX_UPGRADE_LEVEL + 1, "{kind:?}");
+        assert!(
+            preview
+                .bars
+                .iter()
+                .all(|bar| bar.next >= bar.now && bar.next <= bar.max + 1e-3),
+            "{kind:?}: {:?}",
+            preview.bars
+        );
+    }
+    player.drill_strength = DESCENT_MAX_UPGRADE_LEVEL;
+    assert!(
+        upgrade_preview_for(&player, UpgradeKind::Drill, None, ProgressionRules::Descent).is_none()
+    );
+}
+
+#[test]
+fn the_town_stop_ends_above_the_rooftops() {
+    let mut world = world_at(60);
+    let home = world.player_template().tile_position(TILE_SIZE);
+    park(&mut world, home.x, home.y);
+    assert_eq!(world.travel_stop_of(PLAYER), Some(TravelNode::Surface));
+    // High over the town (a sky isle, the Moon) is not the town.
+    park(&mut world, home.x, home.y - 400);
+    assert_eq!(world.travel_stop_of(PLAYER), None);
+    assert_eq!(
+        world.check_logistics(PLAYER, &LogisticsCommand::BuyDiveCharges),
+        Err(super::logistics::LogisticsRefusal::NoSeller)
+    );
 }
 
 #[test]

@@ -161,10 +161,11 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             );
         }
     }
-    // A lift station.
-    if let Some((shaft, at)) = logistics.station_at(tile)
-        && let Some(lift) = logistics.lifts.get(&shaft)
-    {
+    // A lift station (chained lifts share one, so every shaft stopping here is listed).
+    for (shaft, at) in logistics.stations_at(tile) {
+        let Some(lift) = logistics.lifts.get(&shaft) else {
+            continue;
+        };
         if logistics.outpost_at(tile).is_none() {
             heading = if lift.is_ancient() {
                 "Ancient Lift".to_owned()

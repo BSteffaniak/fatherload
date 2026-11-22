@@ -57,6 +57,9 @@ pub const BEACON_MIN_DEPTH_ROWS: i32 = 8;
 /// Columns either side of the town's buildings that still count as the town for travel and
 /// buying dive charges.
 pub const TOWN_TRAVEL_MARGIN: i32 = 6;
+/// Rows above the town's ground that still count as the town (a rig hovering over the
+/// rooftops; not a sky isle or the Moon above it).
+pub const TOWN_TRAVEL_CEILING_ROWS: i32 = 24;
 
 /// Half the width (in tiles, either side of its column) of an outpost's room.
 pub const OUTPOST_HALF_WIDTH: i32 = 4;
@@ -397,6 +400,17 @@ impl Logistics {
             .find_map(|lift| lift.station_at(tile).map(|row| (lift.id, row)))
     }
 
+    /// Every lift station a rig on `tile` stands at, as `(shaft, row)`, by shaft id. Chained
+    /// lifts share a station (one lift's bottom is the next one's top, as in
+    /// [`sites::LogisticsSites::plan`]), so a stop can serve more than one shaft.
+    #[must_use]
+    pub fn stations_at(&self, tile: TilePosition) -> Vec<(u32, i32)> {
+        self.lifts
+            .values()
+            .filter_map(|lift| lift.station_at(tile).map(|row| (lift.id, row)))
+            .collect()
+    }
+
     /// The outpost whose room holds `tile`.
     #[must_use]
     pub fn outpost_at(&self, tile: TilePosition) -> Option<&Outpost> {
@@ -459,6 +473,7 @@ impl Logistics {
     pub fn forget_transient(&mut self, player: PlayerId) {
         self.rides.remove(&player);
         self.dives.remove(&player);
+        self.gate_warned.remove(&player);
     }
 }
 
@@ -499,6 +514,36 @@ mod tests {
         assert!(ride.arrived(SimulationTick::new(310)));
         assert_eq!(ride_millis(300, 20), 15_000);
         assert_eq!(ride_millis(-45, 45), 1_000);
+    }
+
+    #[test]
+    fn chained_lifts_share_their_meeting_station() {
+        let mut logistics = Logistics::default();
+        for (top, bottom) in [(12, 549), (549, 1_139)] {
+            let id = logistics.allocate_id();
+            logistics.lifts.insert(
+                id,
+                LiftShaft {
+                    id,
+                    column: 40,
+                    stations: [top, bottom].into_iter().collect(),
+                    origin: LiftOrigin::Ancient,
+                    restored: true,
+                    cab_row: bottom,
+                },
+            );
+        }
+        let meeting = TilePosition { x: 40, y: 549 };
+        assert_eq!(logistics.stations_at(meeting), vec![(0, 549), (1, 549)]);
+        assert_eq!(
+            logistics.stations_at(TilePosition { x: 40, y: 12 }),
+            vec![(0, 12)]
+        );
+        assert!(
+            logistics
+                .stations_at(TilePosition { x: 41, y: 549 })
+                .is_empty()
+        );
     }
 
     #[test]
