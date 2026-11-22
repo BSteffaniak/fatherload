@@ -89,6 +89,7 @@ impl Material {
     pub const fn of(kind: TileKind) -> Self {
         match kind {
             TileKind::Air
+            | TileKind::Fluid(_)
             | TileKind::Dirt
             | TileKind::Clay
             | TileKind::Gas
@@ -215,6 +216,8 @@ enum SeatLoop {
     Town,
     /// The lunar colony's air recyclers and consoles (Wave 6).
     Colony,
+    /// Bubbles and the muffled pumps while the seat is under fluid (Part III F9).
+    Underwater,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -763,6 +766,18 @@ impl Director {
             SeatLoop::Lava,
             Patch::LavaSizzleLoop,
             (lava_gain * 0.8, pan, 1.0, OPEN_CUTOFF),
+        );
+
+        // Under fluid: bubbles stream past and the pumps rumble (Part III F9).
+        let underwater = terrain
+            .fluid_at(crate::view_frame::frame().tile_at(listener.x, listener.y))
+            .is_some_and(|cell| cell.level >= fatherload_simulation::fluid::FLUID_FULL / 2);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Underwater,
+            Patch::BubbleLoop,
+            (if underwater { 0.7 } else { 0.0 }, pan, 1.0, OPEN_CUTOFF),
         );
 
         // The nearest gas cloud hisses.

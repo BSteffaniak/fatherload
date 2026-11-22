@@ -29,6 +29,7 @@ impl PauseOption {
                     Self::ToggleNoClip,
                     Self::PlaceFieldZone,
                     Self::ClearFieldZones,
+                    Self::PourTestPools,
                 ],
             );
         }

@@ -378,6 +378,19 @@ const fn host_material(band: Band) -> TileKind {
     band.soft_material()
 }
 
+/// Representative colour of a fluid (Part III F9: the minimap, map previews, debris; the live
+/// fluid's body near its surface).
+#[must_use]
+pub const fn fluid_color(kind: fatherload_simulation::fluid::FluidKind) -> Color {
+    use fatherload_simulation::fluid::FluidKind;
+    match kind {
+        FluidKind::Water => OCEAN,
+        FluidKind::Acid => LIME,
+        FluidKind::Brine => TEAL,
+        FluidKind::LiquidMetal => GOLD,
+    }
+}
+
 /// Representative colour of a tile kind in `band` (drill dust, debris, map previews).
 #[must_use]
 pub fn material_color(kind: TileKind, band: Band) -> Color {
@@ -392,6 +405,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Lava => index_of(ORANGE),
         TileKind::Gas => index_of(LEAF),
         TileKind::Air => strata.back[0],
+        TileKind::Fluid(fluid) => return fluid_color(fluid),
         TileKind::Surface(material) => surface_ramp(material)[2],
         TileKind::Poi(tile) => return poi_color(tile, band),
         TileKind::Cave(tile) => return cave_color(tile, band),
@@ -567,7 +581,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         TileKind::Foundation => FOUNDATION[brick_level(x, y)],
         TileKind::Bedrock => bedrock_pixel(x, y),
         TileKind::Lava => lava_pixel(x, y),
-        TileKind::Air => backdrop_pixel(strata, x, y),
+        TileKind::Air | TileKind::Fluid(_) => backdrop_pixel(strata, x, y),
         TileKind::Surface(material) => surface_ramp(material)[surface_level(material, x, y)],
         TileKind::Ore(_)
         | TileKind::Artifact(_)
@@ -649,7 +663,8 @@ fn cell_at(terrain: &Terrain, x: i32, y: i32) -> Cell {
         return Cell::Sky;
     }
     match terrain.tile(TilePosition { x, y }) {
-        Some(tile) if tile.kind == TileKind::Air => {
+        // Fluid paints as the open ground it fills (the fluid is drawn live over the terrain).
+        Some(tile) if tile.kind.is_open() => {
             // Open air above the column's ground line is sky (the surface heightmap moves the
             // ground above and below the classic sky rows; in a biome world a mountain's caves
             // and tunnels dug into it are caves wherever they are).
@@ -741,9 +756,14 @@ pub fn paint_tile(
     reason = "one pass per tile family: air, built pieces, POI fixtures, cave tiles, rock"
 )]
 fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
+    // A fluid tile paints the back wall of the open ground it fills (Part III F9: the fluid
+    // itself is drawn live over the terrain, see `rendering::world::fluids`).
     let kind = terrain
         .tile(position)
-        .map_or(TileKind::Air, |tile| tile.kind);
+        .map_or(TileKind::Air, |tile| match tile.kind {
+            TileKind::Fluid(_) => TileKind::Air,
+            kind => kind,
+        });
     let band = terrain.band_at(position);
     let ground = biome::ground_material(terrain.settings(), position.x, position.y);
     let mut strata = strata_at(terrain, position);

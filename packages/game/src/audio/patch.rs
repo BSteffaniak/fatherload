@@ -342,6 +342,12 @@ patches! {
     ColonyLoop => "loop_colony",
     DawnTheme => "dawn_theme",
     DuskTheme => "dusk_theme",
+    // Fluids (Part III F9, wave 7), appended at the end so every earlier patch keeps its seeds.
+    FluidRush => "fluid_rush",
+    SteamHiss => "steam_hiss",
+    AcidFizz => "acid_fizz",
+    RigSplash => "rig_splash",
+    BubbleLoop => "loop_bubbles",
 }
 
 /// Playback metadata of a patch.
@@ -600,6 +606,16 @@ impl Patch {
             Self::CryptLoop | Self::CryptBossLoop => {
                 PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0)
             }
+            // Fluids (Part III F9): the flood's gush and a rig's plunge are physical; steam
+            // and fizz are small feedback; the bubbles under water loop.
+            Self::FluidRush | Self::RigSplash => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.05, 1.0),
+            Self::SteamHiss | Self::AcidFizz => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.2)
+                .jitter(0.06, 1.0),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -670,6 +686,8 @@ impl Patch {
             | Self::NightProwlLoop
             | Self::TombRunLoop
             | Self::TombBossLoop
+            // Part III F9: under fluid.
+            | Self::BubbleLoop
             // Wave 6: the ambience beds chosen by environment.
             | Self::HighWindLoop
             | Self::MoonLoop
@@ -1085,6 +1103,11 @@ impl Patch {
             Self::ColonyLoop => colony_loop(rng),
             Self::DawnTheme => dawn_theme(rng),
             Self::DuskTheme => dusk_theme(rng),
+            Self::FluidRush => fluid_rush(rng),
+            Self::SteamHiss => steam_hiss(rng),
+            Self::AcidFizz => acid_fizz(rng),
+            Self::RigSplash => rig_splash(rng),
+            Self::BubbleLoop => bubble_loop(rng),
         }
     }
 }
@@ -5855,6 +5878,108 @@ fn dusk_theme(rng: &mut Rng) -> Vec<f32> {
         );
     }
     mix_into(&mut out, &brass(rng, 164.81, 1.0, 0.15), 2.1, 0.12);
+    out
+}
+
+/// One rising bubble: a short sine chirp sweeping up (the "bloop" of air leaving water).
+fn bubble(rng: &mut Rng, low: f32, high: f32) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Sine);
+    let base = rng.range(low, high);
+    let length = rng.range(0.03, 0.07);
+    render(length, |t| {
+        osc.next(base * (1.0 + t / length * 1.6)) * perc(t, 0.002, length * 0.8)
+    })
+}
+
+/// A fluid pocket breached (Part III F9): a low gulp as the wall gives, then a broad, churning
+/// gush of brown and pink noise that swells and drains away, with bubbles bursting through it.
+fn fluid_rush(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(110.0 * rng.jitter(0.05), 55.0, 0.18, 1.4);
+    let mut rush = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut rush_filter = Svf::new(FilterMode::LowPass, 700.0, 0.8);
+    let mut spray = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut spray_filter = Svf::new(FilterMode::BandPass, 1_600.0, 0.7);
+    let churn = rng.range(5.0, 7.0);
+    let gush = render(1.6, |t| {
+        let swell = segments(t, &[(0.0, 0.0), (0.12, 1.0), (0.6, 0.8), (1.6, 0.0)]);
+        let wobble = 0.75 + 0.25 * sine(t, churn);
+        let low = rush_filter.run(rush.next(), 380.0 + 500.0 * swell, 0.8);
+        let high = spray_filter.run(spray.next(), 1_200.0 + 900.0 * wobble, 0.7);
+        (low * 1.1 + high * 0.45) * swell * wobble
+    });
+    mix_into(&mut out, &gush, 0.03, 0.9);
+    for time in scatter(rng, 14, 0.1, 1.4, 1.4) {
+        let pop = bubble(rng, 300.0, 900.0);
+        mix_into(&mut out, &pop, time, rng.range(0.08, 0.2));
+    }
+    out
+}
+
+/// Water meeting lava or molten metal: a sharp sizzle that opens into a breathy steam hiss and
+/// fades, with a few crackles as the crust sets.
+fn steam_hiss(rng: &mut Rng) -> Vec<f32> {
+    let mut hiss = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::HighPass, 3_000.0, 0.7);
+    let mut out = render(1.1, |t| {
+        let open = segments(t, &[(0.0, 5_500.0), (0.15, 2_400.0), (1.1, 3_800.0)]);
+        filter.run(hiss.next(), open, 0.7)
+            * segments(t, &[(0.0, 0.0), (0.02, 1.0), (0.3, 0.6), (1.1, 0.0)])
+    });
+    grains(rng, &mut out, 9, (0.05, 0.9), (2_500.0, 6_000.0), 0.25);
+    out
+}
+
+/// Acid eating rock: a thick, fast fizz of tiny bubbles over a low, sour gurgle.
+fn acid_fizz(rng: &mut Rng) -> Vec<f32> {
+    let mut fizz = Noise::new(NoiseColor::White, rng.next_u64());
+    let mut fizz_filter = Svf::new(FilterMode::BandPass, 4_200.0, 1.2);
+    let mut gurgle = Osc::new(Wave::Sine);
+    let wobble = rng.range(9.0, 13.0);
+    let mut out = render(0.9, |t| {
+        let shape = segments(t, &[(0.0, 0.0), (0.05, 1.0), (0.5, 0.7), (0.9, 0.0)]);
+        let low = gurgle.next(140.0 + 40.0 * sine(t, wobble)) * 0.3;
+        (fizz_filter.process(fizz.next()) * 0.7 + low) * shape
+    });
+    for time in scatter(rng, 18, 0.0, 0.8, 1.2) {
+        let pop = bubble(rng, 1_200.0, 2_800.0);
+        mix_into(&mut out, &pop, time, rng.range(0.05, 0.12));
+    }
+    out
+}
+
+/// A rig plunging under: a heavy body-hit into water (deeper and longer than a pilot's splash),
+/// a wall of spray and a trail of big bubbles rising past the hull.
+fn rig_splash(rng: &mut Rng) -> Vec<f32> {
+    let mut out = thump(95.0 * rng.jitter(0.05), 45.0, 0.22, 1.6);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 1_800.0, 0.6);
+    let spray = render(0.6, |t| {
+        filter.run(noise.next(), 3_200.0 - 2_200.0 * t / 0.6, 0.6) * perc(t, 0.004, 0.35)
+    });
+    mix_into(&mut out, &spray, 0.0, 0.8);
+    for index in 0..8_u8 {
+        let pop = bubble(rng, 220.0, 650.0);
+        mix_into(&mut out, &pop, 0.15 + f32::from(index) * 0.07, 0.2);
+    }
+    out
+}
+
+/// Under water (the director's loop while a local rig is submerged): a muffled low rumble of
+/// the pumps and a steady, even stream of bubbles (spread evenly so nothing pulses at the
+/// loop rate).
+fn bubble_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
+    let mut rumble_filter = Svf::new(FilterMode::LowPass, 260.0, 0.7);
+    let mut pump = Osc::new(Wave::Sine);
+    let mut out = render(loop_length(), |t| {
+        let low = rumble_filter.process(rumble.next()) * 0.9;
+        let hum = pump.next(62.0) * (0.08 + 0.03 * sine(t, 0.5));
+        low + hum
+    });
+    for time in scatter(rng, loop_events(6.0), 0.0, loop_length() - 0.1, 1.0) {
+        let pop = bubble(rng, 260.0, 1_100.0);
+        mix_into(&mut out, &pop, time, rng.range(0.05, 0.13));
+    }
     out
 }
 

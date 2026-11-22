@@ -6,6 +6,7 @@ use fatherload_simulation::{
     base::{Buildable, ModuleKind, ModuleService},
     event::ImpactSurface,
     explosive::Deployment,
+    fluid::FluidReaction,
     item::{ItemCategory, ItemKind},
     tomb::crypt::{CryptAttack, CryptTrapKind},
     village::VillageService,
@@ -253,6 +254,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::LordRoar => Patch::LordRoar,
         SoundCue::StoneSlam => Patch::StoneSlam,
         SoundCue::HexBolt => Patch::HexBolt,
+        SoundCue::FluidRush => Patch::FluidRush,
+        SoundCue::SteamHiss => Patch::SteamHiss,
+        SoundCue::AcidFizz => Patch::AcidFizz,
+        SoundCue::RigSplash => Patch::RigSplash,
     }
 }
 
@@ -707,6 +712,19 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         },
         GameplayEventKind::CryptSlam { .. } => Some(SoundCue::StoneSlam),
         GameplayEventKind::CryptSummon { .. } => Some(SoundCue::CreatureScreech),
+        // Fluids (Part III F9): the breach gushes where it opened, reactions hiss or fizz where
+        // they happen, and a rig plunges in (or splashes out) from the player.
+        GameplayEventKind::FluidBreached { .. } => Some(SoundCue::FluidRush),
+        GameplayEventKind::FluidReacted {
+            reaction: FluidReaction::Quenched | FluidReaction::Solidified,
+            ..
+        } => Some(SoundCue::SteamHiss),
+        GameplayEventKind::FluidReacted {
+            reaction: FluidReaction::Dissolved,
+            ..
+        } => Some(SoundCue::AcidFizz),
+        GameplayEventKind::RigSubmerged { .. } => Some(SoundCue::RigSplash),
+        GameplayEventKind::RigSurfaced { .. } => Some(SoundCue::Splash),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -990,7 +1008,11 @@ mod tests {
             | GameplayEventKind::CryptLordPhase { .. }
             | GameplayEventKind::CryptTell { .. }
             | GameplayEventKind::CryptSlam { .. }
-            | GameplayEventKind::CryptSummon { .. } => {}
+            | GameplayEventKind::CryptSummon { .. }
+            | GameplayEventKind::FluidBreached { .. }
+            | GameplayEventKind::FluidReacted { .. }
+            | GameplayEventKind::RigSubmerged { .. }
+            | GameplayEventKind::RigSurfaced { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1312,6 +1334,29 @@ mod tests {
                 x: 0,
                 y: 0,
                 count: 3,
+            },
+            GameplayEventKind::FluidBreached {
+                kind: fatherload_simulation::fluid::FluidKind::Water,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::FluidReacted {
+                reaction: FluidReaction::Quenched,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::FluidReacted {
+                reaction: FluidReaction::Dissolved,
+                x: 0,
+                y: 0,
+            },
+            GameplayEventKind::RigSubmerged {
+                player_id,
+                kind: fatherload_simulation::fluid::FluidKind::Water,
+            },
+            GameplayEventKind::RigSurfaced {
+                player_id,
+                kind: fatherload_simulation::fluid::FluidKind::Brine,
             },
         ]);
         for action in [
@@ -1909,6 +1954,10 @@ mod tests {
             SoundCue::LordRoar,
             SoundCue::StoneSlam,
             SoundCue::HexBolt,
+            SoundCue::FluidRush,
+            SoundCue::SteamHiss,
+            SoundCue::AcidFizz,
+            SoundCue::RigSplash,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

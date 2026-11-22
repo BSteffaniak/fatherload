@@ -270,7 +270,11 @@ impl GameRenderer {
         }
         self.rig_facings.update(&snapshot.players);
         for tile in &report.changed_tiles {
-            self.terrain.mark_tile_dirty(*tile);
+            let now_open = snapshot
+                .terrain
+                .tile(*tile)
+                .is_some_and(|found| found.kind.is_open());
+            self.terrain.mark_tile_dirty(*tile, now_open);
         }
         // The fog shows everything any local player has explored: every split-screen view
         // shares one terrain cache, so a tile one seat uncovers is lit for all of them.

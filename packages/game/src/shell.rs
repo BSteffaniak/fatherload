@@ -212,6 +212,9 @@ pub enum PauseOption {
     PlaceFieldZone,
     /// Test mode: remove every field zone.
     ClearFieldZones,
+    /// Test mode: carve a row of test pools (water, acid, brine, liquid metal) beside this
+    /// seat's rig (Part III F9).
+    PourTestPools,
 }
 
 impl PauseOption {
@@ -281,6 +284,7 @@ impl PauseOption {
             Self::SleepRule => "Sleeping",
             Self::PlaceFieldZone => "Place Field Zone",
             Self::ClearFieldZones => "Clear Field Zones",
+            Self::PourTestPools => "Pour Test Pools",
         }
     }
 }
@@ -687,6 +691,14 @@ pub enum SoundCue {
     StoneSlam,
     /// A hex being cast.
     HexBolt,
+    /// A fluid pocket breached: the flood gushes out (Part III F9).
+    FluidRush,
+    /// Water on lava or molten metal: a steam hiss.
+    SteamHiss,
+    /// Acid eating ground: a bubbling fizz.
+    AcidFizz,
+    /// A rig plunging under (heavier than a pilot's splash).
+    RigSplash,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -2977,6 +2989,17 @@ impl ShellState {
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
             PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
                 self.field_zone_action(options[self.selected_pause_item], requests);
+            }
+            PauseOption::PourTestPools => {
+                requests.push(ShellRequest::Action {
+                    seat: self.menu_seat,
+                    command: PlayerCommand::TestMode(
+                        fatherload_simulation::TestModeAction::PourTestPools,
+                    ),
+                });
+                self.run_mode = RunMode::Playing;
+                "Test pools poured: water, acid, brine and liquid metal."
+                    .clone_into(&mut self.message);
             }
             PauseOption::ToggleInvulnerable
             | PauseOption::ToggleInfiniteFuel

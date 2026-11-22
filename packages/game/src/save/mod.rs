@@ -103,6 +103,9 @@ const SAVE_SLOTS: usize = 3;
 /// * W7 strata (F8): `GeneratorVersion::V11` worlds (the Deep Descent, about 13,000 rows), and
 ///   a streamed world's edited chunks compressed into one packed stream (`terrain.packed`,
 ///   base64 text of runs of equal tiles; older files' `terrain.chunks` lists still load).
+/// * F9 fluids: `TileKind::Fluid` tiles in the terrain diffs (kind code `0xA00 | fluid`, the
+///   durability byte holding the level) and the world's fluid schedule (`fluids`: the cells
+///   still moving and the round-robin cursor, so a save mid-flood resumes exactly).
 pub const SAVE_VERSION: u32 = 13;
 
 /// Persisted user settings.
@@ -1732,17 +1735,25 @@ mod tests {
             (7, as_version(&classic, 7, &["enemies"])),
             (
                 8,
-                as_version(&streamed, 8, &["clock", "people", "homes", "tombs"]),
+                as_version(&streamed, 8, &["clock", "people", "homes", "tombs", "fluids"]),
             ),
-            (9, as_version(&streamed, 9, &["homes", "tombs"])),
-            (10, as_version(&streamed, 10, &["tombs"])),
+            (9, as_version(&streamed, 9, &["homes", "tombs", "fluids"])),
+            (10, as_version(&streamed, 10, &["tombs", "fluids"])),
             (
                 11,
-                as_version(&streamed, 11, &["terrain.frame", "terrain.column_limit"]),
+                as_version(
+                    &streamed,
+                    11,
+                    &["terrain.frame", "terrain.column_limit", "fluids"],
+                ),
             ),
             (
                 12,
-                as_version(&streamed, 12, &["terrain.frame", "terrain.column_limit"]),
+                as_version(
+                    &streamed,
+                    12,
+                    &["terrain.frame", "terrain.column_limit", "fluids"],
+                ),
             ),
             (13, as_version(&streamed, SAVE_VERSION, &[])),
         ];

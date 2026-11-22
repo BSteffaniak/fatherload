@@ -1030,6 +1030,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Built(_) => CREAM,
         TileKind::Sky(tile) => super::terrain::tile_art::sky_color(tile),
         TileKind::Lunar(tile) => super::terrain::tile_art::lunar_color(tile),
+        TileKind::Fluid(fluid) => super::terrain::tile_art::fluid_color(fluid),
     }
 }
 

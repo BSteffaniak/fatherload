@@ -571,6 +571,7 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         TileKind::ExplosivePocket => palette::AMBER,
         TileKind::Poi(tile) => tile_art::poi_color(tile, band),
         TileKind::Cave(tile) => tile_art::cave_color(tile, band),
+        TileKind::Fluid(fluid) => tile_art::fluid_color(fluid),
     }
 }
 

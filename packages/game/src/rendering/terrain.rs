@@ -78,6 +78,8 @@ struct TerrainChunk {
     work: ChunkWork,
     /// Whether the texture shows anything yet.
     painted: bool,
+    /// Per tile (row-major), whether it was last painted as open ground (air or fluid).
+    open: Vec<bool>,
 }
 
 impl TerrainRenderer {
@@ -101,7 +103,18 @@ impl TerrainRenderer {
 
     /// Tile `position` changed: repaint it and its neighbours (whose edges and shadows depend on
     /// it, and whose hazard tell-tales reach [`tile_art::TELLTALE_RADIUS`] tiles).
-    pub(super) fn mark_tile_dirty(&mut self, position: TilePosition) {
+    ///
+    /// A tile painted open that is still open (`now_open`: air or fluid, which paint the same
+    /// back wall; the fluid itself is drawn live over the terrain) needs nothing: a flood
+    /// changes thousands of fluid levels without repainting a tile.
+    pub(super) fn mark_tile_dirty(&mut self, position: TilePosition, now_open: bool) {
+        if now_open
+            && self
+                .chunk_for_tile_mut(position)
+                .is_some_and(|chunk| chunk.painted_open(position))
+        {
+            return;
+        }
         let reach = tile_art::TELLTALE_RADIUS.max(1);
         for dy in -reach..=reach {
             for dx in -reach..=reach {
@@ -283,7 +296,37 @@ impl TerrainChunk {
                 fog: true,
             },
             painted: false,
+            open: vec![
+                false;
+                ((tile_max_x - tile_min_x) * (tile_max_y - tile_min_y)).max(0) as usize
+            ],
         }
+    }
+
+    /// Index of `tile` in [`Self::open`], if it is inside the chunk.
+    fn tile_index(&self, tile: TilePosition) -> Option<usize> {
+        if tile.x < self.tile_min_x
+            || tile.x >= self.tile_max_x
+            || tile.y < self.tile_min_y
+            || tile.y >= self.tile_max_y
+        {
+            return None;
+        }
+        let columns = self.tile_max_x - self.tile_min_x;
+        let (row, column) = (tile.y - self.tile_min_y, tile.x - self.tile_min_x);
+        usize::try_from(row * columns + column).ok()
+    }
+
+    /// Whether `tile` was painted as open ground and no repaint is pending for it.
+    fn painted_open(&self, tile: TilePosition) -> bool {
+        self.painted
+            && !self.work.full_paint
+            && !self.work.tiles.contains(&tile)
+            && self
+                .tile_index(tile)
+                .and_then(|index| self.open.get(index))
+                .copied()
+                .unwrap_or(false)
     }
 
     fn update(
@@ -349,6 +392,13 @@ impl TerrainChunk {
             ((tile.y - self.tile_min_y) * TILE_ART) as usize,
         );
         tile_art::paint_tile(terrain, tile, &mut self.art, stride, origin);
+        let open = terrain.tile(tile).is_some_and(|found| found.kind.is_open());
+        if let Some(slot) = self
+            .tile_index(tile)
+            .and_then(|index| self.open.get_mut(index))
+        {
+            *slot = open;
+        }
     }
 
     /// The art seen through the darkness, as RGBA bytes.

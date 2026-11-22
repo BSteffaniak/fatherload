@@ -781,6 +781,24 @@ impl Effects {
                     }
                     continue;
                 }
+                // Fluids (Part III F9): a burst of spray where a pocket opens, a puff where
+                // fluids react (steam, fizz); heard where it happens.
+                GameplayEventKind::FluidBreached { x, y, .. }
+                | GameplayEventKind::FluidReacted { x, y, .. } => {
+                    #[allow(clippy::cast_precision_loss, reason = "bounded tile coordinates")]
+                    let (x, y) = (
+                        (x as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                        (y as f32 + 0.5) * fatherload_simulation::TILE_SIZE,
+                    );
+                    self.spawn_dust(x, y);
+                    if impact_cues < 4
+                        && let Some(cue) = event_cue(&gameplay.kind)
+                    {
+                        cues.push(PlacedCue::world(cue, x, y));
+                        impact_cues += 1;
+                    }
+                    continue;
+                }
                 GameplayEventKind::TempleLeverPulled { x, y, .. }
                 | GameplayEventKind::TempleGateOpened { x, y, .. }
                 | GameplayEventKind::RelicChestOpened { x, y, .. } => {
@@ -1026,6 +1044,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::PilotLanded { player_id, .. }
         | GameplayEventKind::PilotLedgeGrab { player_id }
         | GameplayEventKind::PilotSplashed { player_id }
+        | GameplayEventKind::RigSubmerged { player_id, .. }
+        | GameplayEventKind::RigSurfaced { player_id, .. }
         | GameplayEventKind::PilotHurt { player_id, .. }
         | GameplayEventKind::PilotDied { player_id, .. }
         | GameplayEventKind::PilotOxygenLow { player_id, .. }
@@ -1138,7 +1158,9 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::CryptLordPhase { .. }
         | GameplayEventKind::CryptTell { .. }
         | GameplayEventKind::CryptSlam { .. }
-        | GameplayEventKind::CryptSummon { .. } => None,
+        | GameplayEventKind::CryptSummon { .. }
+        | GameplayEventKind::FluidBreached { .. }
+        | GameplayEventKind::FluidReacted { .. } => None,
     }
 }
 

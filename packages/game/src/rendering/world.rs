@@ -40,6 +40,7 @@ mod drops;
 pub(super) use drops::drop_sprite;
 mod enemies;
 mod explosives;
+mod fluids;
 mod fx;
 mod homes;
 mod lighting;
@@ -412,6 +413,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         }
     }
     pilot::draw_pilots(draw, scene.pilots, scene.visible, scene.ticks);
+    // Fluids over the rigs and pilots in them (Part III F9).
+    fluids::draw_fluids(draw, scene.terrain, scene.explored, scene.visible, seconds);
     tombs::draw_downed(draw, scene.tombs, scene.pilots, seconds);
     enemies::draw_rig_hits(draw, scene.players, scene.rig_guards, scene.ticks);
     if let Some(drill) = scene.active_drill {

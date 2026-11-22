@@ -96,6 +96,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
     match kind {
         TileKind::Lava => 3.2,
         TileKind::MagmaVent => 2.2,
+        // Molten metal glows (Part III F9).
+        TileKind::Fluid(fatherload_simulation::fluid::FluidKind::LiquidMetal) => 1.8,
         TileKind::Cave(tile) => tile.light_radius() as f32 * 1.1,
         // The Moon's blooms, glyphs, veils and core (WP-MOON).
         TileKind::Lunar(tile) => super::lunar::lunar_light(tile),
