@@ -170,21 +170,45 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
-    /// The gate lintels of `channel` in reach of mechanism tile `at`, in tile order.
+    /// The gate lintels of `channel` in reach of mechanism tile `at`, in tile order: only those
+    /// in the mechanism's own space ([`MechanismScope`]), so a lever by the wall of one pilot
+    /// space (or tomb run slot) never works a gate of the next one over.
     fn lintels_near(&self, at: TilePosition, channel: u8) -> Vec<TilePosition> {
         let mut found = Vec::new();
+        let scope = self.mechanism_scope(at);
         for y in at.y - REACH_ROWS..=at.y + REACH_ROWS {
             for x in at.x - REACH_COLUMNS..=at.x + REACH_COLUMNS {
                 let tile = TilePosition { x, y };
                 if let Some(TileKind::Built(BuiltTile::GateLintel(lintel))) =
                     self.terrain.tile(tile).map(|found| found.kind)
                     && lintel % CHANNELS == channel % CHANNELS
+                    && self.mechanism_scope(tile) == scope
                 {
                     found.push(tile);
                 }
             }
         }
         found
+    }
+
+    /// The space mechanism tile `tile` belongs to: a generated pilot space (ruin, rig vault,
+    /// crawlway cave), a tomb run slot, or the open world.
+    fn mechanism_scope(&self, tile: TilePosition) -> MechanismScope {
+        let settings = self.terrain.settings();
+        if let Some(slot) = crate::worldgen::tomb_sites::slot_at(settings, tile) {
+            return MechanismScope::RunSlot(slot);
+        }
+        crate::worldgen::pilot_spaces::spaces_touching(
+            settings,
+            &crate::worldgen::features::TileRect {
+                min: tile,
+                max: tile,
+            },
+        )
+        .first()
+        .map_or(MechanismScope::Open, |space| {
+            MechanismScope::PilotSpace(space.origin)
+        })
     }
 
     /// The tiles of the gate under `lintel`: its bars when closed, the air down to the floor
@@ -446,5 +470,100 @@ impl WorldState {
             .filter(|(tile, kind)| self.terrain.set_kind(*tile, *kind))
             .map(|(tile, _)| *tile)
             .collect()
+    }
+}
+
+/// Where a mechanism works ([`WorldState::mechanism_scope`]): levers and plates reach only the
+/// gates of their own space.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MechanismScope {
+    /// Outside every generated space (scenes, player builds).
+    Open,
+    /// A generated pilot space, by its layout's origin.
+    PilotSpace(TilePosition),
+    /// A tomb run slot of the vault.
+    RunSlot(u8),
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+    use crate::{
+        SimulationParams,
+        worldgen::{GeneratorVersion, WorldSettings, tomb_sites},
+    };
+
+    /// Writes a closed gate (lintel and three bars) of `channel` under `lintel`.
+    fn gate(world: &mut WorldState, lintel: TilePosition, channel: u8) {
+        let _ = world
+            .terrain
+            .set_kind_by_rule(lintel, TileKind::Built(BuiltTile::GateLintel(channel)));
+        for dy in 1..=3 {
+            let _ = world.terrain.set_kind_by_rule(
+                TilePosition {
+                    x: lintel.x,
+                    y: lintel.y + dy,
+                },
+                TileKind::Built(BuiltTile::Gate),
+            );
+        }
+    }
+
+    fn closed(world: &WorldState, lintel: TilePosition) -> bool {
+        world
+            .terrain
+            .tile(TilePosition {
+                x: lintel.x,
+                y: lintel.y + 1,
+            })
+            .map(|found| found.kind)
+            == Some(TileKind::Built(BuiltTile::Gate))
+    }
+
+    #[test]
+    fn a_lever_never_reaches_a_gate_in_the_neighbouring_space() {
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V10,
+            ..WorldSettings::new(7)
+        };
+        let mut world = WorldState::new_game_with_settings(
+            PlayerId::new(0),
+            &settings,
+            SimulationParams::new(60),
+        );
+        // A lever in the last column of run slot 0, a gate of its channel three columns into
+        // slot 1 (well inside the lever's reach), and one of its own in slot 0.
+        let next = tomb_sites::slot_origin(1);
+        let row = next.y + 20;
+        let lever = TilePosition {
+            x: next.x - 1,
+            y: row,
+        };
+        let theirs = TilePosition {
+            x: next.x + 3,
+            y: row - 3,
+        };
+        let ours = TilePosition {
+            x: next.x - 4,
+            y: row - 3,
+        };
+        let _ = world.terrain.stream_around(&[lever]);
+        assert_eq!(tomb_sites::slot_at(&settings, lever), Some(0));
+        assert_eq!(tomb_sites::slot_at(&settings, theirs), Some(1));
+        assert!(crate::mechanism::in_reach(lever, theirs));
+        gate(&mut world, theirs, 2);
+        gate(&mut world, ours, 2);
+        let _ = world.terrain.set_kind_by_rule(
+            lever,
+            TileKind::Built(BuiltTile::Lever {
+                channel: 2,
+                on: false,
+            }),
+        );
+        let mut output = TickOutput::default();
+        let changed = world.set_gates(lever, 2, true, None, &mut output);
+        assert_eq!(changed, 1, "only the gate of its own slot");
+        assert!(!closed(&world, ours), "its own gate opened");
+        assert!(closed(&world, theirs), "the next slot's gate stayed shut");
     }
 }
