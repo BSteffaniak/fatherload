@@ -4311,6 +4311,27 @@ holds the span and the gaps.
 - Code families: `0xD00` for `DeepTile`; if another Wave 8 track chose the same family, one
   of us moves.
 
+### Review notes (Wave 8 old deep review)
+
+- Fixed: the tuple-keyed `OldDeep::skeletons` and `OldDeep::pours` maps are saved as lists of
+  pairs (`pair_map`, `storm_pours`). Saves are JSON, and JSON object keys must be strings, so
+  any V11 save failed once a bone was dug or a storm vent poured
+  (`the_old_deep_state_survives_json_saves_and_the_wire`).
+- Fixed: a rig riding a lift keeps its dose (riders are left out of the rules' rigs, and the
+  dose pass used to drop every meter not in that list).
+- Fixed: a glow grub's bite raises the bitten rig's dose by `GLOW_GRUB_BITE_DOSE`, as its
+  description says (`a_glow_grubs_bite_raises_the_dose_and_a_lift_ride_keeps_it`).
+- Fixed: the Glowmother's fall counts when a rig is within `GLOWMOTHER_WITNESS_TILES` of her
+  den, not only inside its mouth. That range stays inside the director's despawn reach, so a
+  despawn never counts as a kill.
+- Still weak: the new creatures are new stats and sprites on the existing behaviour styles
+  (swoop, lunge, contact, ranged, spawner). The Prism Moth is not drawn to beams and the Jet
+  Ray does not ride jets. The storm's screen haze shows to a sheltered rig too. Bones still
+  read as abstract shapes rather than a skeleton. The Star Core is a single tile on a
+  pedestal, which looks small for a gate boss. The Glowmother is barely bigger than the rig.
+- Pre-existing, seen while testing: the depth reward (`DeepRewardGranted`) drops its ore on
+  the tile right of a rig, which can block a creature's line of sight in a staged test room.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

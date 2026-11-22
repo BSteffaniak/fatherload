@@ -331,7 +331,8 @@ fn glowmother_scene(stage: &mut SceneStage<'_>) {
         fit(world, player);
         let (centre, (half_w, half_h)) =
             sites::glowmother_den(&settings(), &descent::layout(&settings())).expect("a den");
-        place_rig(world, player, centre.x - 2, centre.y + half_h - 2);
+        // Off to one side of the den floor, so she rises clear of the rig and its prompt.
+        place_rig(world, player, centre.x - 9, centre.y + half_h - 3);
         finish(
             world,
             player,
