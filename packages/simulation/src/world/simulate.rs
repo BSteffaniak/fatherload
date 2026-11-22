@@ -44,6 +44,10 @@ impl WorldState {
         // Collapsed ground whose hold has run out may move again.
         self.progression.settled_ground.prune(self.simulation_tick);
         let mut quest_notes = QuestNotes::default();
+        // Wave 9: whose thrusters fire this tick (blind hunters hear them).
+        if !self.far_schedule.thrusting.is_empty() {
+            self.far_schedule.thrusting.clear();
+        }
         for (&player_id, input) in &inputs.players {
             // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
             // gets neutral ones.
@@ -66,6 +70,9 @@ impl WorldState {
                     controls
                 }
             }) {
+                if controls.thrust {
+                    self.far_schedule.thrusting.insert(player_id);
+                }
                 let previous_target = self.active_drills.get(&player_id).map(|drill| drill.target);
                 // A rig riding a lift cab (Part III F10) neither drills nor flies: the cab
                 // carries it (`advance_logistics`). Nor does one riding a mine cart (Wave 8,

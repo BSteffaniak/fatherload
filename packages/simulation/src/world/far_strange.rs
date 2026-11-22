@@ -178,7 +178,7 @@ impl WorldState {
             return 0.0;
         }
         let speed = player.velocity_x.hypot(player.velocity_y);
-        let thrusting = player.velocity_y < -30.0 || speed > 150.0;
+        let thrusting = self.far_schedule.thrusting.contains(&player_id) || speed > 150.0;
         let drilling = self.active_drills.contains_key(&player_id);
         let pinged = self
             .far_schedule

@@ -617,6 +617,10 @@ pub struct FarSchedule {
     /// speed).
     #[serde(default)]
     pub speeds: BTreeMap<PlayerId, f32>,
+    /// The rigs whose thrusters fire this tick (rebuilt from the held controls at the start of
+    /// every tick): a hovering rig is still loud to a blind hunter.
+    #[serde(default)]
+    pub thrusting: BTreeSet<PlayerId>,
 }
 
 impl FarSchedule {

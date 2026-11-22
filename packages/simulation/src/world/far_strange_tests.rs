@@ -617,6 +617,28 @@ fn blind_hunters_hear_a_drilling_rig_but_not_a_still_one() {
 }
 
 #[test]
+fn a_hovering_rig_is_loud_its_thrusters_not_its_speed_make_the_noise() {
+    let mut world = world_at(30);
+    let _ = echo_arena(&mut world);
+    let _ = ticks(&mut world, 30);
+    assert!(world.rig_noise(PLAYER) <= 0.0, "a resting rig is silent");
+    // Pressed against the cave's ceiling the rig does not move, but its thrusters roar.
+    for _ in 0..30 * 3 {
+        let _ = tick_with(&mut world, ControlState::new(0.0, true, false));
+    }
+    let player = world.player(PLAYER).expect("rig");
+    assert!(
+        player.velocity_x.hypot(player.velocity_y) < 30.0,
+        "pinned under the ceiling"
+    );
+    let heard = world.rig_noise(PLAYER);
+    assert!(heard >= 9.0, "thrust noise {heard}");
+    // Let go: silent again once it settles.
+    let _ = ticks(&mut world, 30 * 3);
+    assert!(world.rig_noise(PLAYER) <= 0.0);
+}
+
+#[test]
 fn a_shriekers_scream_pings_the_cave_and_calls_the_stalkers() {
     let mut world = world_at(30);
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
