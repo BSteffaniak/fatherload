@@ -192,6 +192,10 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `acid_fizz` | feedback | Acid eating ground: a fast band-passed fizz of tiny bubbles over a low, wobbling gurgle. |
 | `rig_splash` | impact | A rig plunging under: a deep body-hit, a falling wall of spray and a trail of big bubbles past the hull. |
 | `loop_bubbles` | loop | Under fluid: a muffled low-passed rumble, a 62 Hz pump hum breathing twice a loop and a steady, even stream of bubbles. |
+| `radio_echo` | big | The Fathers' expedition (wave 8 story): Dov Halloran on the drop line. A voice that is not words: a buzzing glottal saw through two moving formant band-passes (five vowels), syllable by syllable with breaths and a falling sentence contour, squeezed into a 380-2,700 Hz telephone band, bit-crushed and saturated, with static bursts at the edges and once mid-sentence. Ducks the mix a little. |
+| `ghost_voice` | big | One of Dov's ghost recordings: the same formant voice off an old tape (wow and flutter on the pitch, pink hiss, a wider 160-3,800 Hz band), a recorder click at the start and a slow damped tape echo. Ducks the mix a little. |
+| `log_canister` | feedback | A cipher canister opening: a small brass clank (three decaying partials), two tumbler clicks and a paper rustle. |
+| `anomaly_hum` | big | Stepping into an anomaly room: a slow detuned saw-and-fifth swell whose low-pass opens and closes over 2.4 s, with a glassy FM shimmer on top. Steady: nothing pulses fast. |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 

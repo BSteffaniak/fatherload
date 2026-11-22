@@ -41,7 +41,8 @@ move between ticks never shows as a correction. `Relevance::origin` is the viewe
 `contains_pose` rebases a pose, and the world's chunk relevance measures chunk boxes from it, so
 relevance holds when players are far from the origin and from each other. A client applies the
 per-tick live section (`S::Entities`, which carries the world's frame) **before** player states
-and entity records, so a frame move shifts the replica first. `PROTOCOL_VERSION` 15.
+and entity records, so a frame move shifts the replica first. `PROTOCOL_VERSION` 15 (16 since
+Wave 8: the shared `SectionKey::Expedition` section and the story events 490-493).
 
 Each frame is built for one client from its `Relevance` (its player, position and
 `relevance_radius`, infinite by default):

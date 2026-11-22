@@ -4563,6 +4563,224 @@ integration.
   from the Crust track should give them their own).
 - The descent harness models the boss as fixed minutes, not a simulated fight.
 
+## Wave 8 story: the Fathers' expedition and anomaly rooms (`src/expedition.rs`, `src/expedition/{logs,memories,sites,anomaly}.rs`, `src/world/expedition.rs`)
+
+Expansion plan §13 ("following the builders' cable") and §14's cross-Descent systems: the
+story backbone of the Deep Descent for Descents I to III, the throughline design for the whole
+Descent (below), and the anomaly rooms.
+
+### The story
+
+A generation ago six people from the town went down the builders' cable to find out what hums:
+**Amos Varga** (lead driller; his daughter told him "don't forget to look up"), **Ines Calloway**
+(surveyor; she keys every canister to the one before), **Dov Halloran** (radio; his drop line,
+then his tapes), **Ruth "Bran" Brannigan** (medic and cook), **Teo Marsh** (the young mechanic)
+and **Sefa Rhee** (naturalist). The town called them the Fathers ("two of us are mothers and Teo
+is barely shaving"); Bran painted THE FATHERS' LOAD on the sled. Nobody came back up. One by one
+they stay behind, each with a settlement that later remembers them: Teo with the Hive (III),
+Sefa in Merrow City (IV), Bran with the jungle tribes (V), Dov dies under the inner sun (V),
+Ines in the Archive of Stars (VII), and Amos reaches the Heart alone (VIII).
+
+What the logs reveal, Descent by Descent: the world was **shaped** (I: clay laid in courses,
+shelves that all lean to the cable, identical basalt columns, the Crust as a lid) -> the
+**builders were here long ago** (II: sleeping machines, steps for longer legs, bones laid out in
+rows, the ball-on-a-cable glyph; the Star Core is only their lamp) -> **life adapted to the
+dark** (III: the Hive's Lamp-Bearers, walls that beat with the hum, and the queen's carving of
+the cable running from a sleeping engine at the Heart up to the Moon, the tomb page's "cable
+from the deep core to the hanging stone") -> civilisations below (IV) -> the hollow planet
+and its inner sun (V) -> reality thinning near the machine (VI) -> the builders' city and
+archive (VII) -> the Heart is a sleeping Star Drive (VIII).
+
+### The throughline (about 80 logs; Wave 8 implements 1-30)
+
+Logs are written in depth order and read in order. Later waves append to `logs::LOGS` (and
+`ECHOES`, `CHAPTERS`, `memories::MEMORIES`) in the same order; placement, the journal, the
+milestones and the cards read the tables only. Each row: number, stratum, site, author, beat.
+
+| # | Stratum | Site | Author | Beat |
+|---|---|---|---|---|
+| 1 | Topsoil | camp | Amos | Six of us, one sled: THE FATHERS' LOAD. Down until we find what hums. |
+| 2 | Topsoil | cairn | Teo | Roots this deep all grow down, toward something warm. |
+| 3 | Clay Beds | camp | Bran | An aquifer floods the tent; the clay comes up in plates. |
+| 4 | Clay Beds | cairn | Ines | The clay is laid in courses, like masonry. The cipher begins: read us in order. |
+| 5 | Grey Stone | camp | Amos | Gravel Hollow: Old Tully's grandad found the rails already laid. |
+| 6 | Grey Stone | rig | Teo | A one-piece rig older than any yard, its cab facing the cable. |
+| 7 | Slate Shelves | camp | Bran | A shelf slides away with the stove; every shelf tilts toward the cable. |
+| 8 | Slate Shelves | cairn | Ines | The cable: a plumb rail no drill scratches. A building's spine. |
+| 9 | Basalt Columns | camp | Sefa | Identical columns. "Shaped. The world was shaped." |
+| 10 | Basalt Columns | rig | Amos | The floor gives way (the Sinkhole): the Crust is a lid. Chapter I. |
+| 11 | Crystal Faults | camp | Sefa | Singing glass; the note comes back up Dov's line a day late. |
+| 12 | Fossil Oceans | camp | Sefa | A sea floor on end; gas breathes in the basins like a tide. |
+| 13 | Fossil Oceans | rig | Sefa | Skeletons in sorted rows, skulls to the cable: a collection. |
+| 14 | Pressure Cathedrals | camp | Ines | A hall too big for the lamp, steps for longer legs, a dead lift. |
+| 15 | Pressure Cathedrals | cairn | Teo | A valve turned; the key left in the cairn (the Cathedral Lift). |
+| 16 | Radioactive Hollow | camp | Bran | Counters ticking, the lead tent, Dov's shaking hands, iodine. |
+| 17 | Ancient Machine Layer | rig | Amos | Doors that slide open: machines not ruined but waiting. |
+| 18 | Ancient Machine Layer | camp | Ines | The ball-on-a-cable glyph: the builders, and their cellar. |
+| 19 | Void Geode Fields | cairn | Teo | Weightless somersaults; gravity held back like a door. |
+| 20 | Mantle Storm Zone | camp | Dov | A heat storm cuts the drop line; he will record and leave tapes. |
+| 21 | Mantle Storm Zone | rig | Amos | The Star Core is not the bottom, only the builders' lamp. Chapter II. |
+| 22 | Fungal Forest | camp | Sefa | Mushrooms that throw you; spores swim the lamps; all grows to the hum. |
+| 23 | Fungal Forest | cairn | Bran | "Nobody licks anything." Spore paste in the cairn. |
+| 24 | Root Labyrinth | camp | Amos | Roots regrow behind them; they never touch the cable. |
+| 25 | Root Labyrinth | rig | Ines | Lost two days; she stops drawing walls, draws only the cable. |
+| 26 | The Hive | camp | Sefa | Talking insects; the workers trade, the soldiers don't; the Lamp-Bearers. |
+| 27 | The Hive | cairn | Amos | Teo stays to keep the nursery's builder pumps singing. |
+| 28 | Flesh Caverns | camp | Bran | Walls that heal and beat: the hum all their lives was a heartbeat. |
+| 29 | Glow Sea | camp | Sefa | No light but what life makes; an angler's lamp. |
+| 30 | Glow Sea | rig | Ines | The queen's carving: an engine at the Heart, a cable to the Moon. Chapter III. |
+| 31 | Underground Ocean | camp | Amos | The sled becomes a raft; a sea under the rock. |
+| 32 | Underground Ocean | rig | Sefa | A drowned builder sub; the eel-dragon passes under them. |
+| 33 | Brine Glaciers | camp | Bran | Frostbite; Dov loses two fingers and jokes about the dials. |
+| 34 | Brine Glaciers | cairn | Ines | Builder figures frozen in clear ice around the cable. |
+| 35 | Geyser Fields | camp | Dov | Riding a geyser up; the tapes soaked, one survives. |
+| 36 | Merrow City | camp | Sefa | The fish-folk city in its air bubble; they knew the Lamp-Bearers. |
+| 37 | Merrow City | cairn | Amos | Sefa stays to study the merrow and their archive. |
+| 38 | Merrow City | camp | Ines | Merrow songs: the builders came down from the stars. |
+| 39 | Pearl Abyss | camp | Bran | Pressure; Dov's heart is failing; she keeps it from Amos. |
+| 40 | Pearl Abyss | rig | Amos | The Leviathan; the floor is a ceiling, and they fall through. Chapter IV. |
+| 41 | Inner Sky | camp | Ines | A sun inside the world, with its own day and night. |
+| 42 | Inner Sky | cairn | Dov | His last full tape: he records the inner sunrise. |
+| 43 | Megafauna Jungle | camp | Bran | The jungle tribes; she nurses a chief's child through a fever. |
+| 44 | Megafauna Jungle | rig | Amos | The rig wrecked by a beast; they ride on foot, then on its back. |
+| 45 | Megafauna Jungle | camp | Bran | Bran stays: "someone has to be a mother down here." |
+| 46 | Upside-Down Isles | camp | Ines | Walking upside down; the cable runs straight through the inner sun. |
+| 47 | Upside-Down Isles | cairn | Dov | His last recording; he knows. |
+| 48 | The Sunforge | camp | Amos | Dov is buried in the sun's light. |
+| 49 | The Sunforge | cairn | Ines | The inner sun is a builder lamp: a lamp for the lamp. |
+| 50 | The Sunforge | rig | Amos | The Sun Serpent; a builder locker holds an anchor that walks on walls. Chapter V. |
+| 51 | Mirror Strata | camp | Ines | She meets herself, and her twin writes the same log. |
+| 52 | Mirror Strata | cairn | Amos | Two of every canister: which is real? (Ines's cipher tells them.) |
+| 53 | Gravity Shear | camp | Ines | Walking the walls; the cable is the only up. |
+| 54 | Pixel Rot | rig | Amos | Ines's maps lose resolution; the rock turns to data. |
+| 55 | Pixel Rot | camp | Ines | The world is drawn from a model; the builders kept the plans. |
+| 56 | Time Sludge | camp | Amos | A day in an hour; his beard comes out grey. |
+| 57 | Time Sludge | cairn | Ines | Logs out of order in time: why the cipher keys each to the last. |
+| 58 | Echo Caves | camp | Amos | Total dark, blind hunters; they travel by echo. |
+| 59 | Prism Desert | camp | Ines | Colour-keyed doors open to her lamp filters. |
+| 60 | Prism Desert | rig | Amos | The Glitch rewrites the room; a drill that phases through alloy. Chapter VI. |
+| 61 | Buried Megacity | camp | Ines | Streets, trams, towers; the archivist wakes and speaks. |
+| 62 | Buried Megacity | cairn | Amos | The archivist knew they were coming: "you are late". |
+| 63 | Buried Megacity | camp | Ines | The planet is the builders' ship's engine housing; the Moon its dock. |
+| 64 | Engine Halls | rig | Amos | Crushers on a timed beat; Amos's leg broken. |
+| 65 | Engine Halls | camp | Ines | The halls are the drive's governors, idling for an age. |
+| 66 | Archive of Stars | camp | Ines | Star charts: the first coordinates beyond the Moon. |
+| 67 | Archive of Stars | cairn | Ines | Ines stays to read the archive; Amos goes on alone. |
+| 68 | Sleeping Garrison | camp | Amos | Alone among war machines; he writes to his daughter. |
+| 69 | Sleeping Garrison | rig | Amos | The garrison wakes in waves; he runs. |
+| 70 | The Seal Gate | camp | Amos | The gate wants a key from every Descent; he has none. |
+| 71 | The Seal Gate | cairn | Amos | A letter home, left where the next crew will pass. |
+| 72 | The Seal Gate | rig | Amos | The Gatekeeper lets him through: it knew the cable mark on his sled. Chapter VII. |
+| 73 | Dark Matter Veins | camp | Amos | The more he carries, the lighter he gets. |
+| 74 | Dark Matter Veins | cairn | Amos | The hum is the drive's idle, a heart beating for an engine. |
+| 75 | Singularity Fields | camp | Amos | Light bends; he sees the Moon through the rock. |
+| 76 | Singularity Fields | rig | Amos | The Fathers' Load gives out; on foot from here. |
+| 77 | Core Ocean | camp | Amos | A sea of liquid metal; he rides the mag rails. |
+| 78 | Core Ocean | cairn | Amos | A last letter to the five who stayed. |
+| 79 | The Heart | camp | Amos | The Star Drive, asleep. It needs a rig and a key, and he has neither. |
+| 80 | The Heart | rig | Amos | "You came down after us. Wake it. Go up." Chapter VIII. |
+
+Echoes (in depth order): Dov's radio echoes run through Descent I to the Mantle Storm Zone's
+"last transmission"; his ghost tapes run from below the Star Core to the Sunforge (log 48),
+after which the archivist's recordings of the builders take over (Descents VI to VIII).
+Memories: Gravel Hollow, the Old Deep camp and the Hive now; Merrow City (Sefa), the jungle
+tribes (Bran), the Megacity archive (Ines) and the Heart outpost (Amos's letters) later.
+
+### Implemented (Descents I-III)
+
+- **Content** (`expedition::logs`): `LOGS` (30 `ExpeditionLog`s: day, title, author `Member`,
+  stratum, `SiteKind` camp / rig / marker, text), `ECHOES` (12 `Echo`s: 6 radio, 6 ghost, each at
+  a stratum and per mille through it), `CHAPTERS` (titles and revelations of I-III). Every
+  stratum of Descents I-III holds one to two logs.
+- **Placement** (`expedition::sites`): one `ExpeditionSite` per log on the far side of the
+  builders' cable from the town (`landmarks::lift_column` + 24 to 120 columns), in its log's
+  stratum: a stratum with `k` logs splits its rows (24 clear of each ragged boundary) into `k`
+  slots and log `j` takes slot `j`, so every log lies below the one before in every world
+  (`later_logs_lie_deeper_beside_the_cable`). Per-stratum hook: `placements_for(stratum)`.
+  Rooms: a camp is 15x7 (walls included), a wreck 12x6 on scrap plating, a cairn 8x6; the
+  room is air on a plank floor, its walls stay the stratum's rock. `sites(settings)` is cached
+  per thread (pure).
+- **The generator pass**: `sites::story_stamps(settings, rect)` (the log sites and anomaly
+  rooms touching a chunk) is called in `streamed::assemble` as a pass of its own after the Descent
+  landmarks and before the builders' cable (so the cable always wins), and generated fluid stays
+  out of the story's rooms. Only V11 changes; **`GOLDEN_V11_DIGEST` is updated** (the golden
+  chunks now also pin the first and last log sites and a story anomaly room; every chunk pinned
+  before stays the same). V1-V10 digests are unchanged.
+- **The journal** (`ExpeditionState`, `WorldState::expedition`, shared): `found` (logs read: a
+  prefix, `1..=found`), `sealed` (later canisters reached early), `echoes` (a prefix of
+  `ECHOES`), `next_echo_tick`, `anomalies` (rooms entered, by region) and `anomaly_kinds` (bits).
+  Saved with serde defaults (older saves load empty), hashed only once non-empty (older
+  worlds' hashes stand), replicated as the appended shared `SectionKey::Expedition`, so co-op
+  partners share the journal. `set_expedition` is for tests, scenes and tools.
+- **The tick** (`advance_expedition`, after `advance_logistics`, Deep Descent worlds only, each
+  player's actor tile: the pilot on foot or the rig): a canister whose turn has come is read
+  (`ExpeditionLogFound`, its `log_bounty` credits to the finder) and any canisters sealed after it
+  open in turn; a later one is sealed once (`ExpeditionLogSealed`). The next echo plays when any
+  actor is at or below its row (`ExpeditionEcho`), one at a time `ECHO_GAP_MILLIS` (12 s) apart
+  through `ticks_for_millis` (tick-rate safe). A room's first entry raises `AnomalyEntered`
+  (`first_of_kind` for the crew's first of that kind).
+- **Settlement memories** (`expedition::memories`): 15 `SettlementMemory` lines with stable ids
+  (`gravel_hollow.smith.rails`, `old_deep_camp.quartermaster.splice`, `hive.pump_tender.wrench_one`,
+  ...) for Gravel Hollow, the Old Deep camp and the Hive; `after_log` holds a line back until the
+  crew has read that far. `lines_for(settlement, &state)` and `memory(id)` are the seam: **the
+  integrator wires them into each settlement's people** (the settlement tracks own the people).
+- **Anomaly rooms** (`expedition::anomaly`): `ANOMALY_REGION` 112x96 regions, 22 % hold an
+  18x10 room anywhere below the first 40 rows and above the floor's last 40 (not in the Inner
+  Sky), clear of the cable, the Descent landmarks and the log sites. Kinds (`AnomalyKind`):
+  `GravityFlip` (gravity up, free rotation, a cache on the ceiling, builder-brick walls),
+  `PixelRot` (pixelate + palette + scanlines, crystal walls), `TimeFrozen` (time scale 0.15,
+  desaturated cold grade, a relic cache floating mid-air, obsidian walls) and `Mirror` (screen
+  and controls mirrored, glass walls, twin caches). The rule is a Wave 7 field:
+  `anomaly_field_source` is registered first in `field::STRATUM_FIELD_SOURCES` and answers only
+  inside a room's zone (`AnomalyRoom::zone`, feathered over the walls), laying the room's
+  departures over the stratum's profile (`anomaly::over`: a pixel-rot room in the Gravity Shear
+  still turns gravity) and `None` elsewhere. A small per-thread cache keeps the per-tick lookups
+  cheap. Screen effects are steady levels through the game's effects-intensity setting.
+- **Milestones**: `TrailFound`, `ShapedWorld`, `BuildersCellar`, `GrowsInTheDark` (a chapter's
+  logs all read), `GhostVoices`, `FirstAnomaly`, `EveryAnomaly`, each unlocking a new paint
+  (`Khaki`, `Ochre`, `Bronze`, `Lumen`, `Phantom`, `Anomaly`, `Glitch`). `MilestoneFacts` gains
+  `expedition_logs`, `expedition_echoes` and `anomaly_kinds` (crew-wide, so every partner earns
+  them).
+- **Events 490-493**: `ExpeditionLogFound`, `ExpeditionLogSealed`, `ExpeditionEcho`,
+  `AnomalyEntered`. **Formats**: `PROTOCOL_VERSION` 16 (the section, events, milestones and
+  paints); no save format bump (every new field has a serde default).
+- **Game**: `ModalScreen::ExpeditionLog` (`shell/expedition.rs`, `rendering/expedition_hud.rs`)
+  after the tomb codex in the map's pages on Deep Descent worlds: the trail (logs, echoes,
+  anomalies, the lead to the next canister), chapters with their read logs as rows and their
+  revelations, the selected entry pinned under the list; rows by keys, pad, mouse and touch
+  (`menu_pick`). Story moment cards (`StoryMomentKind::{ExpeditionLog, RadioEcho,
+  GhostRecording, Anomaly}`, `rendering/expedition_card.rs`) go up on every local seat for logs
+  and echoes, on the entering seat for a room. The world draws camps (tent, lamp on a rope, sled
+  "F.L.", stove, bedroll, pickaxe), wrecks and cairns with their canister (waiting, sealed,
+  open) and each room's tells (`rendering/world/expedition.rs`; luminous parts after the
+  darkness pass). Audio patches appended at the end of `patches!`: `radio_echo`, `ghost_voice`
+  (procedural formant voices, never words), `log_canister`, `anomaly_hum`. Scenes:
+  `expedition_camp`, `expedition_log_read`, `expedition_cairn`, `expedition_journal`,
+  `expedition_radio_echo`, `expedition_ghost_recording`, `anomaly_gravity_flip`,
+  `anomaly_pixel_rot`, `anomaly_time_frozen`, `anomaly_mirror`.
+- **Tests**: `expedition::tests` (depth order of logs and echoes, every log below the one before
+  beside the cable for several seeds, deterministic and seeded placement, nothing on older
+  worlds, sites off the landmarks, rooms rare, varied and at every depth, their fields inside
+  and gone six tiles out, the same field in a far frame, memories' ids and gating),
+  `world::expedition_tests` (sites carved, log 3 sealed until 1 opens 1-3 in order, echoes in
+  order and spaced at 30/60/120 Hz, every room kind entered with its field felt and milestones
+  earned, save/load and hashing, co-op replication of the shared section) and the game's
+  `local_game::tests::expedition_tests` (the card, the page cycle, a touch pick, a sealed
+  canister's line, an echo's card, classic worlds unchanged).
+
+### Seams for the integrator and later waves
+
+- The strata tracks own each stratum's content; the expedition's placement is its own pass
+  and keeps clear of the Descent landmarks and the cable. If a stratum track stamps a
+  settlement or set piece where a site lands, move the site with `placements_for` (slots) or
+  keep the site's room clear in that track's stamp.
+- Wire `memories::lines_for` into Gravel Hollow, the Old Deep camp and the Hive (stable ids).
+- Descents IV-VIII: append logs 31-80 (table above), echoes, chapters and memories; give
+  `log_bounty` a look against the deep economy; the gates' set pieces can raise their own story
+  cards through `StoryMomentKind`.
+- The Strange Layers' own crystal anomaly rooms (Wave 7 landmarks) carry no rule yet; they could
+  take an `AnomalyKind` the same way.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
@@ -4579,7 +4797,7 @@ destructuring in `section`, `remove_player`, `redact_player` and `split_player`)
 | On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
 | On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
 | On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks, story marks) | everyone |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks, story marks), the Fathers' expedition (`SectionKey::Expedition`: logs read, sealed canisters, echoes, anomaly rooms; Wave 8) | everyone |
 
 Because other players' private state never reaches a client, replica checks compare
 `visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is

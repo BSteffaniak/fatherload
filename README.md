@@ -1087,6 +1087,34 @@ world dug to the floor, the browser memory fixture) show it.
 - Saves pack a streamed world's dug chunks into one compressed stream (save format 13); a V11
   world explored to the bottom holds about 20 MiB of simulation heap.
 
+### The Fathers' expedition (wave 8 story)
+
+A generation ago six people from the town went down the builders' cable to find out what hums.
+The town called them **the Fathers**; Bran painted THE FATHERS' LOAD on their sled. Nobody
+came back up. In a Deep Descent world their trail is the story's backbone:
+
+- **Expedition logs**: a cipher canister at each of their camps, abandoned rigs and cairns,
+  beside the builders' cable (on the far side from the town), each deeper than the last. Ines
+  keyed every canister to the one before, so the logs are read **in order**: reach a later one
+  first and it shows its red seal until you read the one before (then it opens by itself).
+  Each canister holds a few credits. Descents I to III hold 30 logs in three chapters (the
+  world was shaped; the builders were here long ago; life adapted to the dark).
+- **Radio echoes and ghost recordings**: Dov Halloran's voice on the drop line, then on the
+  tapes he left after a heat storm cut it, play once (a card and a voice that is not quite
+  words) the first time a rig reaches their depths.
+- **The expedition journal** follows the tomb codex in the map's pages (tab or confirm through
+  them): logs read by chapter, a chapter's revelation once complete, echoes, anomalies and the
+  trail's lead (where the next canister lies). Co-op crews share one journal.
+- **Anomaly rooms**: rare sealed rooms at any depth where a deeper chapter's rule leaks through
+  early: an upturned room (gravity pulls up), a rotten room (pixels and few colours), a stopped
+  room (time all but frozen) and a mirror room (screen and controls mirrored). Each holds a
+  cache placed where the rule makes it a small puzzle. Screen effects follow the effects
+  intensity setting and never flash.
+- Seven story milestones (each unlocks a paint). Review scenes: `expedition_camp`,
+  `expedition_log_read`, `expedition_cairn`, `expedition_journal`, `expedition_radio_echo`,
+  `expedition_ghost_recording`, `anomaly_gravity_flip`, `anomaly_pixel_rot`,
+  `anomaly_time_frozen`, `anomaly_mirror`.
+
 ### Fluids (wave 7, Part III F9)
 
 Water, acid, brine and liquid metal flow as simple cellular fluids. They come with the Deep
