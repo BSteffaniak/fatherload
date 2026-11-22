@@ -474,6 +474,8 @@ impl ArcLog {
 #[derive(Clone, Copy, Debug)]
 pub struct OfferContext<'a> {
     pub settings: &'a WorldSettings,
+    /// The world's local pixel frame, which the asking rig's position is measured in (F7).
+    pub frame: crate::position::Frame,
     /// The giver's settlement's people.
     pub population: &'a Population,
     /// Story-worthy places near them (scoring and slot text before binding).
@@ -490,11 +492,16 @@ pub struct OfferContext<'a> {
 /// [`crate::milestone::island_capable`] for the isles, the dead-air gate
 /// [`crate::milestone::crosses_dead_air`] for the great sky lands and the Moon). Worlds
 /// without a sky bind stand-ins on the ground, so only the authored prerequisites count there.
-pub(crate) fn unlocked(template: &ArcTemplate, player: &Player, settings: &WorldSettings) -> bool {
+pub(crate) fn unlocked(
+    template: &ArcTemplate,
+    player: &Player,
+    settings: &WorldSettings,
+    frame: crate::position::Frame,
+) -> bool {
     template
         .prerequisites
         .iter()
-        .all(|prerequisite| prerequisite.met(player, settings))
+        .all(|prerequisite| prerequisite.met_in(player, settings, frame))
         && settings
             .generator
             .sky_bands()
@@ -540,7 +547,7 @@ pub fn offer_for(
         let Some(template) = arc.template() else {
             continue;
         };
-        if !unlocked(template, player, ctx.settings) {
+        if !unlocked(template, player, ctx.settings, ctx.frame) {
             continue;
         }
         let mut rng = PeopleRng::new(
@@ -564,7 +571,7 @@ pub fn offer_for(
     for template in super::ARC_TEMPLATES.iter() {
         if running.contains(&template.id)
             || log.finished_with(character.id, template.id)
-            || !unlocked(template, player, ctx.settings)
+            || !unlocked(template, player, ctx.settings, ctx.frame)
         {
             continue;
         }

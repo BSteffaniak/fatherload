@@ -415,6 +415,7 @@ pub fn arc_report(settings: &crate::worldgen::WorldSettings, count: usize) -> St
             let day = site.unsigned_abs() * 3;
             let ctx = OfferContext {
                 settings,
+                frame: crate::position::Frame::FIXED,
                 population: &found.population,
                 facts: &facts,
                 problems: &problems,

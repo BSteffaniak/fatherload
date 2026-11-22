@@ -152,6 +152,7 @@ impl WorldState {
             .unwrap_or_default();
         let ctx = OfferContext {
             settings: self.terrain.settings(),
+            frame: self.frame(),
             population: &settlement.population,
             facts: &facts,
             problems: &problems,

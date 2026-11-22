@@ -350,15 +350,26 @@ pub enum Prerequisite {
 }
 
 impl Prerequisite {
-    /// Whether `player` meets it in the world `settings` describe.
+    /// Whether `player` meets it in the world `settings` describe, reading the rig's position
+    /// in the origin frame (tests and fixed-frame worlds; gameplay uses [`Self::met_in`]).
     #[must_use]
     pub fn met(self, player: &Player, settings: &WorldSettings) -> bool {
+        self.met_in(player, settings, crate::position::Frame::FIXED)
+    }
+
+    /// Whether `player` meets it in the world `settings` describe, the rig's position measured
+    /// in `frame` (the world's local pixel frame, F7).
+    #[must_use]
+    pub fn met_in(
+        self,
+        player: &Player,
+        settings: &WorldSettings,
+        frame: crate::position::Frame,
+    ) -> bool {
         let log = &player.quests;
         match self {
             Self::Depth(row) => {
-                log.deepest_row
-                    .max(player.tile_position(crate::TILE_SIZE).y)
-                    >= strata::scaled_row(settings, row)
+                log.deepest_row.max(player.tile_in(frame).y) >= strata::scaled_row(settings, row)
             }
             Self::Visited(kind) => log.visited_kinds.contains(&kind),
             Self::Logs(count) => player.journal.logs.len() >= usize::from(count),
@@ -1029,10 +1040,15 @@ impl QuestDef {
     /// Whether every prerequisite is met by `player` in the world `settings` describe (ignores
     /// completion and active state).
     #[must_use]
-    pub fn unlocked_for(&self, player: &Player, settings: &WorldSettings) -> bool {
+    pub fn unlocked_for(
+        &self,
+        player: &Player,
+        settings: &WorldSettings,
+        frame: crate::position::Frame,
+    ) -> bool {
         self.prerequisites
             .iter()
-            .all(|prerequisite| prerequisite.met(player, settings))
+            .all(|prerequisite| prerequisite.met_in(player, settings, frame))
     }
 
     /// The twists that apply to an accepted quest (`variant` picks a board twist).

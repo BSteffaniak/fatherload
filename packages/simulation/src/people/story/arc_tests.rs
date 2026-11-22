@@ -468,6 +468,7 @@ fn every_arc_is_offered_by_someone() {
         let problems = [VillageProblem::ALL[village as usize % VillageProblem::ALL.len()]];
         let ctx = OfferContext {
             settings: &WorldSettings::new(11),
+            frame: crate::position::Frame::FIXED,
             population: &population,
             facts: &facts,
             problems: &problems,
@@ -510,6 +511,7 @@ fn every_arc_is_offered_by_someone() {
         let problems = [VillageProblem::ALL[village as usize % VillageProblem::ALL.len()]];
         let ctx = OfferContext {
             settings: &WorldSettings::new(11),
+            frame: crate::position::Frame::FIXED,
             population: &population,
             facts: &facts,
             problems: &problems,
@@ -541,6 +543,7 @@ fn offers_move_on_after_finishing_and_follow_ups_come_first() {
     let population = generate_population(5, VillageId(7), Culture::Frontier, 10);
     let ctx = OfferContext {
         settings: &WorldSettings::new(5),
+        frame: crate::position::Frame::FIXED,
         population: &population,
         facts: &facts,
         problems: &[],
@@ -778,11 +781,15 @@ fn sky_arcs_wait_until_the_rig_can_climb_there() {
     };
     let mut gated = 0;
     for arc in ARC_TEMPLATES.iter() {
-        assert!(super::run::unlocked(arc, &veteran, &sky), "{}", arc.title);
+        assert!(
+            super::run::unlocked(arc, &veteran, &sky, crate::position::Frame::FIXED),
+            "{}",
+            arc.title
+        );
         if goes_up(arc) {
             gated += 1;
             assert!(
-                !super::run::unlocked(arc, &grounded, &sky),
+                !super::run::unlocked(arc, &grounded, &sky, crate::position::Frame::FIXED),
                 "{} is offered to a rig that can't climb there",
                 arc.title
             );
@@ -795,7 +802,7 @@ fn sky_arcs_wait_until_the_rig_can_climb_there() {
         });
         if past_dead_air {
             assert!(
-                !super::run::unlocked(arc, &island_hopper, &sky),
+                !super::run::unlocked(arc, &island_hopper, &sky, crate::position::Frame::FIXED),
                 "{} is offered before the rig crosses the dead air",
                 arc.title
             );
@@ -805,7 +812,7 @@ fn sky_arcs_wait_until_the_rig_can_climb_there() {
             .iter()
             .all(|prerequisite| prerequisite.met(&grounded, &ground));
         assert_eq!(
-            super::run::unlocked(arc, &grounded, &ground),
+            super::run::unlocked(arc, &grounded, &ground, crate::position::Frame::FIXED),
             authored,
             "{}: without a sky only the authored prerequisites count",
             arc.title

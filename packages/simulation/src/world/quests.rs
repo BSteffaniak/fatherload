@@ -198,7 +198,9 @@ impl WorldState {
             .prerequisites
             .iter()
             .copied()
-            .filter(|prerequisite| !prerequisite.met(player, self.terrain.settings()))
+            .filter(|prerequisite| {
+                !prerequisite.met_in(player, self.terrain.settings(), self.frame())
+            })
             .collect();
         if !missing.is_empty() {
             return QuestAvailability::Locked(missing);

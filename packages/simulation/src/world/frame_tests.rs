@@ -494,3 +494,26 @@ fn position_cost_report() {
     println!("  body step, per-body sector:  {:.2} ns", per(sector_cost));
     println!("  (sink {sink})");
 }
+
+/// Depth prerequisites (quests and story arcs) read the rig's row through the world's frame: a
+/// rig near the surface stays shallow however far the frame sits from the origin.
+#[test]
+fn depth_prerequisites_read_the_rig_through_the_frame() {
+    use crate::quest::Prerequisite;
+    let mut world = streamed_world(60);
+    world.set_floating_frame(true);
+    world.teleport_rig_to(PLAYER, WorldPos::tile_center(200, 20));
+    // The frame ten sectors up: the rig's local row is 20 + 5,120.
+    world.relocate_frame(Frame::floating_at(0, -10));
+    let frame = world.frame();
+    let settings = world.terrain().settings().clone();
+    let rig = world.player(PLAYER).expect("rig").clone();
+    assert_eq!(rig.tile_in(frame).y, 20);
+    assert!(
+        !Prerequisite::Depth(1_000).met_in(&rig, &settings, frame),
+        "a shallow rig is shallow"
+    );
+    assert!(Prerequisite::Depth(10).met_in(&rig, &settings, frame));
+    // Reading the local pixels as world pixels would see a rig 5,140 rows down.
+    assert!(Prerequisite::Depth(1_000).met(&rig, &settings));
+}
