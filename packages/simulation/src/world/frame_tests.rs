@@ -288,12 +288,27 @@ fn a_floating_frame_follows_the_rig_and_nothing_moves() {
     );
 }
 
-/// V1-V10 worlds keep the fixed frame at the origin, wherever their rigs go.
+/// V1-V10 worlds keep the fixed frame at the origin, wherever their rigs go; V11 (the Deep
+/// Descent) floats its frame.
 #[test]
 fn old_generators_keep_the_fixed_frame() {
     for generator in GeneratorVersion::ALL {
-        assert!(!generator.floating_frame(), "{generator:?}");
+        assert_eq!(
+            generator.floating_frame(),
+            generator.has_descents(),
+            "{generator:?}"
+        );
     }
+    assert!(GeneratorVersion::V11.floating_frame());
+    let deep = WorldState::new_game_with_settings(
+        PLAYER,
+        &crate::worldgen::WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..crate::worldgen::WorldSettings::new(3)
+        },
+        crate::SimulationParams::default(),
+    );
+    assert!(deep.frame().floating());
     let mut world = WorldState::new_game(PLAYER);
     assert_eq!(world.frame(), Frame::FIXED);
     world.teleport_rig_to(
