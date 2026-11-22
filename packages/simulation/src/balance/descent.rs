@@ -30,7 +30,11 @@
 //! creatures, landmark and story beat, an upgrade tier, a gate), deaths, fuel on everyday trips
 //! against expeditions, and the estimated whole run (target 60-90 h).
 
+pub mod mechanics;
+
 use std::fmt::Write as _;
+
+pub use mechanics::{BossFight, StratumMechanics, boss_fight};
 
 use super::{BalanceProbe, ProbeContext, ReportSection, Table};
 use crate::{
@@ -82,6 +86,9 @@ pub struct DescentStratum {
     /// landmarks, its story logs and the workshop recipe it opens. Upgrade tiers bought and
     /// the Descent's gate are added as the bot plays.
     pub markers: Vec<Novelty>,
+    /// Its movement rules (Wave 9: submarine travel, inner-sky flight, turned gravity,
+    /// mirrored controls, slow time, the dark) and the deep supply it spends.
+    pub mechanics: StratumMechanics,
 }
 
 impl DescentStratum {
@@ -490,6 +497,7 @@ impl StratumRegistry for RegistryStrata {
                         6.0f64.mul_add(f64::from(set_pieces + mechanic), 18.0),
                     ),
                     markers,
+                    mechanics: StratumMechanics::of(*stratum),
                 }
             })
             .collect()
@@ -600,6 +608,7 @@ impl StratumRegistry for PlanStrata {
                         }
                         markers
                     },
+                    mechanics: StratumMechanics::default(),
                 }
             })
             .collect()
@@ -941,14 +950,22 @@ fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overh
     let distance = f64::from((face_row - base_row).max(0));
     let climb = STOCK_CLIMB_ROWS_PER_SECOND
         * f64::from(engine_power(rig.engine).min(crate::player::ENGINE_CLIMB_CAP));
-    let travel_seconds = distance / FALL_ROWS_PER_SECOND + distance / climb;
+    // Wave 9: the stratum's own rules. Open sky on the way is flown both ways (thrusting),
+    // the rest falls and climbs at the stratum's pace (submarine, turned gravity, slow time).
+    let mechanics = &stratum.mechanics;
+    let local = f64::from((face_row - base_row.max(stratum.top)).max(0));
+    let open = mechanics.open_rows(local);
+    let flight = 2.0 * open / mechanics::SKY_FLIGHT_ROWS_PER_SECOND;
+    let travel_seconds = ((distance - open) / FALL_ROWS_PER_SECOND + (distance - open) / climb)
+        .mul_add(mechanics.move_factor(rig.systems), flight);
     let cargo = f64::from(cargo_capacity_for_level(rig.bay));
     let tiles = cargo / stratum.ore_share;
-    let dig_seconds = tiles * tile_seconds(stratum, rig.drill, overhead);
+    let dig_seconds =
+        tiles * tile_seconds(stratum, rig.drill, overhead) * mechanics.dig_factor(rig.systems);
     let burn = fuel_burn_efficiency(rig.tank);
     // Below its Pressure Rating the thrusters burn more (Wave 8).
     let fuel = tiles * DIG_FUEL_PER_TILE
-        + (distance / climb + dig_seconds * THRUST_SHARE_MINING)
+        + ((distance - open) / climb + flight + dig_seconds * THRUST_SHARE_MINING)
             * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
             * f64::from(burn)
             * pressure_factor(rig.pressure, stratum.descent);
@@ -998,6 +1015,9 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
     let mut claimed: Vec<u8> = Vec::new();
     let mut deaths_total = 0;
     let mut felt = 0_u8;
+    // Wave 9: the movement rules and deep supplies met so far.
+    let mut met_rules = std::collections::BTreeSet::new();
+    let mut met_supplies = std::collections::BTreeSet::new();
     for (index, stratum) in strata.iter().enumerate() {
         let start = clock_minutes;
         let drill_tier = rig.drill;
@@ -1009,8 +1029,20 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         let outpost_row = outpost.unwrap_or(i32::MAX);
         // The stratum's content minutes, and digging through it.
         let rows = f64::from(stratum.rows());
-        let dig_minutes = rows * tile_seconds(stratum, rig.drill, overhead) / 60.0;
+        // Wave 9: open sky is flown, not dug, and the stratum's rules slow the rest.
+        let dig_minutes = (rows - stratum.mechanics.open_rows(rows))
+            * tile_seconds(stratum, rig.drill, overhead)
+            * stratum.mechanics.dig_factor(rig.systems)
+            / 60.0
+            + stratum.mechanics.flight_seconds(rows) / 60.0;
         let mut minutes = dig_minutes;
+        // The first time a rule is met, learning it takes a while (and it is new).
+        for (rule, learning) in stratum.mechanics.firsts() {
+            if met_rules.insert(rule) {
+                minutes += learning;
+                events.push((0.0, NoveltyKind::Mechanic, rule.to_owned()));
+            }
+        }
         let new_descent = index > 0 && strata[index - 1].descent != descent;
         // The Descent's ancient lift restored once (it shortens the trips back up).
         if new_descent {
@@ -1123,8 +1155,18 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                     && system.boss_reward().is_some()
                 {
                     // A boss's reward (Wave 8: the Star Core's Pressure Hull, the Mycelial
-                    // Mind's Bio-Filter and Lamp II): won by beating it, never bought.
-                    minutes += BOSS_FIGHT_MINUTES;
+                    // Mind's Bio-Filter and Lamp II; Wave 9: the Leviathan's, the Sun
+                    // Serpent's and the Glitch's): won by beating it, never bought. Wave 9
+                    // models the fight: its winning attempt, a learning attempt or two and one
+                    // more for each tier of armour short.
+                    if let Some(boss) = system.boss_reward() {
+                        let fight = boss_fight(boss, rig.hull);
+                        minutes += fight.minutes;
+                        deaths += fight.deaths;
+                        let fee = (50.0 + 3.0 * f64::from(face)) * f64::from(fight.deaths);
+                        rig.credits = (rig.credits - fee).max(0.0);
+                        events.push((minutes, NoveltyKind::Gate, boss.name().to_owned()));
+                    }
                     rig.systems |= system.bit();
                     for companion in RigSystem::ALL {
                         if companion.boss_reward() == system.boss_reward() {
@@ -1262,6 +1304,32 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             }
             minutes += run.seconds / 60.0;
         }
+        // Wave 9: the deep supplies its mechanic spends (one a trip, two for the crossing),
+        // crafted from the layer resources aboard when the bay holds them, bought otherwise.
+        if let Some(supply) = stratum.mechanics.supply {
+            let (per_trip, crossing) = stratum.mechanics.supplies_per_trip();
+            let mut wanted = per_trip * trips + crossing;
+            if let Some(recipe) = crate::workshop::RECIPES.iter().find(|recipe| {
+                matches!(recipe.output, crate::workshop::CraftOutput::Supply(made, _) if made == supply)
+            }) {
+                let crate::workshop::CraftOutput::Supply(_, made) = recipe.output else {
+                    unreachable!("found by its output")
+                };
+                while wanted > 0 && rig.holds(recipe) {
+                    rig.spend(recipe);
+                    wanted = wanted.saturating_sub(u32::from(made));
+                }
+            }
+            let price = f64::from(crate::workshop::supply_price(supply, descent));
+            rig.credits = (rig.credits - price * f64::from(wanted)).max(0.0);
+            if met_supplies.insert(supply) {
+                events.push((
+                    0.0,
+                    NoveltyKind::UpgradeTier,
+                    format!("supply: {}", supply.name()),
+                ));
+            }
+        }
         // The stratum's authored content: its markers spread over its time (arrival first),
         // each costing its share of the content minutes.
         minutes += stratum.content_minutes;
@@ -1303,10 +1371,25 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 rig.drill = rig.drill.max(crate::crust::DRILL_II_LEVEL);
             }
             if let Some(span) = descents.get(usize::from(descent)) {
+                // Wave 9: the Descent's own rules on the way (submarine stretches, the open
+                // sky flown both ways, turned and slowed rooms), averaged over its strata.
+                let own: Vec<&DescentStratum> = strata
+                    .iter()
+                    .filter(|each| each.descent == descent)
+                    .collect();
+                let pace = own
+                    .iter()
+                    .map(|each| each.mechanics.move_factor(rig.systems))
+                    .sum::<f64>()
+                    / own.len().max(1) as f64;
+                let flight: f64 = own
+                    .iter()
+                    .map(|each| 2.0 * each.mechanics.flight_seconds(f64::from(each.rows())))
+                    .sum();
                 let rows = f64::from(span.rows() - 40);
                 let climb = STOCK_CLIMB_ROWS_PER_SECOND
                     * f64::from(engine_power(rig.engine).min(crate::player::ENGINE_CLIMB_CAP));
-                let fuel = (rows / climb + 120.0)
+                let fuel = ((rows / climb).mul_add(pace, flight) + 120.0)
                     * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
                     * f64::from(fuel_burn_efficiency(rig.tank))
                     * pressure_factor(rig.pressure, descent)
@@ -1344,11 +1427,17 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
 /// The Descents the pacing check covers (I-III: Wave 8's authored content).
 pub const PACING_DESCENTS: u8 = 3;
 
-/// Minutes a gate boss's fight takes the bot (Wave 8: the Mycelial Mind).
+/// Minutes Wave 8 gave every gate boss's fight.
 ///
-/// Its rewards are never sold. The bot test beats it in about four and a half minutes of game
-/// time; a player learning its nodes and storms takes several tries.
+/// The Mycelial Mind's bot test beats it in about four and a half minutes of game time; a
+/// player learning its nodes and storms takes several tries. Wave 9 models each fight instead ([`boss_fight`]: the winning attempt, the learning
+/// attempts and the armour the rig lacks); this stays as the Star Core's and the Mind's
+/// yardstick.
 pub const BOSS_FIGHT_MINUTES: f64 = 25.0;
+
+/// The Descents the report's pacing table covers (Wave 9: I-VI; IV-VI wait for their content
+/// tracks' creatures and set pieces before they can pass).
+pub const PACING_REPORT_DESCENTS: u8 = 6;
 
 /// §14's target hours at the end of each Descent.
 pub const TARGET_HOURS: [(f64, f64); DESCENT_COUNT] = [
@@ -1458,10 +1547,10 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
         ]);
     }
     section.tables.push(per_stratum);
-    // Wave 8: the "something new every 20-40 minutes" check on Descents I-III, from the
-    // registry's real content markers and what the bot bought on the way.
+    // Wave 8: the "something new every 20-40 minutes" check, from the registry's real content
+    // markers and what the bot bought on the way (Wave 9: Descents I-VI).
     let mut pacing = Table::new(
-        "Descent I-III pacing: new things per stratum (real content markers), the longest wait, deaths and fuel stress",
+        "Descent I-VI pacing: new things per stratum (real content markers), the longest wait, deaths and fuel stress",
         &[
             "Stratum",
             "Minutes",
@@ -1481,7 +1570,7 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
     for stratum in run
         .strata
         .iter()
-        .filter(|stratum| stratum.stratum.descent < PACING_DESCENTS)
+        .filter(|stratum| stratum.stratum.descent < PACING_REPORT_DESCENTS)
     {
         pacing.row(vec![
             format!(
@@ -1525,6 +1614,30 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
                 .join("; ")
         )
     });
+    let deep = run
+        .pacing_failures(PACING_REPORT_DESCENTS)
+        .into_iter()
+        .filter(|(name, _)| !failures.iter().any(|(shallow, _)| shallow == name))
+        .collect::<Vec<_>>();
+    section.notes.push(if deep.is_empty() {
+        "Descents IV-VI pass the pacing check too.".to_owned()
+    } else {
+        format!(
+            "Descents IV-VI pacing check fails in: {}.",
+            deep.iter()
+                .map(|(name, why)| format!("{name} ({why})"))
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    });
+    section.metric(
+        "descent.pacing_passes_d1_6",
+        if run.pacing_passes(PACING_REPORT_DESCENTS) {
+            1.0
+        } else {
+            0.0
+        },
+    );
     section.metric(
         "descent.pacing_passes_d1_3",
         if run.pacing_passes(PACING_DESCENTS) {
@@ -1668,6 +1781,85 @@ mod tests {
     }
 
     #[test]
+    fn descents_four_to_six_model_their_movement_rules_supplies_and_bosses() {
+        // Wave 9: past the Prism Desert (the Strange Layers' end) on the real registry.
+        let registry = RegistryStrata::default_world();
+        let config = DescentConfig {
+            strata_limit: Some(crate::descent::Stratum::PrismDesert.index() + 2),
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&registry, &config);
+        let events_of = |name: &str| {
+            run.strata
+                .iter()
+                .find(|stratum| stratum.stratum.name == name)
+                .map(|stratum| stratum.events.clone())
+                .expect("played")
+        };
+        let has = |name: &str, kind: NoveltyKind, what: &str| {
+            events_of(name)
+                .iter()
+                .any(|(_, each, label)| *each == kind && label.contains(what))
+        };
+        assert!(has(
+            "The Underground Ocean",
+            NoveltyKind::Mechanic,
+            "submarine"
+        ));
+        assert!(has("Inner Sky", NoveltyKind::Mechanic, "inner-sky flight"));
+        assert!(has(
+            "Upside-Down Isles",
+            NoveltyKind::Mechanic,
+            "turned gravity"
+        ));
+        assert!(has("Time Sludge", NoveltyKind::Mechanic, "time zones"));
+        assert!(has(
+            "Brine Glaciers",
+            NoveltyKind::UpgradeTier,
+            "Frost Heater"
+        ));
+        // Each Descent's gate is a boss fight, its systems won, never bought.
+        assert!(has("Pearl Abyss", NoveltyKind::Gate, "Leviathan"));
+        assert!(has("The Sunforge", NoveltyKind::Gate, "Sun Serpent"));
+        assert!(has("Prism Desert", NoveltyKind::Gate, "Glitch"));
+        for system in [
+            RigSystem::CryoHull,
+            RigSystem::GravityAnchor,
+            RigSystem::PhaseDrill,
+        ] {
+            assert!(
+                run.systems.iter().any(|(won, _)| *won == system),
+                "{system:?}"
+            );
+        }
+        // The Descents run in order and each takes hours, not minutes.
+        for descent in 3..6 {
+            let length = run.descent_hours[descent] - run.descent_hours[descent - 1];
+            assert!(length > 4.0, "Descent {descent} took {length:.1} h");
+        }
+        // Fair: no stratum costs more than two deaths, and everyday trips fit the tank.
+        for stratum in run
+            .strata
+            .iter()
+            .filter(|stratum| stratum.stratum.descent >= 3)
+        {
+            assert!(
+                stratum.deaths <= PACING_MAX_DEATHS_PER_STRATUM,
+                "{}",
+                stratum.stratum.name
+            );
+            assert!(
+                stratum.everyday_fuel_percent <= PACING_MAX_EVERYDAY_FUEL_PERCENT,
+                "{}",
+                stratum.stratum.name
+            );
+        }
+        let section = descent_section(&run);
+        assert!(section.metrics.contains_key("descent.pacing_passes_d1_6"));
+    }
+
+    #[test]
     fn a_short_descent_runs_and_reports() {
         let config = DescentConfig {
             strata_limit: Some(8),
@@ -1757,7 +1949,7 @@ mod tests {
             section
                 .tables
                 .iter()
-                .any(|table| table.caption.starts_with("Descent I-III pacing"))
+                .any(|table| table.caption.starts_with("Descent I-VI pacing"))
         );
         let failures = run.pacing_failures(PACING_DESCENTS);
         assert_eq!(run.pacing_passes(PACING_DESCENTS), failures.is_empty());
