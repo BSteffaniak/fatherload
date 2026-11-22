@@ -3855,7 +3855,11 @@ sky/Moon gear or the drill mount. `economy::fit_next_tier` fits a tier without c
   values from. **Ore pays its Descent** (`haul_premium_percent`): the deepest Descent a
   player's haul came from since the last sale (`Logistics::haul_descent`, set when the drill
   breaks ore) multiplies the depot's and outposts' ore payout by `descent_value_percent`; a
-  sale resets it. The Wave 7 value curve was only modelled before; now it is real.
+  sale resets it, and so does a bay with no ore left (the tick drops the entry: a wreck or a
+  village trade does not carry a Descent III premium into the next Crust haul). The depot's
+  sell row reads the same `Logistics::haul_premium_percent`, so the payout it shows is the
+  payout the sale makes. Known limit: the premium is per haul, not per ore, so one deep ore
+  lifts a mixed bay. The Wave 7 value curve was only modelled before; now it is real.
 - **Seam for the content tracks**: if a track adds its own layer resource items or tiles, map
   them onto `ItemKind::Layer(stratum)` (or change `descent_dig_extras`); recipes only read
   `ItemKind::Layer` counts.

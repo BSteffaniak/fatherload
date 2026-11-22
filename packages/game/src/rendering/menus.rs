@@ -566,9 +566,9 @@ pub(super) fn draw_world_setup(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
             .value(cycler(setup.day_length.name()), GOLD),
         Entry::new(&menu_icons::GLOBE, "World")
             .detail(if setup.deep_descent() {
-                "8 Descents, 41 strata, 13,000 rows to the Heart"
+                "41 strata in 8 Descents"
             } else {
-                "The original dig, 12 bands deep"
+                "The original 12-band dig"
             })
             .value(
                 cycler(if setup.deep_descent() {
