@@ -573,8 +573,9 @@ fn v11_generation_is_pinned() {
 
 /// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
 /// pockets, the outposts on the builders' cable and the ancient lifts' carve; Wave 8: the
-/// authored Crust, Old Deep and Living Dark, the expedition's log sites and anomaly rooms).
-const GOLDEN_V11_DIGEST: u64 = 0x85a2_29d1_a342_837d;
+/// authored Crust, Old Deep and Living Dark, the expedition's log sites and anomaly rooms,
+/// kept off the strata's set pieces by the integration).
+const GOLDEN_V11_DIGEST: u64 = 0xaa10_819f_130e_3f04;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]

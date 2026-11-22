@@ -138,7 +138,7 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
     let roll = hash2(settings.seed, SALT_SITE, i32::from(log), 0);
     let y = slot_top + i32::try_from(roll % u64::try_from(slot_rows).unwrap_or(1)).unwrap_or(0);
     let side = trail_side(settings);
-    let at = |out: i32| {
+    let at = |out: i32, y: i32| {
         let column = lift_column(settings) + side * out;
         let x = if side > 0 { column } else { column - width + 1 };
         ExpeditionSite {
@@ -155,14 +155,72 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
         }
     };
     // The rolled distance out from the cable, or the next of a few further along the row where
-    // the site would cut a pilot-only ruin or sit under a tomb entrance (kept as rolled if
-    // every try is taken, which the placement tests rule out for their seeds).
+    // the site would cut a pilot-only ruin, sit under a tomb entrance or cut one of the strata's
+    // set pieces (Wave 8 integration); then the same tries on two other rows of its slot (kept
+    // as rolled if every try is taken, which the placement tests rule out for their seeds).
     let rolled = i32::try_from((roll >> 20) % 97).unwrap_or(0);
-    let first_try = at(24 + rolled);
-    (0..8)
-        .map(|attempt| at(24 + (rolled + attempt * 29) % 97))
-        .find(|site| !crosses_older_spaces(settings, &site.bounds.expanded(3)))
+    let first_try = at(24 + rolled, y);
+    let rows = [
+        y,
+        slot_top + (y - slot_top + slot_rows / 3) % slot_rows,
+        slot_top + (y - slot_top + 2 * slot_rows / 3) % slot_rows,
+    ];
+    rows.into_iter()
+        .flat_map(|row| (0..8).map(move |attempt| (row, attempt)))
+        .map(|(row, attempt)| at(24 + (rolled + attempt * 29) % 97, row))
+        .find(|site| {
+            let around = site.bounds.expanded(3);
+            !crosses_older_spaces(settings, &around)
+                && !crosses_strata_set_pieces(settings, &around)
+        })
         .or(Some(first_try))
+}
+
+/// Whether `area` crosses one of the authored strata's set pieces (Wave 8 integration): the
+/// Crust's cabin, Gravel Hollow, the Sinkhole and its mine works; the Old Deep's Cathedral,
+/// Star Core arena, Glowmother's den and Fathers' camps; the Living Dark's stamps. The log
+/// sites keep off them (the story pass is stamped after them and would cut them open).
+#[must_use]
+pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> bool {
+    use crate::{
+        crust,
+        old_deep::sites as deep,
+        worldgen::descent::{crust as crust_rules, living},
+    };
+    if !settings.generator.has_descents() {
+        return false;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    let rect = |min: (i32, i32), max: (i32, i32)| TileRect {
+        min: TilePosition { x: min.0, y: min.1 },
+        max: TilePosition { x: max.0, y: max.1 },
+    };
+    let mut pieces: Vec<TileRect> = Vec::new();
+    pieces.extend(crust::cabin(settings));
+    if let Some((center, top)) = crust::gravel_hollow(settings) {
+        pieces.push(rect((center - 40, top - 6), (center + 40, top + 14)));
+    }
+    pieces.extend(crust::sinkhole_site(settings).map(|site| site.zone));
+    pieces.extend(deep::cathedral(settings, &layout).map(|site| site.bounds));
+    pieces.extend(deep::star_core_arena(settings, &layout).map(|site| site.bounds));
+    if let Some((centre, (w, h))) = deep::glowmother_den(settings, &layout) {
+        pieces.push(rect(
+            (centre.x - w, centre.y - h),
+            (centre.x + w, centre.y + h),
+        ));
+    }
+    for stratum in crate::descent::Descent::OldDeep.strata() {
+        if let Some(camp) = deep::expedition_camp(settings, &layout, stratum) {
+            pieces.push(rect((camp.x - 3, camp.y - 3), (camp.x + 3, camp.y + 1)));
+        }
+    }
+    pieces.iter().any(|piece| piece.intersects(area))
+        || crust_rules::works_touching(settings, &layout, area)
+            .iter()
+            .any(|works| works.bounds().intersects(area))
+        || living::stamps_with(settings, &layout, area)
+            .iter()
+            .any(|stamp| stamp.bounds.intersects(area))
 }
 
 /// Whether `area` crosses a pilot-only space (V9+, stamped before the story pass) or a tomb
