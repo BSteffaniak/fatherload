@@ -579,9 +579,11 @@ impl EnemyKind {
                 sight_tiles: 3.0,
                 hearing_tiles: 2.5,
                 leash_tiles: 14.0,
-                contact_damage: 14.0,
+                // Wave 6: once the lunge reliably connected, the old 14 a bite every 1.3 s
+                // took a third of a band's typical hull in a duel with the starter gun.
+                contact_damage: 8.0,
                 windup_millis: 400,
-                cooldown_millis: 1_300,
+                cooldown_millis: 2_000,
                 attack_range_tiles: 2.5,
                 knockback: 180.0,
                 ..stats("Rock Mimic", Creature, Walking, AttackStyle::Lunge)

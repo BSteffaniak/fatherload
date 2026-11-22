@@ -124,6 +124,25 @@ fn armour_still_matters() {
     );
 }
 
+/// Pinned (wave 6): a rock mimic bites, but fairly. Once its lunge reliably connected it took
+/// a third of a band's typical hull in a duel with the starter gun (46 of 140 in the grey
+/// stone, 412 of 1,180 in the void geodes); it now costs well under a fifth, and still more
+/// than nothing.
+#[test]
+fn rock_mimics_bite_fairly() {
+    for (band, typical) in [
+        (Band::Stone, 140.0),
+        (Band::Deep(DeepStratum::VoidGeodeFields), 1_180.0),
+    ] {
+        let mimic = duel(EnemyKind::RockMimic, band, LOADOUTS[0], 30).expect("arena");
+        assert!(mimic.seconds.is_some(), "the rivet gun kills it: {mimic:?}");
+        assert!(
+            mimic.hull_lost > 0.0 && mimic.hull_lost < typical * 0.2,
+            "rock mimic at {band:?} vs rivet gun: {mimic:?}"
+        );
+    }
+}
+
 /// The climb probe flies the real tick: a bigger tank and a stronger engine both climb higher.
 /// Without altitude intakes every climb tops out where thin air leaves the engine too weak
 /// (about 480 tiles for a stock engine; even a stock tank gets most of the way), and thin air
