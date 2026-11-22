@@ -29,18 +29,39 @@ pub struct ViewAnchor {
     pub viewport: Viewport,
     pub camera: CameraPosition,
     pub world_scale: f32,
+    /// The camera's roll (F9: radians, clockwise; the seat's rig orientation while it rolls,
+    /// 0 otherwise). The world is drawn turned the other way about [`Self::pivot`].
+    pub roll: f32,
+    /// The world point the rolled view turns about (the seat's rig as drawn).
+    pub pivot: (f32, f32),
 }
 
 impl ViewAnchor {
-    /// The world point under screen point `(x, y)`.
+    /// The world point under screen point `(x, y)` (through the rolled camera, if it rolls).
     #[must_use]
     #[allow(clippy::cast_precision_loss, reason = "viewport coordinates are small")]
     pub fn world_point(&self, x: f32, y: f32) -> (f32, f32) {
         let scale = self.world_scale.max(f32::EPSILON);
-        (
+        let flat = (
             (x - self.viewport.x as f32) / scale + self.camera.x,
             (y - self.viewport.y as f32) / scale + self.camera.y,
-        )
+        );
+        if self.roll == 0.0 {
+            return flat;
+        }
+        let (dx, dy) = self.world_direction(flat.0 - self.pivot.0, flat.1 - self.pivot.1);
+        (self.pivot.0 + dx, self.pivot.1 + dy)
+    }
+
+    /// A direction on screen (`(x, y)`, +y down: a controller's aim stick) as a world
+    /// direction: turned by the camera's roll, since the world is drawn turned the other way.
+    #[must_use]
+    pub fn world_direction(&self, x: f32, y: f32) -> (f32, f32) {
+        if self.roll == 0.0 {
+            return (x, y);
+        }
+        let (sin, cos) = self.roll.sin_cos();
+        (cos.mul_add(x, -(sin * y)), sin.mul_add(x, cos * y))
     }
 
     /// Whether screen point `(x, y)` is inside this view.
@@ -96,7 +117,12 @@ pub fn seat_aim(
                 pointer: Some((wx, wy)),
             };
         }
-        if let Some((aim_x, aim_y)) = quantize_aim(input.aim_x, input.aim_y) {
+        // The stick points on screen: through a rolled camera that is a turned world
+        // direction (F9).
+        let (stick_x, stick_y) = anchor.map_or((input.aim_x, input.aim_y), |anchor| {
+            anchor.world_direction(input.aim_x, input.aim_y)
+        });
+        if let Some((aim_x, aim_y)) = quantize_aim(stick_x, stick_y) {
             return SeatAim {
                 control: WeaponControl {
                     fire,
@@ -348,7 +374,43 @@ mod tests {
             },
             camera: CameraPosition { x: 0.0, y: 0.0 },
             world_scale: 1.0,
+            roll: 0.0,
+            pivot: (0.0, 0.0),
         }
+    }
+
+    #[test]
+    fn a_rolled_camera_turns_the_mouse_and_the_stick_aim_with_the_world() {
+        // The rig at the view's centre, leaning a quarter turn clockwise: the world is drawn a
+        // quarter turn anticlockwise around it, so the screen's right is the world's down.
+        let player = armed();
+        let rolled = ViewAnchor {
+            camera: CameraPosition {
+                x: player.x - 320.0,
+                y: player.y - 180.0,
+            },
+            roll: std::f32::consts::FRAC_PI_2,
+            pivot: (player.x, player.y),
+            ..anchor()
+        };
+        let (wx, wy) = rolled.world_point(420.0, 180.0);
+        assert!((wx - player.x).abs() < 1e-3, "{wx}");
+        assert!((wy - (player.y + 100.0)).abs() < 1e-3, "{wy}");
+        let (dx, dy) = rolled.world_direction(1.0, 0.0);
+        assert!(dx.abs() < 1e-6 && (dy - 1.0).abs() < 1e-6, "{dx} {dy}");
+        let stick = PlayerInput {
+            fire: true,
+            aim_x: 1.0,
+            ..PlayerInput::default()
+        };
+        let aim = seat_aim(&stick, Some(&player), 1, Some(&rolled));
+        assert!(!aim.control.auto_aim);
+        assert!(
+            aim.control.aim_y > 100 && aim.control.aim_x.abs() < 5,
+            "{aim:?}"
+        );
+        // Level: unchanged.
+        assert_eq!(anchor().world_point(10.0, 20.0), (10.0, 20.0));
     }
 
     #[test]
