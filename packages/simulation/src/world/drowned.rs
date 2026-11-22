@@ -756,13 +756,18 @@ impl WorldState {
                 continue;
             }
             let tile = player.tile_in(frame);
+            let glaciers = self.deep_stratum_at(tile) == Some(Stratum::BrineGlaciers);
+            if !glaciers && player.water.frost_micro == 0 {
+                // Nothing to freeze or thaw (skips the vent search for every rig elsewhere).
+                continue;
+            }
             let harbour = self.logistics.outpost_at(tile).is_some()
                 || city.is_some_and(|site| site.in_city(tile));
             let rate = if harbour {
                 -FROST_THAW_HARBOUR
             } else if self.near_vent(tile) {
                 -FROST_THAW_VENT
-            } else if self.deep_stratum_at(tile) == Some(Stratum::BrineGlaciers) {
+            } else if glaciers {
                 let wet = self.submersion(player.x, player.y, AUTHORITATIVE_PLAYER_RADIUS);
                 let brine = if wet.kind == Some(FluidKind::Brine) {
                     FROST_BRINE_FACTOR
@@ -828,7 +833,7 @@ impl WorldState {
                 .map_or(TilePosition { x: 0, y: 0 }, |p| p.tile_in(self.frame()));
             let damage =
                 PRESSURE_DAMAGE_PER_SECOND * over * tier_scale(self.tier_at(tile)) * seconds;
-            // Warn once a second while it bites (world time, tick-rate safe).
+            // Warn every three seconds while it bites (world time, tick-rate safe).
             let now = self.millis_at(self.simulation_tick);
             let before = self.millis_at(SimulationTick::new(
                 self.simulation_tick.get().saturating_sub(1),
