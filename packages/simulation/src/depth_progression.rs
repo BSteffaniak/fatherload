@@ -466,6 +466,8 @@ impl RigSystem {
     #[must_use]
     pub const fn boss_reward(self) -> Option<crate::descent::DescentBoss> {
         match self {
+            // The Star Core's Pressure Hull (Wave 8 integration: the Old Deep's gate).
+            Self::PressureHull => Some(crate::descent::DescentBoss::StarCore),
             Self::BioFilter | Self::LampII => Some(crate::descent::DescentBoss::MycelialMind),
             _ => None,
         }

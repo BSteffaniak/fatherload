@@ -37,6 +37,8 @@ fn deep_world(seed: u64) -> WorldState {
     let mut world =
         WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::default());
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
+    // The crew holds the Deep Claim (the Sinkhole beaten), or Descent I's gate crushes it below.
+    world.grant_deep_claim();
     world
 }
 
@@ -194,9 +196,11 @@ fn a_geared_rig_holds_its_hull_in_the_heart() {
 fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
     let mut world = deep_world(0x0FA1_4003);
     let layout = world.descent_layout();
-    let living_dark = layout.descent(2).expect("Descent III");
-    let index = offer_index(UpgradeKind::DescentPressureHull);
-    world.progression.deepest_tile_reached = living_dark.top + 30;
+    // The Cryo Hull (the bosses' rewards above it are never sold, Wave 8): the crew holds the
+    // gates above the Hollow World.
+    let hollow = layout.descent(4).expect("Descent V");
+    let index = offer_index(UpgradeKind::CryoHull);
+    world.progression.deepest_tile_reached = hollow.top + 30;
     let offer = upgrade_offers_for(
         world.player(PLAYER).expect("rig"),
         ProgressionRules::Descent,
@@ -210,13 +214,12 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
             world.logistics().felt_systems,
         )
     };
-    assert_eq!(
-        lock(&world),
-        Some(UpgradeLock::Unfelt(RigSystem::PressureHull))
-    );
+    assert_eq!(lock(&world), Some(UpgradeLock::Unfelt(RigSystem::CryoHull)));
     // A dip past the gate: the crush starts gently and the need is felt.
     {
         let rig = world.player_mut(PLAYER).expect("rig");
+        rig.hazard_gear.rig_systems = RigSystem::PressureHull.bit() | RigSystem::BioFilter.bit();
+        rig.hazard_gear.pressure_rating = DEPTH_LINE_MAX_LEVEL;
         rig.hull_level = 12;
         rig.radiator_level = 12;
         rig.hazard_gear.heat_shield = 6;
@@ -226,7 +229,7 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
         &mut world,
         TilePosition {
             x: 30,
-            y: living_dark.top + 1,
+            y: hollow.top + 1,
         },
     );
     let before = world.player(PLAYER).expect("rig").hull;
@@ -240,7 +243,7 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
         "a dip is gentle: {shallow_loss}"
     );
     assert_ne!(
-        world.logistics().felt_systems & RigSystem::PressureHull.bit(),
+        world.logistics().felt_systems & RigSystem::CryoHull.bit(),
         0
     );
     assert_eq!(lock(&world), None);

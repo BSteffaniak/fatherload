@@ -1034,11 +1034,11 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                     && core.is_empty()
                     && system.boss_reward().is_some()
                 {
-                    // A boss's reward (Wave 8: the Mycelial Mind's Bio-Filter and Lamp II):
-                    // won by beating it, never bought.
+                    // A boss's reward (Wave 8: the Star Core's Pressure Hull, the Mycelial
+                    // Mind's Bio-Filter and Lamp II): won by beating it, never bought.
                     minutes += BOSS_FIGHT_MINUTES;
                     rig.systems |= system.bit();
-                    for companion in [RigSystem::BioFilter, RigSystem::LampII] {
+                    for companion in RigSystem::ALL {
                         if companion.boss_reward() == system.boss_reward() {
                             rig.systems |= companion.bit();
                         }

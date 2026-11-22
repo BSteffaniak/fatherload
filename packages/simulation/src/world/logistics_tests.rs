@@ -757,10 +757,10 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     );
     let index = UpgradeKind::ALL
         .iter()
-        .position(|kind| *kind == UpgradeKind::DescentPressureHull)
+        .position(|kind| *kind == UpgradeKind::CryoHull)
         .expect("line");
     let hull = upgrade_offers_for(&player, rules)[index];
-    let sold_from = RigSystem::PressureHull.sold_from_row(&PlanLayout);
+    let sold_from = RigSystem::CryoHull.sold_from_row(&PlanLayout);
     assert!(matches!(
         upgrade_lock_for(&hull, &settings, sold_from - 1, rules, 0),
         Some(UpgradeLock::Depth { .. })
@@ -768,7 +768,7 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
     // Wave 8: reached is not enough; the crew must have felt the crush first.
     assert_eq!(
         upgrade_lock_for(&hull, &settings, sold_from, rules, 0),
-        Some(UpgradeLock::Unfelt(RigSystem::PressureHull))
+        Some(UpgradeLock::Unfelt(RigSystem::CryoHull))
     );
     assert_eq!(
         upgrade_lock_for(
@@ -776,9 +776,19 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
             &settings,
             sold_from,
             rules,
-            RigSystem::PressureHull.bit()
+            RigSystem::CryoHull.bit()
         ),
         None
+    );
+    // The Star Core's Pressure Hull is won, never sold (Wave 8 integration).
+    let index = UpgradeKind::ALL
+        .iter()
+        .position(|kind| *kind == UpgradeKind::DescentPressureHull)
+        .expect("line");
+    let pressure = upgrade_offers_for(&player, rules)[index];
+    assert_eq!(
+        upgrade_lock_for(&pressure, &settings, i32::MAX, rules, u8::MAX),
+        Some(UpgradeLock::Boss(crate::descent::DescentBoss::StarCore))
     );
 }
 
@@ -844,7 +854,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
     world.set_progression_rules(ProgressionRules::Descent);
     let index = UpgradeKind::ALL
         .iter()
-        .position(|kind| *kind == UpgradeKind::DescentPressureHull)
+        .position(|kind| *kind == UpgradeKind::CryoHull)
         .expect("line");
     // Stand in the shop with the world dug deep enough.
     let shop = crate::surface::SURFACE_BUILDINGS
@@ -861,7 +871,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
         PlayerScopedCommandOutcome::IgnoredUnavailable,
         "too shallow"
     );
-    world.progression.deepest_tile_reached = RigSystem::PressureHull.sold_from_row(&PlanLayout);
+    world.progression.deepest_tile_reached = RigSystem::CryoHull.sold_from_row(&PlanLayout);
     let inputs = TickInputs::default().act(PLAYER, buy.clone());
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
     assert_eq!(
@@ -869,7 +879,8 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
         PlayerScopedCommandOutcome::IgnoredUnavailable,
         "reached but not felt yet (Wave 8)"
     );
-    world.logistics.felt_systems |= RigSystem::PressureHull.bit();
+    world.logistics.felt_systems |= RigSystem::CryoHull.bit();
+    world.player_mut(PLAYER).expect("player").credits = 10_000_000;
     let inputs = TickInputs::default().act(PLAYER, buy);
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
     assert_eq!(
@@ -881,7 +892,7 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
             .player(PLAYER)
             .expect("player")
             .hazard_gear
-            .has_system(RigSystem::PressureHull)
+            .has_system(RigSystem::CryoHull)
     );
 }
 
