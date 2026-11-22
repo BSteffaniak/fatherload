@@ -315,10 +315,11 @@ fn every_descent_has_an_outpost_and_a_gate_chamber() {
             y: first.bounds.min.y + 3,
         };
         assert_eq!(generated_tile(&settings, inside).kind, TileKind::Air);
+        // Descent II's chamber is the Star Core's arena (Wave 8): walled in core wall.
         let gate = gate_chamber(&settings, &layout, Descent::OldDeep);
         assert_eq!(
             generated_tile(&settings, gate.bounds.max).kind,
-            TileKind::Cave(CaveTile::RuinBrick)
+            TileKind::Deep(crate::old_deep::DeepTile::CoreWall)
         );
         // Descent III's chamber is overgrown into the Mind's hollow (Wave 8): open in the
         // middle, its builders' pillars still standing.

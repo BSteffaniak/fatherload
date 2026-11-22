@@ -32,6 +32,8 @@ fn deep_world(seed: u64, hz: u32) -> WorldState {
     let mut world =
         WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(hz));
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
+    // The crew holds the Deep Claim (the Sinkhole beaten), or Descent I's gate crushes it below.
+    world.grant_deep_claim();
     let rig = world.player_mut(PLAYER).expect("rig");
     rig.drill_strength = 8;
     rig.engine_level = 10;

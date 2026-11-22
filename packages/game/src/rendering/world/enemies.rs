@@ -27,8 +27,7 @@ use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
         crypt as crypt_art, enemies as art, living as living_art, moon as moon_art,
-        old_deep as deep_art,
-        tomb as tomb_art,
+        old_deep as deep_art, tomb as tomb_art,
     },
 };
 

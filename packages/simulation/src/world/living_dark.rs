@@ -185,8 +185,9 @@ impl WorldState {
             (_, true) => crate::depth_progression::LAMP_II_LIGHT_SCALE,
             (false, false) => 1.0,
         };
-        // The Headlamp line widens whatever beam the rig has a little per tier (Wave 8).
-        if self.progression_rules().is_descent() {
+        // The Headlamp line widens the beam a little per tier (Wave 8), but no Headlamp tier
+        // lights the Glow Sea: only Lamp II does.
+        if self.progression_rules().is_descent() && !(glow_sea && !lamp_two) {
             beam * crate::depth_progression::headlamp_light_scale(player.hazard_gear.headlamp)
         } else {
             beam
