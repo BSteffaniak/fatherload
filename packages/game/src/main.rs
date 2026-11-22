@@ -26,8 +26,8 @@ mod shell;
 #[cfg(not(target_os = "emscripten"))]
 mod story_report;
 mod touch_screen;
-#[cfg(not(target_os = "emscripten"))]
 mod view_frame;
+#[cfg(not(target_os = "emscripten"))]
 mod village_report;
 mod weapon_aim;
 mod window;
