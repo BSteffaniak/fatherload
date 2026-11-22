@@ -2165,13 +2165,13 @@ pub struct ShellState {
     pub fullscreen: bool,
     /// Windowed size/maximized state, kept current by the desktop app and persisted with settings.
     pub window: save::WindowSettings,
-    /// Touch control preferences (Options; persisted with settings).
     /// The field preset the test-mode "Place Field Zone" entry places next (F9 dev zones).
     pub next_field_preset: usize,
     /// Screen effects intensity (F9 accessibility, Options).
     pub effects: crate::screen_fx::EffectsIntensity,
     /// Craft rotation assists switched on (F9, Options; they work once fitted).
     pub assists: fatherload_simulation::attitude::AttitudeAssists,
+    /// Touch control preferences (Options; persisted with settings).
     pub touch: crate::input::touch::TouchSettings,
     /// A touch screen has driven the first seat this run (Options then shows its rows).
     pub touch_seen: bool,

@@ -284,6 +284,7 @@ mod tests {
         let mut previous = seat.update(&FieldSample::NEUTRAL, EffectsIntensity::Full, DT);
         let mut reversals = 0;
         let mut last_direction = 0.0_f32;
+        let (mut low, mut high) = (f32::MAX, f32::MIN);
         for frame in 0..600 {
             let field = if frame % 2 == 0 { &dark } else { &bright };
             let fx = seat.update(field, EffectsIntensity::Full, DT);
@@ -304,11 +305,18 @@ mod tests {
                 }
                 last_direction = direction;
             }
+            if frame >= 300 {
+                // Settled into its wiggle: track the light's swing.
+                low = low.min(fx.light);
+                high = high.max(fx.light);
+            }
             previous = fx;
         }
-        // Each frame's swing is tiny, so even if the eased value wiggles it carries almost
-        // no contrast: its total excursion stays far below a flash.
-        let _ = reversals;
+        // Each frame's swing is tiny, so even though the eased value wiggles with the field
+        // (it reverses direction every frame) it carries almost no contrast: a flash is a
+        // swing of a tenth of full brightness or more, and this stays well under that.
+        assert!(reversals > 100, "the field really strobed: {reversals}");
+        assert!(high - low < 0.05, "light swings {low}..{high}");
         assert!(previous.light > MIN_LIGHT);
     }
 
