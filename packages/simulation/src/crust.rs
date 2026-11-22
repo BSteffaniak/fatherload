@@ -987,7 +987,11 @@ mod tests {
         assert_eq!(stratum_heat_units(Stratum::SlateShelves), 0);
         // One radiator tier covers the Basalt Columns.
         assert!(stratum_heat_units(Stratum::BasaltColumns) <= radiator_cooling(2));
-        for descent in Descent::ALL.into_iter().skip(1) {
+        // Wave 9: Descents IV-VI have their own climate, fair by its own rule (the cap plus
+        // two Heat Shielding tiers: `depth_progression`'s climate test).
+        for descent in Descent::ALL.into_iter().skip(1).filter(|descent| {
+            crate::depth_progression::deep_climate(descent.first_stratum()).is_none()
+        }) {
             let index = u8::try_from(descent.index()).unwrap_or(7);
             let first = descent.first_stratum();
             assert!(
