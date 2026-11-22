@@ -1556,3 +1556,36 @@ fn world_pilots_on_the_moon_and_in_the_high_sky_predict_and_converge() {
         "corrections stay finite: {summary:?}"
     );
 }
+
+#[test]
+fn world_rigs_rotate_in_fields_predict_and_converge() {
+    // F9: a gravity shear over the bots' hop (sideways gravity, unlimited rotation) and the
+    // scripted lean pulses: orientation and spin are predicted with the pose, the field path
+    // runs on host and clients alike, and everyone converges.
+    use fatherload_simulation::field::{FieldPreset, FieldZone};
+
+    let mut harness = harness(60, 2, LinkConditions::new(60, 10, 2.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let _ = world.place_field_zone(FieldZone::of_preset(
+        FieldPreset::GravityShear,
+        (48, -2),
+        (48, 4),
+    ));
+    harness.host.new_epoch(world);
+    let mut leaned = 0.0_f32;
+    for _ in 0..24 {
+        harness.run_for(Duration::from_secs(1));
+        for player in harness.world().players().values() {
+            leaned = leaned.max(player.attitude.orientation.abs());
+        }
+    }
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+    }
+    assert!(leaned > 0.05, "the rigs leaned: {leaned}");
+}

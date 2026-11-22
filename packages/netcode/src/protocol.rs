@@ -138,6 +138,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * W7 strata (F8): `GeneratorVersion::V11` (the Deep Descent) in the session settings, and
 ///   the terrain keyframe's streamed edits as one packed byte stream
 ///   (`TerrainSnapshot::packed`, runs of equal tiles) instead of nested lists of tile codes.
+/// * F9 field effects and craft rotation: `ControlState`'s rotation thrusters and assist
+///   bits, `Player::attitude` / `PlayerTickState::attitude` (orientation and spin, per tick),
+///   `HazardGear::attitude` (tilt rating, gyro, horizon hold) in loadouts, the `FieldZones`
+///   world field and `SectionKey::Fields` section, and `TestModeAction::{PlaceFieldZone,
+///   ClearFieldZones}`.
 pub const PROTOCOL_VERSION: u8 = 15;
 
 /// One client input frame: the controls and actions for exactly one tick.

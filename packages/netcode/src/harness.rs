@@ -299,6 +299,10 @@ impl HarnessSim for WorldState {
             30..330 => ControlState::new(0.0, false, true),
             // A short symmetric hop keeps each bot over its own spawn column; rivets fly up
             // and to the side while it hovers.
+            // F9 craft rotation: a symmetric lean right, left and back in the hop (predicted
+            // and reconciled like the pose; the rig settles level when it lands).
+            340..350 | 370..380 => ControlState::new(0.0, true, false).with_rotation(1.0),
+            350..370 => ControlState::new(0.0, true, false).with_rotation(-1.0),
             330..560 => ControlState::new(0.0, true, false),
             600..680 => ControlState::new(0.0, true, false).with_weapon(
                 fatherload_simulation::WeaponControl {
