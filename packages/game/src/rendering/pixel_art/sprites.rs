@@ -4,6 +4,7 @@
 
 pub mod crypt;
 pub mod deep_gear;
+pub mod drowned;
 pub mod enemies;
 pub mod explosives;
 pub mod icons;
@@ -490,6 +491,19 @@ pub const ALL: &[&SpriteDef] = &[
     &living::SHOT_SPORE,
     &living::SHOT_THORN,
     &living::SHOT_MIND_SPORE,
+    // The Drowned and Frozen (Wave 9).
+    &drowned::REEF_SHARK,
+    &drowned::INK_SQUID,
+    &drowned::EEL_DRAGON,
+    &drowned::FROST_MITE,
+    &drowned::TUSK_SEAL,
+    &drowned::SCALD_BEETLE,
+    &drowned::SINTER_SNAIL,
+    &drowned::SPINEPUFF,
+    &drowned::LURE_ANGLER,
+    &drowned::GULPER_EEL,
+    &drowned::LEVIATHAN,
+    &drowned::SHOT_PRESSURE_BUBBLE,
 ];
 
 #[cfg(test)]

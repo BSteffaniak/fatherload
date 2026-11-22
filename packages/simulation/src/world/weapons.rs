@@ -43,8 +43,9 @@ use crate::{
 
 use super::{WorldState, bombs::Blast};
 
-/// Largest hit radius any damageable entity may have (spatial queries look this far).
-pub const MAX_HIT_RADIUS: f32 = TILE_SIZE;
+/// Largest hit radius any damageable entity may have (spatial queries look this far; the
+/// Leviathan's great body is the largest, Wave 9).
+pub const MAX_HIT_RADIUS: f32 = TILE_SIZE * 1.5;
 /// How close a shot must pass a live charge to set it off, in pixels.
 const CHARGE_HIT_RADIUS: f32 = 9.0;
 /// How close a harpoon must pass a drop to spear it, in pixels.

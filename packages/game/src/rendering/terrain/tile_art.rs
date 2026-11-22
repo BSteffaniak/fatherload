@@ -42,6 +42,7 @@ mod built_art;
 mod cave_art;
 mod crust_art;
 mod deep_art;
+mod drowned_art;
 mod living_art;
 mod lunar_art;
 mod poi_art;
@@ -815,6 +816,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             // The Living Dark's open ground shows its stratum's own wall (Wave 8).
             if let Some(stratum) = living_art::living_stratum(terrain, position) {
                 living_art::paint_back(&mut canvas, stratum, up, left, right);
+            } else if let Some(stratum) = drowned_art::drowned_stratum(terrain, position) {
+                // So does the Drowned and Frozen's (Wave 9).
+                drowned_art::paint_back(&mut canvas, stratum, up, left, right);
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }

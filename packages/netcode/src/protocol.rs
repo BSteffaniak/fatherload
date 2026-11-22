@@ -180,7 +180,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   Fathers' expedition logs read, sealed canisters, echoes heard, anomaly rooms entered), the
 ///   story events 490-493 (`ExpeditionLogFound`, `ExpeditionLogSealed`, `ExpeditionEcho`,
 ///   `AnomalyEntered`), the story `Milestone`s and their `PaintColor` rewards.
-pub const PROTOCOL_VERSION: u8 = 16;
+/// * The Drowned and Frozen (Descent IV, Wave 9): thirteen appended `CaveTile`s, eleven
+///   appended `EnemyKind`s and `ShotKind::PressureBubble`, `Player::water` /
+///   `PlayerTickState::water` (ballast and hull frost, per tick), the `DrownedState` world
+///   field and `SectionKey::Drowned` section, `Culture::Merrow`, five appended `Furniture`
+///   pieces and the Drowned events 520-539 (`GameplayEventKind::Drowned`).
+pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

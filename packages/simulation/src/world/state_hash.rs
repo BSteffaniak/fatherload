@@ -218,6 +218,11 @@ impl WorldState {
         if !self.expedition.is_empty() {
             hash.write_serialized(&self.expedition);
         }
+        // Absent until something happens in the Drowned and Frozen (Wave 9), so older worlds
+        // keep their hashes.
+        if !self.drowned.is_empty() {
+            hash.write_serialized(&self.drowned);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

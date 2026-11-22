@@ -283,6 +283,13 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::GhostVoice => Patch::GhostVoice,
         SoundCue::LogCanister => Patch::LogCanister,
         SoundCue::AnomalyHum => Patch::AnomalyHum,
+        SoundCue::SonarPing => Patch::SonarPing,
+        SoundCue::GeyserBlast => Patch::GeyserBlast,
+        SoundCue::IceCrack => Patch::IceCrack,
+        SoundCue::HullGroan => Patch::HullGroan,
+        SoundCue::ClamSnap => Patch::ClamSnap,
+        SoundCue::LeviathanRoar => Patch::LeviathanRoar,
+        SoundCue::MerrowChime => Patch::MerrowChime,
     }
 }
 
@@ -353,6 +360,31 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::CryptArrow => SoundCue::ArrowTwang,
         ShotKind::Boulder => SoundCue::GateRumble,
         ShotKind::Spore | ShotKind::MindSpore => SoundCue::SporePuff,
+        ShotKind::PressureBubble => SoundCue::FluidRush,
+    }
+}
+
+/// The sound of a Drowned and Frozen event (Wave 9; exhaustive: a new event decides how it
+/// sounds).
+#[must_use]
+pub const fn drowned_cue(what: fatherload_simulation::drowned::DrownedEvent) -> SoundCue {
+    use fatherload_simulation::drowned::DrownedEvent as E;
+    match what {
+        E::SonarPing => SoundCue::SonarPing,
+        E::FrostWarning | E::TunnelRefroze => SoundCue::IceCrack,
+        E::GeyserErupted | E::GeyserScalded => SoundCue::GeyserBlast,
+        E::GeyserLaunched => SoundCue::SteamHiss,
+        E::ClamPearl => SoundCue::ArtifactPickup,
+        E::ClamSnapped => SoundCue::ClamSnap,
+        E::PressureWarning => SoundCue::HullGroan,
+        E::InkCloud => SoundCue::FleshSquelch,
+        E::EelDragonAwoke | E::LeviathanAwoke | E::LeviathanPhase | E::LeviathanCharge => {
+            SoundCue::LeviathanRoar
+        }
+        E::EelDragonPulse => SoundCue::MachineZap,
+        E::EelDragonDefeated => SoundCue::CreatureDeath,
+        E::LeviathanDefeated | E::GateRewards => SoundCue::DeepClaimFanfare,
+        E::LoreFound | E::CityReached => SoundCue::MerrowChime,
     }
 }
 
@@ -868,6 +900,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
             }
         }
         GameplayEventKind::AnomalyEntered { .. } => Some(SoundCue::AnomalyHum),
+        // The Drowned and Frozen (Wave 9).
+        GameplayEventKind::Drowned { what, .. } => Some(drowned_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1205,7 +1239,8 @@ mod tests {
             | GameplayEventKind::ExpeditionLogFound { .. }
             | GameplayEventKind::ExpeditionLogSealed { .. }
             | GameplayEventKind::ExpeditionEcho { .. }
-            | GameplayEventKind::AnomalyEntered { .. } => {}
+            | GameplayEventKind::AnomalyEntered { .. }
+            | GameplayEventKind::Drowned { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2261,6 +2296,13 @@ mod tests {
             SoundCue::GhostVoice,
             SoundCue::LogCanister,
             SoundCue::AnomalyHum,
+            SoundCue::SonarPing,
+            SoundCue::GeyserBlast,
+            SoundCue::IceCrack,
+            SoundCue::HullGroan,
+            SoundCue::ClamSnap,
+            SoundCue::LeviathanRoar,
+            SoundCue::MerrowChime,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

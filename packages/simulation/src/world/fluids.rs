@@ -246,6 +246,17 @@ impl WorldState {
         let mut gear = SubmersionGear::default();
         if let Some(player) = self.players.get(&player_id) {
             gear.pressure_rows += 8 * i32::from(player.hazard_gear.pressure_bracing);
+            // The Pressure Rating's seals and the Pressure Hull take the water's weight too on
+            // Descent worlds (Wave 9: the Drowned and Frozen's deep basins).
+            if self.progression_rules().is_descent() {
+                gear.pressure_rows += 12 * i32::from(player.hazard_gear.pressure_rating);
+                if player
+                    .hazard_gear
+                    .has_system(crate::depth_progression::RigSystem::PressureHull)
+                {
+                    gear.pressure_rows += 16;
+                }
+            }
             // The Bio-Filter (the Mycelial Mind's reward, Wave 8) shrugs off acid.
             if player
                 .hazard_gear

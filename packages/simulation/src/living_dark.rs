@@ -431,6 +431,8 @@ pub enum Regrowth {
     Root,
     /// Flesh (the Flesh Caverns).
     Flesh,
+    /// Thin rime over a tunnel through the Brine Glaciers (Wave 9, [`crate::drowned`]).
+    Rime,
 }
 
 /// Host bookkeeping of the Living Dark (see the module docs): saved, never hashed or

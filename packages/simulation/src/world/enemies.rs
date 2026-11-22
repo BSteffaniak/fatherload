@@ -67,6 +67,7 @@ use crate::{
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
 mod crypt;
+mod drowned;
 mod living;
 mod sky;
 mod tomb;
@@ -675,7 +676,7 @@ impl WorldState {
 
     /// Whether the ground around `tile` suits an enemy of `kind`.
     fn habitat_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
-        if !self.living_spawn_allowed(kind) {
+        if !self.living_spawn_allowed(kind) || !Self::drowned_spawn_allowed(kind) {
             return false;
         }
         let spec = kind.stats();
@@ -711,7 +712,9 @@ impl WorldState {
                             })
             }
             Locomotion::Flying => {
-                self.air(tile) && self.open_area(tile) >= if big { 20 } else { 12 }
+                (self.air(tile) && self.open_area(tile) >= if big { 20 } else { 12 })
+                    // The Drowned and Frozen's sea creatures appear swimming (Wave 9).
+                    || self.drowned_swim_site(kind, tile)
             }
             Locomotion::Walking | Locomotion::Stationary => {
                 self.air(tile)
@@ -1179,6 +1182,10 @@ impl WorldState {
         self.free_from_rock(&mut body, state.kind);
         let intent = self.behave(id, &mut body, &mut state, now, output);
         self.move_enemy(id, &mut body, &mut state, intent, now);
+        if state.kind.is_drowned() {
+            // Seals slide, beetles ride geysers, snails seal tunnels (Wave 9).
+            self.drowned_after_move(id, &mut body, &mut state, now);
+        }
         self.keep_off_bodies(id, &mut body, &state);
         self.contact_attack(&mut body, &mut state, now, output);
         if body != start_body || state != start_state {
@@ -1237,6 +1244,8 @@ impl WorldState {
         // The Living Dark (Wave 8): factions, harmless kinds and the Mind's thralls.
         let noticed = self
             .living_notice(body, state)
+            // The Drowned and Frozen (Wave 9): the Leviathan knows its arena.
+            .or_else(|| self.drowned_notice(body, state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1360,6 +1369,10 @@ impl WorldState {
                 // Side-view tomb guardians have patterns of their own (WP-TOMBS T28).
                 if tomb::is_tomb_guardian(state.kind) {
                     return self.guardian_chase(id, body, state, (tx, ty), distance, now, output);
+                }
+                // The Drowned and Frozen (Wave 9): reef sharks circle between dashes.
+                if let Some(intent) = self.drowned_chase(state, (tx, ty), ready, now) {
+                    return intent;
                 }
                 match spec.attack {
                     AttackStyle::Contact => {
@@ -2078,6 +2091,10 @@ impl WorldState {
             if landed && state.kind == EnemyKind::GlowGrub {
                 self.glow_grub_bite(player_id);
             }
+            if landed && state.kind.is_drowned() {
+                // Frost, ink and gulps (Wave 9, the Drowned and Frozen).
+                self.drowned_bite(body, state, player_id, now, output);
+            }
             (landed, at)
         } else if let Some((pilot, middle)) = self
             .pilots_near(body.x, body.y, spec.radius + PILOT_HALF_WIDTH + 14.0)
@@ -2433,7 +2450,9 @@ impl WorldState {
         }
         let now = self.simulation_tick.next();
         let spec = state.kind.stats();
-        let mut amount = (damage.amount * state.kind.resistance(damage.kind)).max(0.0);
+        let mut amount = (damage.amount * state.kind.resistance(damage.kind)).max(0.0)
+            // The Leviathan's open maw takes double (Wave 9).
+            * self.drowned_damage_factor(state.kind);
         let mut stunned = false;
         if damage.kind == DamageKind::Emp && state.kind.is_machine() {
             stunned = true;
@@ -2542,6 +2561,11 @@ impl WorldState {
             // Errands, the Swarm, the Court and the Mind's fight (Wave 8).
             let tile = self.frame().tile_at(body.x, body.y);
             self.living_dark_kill(id.get(), state.kind, tile, state.last_attacker, output);
+        }
+        if state.kind.is_drowned() {
+            // The eel-dragon's bounty and the Leviathan's gate (Wave 9).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.drowned_kill(state.kind, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2745,5 +2769,17 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::SwarmMatriarch
         | EnemyKind::MycelialMind
         | EnemyKind::MindNode => false,
+        // The Drowned and Frozen (Wave 9): the sea's swimmers in watery caves, mites with the
+        // swarmers, the walkers in roomy caves; the bosses live in their set pieces.
+        EnemyKind::ReefShark
+        | EnemyKind::InkSquid
+        | EnemyKind::Spinepuff
+        | EnemyKind::LureAngler
+        | EnemyKind::GulperEel => tags.aquatic || tags.swarmers,
+        EnemyKind::FrostMite => tags.swarmers,
+        EnemyKind::TuskSeal | EnemyKind::ScaldBeetle | EnemyKind::SinterSnail => {
+            tags.nests || tags.burrowers
+        }
+        EnemyKind::EelDragon | EnemyKind::Leviathan => false,
     }
 }

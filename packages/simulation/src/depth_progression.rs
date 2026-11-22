@@ -469,6 +469,8 @@ impl RigSystem {
             // The Star Core's Pressure Hull (Wave 8 integration: the Old Deep's gate).
             Self::PressureHull => Some(crate::descent::DescentBoss::StarCore),
             Self::BioFilter | Self::LampII => Some(crate::descent::DescentBoss::MycelialMind),
+            // Wave 9: the Leviathan's Sonar Suite and Cryo Hull (Descent IV's gate).
+            Self::SonarSuite | Self::CryoHull => Some(crate::descent::DescentBoss::Leviathan),
             _ => None,
         }
     }

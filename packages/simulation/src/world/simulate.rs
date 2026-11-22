@@ -128,6 +128,13 @@ impl WorldState {
                     // Mud and slick slate under the rig, then a rail to hook onto (Wave 8).
                     if let Some(before) = velocity_before {
                         self.apply_ground_grip(player_id, before, controls.horizontal());
+                        // Ice and hull frost (Wave 9, the Drowned and Frozen).
+                        self.apply_drowned_drive(
+                            player_id,
+                            before,
+                            controls.horizontal(),
+                            controls.thrust,
+                        );
                     }
                     self.try_board_cart(
                         player_id,
@@ -151,6 +158,10 @@ impl WorldState {
                         (controls.horizontal(), controls.thrust, controls.drill_down),
                         &mut output,
                     );
+                    if !riding {
+                        // Ballast and currents (Wave 9, the Drowned and Frozen).
+                        self.apply_submarine(player_id, controls.thrust, controls.drill_down);
+                    }
                 }
                 if let Some(before) = position_before {
                     // Sky bands, updrafts and icing (F6, V8 skies).
@@ -235,6 +246,10 @@ impl WorldState {
                     // A lunar uplink's beam (WP-MOON).
                     if let Some(event) = self.uplink_event(player_id, &action.command) {
                         output.push_event(event);
+                    }
+                    // Under water the scanner is a sonar (Wave 9, the Drowned and Frozen).
+                    if matches!(action.command, crate::PlayerCommand::UseScanner) {
+                        self.drowned_scanner(player_id, &mut output);
                     }
                 }
             }
@@ -531,6 +546,9 @@ impl WorldState {
         self.advance_entities(EntityPhase::Late, next_tick, &mut output);
         // The Living Dark (Wave 8): regrowth, spores, tides, the Hive and the Mind.
         self.advance_living_dark(next_tick, &mut output);
+        // The Drowned and Frozen (Wave 9): refreezing ice, clams, frost, pressure, geysers,
+        // sonar, lore, the eel-dragon and the Leviathan.
+        self.advance_drowned(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

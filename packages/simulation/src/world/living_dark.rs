@@ -834,6 +834,7 @@ impl WorldState {
             .collect();
         let mut roots: Option<TilePosition> = None;
         let mut flesh: Option<TilePosition> = None;
+        let mut rime: Option<TilePosition> = None;
         for ((tick, position), kind) in due {
             self.living_schedule.due.remove(&(tick, position));
             self.living_schedule.waiting.remove(&position);
@@ -857,11 +858,14 @@ impl WorldState {
             let tile = match kind {
                 Regrowth::Root => CaveTile::Root,
                 Regrowth::Flesh => CaveTile::Flesh,
+                // The Brine Glaciers' tunnels freeze over (Wave 9).
+                Regrowth::Rime => CaveTile::Rime,
             };
             if self.terrain.set_kind(position, TileKind::Cave(tile)) {
                 match kind {
                     Regrowth::Root => roots = roots.or(Some(position)),
                     Regrowth::Flesh => flesh = flesh.or(Some(position)),
+                    Regrowth::Rime => rime = rime.or(Some(position)),
                 }
             }
         }
@@ -870,6 +874,13 @@ impl WorldState {
         }
         if let Some(at) = flesh {
             output.push_event(living_dark_event(LivingDarkEvent::FleshHealed, None, at));
+        }
+        if let Some(at) = rime {
+            output.push_event(super::drowned::drowned_event(
+                crate::drowned::DrownedEvent::TunnelRefroze,
+                None,
+                at,
+            ));
         }
     }
 

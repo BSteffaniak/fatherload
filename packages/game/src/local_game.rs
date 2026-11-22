@@ -543,6 +543,7 @@ impl LocalGame {
         self.announce_logistics(&players);
         self.announce_old_deep(&players);
         self.announce_living_dark(&players);
+        self.announce_drowned(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1226,6 +1227,89 @@ impl LocalGame {
         }
         for (seat, message) in messages {
             self.shell.seat_mut(seat).message = message;
+        }
+    }
+
+    /// The Drowned and Frozen's news for each local seat (Wave 9): the bosses' turns, the
+    /// gate's rewards, warnings for its own rig (frost, pressure), and a story card for each
+    /// story beat the crew finds (the beat of the stratum it was found in).
+    fn announce_drowned(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::drowned::{DrownedEvent as E, DrownedLore};
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(usize, DrownedLore)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Drowned {
+                what,
+                player_id,
+                x,
+                y,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            if what == E::LoreFound {
+                let stratum = world
+                    .terrain()
+                    .stratum_at(fatherload_simulation::terrain::TilePosition { x, y });
+                if let Some(lore) = DrownedLore::ALL
+                    .into_iter()
+                    .find(|lore| lore.stratum() == stratum)
+                {
+                    for seat in 0..players.len() {
+                        cards.push((seat, lore));
+                    }
+                }
+                continue;
+            }
+            let text = match what {
+                E::LeviathanAwoke => {
+                    "The Leviathan rises from the trench! Watch for its roar: then get out of its \
+                     line."
+                }
+                E::LeviathanCharge => "It roars: a charge is coming!",
+                E::LeviathanPhase => match world.drowned().leviathan.phase {
+                    fatherload_simulation::drowned::LeviathanPhase::Maelstrom => {
+                        "The Leviathan sinks and opens its maw: the maelstrom pulls. Strike the maw!"
+                    }
+                    fatherload_simulation::drowned::LeviathanPhase::Thrashing => {
+                        "The Leviathan thrashes! The roof shakes loose and sharks come."
+                    }
+                    fatherload_simulation::drowned::LeviathanPhase::Circling => continue,
+                },
+                E::GateRewards => {
+                    "The Leviathan falls. Sonar Suite and Cryo Hull fitted: the way to the Hollow \
+                     World is open."
+                }
+                E::EelDragonAwoke => "The eel-dragon uncoils in its grotto!",
+                E::EelDragonPulse => "The eel-dragon crackles: a pulse is coming. Get clear!",
+                E::EelDragonDefeated => "The eel-dragon is dead. Its bounty is yours.",
+                E::FrostWarning => "Hull frost is biting: warm the rig at a thermal vent.",
+                E::PressureWarning => "The seals are failing under the pressure: rise!",
+                E::ClamPearl => "An Abyss Pearl!",
+                E::ClamSnapped => "The clam snapped shut on the drill.",
+                E::CityReached => "Merrow City: the fish-folk welcome you into their bubble.",
+                _ => continue,
+            };
+            for (seat, player) in players.iter().enumerate() {
+                if player_id.is_none_or(|owner| owner == *player) {
+                    messages.push((seat, text.to_owned()));
+                }
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (seat, lore) in cards {
+            self.shell.story_moment(
+                seat,
+                crate::shell::StoryMomentKind::DeepLore,
+                lore.title(),
+                lore.text(),
+            );
         }
     }
 

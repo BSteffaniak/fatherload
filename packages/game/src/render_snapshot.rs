@@ -239,6 +239,13 @@ pub struct PlayerPresentation {
     pub lamp_scale: f32,
     /// Whether the rig rides a mine cart (Wave 8, the Crust's old works).
     pub riding_cart: bool,
+    /// Ballast trim and hull frost (Wave 9, the Drowned and Frozen).
+    pub water: fatherload_simulation::drowned::RigWater,
+    /// The Pearl Abyss's pressure on the rig and what its seals hold, per mille (`None`
+    /// outside the abyss).
+    pub pressure: Option<(u16, u16)>,
+    /// Whether the rig is under water as a submarine.
+    pub submerged: bool,
 }
 
 /// Gravity (relative to the ground's) under which a pilot is drawn floating and loping.
@@ -376,6 +383,16 @@ impl PlayerPresentation {
             // without Lamp II (Wave 8).
             lamp_scale: world.lamp_scale_for(player_id),
             riding_cart: player.cart.is_some(),
+            water: player.water,
+            pressure: world.abyss_pressure_for(player_id),
+            submerged: world
+                .submersion(
+                    player.x,
+                    player.y,
+                    fatherload_simulation::world::AUTHORITATIVE_PLAYER_RADIUS,
+                )
+                .share
+                >= fatherload_simulation::fluid::SUBMARINE_SHARE,
         }
     }
 
@@ -782,6 +799,20 @@ pub struct RenderSnapshot<'w> {
     pub old_deep: &'w fatherload_simulation::old_deep::OldDeep,
     /// Where Descent II's set pieces stand in this world.
     pub deep_sites: DeepSites,
+    /// The Drowned and Frozen's live state (Wave 9): sonar pings, the eel-dragon, the
+    /// Leviathan's fight.
+    pub drowned: &'w fatherload_simulation::drowned::DrownedState,
+    /// Where Descent IV's set pieces stand in this world.
+    pub drowned_sites: DrownedSites,
+}
+
+/// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
+#[derive(Clone, Debug, Default)]
+pub struct DrownedSites {
+    pub arena: Option<fatherload_simulation::worldgen::TileRect>,
+    pub old_faithful: Option<fatherload_simulation::worldgen::TileRect>,
+    pub city: Option<fatherload_simulation::worldgen::descent::drowned::MerrowSite>,
+    pub grotto: Option<fatherload_simulation::worldgen::TileRect>,
 }
 
 /// Where Descent II's set pieces stand (Wave 8; `None` in worlds without them).
@@ -904,6 +935,13 @@ impl<'w> RenderSnapshot<'w> {
             deep_sites: DeepSites {
                 cathedral: world.cathedral_site(),
                 arena: world.star_core_arena(),
+            },
+            drowned: world.drowned(),
+            drowned_sites: DrownedSites {
+                arena: world.leviathan_arena(),
+                old_faithful: world.old_faithful(),
+                city: world.merrow_city(),
+                grotto: world.eel_grotto(),
             },
             expedition: world.expedition(),
             expedition_lead: crate::shell::expedition::next_lead(world),
@@ -1111,6 +1149,8 @@ fn view_snapshot(
         player_id,
         world.view_fields_for(player_id, focus_x, focus_y),
     );
+    // The abyss darkens and greys with its pressure, frost rimes the view (Wave 9).
+    fields = crate::rendering::drowned_hud::drowned_screen(world, player_id, fields);
     if world.glow_light_at(focus_x, focus_y).is_some() {
         // The Glow Sea's dark is drawn in the world, cut back by its living lights (Wave 8):
         // the post-process does not darken the screen again round a lamp of its own.

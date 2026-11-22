@@ -356,6 +356,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::ExpeditionLogSealed { player_id, .. } => (491, Some(player_id)),
         GameplayEventKind::ExpeditionEcho { player_id, .. } => (492, Some(player_id)),
         GameplayEventKind::AnomalyEntered { player_id, .. } => (493, Some(player_id)),
+        // The Drowned and Frozen (wave 9, Descent IV): 520-539.
+        GameplayEventKind::Drowned {
+            what, player_id, ..
+        } => (520 + what.code() as u32, player_id),
     }
 }
 

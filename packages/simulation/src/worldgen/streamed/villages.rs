@@ -124,6 +124,55 @@ pub fn gravel_hollow_hall(settings: &WorldSettings) -> Option<(UndergroundSite, 
     ))
 }
 
+/// Merrow City (Wave 9): a Deep Descent world's fish-folk settlement beside the Descent IV
+/// outpost, under the city's bubble ([`crate::worldgen::descent::drowned::merrow_city`]). Its
+/// hall and centre column; `None` before V11.
+#[must_use]
+pub fn merrow_hall(settings: &WorldSettings) -> Option<(UndergroundSite, i32)> {
+    if !settings.generator.has_villages() {
+        return None;
+    }
+    let city = crate::worldgen::descent::drowned::merrow_city(settings)?;
+    Some((
+        UndergroundSite {
+            site: crate::drowned::MERROW_SITE,
+            center: city.hall_center,
+            top: city.hall_top,
+            slide: 1,
+        },
+        city.hall_center,
+    ))
+}
+
+/// Merrow City's village (Wave 9), built on first use, named for the place.
+fn merrow_village(settings: &WorldSettings) -> Option<Arc<Village>> {
+    let (site, center) = merrow_hall(settings)?;
+    let built = VILLAGES.get_or_compute((*settings, crate::drowned::MERROW_SITE, 1), || {
+        let mut village = layout::build(settings, &SiteSpec::Underground { site, center });
+        crate::drowned::MERROW_CITY_NAME.clone_into(&mut village.name);
+        crate::drowned::MERROW_CITY_NAME.clone_into(&mut village.population.village_name);
+        Some(Arc::new(village))
+    });
+    built.as_ref().clone()
+}
+
+/// The special halls of a Deep Descent world (Gravel Hollow, Merrow City): each hall, its
+/// centre column and its village.
+fn special_halls(settings: &WorldSettings) -> impl Iterator<Item = (UndergroundSite, i32)> {
+    gravel_hollow_hall(settings)
+        .into_iter()
+        .chain(merrow_hall(settings))
+}
+
+/// The village of a special hall's site.
+fn special_village(settings: &WorldSettings, site: i32) -> Option<Arc<Village>> {
+    if site == 0 {
+        gravel_hollow(settings)
+    } else {
+        merrow_village(settings)
+    }
+}
+
 /// Gravel Hollow's village (Wave 8), built on first use, named for the place.
 fn gravel_hollow(settings: &WorldSettings) -> Option<Arc<Village>> {
     let (site, center) = gravel_hollow_hall(settings)?;
@@ -181,6 +230,16 @@ pub fn keeps_caves_out(ctx: &Ctx, x: i32, y: i32) -> bool {
         && hall_rect(center, hall.top)
             .expanded(CAVE_KEEP_OUT)
             .contains(TilePosition { x, y })
+    {
+        return true;
+    }
+    // Merrow City's bubble and the sea round it (Wave 9): no cave pierces the glass.
+    if ctx.descent.is_some()
+        && crate::worldgen::descent::drowned::merrow_city(&ctx.settings).is_some_and(|city| {
+            city.bounds()
+                .expanded(CAVE_KEEP_OUT)
+                .contains(TilePosition { x, y })
+        })
     {
         return true;
     }
@@ -243,6 +302,9 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
     if site == 0 && underground {
         return gravel_hollow(settings);
     }
+    if site == crate::drowned::MERROW_SITE && underground {
+        return merrow_village(settings);
+    }
     let geometry = geometry(&ctx, site)?;
     if underground && geometry.underground.is_none() {
         return None;
@@ -266,10 +328,10 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
 pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<Arc<Village>> {
     let ctx = ctx(settings);
     let mut found = Vec::new();
-    if let Some((_, center)) = gravel_hollow_hall(settings)
-        && (first..=last).contains(&center)
-    {
-        found.extend(gravel_hollow(settings));
+    for (hall, center) in special_halls(settings) {
+        if (first..=last).contains(&center) {
+            found.extend(special_village(settings, hall.site));
+        }
     }
     for site in sites_reaching(first, last) {
         let Some(geometry) = geometry(&ctx, site) else {
@@ -306,10 +368,10 @@ pub fn village_containing(
         return sky_town(settings, site.block.0, site.block.1);
     }
     let ctx = ctx(settings);
-    if let Some((hall, center)) = gravel_hollow_hall(settings)
-        && hall_rect(center, hall.top).contains(position)
-    {
-        return gravel_hollow(settings);
+    for (hall, center) in special_halls(settings) {
+        if hall_rect(center, hall.top).contains(position) {
+            return special_village(settings, hall.site);
+        }
     }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, 0)
         && let Some(geometry) = geometry(&ctx, site.site)
@@ -354,11 +416,11 @@ pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin:
         return true;
     }
     let ctx = ctx(settings);
-    if let Some((hall, center)) = gravel_hollow_hall(settings)
-        && hall_rect(center, hall.top)
+    if special_halls(settings).any(|(hall, center)| {
+        hall_rect(center, hall.top)
             .expanded(margin)
             .contains(position)
-    {
+    }) {
         return true;
     }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, margin)
@@ -387,10 +449,10 @@ pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
         out.push(surface_feature(ctx, &geometry));
         out.extend(underground_feature(ctx, &geometry));
     }
-    if let Some(hall) = gravel_hollow_hall(&ctx.settings)
-        && hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH))
-    {
-        out.push(hall_feature(ctx, hall));
+    for hall in special_halls(&ctx.settings) {
+        if hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH)) {
+            out.push(hall_feature(ctx, hall));
+        }
     }
     for site in crate::worldgen::sky::sky_towns_touching(&ctx.settings, rect) {
         out.push(sky_town_feature(&site));
@@ -482,6 +544,9 @@ pub fn feature(ctx: &Ctx, site: i32, ry: i32) -> Option<WorldFeature> {
     if site == 0 && ry == 1 {
         return gravel_hollow_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
     }
+    if site == crate::drowned::MERROW_SITE && ry == 1 {
+        return merrow_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
+    }
     let geometry = geometry(ctx, site)?;
     match ry {
         0 => Some(surface_feature(ctx, &geometry)),
@@ -502,6 +567,15 @@ pub fn stamps_touching(ctx: &Ctx, rect: &TileRect) -> Vec<Arc<VillageStamp>> {
         found.push(STAMPS.get_or_compute((ctx.settings, 0, 1), || {
             hall_stamp(&ctx.settings, hall, center)
         }));
+    }
+    if let Some((hall, center)) = merrow_hall(&ctx.settings)
+        && hall_rect(center, hall.top).expanded(7).intersects(rect)
+    {
+        found.push(
+            STAMPS.get_or_compute((ctx.settings, crate::drowned::MERROW_SITE, 1), || {
+                merrow_stamp(&ctx.settings, hall, center)
+            }),
+        );
     }
     for site in sites_reaching(rect.min.x, rect.max.x) {
         let Some(geometry) = geometry(ctx, site) else {
@@ -619,6 +693,28 @@ fn hall_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -> V
             .push((x, hall.floor_row() + 1, TileKind::Foundation));
     }
     if let Some(found) = gravel_hollow(settings) {
+        lot_foundations(settings.seed, &found, &mut out.cells);
+    }
+    out.bounds = Some(air.expanded(6));
+    out
+}
+
+/// Merrow City's hall stamp (Wave 9): its hall carved out over a reef-stone floor and its
+/// buildings' lots (the city's bubble, glass and sea are the Drowned and Frozen's pass).
+fn merrow_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -> VillageStamp {
+    let mut out = VillageStamp::default();
+    let air = hall_rect(center, hall.top);
+    out.clear.push(air.expanded(3));
+    for y in air.min.y..hall.floor_row() {
+        for x in air.min.x..=air.max.x {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    for x in air.min.x..=air.max.x {
+        out.cells
+            .push((x, hall.floor_row() + 1, TileKind::Foundation));
+    }
+    if let Some(found) = merrow_village(settings) {
         lot_foundations(settings.seed, &found, &mut out.cells);
     }
     out.bounds = Some(air.expanded(6));

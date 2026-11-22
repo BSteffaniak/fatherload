@@ -1206,6 +1206,15 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The Drowned and Frozen (Wave 9, Descent IV; netcode codes 520-539).
+    /// Something of the Drowned and Frozen happened at tile `(x, y)`; `player_id` is whose
+    /// deed or whom it concerns, if anyone's.
+    Drowned {
+        what: crate::drowned::DrownedEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
     /// The crew read log `log` (1-based) of the Fathers' expedition; `player_id` opened the
     /// canister (or reached a sealed one that the log before has just opened). Wave 8 story.
     ExpeditionLogFound {

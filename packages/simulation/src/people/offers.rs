@@ -175,6 +175,8 @@ pub const fn signature_furniture(culture: super::Culture) -> crate::home::Furnit
         super::Culture::Aeronaut => F::ModelAirship,
         super::Culture::Cloudborn => F::WindChime,
         super::Culture::Lunar => F::MoonGlobe,
+        // The merrow's aquarium line (Wave 9): its grand reef tank leads it.
+        super::Culture::Merrow => F::Aquarium,
     }
 }
 
@@ -389,6 +391,28 @@ pub fn offers_of(character: &Character) -> Vec<PersonOffer> {
             Standing::Friendly,
             false,
         ));
+    }
+    // The merrow's makers sell the rest of their aquarium line too (Wave 9), the finer pieces
+    // to friends.
+    if character.culture == super::Culture::Merrow && sells_signature(character.role) {
+        for (piece, standing) in crate::home::Furniture::AQUARIUM_LINE
+            .into_iter()
+            .filter(|piece| *piece != crate::home::Furniture::Aquarium)
+            .zip([
+                Standing::Acquainted,
+                Standing::Acquainted,
+                Standing::Friendly,
+                Standing::Friendly,
+            ])
+        {
+            list.push(row(
+                OfferKind::Recipe,
+                PersonDeal::Furniture(piece),
+                piece.catalogue_price() * SIGNATURE_PRICE_PERCENT / 100,
+                standing,
+                false,
+            ));
+        }
     }
     list
 }

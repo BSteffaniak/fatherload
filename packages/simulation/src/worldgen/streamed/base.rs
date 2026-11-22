@@ -475,7 +475,14 @@ pub const fn is_plain_rock(kind: TileKind) -> bool {
             | TileKind::Surface(
                 SurfaceMaterial::Sandstone | SurfaceMaterial::RedRock | SurfaceMaterial::Granite
             )
-            // The Flesh Caverns' rock (Wave 8): ore and hazards sit in flesh like in stone.
-            | TileKind::Cave(crate::cave::CaveTile::Flesh)
+            | TileKind::Cave(
+                crate::cave::CaveTile::Flesh
+                    | crate::cave::CaveTile::Seabed
+                    | crate::cave::CaveTile::BrineIce
+                    | crate::cave::CaveTile::PackIce
+                    | crate::cave::CaveTile::Sinter
+                    | crate::cave::CaveTile::MerrowStone
+                    | crate::cave::CaveTile::PillowBasalt
+            )
     )
 }

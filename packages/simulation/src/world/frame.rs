@@ -172,6 +172,8 @@ impl WorldState {
             living_schedule: _,
             // The expedition's trail is counts and region keys.
             expedition: _,
+            // Pings are tiles; the Leviathan's moves are offsets from its arena (Wave 9).
+            drowned: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

@@ -241,13 +241,15 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::GhostRecording => ("A GHOST RECORDING", MIST, PanelStyle::Standard),
         StoryMomentKind::Anomaly => ("AN ANOMALY", LAVENDER, PanelStyle::Accent),
         StoryMomentKind::Remembered => ("THEY REMEMBER THE FATHERS", SAND, PanelStyle::Standard),
+        StoryMomentKind::DeepLore => ("THE DROWNED AND FROZEN", MINT, PanelStyle::Accent),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
     lines.truncate(match moment.kind {
         StoryMomentKind::ExpeditionLog
         | StoryMomentKind::RadioEcho
         | StoryMomentKind::GhostRecording
-        | StoryMomentKind::Remembered => 8,
+        | StoryMomentKind::Remembered
+        | StoryMomentKind::DeepLore => 8,
         _ => 6,
     });
     let heading_y = 6;

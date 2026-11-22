@@ -613,6 +613,19 @@ pub enum MusicCue {
     GlowSea,
     /// The Mycelial Mind's fight.
     MycelialMind,
+    // --- The Drowned and Frozen's own pieces (Wave 9), appended -----------------------------
+    /// The Underground Ocean: a slow, swelling sea shanty of low strings and far whale calls.
+    UndergroundOcean,
+    /// Brine Glaciers: a cold celesta and bowed glass over creaking ice.
+    BrineGlaciers,
+    /// Geyser Fields: hissing steam, a bubbling marimba ostinato and kettle drums.
+    GeyserFields,
+    /// Merrow City: a warm, lilting harp and voice-like pads of the fish-folk.
+    MerrowCity,
+    /// Pearl Abyss: a crushing low drone, a slow heartbeat of the deep, pressure groans.
+    PearlAbyss,
+    /// The Leviathan's fight.
+    Leviathan,
 }
 
 /// A stratum's ambience bed.
@@ -658,6 +671,15 @@ pub enum AmbienceCue {
     Heartbeat,
     /// The deep dark: far bubbles, a whale-like moan.
     Abyss,
+    // --- The Drowned and Frozen (Wave 9), appended ------------------------------------------
+    /// The reef and the open sea: currents rushing, bubbles, shrimp clicks.
+    Reef,
+    /// Hissing steam vents and bubbling mud.
+    Geysers,
+    /// Merrow City's bubble: a gentle hum of air pumps and far chatter.
+    Bubble,
+    /// The trench: pressure groans and the hull ticking.
+    Trench,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -685,10 +707,15 @@ pub enum LandmarkKind {
     /// the Amber Court, gullets, abyssal halls and the Mind's hollow
     /// ([`crate::worldgen::descent::living`]).
     LivingDark,
+    /// The Drowned and Frozen's set pieces (Wave 9): ocean basins and the eel-dragon's grotto,
+    /// the drowned builder sub, ice galleries and thermal vents, geyser chimneys and Old
+    /// Faithful, Merrow City's bubble, pearl beds and the Leviathan's arena
+    /// ([`crate::worldgen::descent::drowned`]).
+    Drowned,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -698,6 +725,7 @@ impl LandmarkKind {
         Self::Settlements,
         Self::Tombs,
         Self::LivingDark,
+        Self::Drowned,
     ];
 }
 

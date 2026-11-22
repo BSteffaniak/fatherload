@@ -255,6 +255,29 @@ pub enum EnemyKind {
     MycelialMind,
     /// A nerve node of the Mycelial Mind: while any lives, the Mind cannot be hurt.
     MindNode,
+    // --- The Drowned and Frozen (Wave 9, Descent IV, `crate::drowned`), appended ------------
+    /// Underground Ocean and Merrow's reefs: a shark that circles its prey, then dashes in.
+    ReefShark,
+    /// Underground Ocean: a squid that bites, then inks the water black and darts away.
+    InkSquid,
+    /// The Underground Ocean's mini-boss: a vast electric eel-dragon coiled in its grotto.
+    EelDragon,
+    /// Brine Glaciers: a swarm of ice mites whose bites frost the hull.
+    FrostMite,
+    /// Brine Glaciers: a tusked seal that belly-slides across the ice in a straight charge.
+    TuskSeal,
+    /// Geyser Fields: a beetle that rides the geysers' jets and leaps on what is above.
+    ScaldBeetle,
+    /// Geyser Fields: an armoured snail that seals tunnels behind it with sinter.
+    SinterSnail,
+    /// Merrow City's reefs: a pufferfish, harmless until something comes close and it swells into spines.
+    Spinepuff,
+    /// Pearl Abyss: an anglerfish whose hypnotic lure drags rigs toward its jaws.
+    LureAngler,
+    /// Pearl Abyss: a slow eel that is mostly mouth; its long gape is the tell before a gulp.
+    GulperEel,
+    /// The Descent IV gate boss: the Leviathan, a giant sea beast fought from the submarine.
+    Leviathan,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -343,6 +366,8 @@ pub enum ShotKind {
     Thorn,
     /// The Mycelial Mind's slow spore orb: it bursts into a spore cloud.
     MindSpore,
+    /// The Leviathan's pressure bubble: a slow, wobbling sphere of crushed water (Wave 9).
+    PressureBubble,
 }
 
 impl ShotKind {
@@ -362,6 +387,7 @@ impl ShotKind {
             Self::Spore => 210.0,
             Self::Thorn => 340.0,
             Self::MindSpore => 120.0,
+            Self::PressureBubble => 110.0,
         }
     }
 
@@ -375,6 +401,8 @@ impl ShotKind {
             Self::Rubble => 520.0,
             Self::Spore => 300.0,
             Self::Thorn => 40.0,
+            // A pressure bubble drifts up as it flies.
+            Self::PressureBubble => -40.0,
             Self::MindSpore
             | Self::Fireball
             | Self::Bolt
@@ -402,6 +430,7 @@ impl ShotKind {
             Self::Boulder => 12.0,
             Self::Spore => 5.0,
             Self::MindSpore => 7.0,
+            Self::PressureBubble => 9.0,
         }
     }
 
@@ -424,11 +453,13 @@ impl ShotKind {
             Self::Spore => 3.0,
             Self::Thorn => 6.5,
             Self::MindSpore => 4.0,
+            Self::PressureBubble => 5.0,
         }
     }
 
     /// How long a shot flies before fizzling, milliseconds.
     #[must_use]
+    #[allow(clippy::match_same_arms, reason = "the Wave 9 shot keeps its own row")]
     pub const fn life_millis(self) -> u64 {
         match self {
             Self::Acid | Self::CryptArrow => 2_500,
@@ -440,6 +471,7 @@ impl ShotKind {
             Self::Boulder => 7_000,
             Self::Spore | Self::Thorn => 2_600,
             Self::MindSpore => 5_000,
+            Self::PressureBubble => 4_500,
         }
     }
 
@@ -605,7 +637,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 74] = [
+    pub const ALL: [Self; 85] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -680,6 +712,17 @@ impl EnemyKind {
         Self::Angler,
         Self::MycelialMind,
         Self::MindNode,
+        Self::ReefShark,
+        Self::InkSquid,
+        Self::EelDragon,
+        Self::FrostMite,
+        Self::TuskSeal,
+        Self::ScaldBeetle,
+        Self::SinterSnail,
+        Self::Spinepuff,
+        Self::LureAngler,
+        Self::GulperEel,
+        Self::Leviathan,
     ];
 
     /// Whether the creature goes into fluid (Part III F9). Most turn back at a fluid's edge
@@ -689,7 +732,18 @@ impl EnemyKind {
     pub const fn can_swim(self) -> bool {
         matches!(
             self,
-            Self::LureFish | Self::Angler | Self::Leechling | Self::GlowJelly
+            Self::LureFish
+                | Self::Angler
+                | Self::Leechling
+                | Self::GlowJelly
+                // The Drowned and Frozen's sea creatures (Wave 9).
+                | Self::ReefShark
+                | Self::InkSquid
+                | Self::EelDragon
+                | Self::Spinepuff
+                | Self::LureAngler
+                | Self::GulperEel
+                | Self::Leviathan
         )
     }
 
@@ -719,6 +773,25 @@ impl EnemyKind {
         )
     }
 
+    /// Whether this is one of the Drowned and Frozen's creatures (Wave 9, Descent IV).
+    #[must_use]
+    pub const fn is_drowned(self) -> bool {
+        matches!(
+            self,
+            Self::ReefShark
+                | Self::InkSquid
+                | Self::EelDragon
+                | Self::FrostMite
+                | Self::TuskSeal
+                | Self::ScaldBeetle
+                | Self::SinterSnail
+                | Self::Spinepuff
+                | Self::LureAngler
+                | Self::GulperEel
+                | Self::Leviathan
+        )
+    }
+
     /// Light the creature gives off, in tiles (presentation: in the Glow Sea it is the only
     /// light there is; 0 for none).
     #[must_use]
@@ -731,6 +804,11 @@ impl EnemyKind {
             Self::MycelialMind => 6.0,
             Self::MindNode => 2.2,
             Self::SporePuffer => 0.9,
+            // The Drowned and Frozen (Wave 9): the angler's lure, the eel-dragon's crackle, the
+            // Leviathan's eyes.
+            Self::LureAngler => 3.2,
+            Self::EelDragon => 2.0,
+            Self::Leviathan => 4.0,
             _ => 0.0,
         }
     }
@@ -1934,6 +2012,173 @@ impl EnemyKind {
                 knockback: 0.0,
                 ..stats("Nerve Node", Creature, Stationary, AttackStyle::Contact)
             },
+            // --- The Drowned and Frozen (Wave 9) ------------------------------------------
+            Self::ReefShark => EnemyStats {
+                radius: 10.0,
+                health: 120.0,
+                speed: 95.0,
+                dash_speed: 340.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 16.0,
+                windup_millis: 380,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 5.0,
+                knockback: 220.0,
+                ..stats("Reef Shark", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::InkSquid => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 120.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 9.0,
+                windup_millis: 0,
+                cooldown_millis: 1_600,
+                attack_range_tiles: 0.8,
+                knockback: 120.0,
+                ..stats("Ink Squid", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::EelDragon => EnemyStats {
+                radius: 15.0,
+                health: 260.0,
+                speed: 110.0,
+                dash_speed: 380.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 24.0,
+                contact_damage: 20.0,
+                windup_millis: 520,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 6.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats("The Eel-Dragon", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::FrostMite => EnemyStats {
+                radius: 5.0,
+                health: 12.0,
+                speed: 140.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 24.0,
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 900,
+                attack_range_tiles: 0.6,
+                knockback: 60.0,
+                ..stats("Frost Mite", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::TuskSeal => EnemyStats {
+                radius: 11.0,
+                health: 160.0,
+                speed: 50.0,
+                dash_speed: 300.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 18.0,
+                contact_damage: 18.0,
+                windup_millis: 700,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 7.0,
+                knockback: 320.0,
+                ..stats("Tusk Seal", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::ScaldBeetle => EnemyStats {
+                radius: 8.0,
+                health: 60.0,
+                speed: 70.0,
+                dash_speed: 260.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 20.0,
+                contact_damage: 10.0,
+                windup_millis: 450,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 4.0,
+                knockback: 180.0,
+                ..stats("Scald Beetle", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::SinterSnail => EnemyStats {
+                radius: 9.0,
+                health: 140.0,
+                speed: 22.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 10.0,
+                contact_damage: 12.0,
+                windup_millis: 0,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 0.6,
+                knockback: 140.0,
+                ..stats("Sinter Snail", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Spinepuff => EnemyStats {
+                radius: 8.0,
+                health: 50.0,
+                speed: 45.0,
+                // It only notices what comes close (`world/enemies/drowned.rs`).
+                sight_tiles: 3.0,
+                hearing_tiles: 2.0,
+                leash_tiles: 14.0,
+                contact_damage: 14.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.8,
+                knockback: 200.0,
+                ..stats("Spinepuff", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::LureAngler => EnemyStats {
+                radius: 12.0,
+                health: 200.0,
+                speed: 30.0,
+                dash_speed: 300.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 10.0,
+                contact_damage: 24.0,
+                windup_millis: 600,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 3.0,
+                knockback: 240.0,
+                ..stats("Lure Angler", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::GulperEel => EnemyStats {
+                radius: 12.0,
+                health: 260.0,
+                speed: 55.0,
+                dash_speed: 260.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 16.0,
+                contact_damage: 26.0,
+                windup_millis: 900,
+                cooldown_millis: 3_800,
+                attack_range_tiles: 5.0,
+                knockback: 120.0,
+                ..stats("Gulper Eel", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Leviathan => EnemyStats {
+                // Its great body is the biggest target there is (`MAX_HIT_RADIUS`).
+                radius: 44.0,
+                // Always open to hits, so tougher than the Mind; its maw takes double.
+                health: 520.0,
+                speed: 0.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 20.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 1.0,
+                knockback: 360.0,
+                elite: true,
+                // It moves on its own pattern (`world/enemies/drowned.rs`).
+                ..stats("The Leviathan", Creature, Stationary, AttackStyle::Contact)
+            },
         }
     }
 
@@ -2096,6 +2341,19 @@ impl EnemyKind {
             Self::Angler => (17.0, 12.0),
             Self::MycelialMind => (34.0, 28.0),
             Self::MindNode => (10.0, 11.0),
+            // The Drowned and Frozen (Wave 9), sized to their art.
+            Self::ReefShark => (19.0, 8.0),
+            Self::InkSquid => (10.0, 11.0),
+            Self::EelDragon => (36.0, 10.0),
+            Self::FrostMite => (7.0, 6.0),
+            Self::TuskSeal => (18.0, 10.0),
+            Self::ScaldBeetle => (11.0, 7.0),
+            Self::SinterSnail => (12.0, 9.0),
+            Self::Spinepuff => (12.0, 12.0),
+            Self::LureAngler => (18.0, 13.0),
+            Self::GulperEel => (24.0, 11.0),
+            // The Leviathan's great body (its head and trunk; the tail is drawn).
+            Self::Leviathan => (92.0, 28.0),
         }
     }
 
@@ -2202,6 +2460,23 @@ impl EnemyKind {
             (Self::SwarmMatriarch | Self::Angler, DamageKind::Kinetic) => 0.7,
             (Self::BilePolyp | Self::MindNode | Self::SwarmMatriarch, DamageKind::Explosive) => 1.5,
             (Self::HiveSoldier | Self::Leechling, DamageKind::Fire) => 1.5,
+            // The Drowned and Frozen (Wave 9): the snail's shell and the seal's blubber turn
+            // bullets, fire does little under water, ice mites melt.
+            (Self::SinterSnail, DamageKind::Kinetic) => 0.3,
+            (Self::SinterSnail, DamageKind::Explosive) => 1.6,
+            (Self::TuskSeal | Self::Leviathan | Self::EelDragon, DamageKind::Kinetic) => 0.8,
+            (Self::FrostMite, DamageKind::Fire) => 2.0,
+            (Self::ScaldBeetle, DamageKind::Fire) => 0.0,
+            (
+                Self::ReefShark
+                | Self::InkSquid
+                | Self::Spinepuff
+                | Self::LureAngler
+                | Self::GulperEel
+                | Self::Leviathan
+                | Self::EelDragon,
+                DamageKind::Fire,
+            ) => 0.5,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -3110,6 +3385,38 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 10 + extra);
             add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 6);
             add(ItemKind::Artifact(ArtifactKind::RadiantShell), 1);
+        }
+        // The Drowned and Frozen (Wave 9): the sea pays in pearls and ice.
+        EnemyKind::ReefShark | EnemyKind::InkSquid | EnemyKind::Spinepuff => {
+            add(mineral, 1 + extra / 2);
+            if rare < 25 {
+                add(ItemKind::Material(StrategicResourceKind::PressurePearl), 1);
+            }
+        }
+        EnemyKind::FrostMite => {
+            if rare < 40 {
+                add(ItemKind::Material(StrategicResourceKind::MoonIce), 1);
+            }
+        }
+        EnemyKind::TuskSeal | EnemyKind::SinterSnail | EnemyKind::ScaldBeetle => {
+            add(richer, 1 + extra);
+            if rare < 20 {
+                add(ItemKind::Material(StrategicResourceKind::MoonIce), 1);
+            }
+        }
+        EnemyKind::LureAngler | EnemyKind::GulperEel => {
+            add(richer, 3 + extra);
+            add(ItemKind::Material(StrategicResourceKind::PressurePearl), 1);
+        }
+        EnemyKind::EelDragon => {
+            add(richer, 8 + extra);
+            add(ItemKind::Material(StrategicResourceKind::PressurePearl), 4);
+            add(ItemKind::Artifact(ArtifactKind::VoidPearl), 1);
+        }
+        EnemyKind::Leviathan => {
+            add(richer, 14 + extra);
+            add(ItemKind::Material(StrategicResourceKind::PressurePearl), 8);
+            add(ItemKind::Artifact(ArtifactKind::VoidPearl), 2);
         }
     }
     drops

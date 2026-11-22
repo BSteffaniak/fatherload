@@ -670,6 +670,8 @@ const fn culture_roles(culture: Culture) -> &'static [Role] {
         Culture::Aeronaut => &[Role::Aeronaut, Role::Smuggler, Role::StormChaser],
         Culture::Cloudborn => &[Role::Monk, Role::Farmer, Role::StormChaser],
         Culture::Lunar => &[Role::Hydroponist, Role::DomeTech, Role::Selenographer],
+        // The merrow (Wave 9): pearl traders, song-keepers and archivists of the sea.
+        Culture::Merrow => &[Role::Trader, Role::Storyteller, Role::Scholar],
     }
 }
 

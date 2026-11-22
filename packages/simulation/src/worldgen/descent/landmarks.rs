@@ -47,6 +47,8 @@ pub enum LandmarkGenerator {
     TombSites,
     /// The Living Dark's stamps and living rock ([`super::living`], Wave 8).
     LivingDark,
+    /// The Drowned and Frozen's stamps and rock ([`super::drowned`], Wave 9).
+    Drowned,
 }
 
 /// The generator behind `kind`.
@@ -62,6 +64,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::Settlements => LandmarkGenerator::Villages,
         LandmarkKind::Tombs => LandmarkGenerator::TombSites,
         LandmarkKind::LivingDark => LandmarkGenerator::LivingDark,
+        LandmarkKind::Drowned => LandmarkGenerator::Drowned,
     }
 }
 
@@ -403,6 +406,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::CaveEcosystems
         | LandmarkKind::Settlements
         | LandmarkKind::Tombs
-        | LandmarkKind::LivingDark => return None,
+        | LandmarkKind::LivingDark
+        | LandmarkKind::Drowned => return None,
     })
 }

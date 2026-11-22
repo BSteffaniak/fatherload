@@ -36,6 +36,10 @@ pub struct Player {
     /// [`crate::crust::CartRide`]). Per tick, predicted and reconciled like the pose.
     #[serde(default)]
     pub cart: Option<crate::crust::CartRide>,
+    /// Ballast trim and hull frost (Wave 9, the Drowned and Frozen; see
+    /// [`crate::drowned::RigWater`]). Per tick, predicted and reconciled like the pose.
+    #[serde(default)]
+    pub water: crate::drowned::RigWater,
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
@@ -169,6 +173,7 @@ impl Player {
             x_remainder: 0.0,
             attitude: crate::attitude::RigAttitude::LEVEL,
             cart: None,
+            water: crate::drowned::RigWater::default(),
             fuel: fuel_capacity_for_level(1),
             fuel_capacity: fuel_capacity_for_level(1),
             hull: 100.0,

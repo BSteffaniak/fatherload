@@ -49,6 +49,13 @@ const DEEP_SKIN: [Color; 3] = [
     Color::new(0xa8, 0x96, 0x94, 255),
 ];
 
+/// The merrow's scales (Wave 9, Merrow City): sea greens and blues.
+const MERROW_SKIN: [Color; 3] = [
+    Color::new(0x6f, 0xc8, 0xb4, 255),
+    Color::new(0x5a, 0xa6, 0xc4, 255),
+    Color::new(0x8a, 0xd0, 0x9a, 255),
+];
+
 /// A culture's cloth: `(main, shade)` pairs picked by the outfit index.
 const fn cloth(culture: Culture) -> &'static [(Color, Color)] {
     match culture {
@@ -119,6 +126,14 @@ const fn cloth(culture: Culture) -> &'static [(Color, Color)] {
             (STEEL_LIGHT, STEEL),
             (TEAL, TEAL_DARK),
         ],
+        // The merrow (Wave 9): woven kelp, sea-glass silks and coral-dyed wraps.
+        Culture::Merrow => &[
+            (PINE, NIGHT),
+            (SKY_LIGHT, SKY),
+            (ROSE, MAROON),
+            (MINT, TEAL),
+            (CREAM, SAND),
+        ],
     }
 }
 
@@ -135,6 +150,7 @@ const fn accent(culture: Culture, seed: u64) -> Color {
         Culture::Aeronaut => [COPPER, GOLD, AMBER][pick as usize],
         Culture::Cloudborn => [SKY, GOLD, TEAL][pick as usize],
         Culture::Lunar => [ORANGE, SKY_LIGHT, GOLD][pick as usize],
+        Culture::Merrow => [BONE, PINK, GOLD][pick as usize],
     }
 }
 
@@ -233,6 +249,9 @@ pub fn draw_person_posed(
     let trim = accent(culture, seed);
     let skin = if culture == Culture::Deepfolk {
         DEEP_SKIN[(seed % DEEP_SKIN.len() as u64) as usize]
+    } else if culture == Culture::Merrow {
+        // The merrow's scales (Wave 9): sea greens and blues.
+        MERROW_SKIN[(seed % MERROW_SKIN.len() as u64) as usize]
     } else {
         SKIN[(seed % SKIN.len() as u64) as usize]
     };
@@ -418,6 +437,19 @@ pub fn draw_person_posed(
             pen.rect(draw, 0, torso_top + 2, 1, torso - 2, with_alpha(INK, 90));
             pen.px(draw, -facing * (half - 1), torso_top + 3, trim);
         }
+        Culture::Merrow => {
+            // A shell necklace over a wrap, scales glinting at the sleeves.
+            for x in -half..-half + wide {
+                pen.px(
+                    draw,
+                    x,
+                    torso_top + 1 + i32::from(x.rem_euclid(2) == 0),
+                    trim,
+                );
+            }
+            pen.px(draw, -half, torso_top + 3, skin);
+            pen.px(draw, right - 1, torso_top + 3, skin);
+        }
     }
     // The trade's garment.
     match role {
@@ -543,6 +575,17 @@ pub fn draw_person_posed(
     let head_x = -2;
     pen.rect(draw, head_x - 1, head_top - 1, 6, head + 1, INK);
     pen.rect(draw, head_x, head_top, 4, head, skin);
+    if culture == Culture::Merrow {
+        // The merrow's crest fin over the head and a fin at the cheek (Wave 9).
+        pen.rect(draw, head_x + 1, head_top - 2, 2, 1, trim);
+        pen.px(draw, head_x + 1 - facing, head_top - 3, trim);
+        pen.px(
+            draw,
+            if facing < 0 { head_x + 4 } else { head_x - 1 },
+            head_top + 2,
+            trim,
+        );
+    }
     let eye_x = if facing < 0 { head_x } else { head_x + 2 };
     if blink {
         pen.rect(draw, eye_x, head_top + 2, 2, 1, with_alpha(INK, 120));
@@ -694,6 +737,9 @@ pub fn draw_portrait(
     let trim = accent(culture, seed);
     let skin = if culture == Culture::Deepfolk {
         DEEP_SKIN[(seed % DEEP_SKIN.len() as u64) as usize]
+    } else if culture == Culture::Merrow {
+        // The merrow's scales (Wave 9): sea greens and blues.
+        MERROW_SKIN[(seed % MERROW_SKIN.len() as u64) as usize]
     } else {
         SKIN[(seed % SKIN.len() as u64) as usize]
     };
@@ -763,6 +809,23 @@ pub fn draw_portrait(
             pen.rect(draw, sx, 23, sw, 2, STEEL_LIGHT);
             pen.rect(draw, sx + sw - 7, 26, 3, 3, trim);
             pen.rect(draw, 15, 25, 1, 7, with_alpha(INK, 90));
+        }
+        Culture::Merrow => {
+            // A string of shells and pearls, and gill slits at the neck.
+            for step in 0..6 {
+                pen.rect(
+                    draw,
+                    10 + step * 2,
+                    24 + i32::from(step % 2 == 0),
+                    1,
+                    1,
+                    trim,
+                );
+            }
+            for gill in 0..3 {
+                pen.rect(draw, 11, 20 + gill, 2, 1, with_alpha(INK, 110));
+                pen.rect(draw, 19, 20 + gill, 2, 1, with_alpha(INK, 110));
+            }
         }
     }
     match role {

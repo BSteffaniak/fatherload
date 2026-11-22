@@ -122,7 +122,9 @@ impl BuildingStyle {
             Culture::Aeronaut => Self::Skyrig,
             // The colony is no village (never laid out); its glass and hull read as the
             // cloister's white stone where a style is asked for.
-            Culture::Cloudborn | Culture::Lunar => Self::Cloister,
+            // Merrow City's coral-and-shell halls read as the cloister's pale stone and
+            // sea-blue tile too (Wave 9).
+            Culture::Cloudborn | Culture::Lunar | Culture::Merrow => Self::Cloister,
         }
     }
 
@@ -480,6 +482,9 @@ pub fn identity(settings: &WorldSettings, id: VillageId) -> Option<(String, Cult
     if id == placement::underground_id(0) {
         return Some((crate::crust::GRAVEL_HOLLOW_NAME.to_owned(), culture));
     }
+    if id == placement::underground_id(crate::drowned::MERROW_SITE) {
+        return Some((crate::drowned::MERROW_CITY_NAME.to_owned(), culture));
+    }
     Some((village_name(settings.seed, id.0, culture), culture))
 }
 
@@ -492,6 +497,11 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
     if site == 0 && underground && crate::crust::crust_rules(settings) {
         // Gravel Hollow (Wave 8): miners' folk of the deep.
         return Some((Landscape::Caverns, Culture::Deepfolk));
+    }
+    if site == crate::drowned::MERROW_SITE && underground {
+        // Merrow City (Wave 9): the fish-folk in their bubble under the sea.
+        return crate::drowned::drowned_rules(settings)
+            .then_some((Landscape::Caverns, Culture::Merrow));
     }
     let surface = placement::surface_site(settings.seed, site)?;
     if underground {
@@ -532,13 +542,16 @@ fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {
         Culture::Mesa => &[(0, 4), (1, 1), (2, 3), (3, 1), (4, 2), (5, 1), (6, 2)],
         Culture::Riverside => &[(0, 2), (1, 1), (2, 3), (3, 1), (4, 2), (5, 2), (6, 2)],
         Culture::Scrapper => &[(0, 1), (1, 4), (2, 2), (3, 4), (4, 2), (5, 1), (6, 0)],
-        Culture::Deepfolk => &[(0, 4), (1, 2), (2, 1), (3, 1), (4, 3), (5, 2), (6, 3)],
+        Culture::Deepfolk | Culture::Merrow => {
+            &[(0, 4), (1, 2), (2, 1), (3, 1), (4, 3), (5, 2), (6, 3)]
+        }
         // Sky towns take their specialty from their kind (`build`); this is never asked.
         Culture::Aeronaut | Culture::Cloudborn | Culture::Lunar => &[(1, 1), (2, 1), (4, 1)],
     };
     match *rng.weighted(table) {
         0 => {
-            let minerals: &[MineralKind] = if culture == Culture::Deepfolk {
+            let minerals: &[MineralKind] = if matches!(culture, Culture::Deepfolk | Culture::Merrow)
+            {
                 &[
                     MineralKind::Diamond,
                     MineralKind::Platinum,
@@ -569,7 +582,8 @@ const fn centrepiece(culture: Culture) -> DecorKind {
     match culture {
         Culture::Frontier => DecorKind::Well,
         Culture::Highland => DecorKind::Statue,
-        Culture::Mesa => DecorKind::Fountain,
+        // The merrow's fountain too (Wave 9).
+        Culture::Mesa | Culture::Merrow => DecorKind::Fountain,
         Culture::Riverside => DecorKind::Totem,
         Culture::Scrapper => DecorKind::Bonfire,
         Culture::Deepfolk => DecorKind::CrystalCluster,

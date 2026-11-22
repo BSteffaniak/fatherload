@@ -474,6 +474,8 @@ fn glyph(kind: TileKind, water: bool) -> char {
             CaveTile::Comb | CaveTile::JellyCell => 'h',
             CaveTile::SporePod => 'p',
             CaveTile::AcidGland => 'g',
+            // The Drowned and Frozen (Wave 9) never generates in these tests' worlds.
+            _ => '~',
         },
         _ => '!',
     }

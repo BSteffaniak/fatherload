@@ -34,6 +34,10 @@ pub enum Culture {
     /// world below, and call signs earned on shift. Not in [`Self::ALL`] (which samples the
     /// cultures villages are built in); see [`Self::EVERY`].
     Lunar,
+    /// The merrow (Wave 9, Descent IV): the fish-folk of Merrow City in its air bubble under
+    /// the sea, liquid, bubbling names and tide-and-shell epithets. Not in [`Self::ALL`]; see
+    /// [`Self::EVERY`].
+    Merrow,
 }
 
 impl Culture {
@@ -49,7 +53,7 @@ impl Culture {
     ];
 
     /// Every culture, the Moon's colonists included.
-    pub const EVERY: [Self; 9] = [
+    pub const EVERY: [Self; 10] = [
         Self::Frontier,
         Self::Highland,
         Self::Mesa,
@@ -59,6 +63,7 @@ impl Culture {
         Self::Aeronaut,
         Self::Cloudborn,
         Self::Lunar,
+        Self::Merrow,
     ];
 
     /// Whether this is the Moon colonists' culture (Wave 6).
@@ -85,6 +90,7 @@ impl Culture {
             Self::Aeronaut => "Aeronaut",
             Self::Cloudborn => "Cloudborn",
             Self::Lunar => "Lunar",
+            Self::Merrow => "Merrow",
         }
     }
 
@@ -101,6 +107,7 @@ impl Culture {
             Self::Aeronaut => "canvas and brass",
             Self::Cloudborn => "white stone and blue tile",
             Self::Lunar => "pressed regolith and glass",
+            Self::Merrow => "coral and shell",
         }
     }
 
@@ -115,6 +122,7 @@ impl Culture {
             Self::Aeronaut => &AERONAUT,
             Self::Cloudborn => &CLOUDBORN,
             Self::Lunar => &LUNAR,
+            Self::Merrow => &MERROW,
         }
     }
 }
@@ -481,6 +489,50 @@ const DEEPFOLK: NameTable = NameTable {
     ],
     place_tails: &[
         " Hall", " Hearth", "deep", " Grotto", " Lamp", " Stair", "well", " Reach",
+    ],
+};
+
+/// The merrow's names (Wave 9): liquid, bubbling, sung more than said.
+const MERROW: NameTable = NameTable {
+    given: &[
+        "Ulla", "Mirro", "Pelagi", "Sooli", "Wavren", "Nerilla", "Coralyn", "Bubbo", "Thalassa",
+        "Oolo", "Merrin", "Spindle", "Lumi", "Kelpie",
+    ],
+    she: &["Ulla", "Pelagi", "Nerilla", "Coralyn", "Thalassa"],
+    he: &["Mirro", "Wavren", "Bubbo"],
+    onsets: &["M", "P", "S", "W", "N", "L", "Th", "Bl", "Oo", "U"],
+    vowels: &["a", "e", "i", "oo", "ui", "aa"],
+    endings: &["la", "rro", "li", "ssa", "mi", "plo", "rin"],
+    generated_percent: 45,
+    surname_heads: &[],
+    surname_tails: &[],
+    surnames: &[
+        "of the Slack Tide",
+        "of the Pearl Bed",
+        "of the Warm Current",
+        "of the Glass Dome",
+        "of the Kelp Hall",
+        "of the Ninth Bubble",
+        "of the Long Swim",
+        "of the Singing Shell",
+        "of the Low Reef",
+        "of the Lantern Fish",
+    ],
+    nickname_percent: 25,
+    nicknames: &[
+        "Bubbles",
+        "Finny",
+        "Gills",
+        "Driftwood",
+        "Snapper",
+        "Minnow",
+        "Shellback",
+    ],
+    place_heads: &[
+        "Pearl", "Coral", "Kelp", "Tide", "Shell", "Bubble", "Reef", "Brine",
+    ],
+    place_tails: &[
+        " Dome", " Reach", " Hollow", "mere", " Shoal", " Spire", "fall", " Sound",
     ],
 };
 

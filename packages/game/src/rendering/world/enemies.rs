@@ -26,8 +26,8 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
-        crypt as crypt_art, enemies as art, living as living_art, moon as moon_art,
-        old_deep as deep_art, tomb as tomb_art,
+        crypt as crypt_art, drowned as drowned_art, enemies as art, living as living_art,
+        moon as moon_art, old_deep as deep_art, tomb as tomb_art,
     },
 };
 
@@ -114,6 +114,18 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Angler => &living_art::ANGLER,
         EnemyKind::MycelialMind => &living_art::MYCELIAL_MIND,
         EnemyKind::MindNode => &living_art::MIND_NODE,
+        // The Drowned and Frozen (Wave 9).
+        EnemyKind::ReefShark => &drowned_art::REEF_SHARK,
+        EnemyKind::InkSquid => &drowned_art::INK_SQUID,
+        EnemyKind::EelDragon => &drowned_art::EEL_DRAGON,
+        EnemyKind::FrostMite => &drowned_art::FROST_MITE,
+        EnemyKind::TuskSeal => &drowned_art::TUSK_SEAL,
+        EnemyKind::ScaldBeetle => &drowned_art::SCALD_BEETLE,
+        EnemyKind::SinterSnail => &drowned_art::SINTER_SNAIL,
+        EnemyKind::Spinepuff => &drowned_art::SPINEPUFF,
+        EnemyKind::LureAngler => &drowned_art::LURE_ANGLER,
+        EnemyKind::GulperEel => &drowned_art::GULPER_EEL,
+        EnemyKind::Leviathan => &drowned_art::LEVIATHAN,
     }
 }
 
@@ -135,6 +147,7 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Spore => &living_art::SHOT_SPORE,
         ShotKind::Thorn => &living_art::SHOT_THORN,
         ShotKind::MindSpore => &living_art::SHOT_MIND_SPORE,
+        ShotKind::PressureBubble => &drowned_art::SHOT_PRESSURE_BUBBLE,
     }
 }
 
@@ -471,6 +484,41 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::GlowJelly
         | EnemyKind::MycelialMind
         | EnemyKind::MindNode => sprite.frame_at(phase),
+        // The Drowned and Frozen (Wave 9): swimmers swim, lungers bare their jaws in the
+        // attack, the seal flattens for its slide, the beetle crouches to pounce, the puff
+        // swells while it hunts, the Leviathan gapes with its maw open and roars as it aims.
+        EnemyKind::ReefShark
+        | EnemyKind::EelDragon
+        | EnemyKind::LureAngler
+        | EnemyKind::GulperEel => {
+            if attacking {
+                2
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
+        EnemyKind::InkSquid => {
+            if state.mode == EnemyMode::Flee {
+                2
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
+        EnemyKind::TuskSeal | EnemyKind::ScaldBeetle => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 4.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Spinepuff => usize::from(state.mode.hostile()),
+        EnemyKind::FrostMite | EnemyKind::SinterSnail => sprite.frame_at(phase),
+        EnemyKind::Leviathan => match state.phase {
+            1 | 2 => 2,
+            _ => sprite.frame_at(phase) % 2,
+        },
     }
 }
 
@@ -479,6 +527,8 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
 const fn sprite_scale(kind: EnemyKind) -> f32 {
     match kind {
         EnemyKind::SunColossus | EnemyKind::HollowMatriarch | EnemyKind::MycelialMind => ART * 1.5,
+        // The Leviathan towers over the submarine (Wave 9).
+        EnemyKind::Leviathan => ART * 2.0,
         _ => ART,
     }
 }
@@ -526,6 +576,15 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::Leechling
             | EnemyKind::LureFish
             | EnemyKind::Angler
+            // The Drowned and Frozen (Wave 9).
+            | EnemyKind::ReefShark
+            | EnemyKind::EelDragon
+            | EnemyKind::TuskSeal
+            | EnemyKind::ScaldBeetle
+            | EnemyKind::SinterSnail
+            | EnemyKind::LureAngler
+            | EnemyKind::GulperEel
+            | EnemyKind::Leviathan
     )
 }
 
@@ -550,10 +609,11 @@ fn draw_enemy(
         sprite.width() as f32 * scale,
         sprite.height() as f32 * scale,
     );
+    // The Leviathan swims its own pattern though it is "stationary" to the generic AI.
     let grounded = matches!(
         stats.locomotion,
         Locomotion::Walking | Locomotion::Stationary
-    );
+    ) && state.kind != EnemyKind::Leviathan;
     // Walkers stand on their collision box's floor; flyers and burrowers centre on it.
     let left = x - width * 0.5;
     let top = if grounded {
@@ -1088,6 +1148,7 @@ fn draw_shot(
         ShotKind::Hex => VIOLET,
         ShotKind::CryptHex => LAVENDER,
         ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
+        ShotKind::PressureBubble => SKY_LIGHT,
     };
     disc(
         draw,

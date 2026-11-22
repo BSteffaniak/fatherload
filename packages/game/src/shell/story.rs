@@ -40,6 +40,8 @@ pub enum StoryMomentKind {
     Anomaly,
     /// A deep settlement remembering the Fathers' expedition (Wave 8 integration).
     Remembered,
+    /// One of the Drowned and Frozen's story beats found at its landmark (Wave 9).
+    DeepLore,
 }
 
 /// A card across the seat's view telling a moment of a story.

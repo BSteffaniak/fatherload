@@ -75,7 +75,7 @@ pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
         CaveTile::GlowAlgae | CaveTile::SporePod | CaveTile::AcidGland => Some(LIME),
         CaveTile::TreasureCache | CaveTile::RelicCache => Some(GOLD),
         CaveTile::JellyCell => Some(CREAM),
-        _ => None,
+        _ => super::drowned_art::drowned_glow(tile),
     }
 }
 
@@ -111,6 +111,11 @@ pub const fn cave_color(tile: CaveTile, band: Band) -> Color {
         CaveTile::JellyCell => CREAM,
         CaveTile::SporePod => VIOLET,
         CaveTile::AcidGland => MAROON,
+        // The Drowned and Frozen (Wave 9).
+        _ => match super::drowned_art::drowned_color(tile) {
+            Some(color) => color,
+            None => STONE,
+        },
     }
 }
 
@@ -273,10 +278,15 @@ fn paint_back(
         })
     };
     let water = water_near(0, -1) || (water_near(-1, 0) && water_near(1, 0));
-    // Outside a cave ecosystem, the Living Dark's own wall stands behind (Wave 8).
+    // Outside a cave ecosystem, the Living Dark's own wall stands behind (Wave 8), and the
+    // Drowned and Frozen's (Wave 9).
     let living = kind
         .is_none()
         .then(|| super::living_art::living_stratum(terrain, position))
+        .flatten();
+    let drowned = kind
+        .is_none()
+        .then(|| super::drowned_art::drowned_stratum(terrain, position))
         .flatten();
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
@@ -285,6 +295,8 @@ fn paint_back(
                 water_pixel(gx, gy, py + TILE_ART)
             } else if let Some(stratum) = living {
                 super::living_art::back_pixel(stratum, gx, gy)
+            } else if let Some(stratum) = drowned {
+                super::drowned_art::back_pixel(stratum, gx, gy)
             } else {
                 cave_back_pixel(kind, strata, band, gx, gy)
             };
@@ -304,6 +316,11 @@ pub(super) fn paint(
     edges: Edges,
 ) {
     let seed = hash(position.x, position.y, 421);
+    // The Drowned and Frozen's tiles have their own art (Wave 9).
+    if super::drowned_art::is_drowned_tile(tile) {
+        super::drowned_art::paint(canvas, terrain, position, tile, strata, edges);
+        return;
+    }
     match tile {
         CaveTile::MushroomStem => {
             paint_back(canvas, terrain, position, strata, band);

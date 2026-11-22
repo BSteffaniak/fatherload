@@ -268,6 +268,34 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The Drowned and Frozen (Wave 9, Descent IV): its basins, ice, geysers, Merrow City's
+        // bubble, pearl beds and the Leviathan's arena, over the landmarks (the city keeps the
+        // outpost and its settlement; the cable still carves over everything).
+        let (first, last) = layout.descent_rows(crate::descent::Descent::DrownedAndFrozen);
+        if rect.max.y >= first - 48 && rect.min.y <= last + 48 {
+            use crate::worldgen::descent::drowned;
+            let stamps = drowned::stamps_with(&ctx.settings, layout, &rect);
+            let city = drowned::merrow_city(&ctx.settings);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                let base = chunk_kinds.kinds[slot];
+                if let Some(kind) = drowned::drowned_tile(
+                    &ctx.settings,
+                    layout,
+                    city.as_ref(),
+                    &stamps,
+                    position.x,
+                    position.y,
+                    base,
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     if ctx.descent.is_some() {
         // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.
         super::crust_pass::apply_sinkhole(ctx, &mut chunk_kinds);
@@ -354,9 +382,18 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             durability: tile_durability(kind),
         })
         .collect();
+    let city = if fluids.is_empty() {
+        None
+    } else {
+        crate::worldgen::descent::drowned::merrow_city(&ctx.settings)
+    };
     for (at, tile) in fluids {
         // The expedition's rooms stay dry (their floors are basins to the pool rule).
         if story.covers(at) {
+            continue;
+        }
+        // So do Merrow City's streets (Wave 9): the bubble keeps the sea out.
+        if city.is_some_and(|site| site.bounds().contains(at)) {
             continue;
         }
         if let Some(slot) = chunk_kinds.slot(at.x, at.y) {

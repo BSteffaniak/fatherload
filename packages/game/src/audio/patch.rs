@@ -14,6 +14,7 @@
 
 use std::f32::consts::TAU;
 
+mod drowned;
 mod old_deep;
 
 use super::{
@@ -403,6 +404,21 @@ patches! {
     GhostVoice => "ghost_voice",
     LogCanister => "log_canister",
     AnomalyHum => "anomaly_hum",
+    // The Drowned and Frozen (Wave 9, Descent IV), appended at the end so every earlier patch
+    // keeps its seeds.
+    SonarPing => "sonar_ping",
+    GeyserBlast => "geyser_blast",
+    IceCrack => "ice_crack",
+    HullGroan => "hull_groan",
+    ClamSnap => "clam_snap",
+    LeviathanRoar => "leviathan_roar",
+    MerrowChime => "merrow_chime",
+    OceanLoop => "loop_underground_ocean",
+    GlacierLoop => "loop_brine_glaciers",
+    GeyserLoop => "loop_geyser_fields",
+    MerrowLoop => "loop_merrow_city",
+    AbyssLoop => "loop_pearl_abyss",
+    LeviathanLoop => "loop_leviathan",
 }
 
 /// Playback metadata of a patch.
@@ -500,6 +516,33 @@ impl Patch {
     pub const fn info(self) -> PatchInfo {
         use Category::{Alarm, Big, Feedback, Impact, Interface, Loop};
         match self {
+            // The Drowned and Frozen (wave 9): the strata's beds and the Leviathan's theme
+            // loop; the sonar and the city ring out; ice, steam and the hull are physical; the
+            // Leviathan's roar is big.
+            Self::OceanLoop
+            | Self::GlacierLoop
+            | Self::GeyserLoop
+            | Self::MerrowLoop
+            | Self::AbyssLoop
+            | Self::LeviathanLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::SonarPing | Self::MerrowChime => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.5)
+                .jitter(0.01, 0.3),
+            Self::IceCrack | Self::ClamSnap => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.05, 1.0),
+            Self::GeyserBlast | Self::HullGroan => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.04, 0.8),
+            Self::LeviathanRoar => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.02, 0.4)
+                .ducking(0.4)
+                .priority(8),
             // The Old Deep (wave 8): the strata's beds, the core's theme and the dose crackle
             // loop; struck crystal and story stings ring out; machinery is physical.
             Self::CrystalLoop
@@ -1314,6 +1357,19 @@ impl Patch {
             Self::GhostVoice => expedition_voice(rng, false),
             Self::LogCanister => log_canister(rng),
             Self::AnomalyHum => anomaly_hum(rng),
+            Self::SonarPing => drowned::sonar_ping(rng),
+            Self::GeyserBlast => drowned::geyser_blast(rng),
+            Self::IceCrack => drowned::ice_crack(rng),
+            Self::HullGroan => drowned::hull_groan(rng),
+            Self::ClamSnap => drowned::clam_snap(rng),
+            Self::LeviathanRoar => drowned::leviathan_roar(rng),
+            Self::MerrowChime => drowned::merrow_chime(rng),
+            Self::OceanLoop => drowned::ocean_loop(rng),
+            Self::GlacierLoop => drowned::glacier_loop(rng),
+            Self::GeyserLoop => drowned::geyser_loop(rng),
+            Self::MerrowLoop => drowned::merrow_loop(rng),
+            Self::AbyssLoop => drowned::abyss_loop(rng),
+            Self::LeviathanLoop => drowned::leviathan_loop(rng),
         }
     }
 }

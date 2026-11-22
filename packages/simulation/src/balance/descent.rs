@@ -165,8 +165,22 @@ pub type StoryLogSource = fn(crate::descent::Stratum) -> Vec<&'static str>;
 
 /// Every story log source the probe reads: the Descents' own story beats, and the Fathers'
 /// expedition's logs and echoes in their strata (Wave 8 story, wired by the integration).
-pub const STORY_LOG_SOURCES: &[StoryLogSource] =
-    &[descent_story_beats, expedition_logs, expedition_echoes];
+pub const STORY_LOG_SOURCES: &[StoryLogSource] = &[
+    descent_story_beats,
+    expedition_logs,
+    expedition_echoes,
+    drowned_lore,
+];
+
+/// The Drowned and Frozen's story beat found in `stratum` (Wave 9, one per stratum).
+#[must_use]
+pub fn drowned_lore(stratum: crate::descent::Stratum) -> Vec<&'static str> {
+    crate::drowned::DrownedLore::ALL
+        .iter()
+        .filter(|lore| lore.stratum() == stratum)
+        .map(|lore| lore.title())
+        .collect()
+}
 
 /// The Fathers' expedition logs placed in `stratum` (one canister each, in log order).
 #[must_use]
@@ -383,14 +397,19 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::HollowCavern
                                     | LandmarkKind::Settlements
                                     | LandmarkKind::LivingDark
+                                    | LandmarkKind::Drowned
                             )
                         })
                         .count(),
                 )
                 .unwrap_or(u8::MAX);
                 // Wave 8: the Old Deep's authored mechanics and set pieces count too.
-                let (authored_mechanics, authored_pieces) =
-                    crate::old_deep::authored_content(*stratum);
+                let (old_mechanics, old_pieces) = crate::old_deep::authored_content(*stratum);
+                // Wave 9: the Drowned and Frozen's too.
+                let (drowned_mechanics, drowned_pieces) =
+                    crate::drowned::authored_content(*stratum);
+                let authored_mechanics = old_mechanics.saturating_add(drowned_mechanics);
+                let authored_pieces = old_pieces.saturating_add(drowned_pieces);
                 let set_pieces = set_pieces.saturating_add(authored_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(

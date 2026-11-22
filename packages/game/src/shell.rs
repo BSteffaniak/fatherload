@@ -757,6 +757,14 @@ pub enum SoundCue {
     LogCanister,
     /// Stepping into an anomaly room: a slow eerie swell.
     AnomalyHum,
+    // The Drowned and Frozen (Wave 9, Descent IV).
+    SonarPing,
+    GeyserBlast,
+    IceCrack,
+    HullGroan,
+    ClamSnap,
+    LeviathanRoar,
+    MerrowChime,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

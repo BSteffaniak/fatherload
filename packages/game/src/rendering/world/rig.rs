@@ -293,6 +293,9 @@ mod tests {
 
     fn rig(id: PlayerId, velocity_x: f32) -> PlayerPresentation {
         PlayerPresentation {
+            water: fatherload_simulation::drowned::RigWater::default(),
+            pressure: None,
+            submerged: false,
             player_id: id,
             x: 0.0,
             y: 0.0,

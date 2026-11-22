@@ -137,10 +137,21 @@ pub enum Furniture {
     Moonflower,
     /// A wind-up gramophone (stories, the land office).
     Gramophone,
+    // The merrow's aquarium line (Wave 9, Merrow City), appended.
+    /// Merrow City's grand reef aquarium: a window you keep the sea out of (Wave 9).
+    Aquarium,
+    /// A lamp of glowing merrow coral.
+    CoralLamp,
+    /// A planter of swaying kelp in a bowl of sea water.
+    KelpPlanter,
+    /// A chair carved from a giant clam's shell.
+    ShellChair,
+    /// A mirror framed in abyss pearls.
+    PearlMirror,
 }
 
 impl Furniture {
-    pub const ALL: [Self; 45] = [
+    pub const ALL: [Self; 50] = [
         Self::Bed,
         Self::Sofa,
         Self::Table,
@@ -186,6 +197,20 @@ impl Furniture {
         Self::StarChart,
         Self::Moonflower,
         Self::Gramophone,
+        Self::Aquarium,
+        Self::CoralLamp,
+        Self::KelpPlanter,
+        Self::ShellChair,
+        Self::PearlMirror,
+    ];
+
+    /// The merrow's aquarium line, sold in Merrow City (Wave 9).
+    pub const AQUARIUM_LINE: [Self; 5] = [
+        Self::Aquarium,
+        Self::CoralLamp,
+        Self::KelpPlanter,
+        Self::ShellChair,
+        Self::PearlMirror,
     ];
 
     /// The land office's catalogue, in listing order.
@@ -293,6 +318,11 @@ impl Furniture {
             Self::StarChart => "Star chart",
             Self::Moonflower => "Moonflower",
             Self::Gramophone => "Gramophone",
+            Self::Aquarium => "Reef aquarium",
+            Self::CoralLamp => "Coral lamp",
+            Self::KelpPlanter => "Kelp planter",
+            Self::ShellChair => "Shell chair",
+            Self::PearlMirror => "Pearl mirror",
         }
     }
 
@@ -308,7 +338,8 @@ impl Furniture {
             | Self::MountedPick
             | Self::Barometer
             | Self::GuardianMask
-            | Self::StarChart => DecorRow::Wall,
+            | Self::StarChart
+            | Self::PearlMirror => DecorRow::Wall,
             Self::Chandelier
             | Self::Lantern
             | Self::HangingPlant
@@ -334,7 +365,8 @@ impl Furniture {
             | Self::Banner
             | Self::Loom
             | Self::HydroponicRack
-            | Self::CloudHammock => 2,
+            | Self::CloudHammock
+            | Self::Aquarium => 2,
             _ => 1,
         }
     }
@@ -359,6 +391,8 @@ impl Furniture {
                 | Self::GlowcapLamp
                 | Self::HydroponicRack
                 | Self::Moonflower
+                | Self::Aquarium
+                | Self::CoralLamp
         )
     }
 
@@ -377,6 +411,7 @@ impl Furniture {
 
     /// Credits at the land office.
     #[must_use]
+    #[allow(clippy::match_same_arms, reason = "one price per piece")]
     pub const fn catalogue_price(self) -> u32 {
         match self {
             Self::Bed => 180,
@@ -422,6 +457,11 @@ impl Furniture {
             Self::StarChart => 210,
             Self::Moonflower => 165,
             Self::Gramophone => 450,
+            Self::Aquarium => 640,
+            Self::CoralLamp => 210,
+            Self::KelpPlanter => 120,
+            Self::ShellChair => 260,
+            Self::PearlMirror => 480,
         }
     }
 

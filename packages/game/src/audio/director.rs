@@ -263,6 +263,13 @@ enum SeatLoop {
     HeartbeatMusic,
     GlowSeaMusic,
     MindMusic,
+    // The Drowned and Frozen's music (Wave 9): one piece per stratum, the Leviathan's fight.
+    OceanMusic,
+    GlacierMusic,
+    GeyserMusic,
+    MerrowMusic,
+    AbyssMusic,
+    LeviathanMusic,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -889,6 +896,7 @@ impl Director {
         self.crust_music(live, listener, snapshot, ambience);
         self.old_deep_music(live, listener, terrain, snapshot);
         self.living_dark_music(live, listener, snapshot);
+        self.drowned_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1427,6 +1435,79 @@ impl Director {
             SeatLoop::MindMusic,
             Patch::MindLoop,
             (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// The Drowned and Frozen's music (Wave 9): each stratum's own piece while the seat is in it
+    /// (`descent::MusicCue`), and the Leviathan's theme in place of the Pearl Abyss's while it
+    /// fights near.
+    fn drowned_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::{descent::MusicCue, enemy::EnemyKind, entity::EntityState};
+        let terrain = snapshot.terrain;
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let cue = terrain
+            .settings()
+            .generator
+            .has_descents()
+            .then(|| terrain.stratum_at(tile).def().music);
+        let reach = 40.0 * fatherload_simulation::terrain::TILE_SIZE;
+        let fighting = snapshot.enemies.iter().any(|entity| {
+            matches!(entity.state, EntityState::Enemy(state) if state.kind == EnemyKind::Leviathan)
+                && (entity.body.x - listener.x).hypot(entity.body.y - listener.y) < reach
+        });
+        let pieces = [
+            (
+                MusicCue::UndergroundOcean,
+                SeatLoop::OceanMusic,
+                Patch::OceanLoop,
+                0.4,
+            ),
+            (
+                MusicCue::BrineGlaciers,
+                SeatLoop::GlacierMusic,
+                Patch::GlacierLoop,
+                0.38,
+            ),
+            (
+                MusicCue::GeyserFields,
+                SeatLoop::GeyserMusic,
+                Patch::GeyserLoop,
+                0.38,
+            ),
+            (
+                MusicCue::MerrowCity,
+                SeatLoop::MerrowMusic,
+                Patch::MerrowLoop,
+                0.42,
+            ),
+            (
+                MusicCue::PearlAbyss,
+                SeatLoop::AbyssMusic,
+                Patch::AbyssLoop,
+                0.45,
+            ),
+        ];
+        for (piece, slot, patch, gain) in pieces {
+            let playing = cue == Some(piece) && !fighting;
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::LeviathanMusic,
+            Patch::LeviathanLoop,
+            (if fighting { 0.58 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 
@@ -2010,8 +2091,8 @@ mod tests {
     }
 
     /// Every stratum's own music bed (the Crust's, the Old Deep's and the Living Dark's pieces,
-    /// Wave 8).
-    const STRATUM_BEDS: [Patch; 17] = [
+    /// Wave 8; the Drowned and Frozen's, Wave 9).
+    const STRATUM_BEDS: [Patch; 22] = [
         Patch::CrustTopsoilLoop,
         Patch::CrustClayLoop,
         Patch::CrustWorksLoop,
@@ -2029,6 +2110,11 @@ mod tests {
         Patch::HiveLoop,
         Patch::HeartbeatLoop,
         Patch::GlowSeaLoop,
+        Patch::OceanLoop,
+        Patch::GlacierLoop,
+        Patch::GeyserLoop,
+        Patch::MerrowLoop,
+        Patch::AbyssLoop,
     ];
 
     #[test]
@@ -2048,10 +2134,15 @@ mod tests {
         };
         let base = WorldState::new_game_with_settings(one, &settings, SimulationParams::default());
         let layout = fatherload_simulation::descent::fields::cached_layout(&settings);
-        let strata: Vec<Stratum> = [Descent::Crust, Descent::OldDeep, Descent::LivingDark]
-            .into_iter()
-            .flat_map(Descent::strata)
-            .collect();
+        let strata: Vec<Stratum> = [
+            Descent::Crust,
+            Descent::OldDeep,
+            Descent::LivingDark,
+            Descent::DrownedAndFrozen,
+        ]
+        .into_iter()
+        .flat_map(Descent::strata)
+        .collect();
         assert_eq!(strata.len(), STRATUM_BEDS.len());
         let mut heard = Vec::new();
         for stratum in strata {
@@ -2085,7 +2176,7 @@ mod tests {
 
     #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
-        assert!((SeatLoop::MindMusic as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::LeviathanMusic as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

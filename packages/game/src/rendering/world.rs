@@ -39,6 +39,7 @@ mod crypt;
 pub(super) mod daylight;
 mod drops;
 pub(super) use drops::drop_sprite;
+mod drowned;
 mod enemies;
 mod expedition;
 mod explosives;
@@ -205,6 +206,9 @@ pub(super) struct WorldScene<'a> {
     /// Descent II's live state and set pieces (Wave 8).
     pub old_deep: &'a fatherload_simulation::old_deep::OldDeep,
     pub deep_sites: &'a crate::render_snapshot::DeepSites,
+    /// Descent IV's live state and set pieces (Wave 9).
+    pub drowned: &'a fatherload_simulation::drowned::DrownedState,
+    pub drowned_sites: &'a crate::render_snapshot::DrownedSites,
     /// How much of the screen and world effects the accessibility setting lets through (the
     /// Flesh Caverns' pulse, Wave 8): 1 full, 0 off.
     pub effects_strength: f32,
@@ -378,6 +382,20 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         arena: scene.deep_sites.arena.as_ref(),
     };
     old_deep::draw_deep_world(draw, &deep_scene);
+    // The Drowned and Frozen (Wave 9): geysers, clams, vents, currents, the Leviathan's tells.
+    let drowned_scene = drowned::DrownedScene {
+        terrain: scene.terrain,
+        drowned: scene.drowned,
+        sites: scene.drowned_sites,
+        visible: scene.visible,
+        world_millis: scene.world_millis,
+        tick_rate_hz: scene.tick_rate_hz,
+        seconds,
+        players: scene.players,
+        enemies: scene.enemies,
+        effects_strength: scene.effects_strength,
+    };
+    drowned::draw_drowned_world(draw, &drowned_scene);
     let refraction = old_deep::local_refraction(&deep_scene);
     let beam_lights: Vec<(f32, f32, f32)> = refraction
         .beams
@@ -630,6 +648,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     // The Mycelial Mind's nerves: wired to its nodes while they shield it, a raw core when
     // exposed (Wave 8).
     living_dark::draw_mind_nerves(draw, scene.enemies, seconds, scene.effects_strength);
+    // Sonar rings and the frost on rigs, over the dark (Wave 9).
+    drowned::draw_drowned_lights(draw, &drowned_scene);
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }

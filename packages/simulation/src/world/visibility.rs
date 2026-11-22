@@ -98,6 +98,7 @@ impl WorldState {
             living_dark: _,
             living_schedule: _,
             expedition: _,
+            drowned: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

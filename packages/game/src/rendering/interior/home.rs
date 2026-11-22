@@ -1322,6 +1322,77 @@ fn draw_wave6_piece(
                 d.draw_rectangle(mid + 8, f - 46 - rise, 2, 3, CREAM);
             }
         }
+        // The merrow's aquarium line (Wave 9, Merrow City).
+        Furniture::Aquarium => {
+            // A grand reef tank on a shell-inlaid cabinet: coral, kelp, a darting school.
+            d.draw_rectangle(x + 4, f - 12, w - 8, 12, TEAL_DARK);
+            for inlay in (x + 8..x + w - 8).step_by(8) {
+                d.draw_circle(inlay, f - 6, 2.0, BONE);
+            }
+            d.draw_rectangle(x + 3, f - 46, w - 6, 34, with_alpha(OCEAN, 190));
+            d.draw_rectangle(x + 3, f - 46, w - 6, 6, with_alpha(SKY, 140));
+            d.draw_rectangle_lines(x + 3, f - 46, w - 6, 34, STEEL_LIGHT);
+            d.draw_rectangle(x + 5, f - 16, w - 10, 3, SAND);
+            for (dx, h, color) in [(8, 14, ROSE), (16, 9, PINK), (w - 18, 12, RED)] {
+                d.draw_rectangle(x + dx, f - 16 - h, 3, h, color);
+                d.draw_rectangle(x + dx - 2, f - 12 - h, 2, 2, color);
+            }
+            let sway = ((seconds * 1.2).sin() * 2.0) as i32;
+            d.draw_rectangle(x + w - 10 + sway, f - 38, 2, 22, LEAF);
+            for fish in 0..4 {
+                let lap = (seconds * 0.6 + fish as f32 * 0.8).sin();
+                let fx = mid + (lap * (w / 2 - 12) as f32) as i32;
+                let fy = f - 36 + fish * 5;
+                d.draw_rectangle(fx - 2, fy, 5, 2, if fish % 2 == 0 { GOLD } else { MINT });
+                d.draw_rectangle(fx + if lap > 0.0 { -3 } else { 3 }, fy, 1, 2, AMBER);
+            }
+            let rise = (seconds * 9.0) as i32 % 26;
+            d.draw_rectangle(x + 12, f - 18 - rise, 1, 1, with_alpha(BONE, 200));
+            if lit {
+                d.draw_rectangle(x + 3, f - 46, w - 6, 34, with_alpha(MINT, 24));
+            }
+        }
+        Furniture::CoralLamp => {
+            d.draw_rectangle(mid - 6, f - 4, 12, 4, TEAL_DARK);
+            d.draw_rectangle(mid - 1, f - 20, 3, 16, ROSE);
+            for (dx, dy) in [(-6, -26), (5, -24), (-2, -32), (3, -30)] {
+                d.draw_circle(mid + dx, f + dy, 3.0, PINK);
+            }
+            let pulse = ((seconds * 1.5).sin() * 0.5 + 0.5) * 70.0;
+            d.draw_circle(mid, f - 28, 12.0, with_alpha(PINK, pulse as u8 + 20));
+        }
+        Furniture::KelpPlanter => {
+            d.draw_ellipse(mid, f - 6, 11.0, 6.0, with_alpha(OCEAN, 200));
+            d.draw_ellipse_lines(mid, f - 6, 11.0, 6.0, STEEL_LIGHT);
+            for (strand, dx) in [-6, -1, 4].into_iter().enumerate() {
+                let sway = ((seconds * 1.1 + strand as f32).sin() * 3.0) as i32;
+                d.draw_rectangle(mid + dx + sway, f - 34 + strand as i32 * 3, 2, 28, LEAF);
+                d.draw_rectangle(mid + dx + sway + 2, f - 24, 2, 2, LIME);
+            }
+        }
+        Furniture::ShellChair => {
+            d.draw_rectangle(mid - 8, f - 4, 16, 4, SAND);
+            d.draw_ellipse(mid, f - 18, 11.0, 14.0, MIST);
+            for rib in [-6, -2, 2, 6] {
+                d.draw_rectangle(mid + rib, f - 30, 1, 16, FOG);
+            }
+            d.draw_ellipse(mid, f - 10, 9.0, 4.0, PINK);
+        }
+        Furniture::PearlMirror => {
+            let y = WALL_ROW_Y - 18;
+            d.draw_ellipse(mid, y + 14, 10.0, 15.0, MIST);
+            for bead in 0..10 {
+                let angle = bead as f32 / 10.0 * std::f32::consts::TAU;
+                d.draw_circle(
+                    mid + (angle.cos() * 10.0) as i32,
+                    y + 14 + (angle.sin() * 15.0) as i32,
+                    1.5,
+                    BONE,
+                );
+            }
+            d.draw_ellipse(mid, y + 14, 7.0, 12.0, ICE);
+            d.draw_rectangle(mid - 3, y + 6, 2, 10, with_alpha(BONE, 160));
+        }
         _ => {}
     }
 }

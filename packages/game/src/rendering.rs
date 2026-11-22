@@ -21,6 +21,7 @@ mod build;
 mod counters;
 mod crypt_map;
 mod descent_hud;
+pub mod drowned_hud;
 mod expedition_card;
 mod expedition_hud;
 #[cfg(not(target_os = "emscripten"))]
@@ -777,6 +778,8 @@ impl GameRenderer {
             crust: snapshot.crust,
             old_deep: snapshot.old_deep,
             deep_sites: &snapshot.deep_sites,
+            drowned: snapshot.drowned,
+            drowned_sites: &snapshot.drowned_sites,
             effects_strength: match snapshot.effects {
                 crate::screen_fx::EffectsIntensity::Full => 1.0,
                 crate::screen_fx::EffectsIntensity::Reduced => 0.45,

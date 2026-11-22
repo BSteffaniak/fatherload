@@ -62,6 +62,9 @@ pub struct PlayerTickState {
     /// The mine cart the rig rides (Wave 8, the Crust).
     #[serde(default)]
     pub cart: Option<crate::crust::CartRide>,
+    /// Ballast trim and hull frost (Wave 9, the Drowned and Frozen).
+    #[serde(default)]
+    pub water: crate::drowned::RigWater,
     pub fuel: f32,
     pub hull: f32,
     pub drill: Option<DrillState>,
@@ -228,6 +231,9 @@ pub enum SectionKey {
     /// The Fathers' expedition: logs read, sealed canisters, echoes heard, anomaly rooms
     /// entered (Wave 8 story; the crew shares one journal).
     Expedition,
+    /// The Drowned and Frozen (Wave 9): sonar pings, ink clouds, the eel-dragon, the
+    /// Leviathan's fight and the lore found (refrozen ice travels as terrain ops).
+    Drowned,
 }
 
 impl SectionKey {
@@ -247,7 +253,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 24] = [
+    pub const SHARED: [Self; 25] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -273,6 +279,7 @@ impl SectionKey {
         Self::Expedition,
         // The authored Crust (Wave 8 integration: it was left out, so clients never saw it).
         Self::Crust,
+        Self::Drowned,
     ];
 }
 
@@ -304,6 +311,7 @@ pub enum SectionPayload {
     Crust(Box<crate::crust::CrustState>),
     OldDeep(Box<crate::old_deep::OldDeep>),
     LivingDark(Box<crate::living_dark::LivingDark>),
+    Drowned(Box<crate::drowned::DrownedState>),
     Expedition(Box<crate::expedition::ExpeditionState>),
 }
 
@@ -329,6 +337,7 @@ impl WorldState {
             x_remainder: rig.x_remainder,
             attitude: rig.attitude,
             cart: rig.cart,
+            water: rig.water,
             fuel: rig.fuel,
             hull: rig.hull,
             drill: self.active_drills.get(&player_id).copied(),
@@ -351,6 +360,7 @@ impl WorldState {
             x_remainder,
             attitude,
             cart,
+            water,
             fuel,
             hull,
             drill,
@@ -369,6 +379,7 @@ impl WorldState {
             player.x_remainder = x_remainder;
             player.attitude = attitude;
             player.cart = cart;
+            player.water = water;
             player.fuel = fuel;
             player.hull = hull;
         }
@@ -499,6 +510,7 @@ impl WorldState {
             living_dark,
             living_schedule: _,
             expedition,
+            drowned,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -601,6 +613,7 @@ impl WorldState {
             SectionKey::OldDeep => SectionPayload::OldDeep(Box::new(old_deep.clone())),
             SectionKey::LivingDark => SectionPayload::LivingDark(Box::new(living_dark.clone())),
             SectionKey::Expedition => SectionPayload::Expedition(Box::new(expedition.clone())),
+            SectionKey::Drowned => SectionPayload::Drowned(Box::new(drowned.clone())),
         })
     }
 
@@ -775,6 +788,9 @@ impl WorldState {
             }
             (SectionKey::Expedition, SectionPayload::Expedition(expedition)) => {
                 self.expedition = *expedition;
+            }
+            (SectionKey::Drowned, SectionPayload::Drowned(drowned)) => {
+                self.drowned = *drowned;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

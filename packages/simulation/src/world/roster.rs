@@ -118,11 +118,14 @@ impl WorldState {
             living_schedule: _,
             // The expedition's trail is the crew's, not a player's.
             expedition: _,
+            // A leaving rig's pings fade with it; the fights belong to the world (Wave 9).
+            drowned,
         } = self;
         logistics.forget_transient(player_id);
         crust.forget(player_id);
         old_deep.forget(player_id);
         living_dark.forget(player_id);
+        drowned.forget(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

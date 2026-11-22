@@ -337,10 +337,37 @@ pub enum CaveTile {
     AcidGland,
     /// A burnt root: scorched by fire or a root axe, it never grows back.
     CharredRoot,
+    // --- The Drowned and Frozen (Wave 9, Descent IV), appended ------------------------------
+    /// The Underground Ocean's rock: silt-packed, barnacled stone (Wave 9).
+    Seabed,
+    /// A kelp frond of the Underground Ocean's forests: soft, quick to cut.
+    Kelp,
+    /// Living reef coral: it glows softly (the Ocean and Merrow City).
+    Coral,
+    /// Salty glacier ice of the Brine Glaciers: rigs slide on it.
+    BrineIce,
+    /// Old, blue pack ice: hard, and as slick as brine ice.
+    PackIce,
+    /// Thin rime over a frozen-over tunnel: it cracks at a touch of the drill.
+    Rime,
+    /// A warm vent in the ice: a rig near it thaws (hull frost melts).
+    ThermalVent,
+    /// A builder's figure frozen in clear ice beside the cable.
+    FrozenFigure,
+    /// The Geyser Fields' crusty, layered mineral rock.
+    Sinter,
+    /// A geyser's throat: steam bursts up its chimney on a beat.
+    GeyserVent,
+    /// The Pearl Abyss's black, lumpy deep-sea basalt.
+    PillowBasalt,
+    /// A giant clam: drill it while it gapes for an Abyss Pearl; shut, it bites.
+    PearlClam,
+    /// Carved reef stone of Merrow City's streets and walls.
+    MerrowStone,
 }
 
 impl CaveTile {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 35] = [
         Self::Crystal,
         Self::MushroomStem,
         Self::MushroomCap,
@@ -363,6 +390,19 @@ impl CaveTile {
         Self::SporePod,
         Self::AcidGland,
         Self::CharredRoot,
+        Self::Seabed,
+        Self::Kelp,
+        Self::Coral,
+        Self::BrineIce,
+        Self::PackIce,
+        Self::Rime,
+        Self::ThermalVent,
+        Self::FrozenFigure,
+        Self::Sinter,
+        Self::GeyserVent,
+        Self::PillowBasalt,
+        Self::PearlClam,
+        Self::MerrowStone,
     ];
 
     #[must_use]
@@ -390,6 +430,19 @@ impl CaveTile {
             Self::SporePod => "spore pod",
             Self::AcidGland => "acid gland",
             Self::CharredRoot => "charred root",
+            Self::Seabed => "seabed rock",
+            Self::Kelp => "kelp",
+            Self::Coral => "coral",
+            Self::BrineIce => "brine ice",
+            Self::PackIce => "pack ice",
+            Self::Rime => "rime",
+            Self::ThermalVent => "thermal vent",
+            Self::FrozenFigure => "frozen figure",
+            Self::Sinter => "sinter",
+            Self::GeyserVent => "geyser vent",
+            Self::PillowBasalt => "pillow basalt",
+            Self::PearlClam => "pearl clam",
+            Self::MerrowStone => "merrow stone",
         }
     }
 
@@ -419,6 +472,19 @@ impl CaveTile {
             Self::SporePod => 19,
             Self::AcidGland => 20,
             Self::CharredRoot => 21,
+            Self::Seabed => 22,
+            Self::Kelp => 23,
+            Self::Coral => 24,
+            Self::BrineIce => 25,
+            Self::PackIce => 26,
+            Self::Rime => 27,
+            Self::ThermalVent => 28,
+            Self::FrozenFigure => 29,
+            Self::Sinter => 30,
+            Self::GeyserVent => 31,
+            Self::PillowBasalt => 32,
+            Self::PearlClam => 33,
+            Self::MerrowStone => 34,
         }
     }
 
@@ -462,6 +528,20 @@ impl CaveTile {
             | Self::RelicCache
             | Self::FossilRib => 3,
             Self::Obsidian => 4,
+            // The Drowned and Frozen (Wave 9).
+            Self::Seabed => 3,
+            Self::Kelp => 1,
+            Self::Coral => 2,
+            Self::BrineIce => 3,
+            Self::PackIce => 4,
+            Self::Rime => 1,
+            Self::ThermalVent => 4,
+            Self::FrozenFigure => 3,
+            Self::Sinter => 3,
+            Self::GeyserVent => 4,
+            Self::PillowBasalt => 4,
+            Self::PearlClam => 2,
+            Self::MerrowStone => 3,
         }
     }
 
@@ -484,6 +564,20 @@ impl CaveTile {
             Self::RuinBrick | Self::RuinGlyph | Self::RelicCache => 8,
             Self::RuinPillar => 9,
             Self::Obsidian => 10,
+            // The Drowned and Frozen (Wave 9).
+            Self::Seabed => 5,
+            Self::Kelp => 1,
+            Self::Coral => 3,
+            Self::BrineIce => 4,
+            Self::PackIce => 8,
+            Self::Rime => 2,
+            Self::ThermalVent => 10,
+            Self::FrozenFigure => 8,
+            Self::Sinter => 4,
+            Self::GeyserVent => 12,
+            Self::PillowBasalt => 7,
+            Self::PearlClam => 3,
+            Self::MerrowStone => 8,
         }
     }
 
@@ -510,16 +604,38 @@ impl CaveTile {
             Self::Crystal | Self::FossilRib => 0.17,
             Self::RuinBrick | Self::RuinPillar | Self::RuinGlyph => 0.16,
             Self::Obsidian => 0.2,
+            // The Drowned and Frozen (Wave 9).
+            Self::Seabed => 0.15,
+            Self::Kelp => 0.05,
+            Self::Coral => 0.1,
+            Self::BrineIce => 0.12,
+            Self::PackIce => 0.18,
+            Self::Rime => 0.06,
+            Self::ThermalVent => 0.2,
+            Self::FrozenFigure => 0.16,
+            Self::Sinter => 0.12,
+            Self::GeyserVent => 0.2,
+            Self::PillowBasalt => 0.17,
+            Self::PearlClam => 0.1,
+            Self::MerrowStone => 0.16,
         }
     }
 
     /// Light the tile gives off, in tiles (presentation; `0` for none).
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Drowned and Frozen's rows keep their own lines"
+    )]
     pub const fn light_radius(self) -> u8 {
         match self {
             Self::Crystal | Self::GlowCap => 3,
             Self::RuinGlyph | Self::GlowAlgae | Self::JellyCell => 2,
             Self::TreasureCache | Self::RelicCache | Self::SporePod | Self::AcidGland => 1,
+            // The Drowned and Frozen (Wave 9): glowing coral, warm vents, steam throats, the
+            // pearls' sheen and the figures' cold light.
+            Self::ThermalVent => 2,
+            Self::Coral | Self::FrozenFigure | Self::GeyserVent | Self::PearlClam => 1,
             _ => 0,
         }
     }

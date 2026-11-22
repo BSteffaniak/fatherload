@@ -66,6 +66,9 @@ mod drop_economy_tests;
 #[cfg(test)]
 mod drop_tests;
 pub mod drops;
+mod drowned;
+#[cfg(test)]
+mod drowned_tests;
 mod enemies;
 #[cfg(test)]
 mod enemy_body_tests;
@@ -474,6 +477,10 @@ pub struct WorldState {
     /// canisters, echoes heard and anomaly rooms entered, shared by the crew.
     #[serde(default)]
     expedition: crate::expedition::ExpeditionState,
+    /// The Drowned and Frozen's shared state (Wave 9, Descent IV, see [`crate::drowned`]):
+    /// sonar pings, ink clouds, the eel-dragon, the Leviathan's fight, the lore found.
+    #[serde(default)]
+    drowned: crate::drowned::DrownedState,
 }
 
 impl WorldState {

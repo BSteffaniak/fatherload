@@ -23,6 +23,7 @@ pub const fn local_id(culture: Culture) -> &'static str {
         Culture::Aeronaut => "local-aeronaut",
         Culture::Cloudborn => "local-cloudborn",
         Culture::Lunar => "local-lunar",
+        Culture::Merrow => "local-merrow",
     }
 }
 
@@ -94,6 +95,14 @@ pub const fn local_lines(culture: Culture) -> &'static [&'static str] {
             "Low gravity's lovely until you sneeze. Then it's an expedition.",
             "The lettuce up here tastes of nothing and we'd fight a Warden for it.",
             "Every hiss in {village} gets a name and a work ticket. The current favourite is called Gerald.",
+        ],
+        Culture::Merrow => &[
+            "The bubble over {village} was blown by our great-great-grandmothers, one breath each. We still breathe a thank-you into it at midsummer.",
+            "Dry folk always gasp at the moon pools. Then they gasp at the prices. Then they gasp at the eels.",
+            "We sing the currents. Every child of {village} learns the song of the gyre before they learn to count.",
+            "The Leviathan sleeps in the trench below. We leave it the first pearl of every bed, and it leaves us be.",
+            "Your kind come down in sixes, {player}. Always sixes. We keep a song for each six.",
+            "Fish tanks are a dry-folk joke, you know. To us an aquarium is a window you keep the sea out of.",
         ],
     }
 }

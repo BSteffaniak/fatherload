@@ -1537,6 +1537,7 @@ fn draw_decor(
         Culture::Aeronaut => COPPER,
         Culture::Cloudborn => SKY,
         Culture::Lunar => STEEL_LIGHT,
+        Culture::Merrow => MINT,
     };
     match decor.kind {
         DecorKind::Well => {
