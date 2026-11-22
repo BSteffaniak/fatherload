@@ -44,6 +44,9 @@ impl WorldState {
         // Crew identities (profile ids are the credential for reclaiming a rig) and parked
         // players stay on the host.
         world.crew = crate::crew::CrewRoster::default();
+        // The fluid schedule is host bookkeeping (a client's authority never ticks; its
+        // prediction wakes fluid from its own terrain writes, see `world/fluids.rs`).
+        world.fluids = super::FluidSchedule::default();
         world
     }
 
@@ -85,6 +88,7 @@ impl WorldState {
             homes: _,
             tombs: _,
             fields: _,
+            fluids: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

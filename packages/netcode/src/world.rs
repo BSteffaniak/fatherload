@@ -294,6 +294,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::CryptTell { .. } => (294, None),
         GameplayEventKind::CryptSlam { .. } => (295, None),
         GameplayEventKind::CryptSummon { .. } => (296, None),
+        // Fluids (Part III F9, wave 7): 380-389.
+        GameplayEventKind::FluidBreached { .. } => (380, None),
+        GameplayEventKind::FluidReacted { .. } => (381, None),
+        GameplayEventKind::RigSubmerged { player_id, .. } => (382, Some(player_id)),
+        GameplayEventKind::RigSurfaced { player_id, .. } => (383, Some(player_id)),
     }
 }
 

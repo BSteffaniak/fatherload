@@ -105,6 +105,18 @@ impl WorldState {
                     // A tether harpoon's line holds the rig (T21).
                     self.apply_tether(player_id, controls.thrust);
                 }
+                if !no_clip
+                    && !recalled
+                    && let Some(before) = position_before
+                {
+                    // Fluids (Part III F9): buoyancy, drag, the submarine mode and damage.
+                    self.apply_fluid_to_rig(
+                        player_id,
+                        before,
+                        (controls.horizontal(), controls.thrust, controls.drill_down),
+                        &mut output,
+                    );
+                }
                 if let Some(before) = position_before {
                     // Sky bands, updrafts and icing (F6, V8 skies).
                     self.push_altitude_events(player_id, before, &mut output);
@@ -478,6 +490,8 @@ impl WorldState {
         self.advance_milestones(&mut output);
         self.apply_test_mode_refills();
         self.advance_sky_isles(&mut output);
+        // Last before the journal closes: every terrain write this tick wakes its fluid.
+        self.advance_fluids(next_tick, &mut output);
         output.terrain_ops = self.terrain.finish_journal();
         self.wake_entities_near(&output.terrain_ops);
         output.discoveries = self.take_discoveries();

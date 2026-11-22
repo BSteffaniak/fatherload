@@ -90,6 +90,25 @@ impl WorldState {
                 return self.place_dev_field_zone(player_id, preset);
             }
             TestModeAction::ClearFieldZones => self.fields.clear(),
+            TestModeAction::PourTestPools => {
+                let Some(at) = self
+                    .players
+                    .get(&player_id)
+                    .map(|player| player.tile_in(self.terrain.frame()))
+                else {
+                    return PlayerScopedCommandOutcome::UnknownPlayer;
+                };
+                // The basins' open top rows sit level with the rig, just to its right.
+                let origin = TilePosition {
+                    x: at.x + 1,
+                    y: at.y - 4,
+                };
+                return if self.pour_demo_basins(origin) {
+                    PlayerScopedCommandOutcome::Applied
+                } else {
+                    PlayerScopedCommandOutcome::IgnoredUnavailable
+                };
+            }
             TestModeAction::SetNoClip(on) => {
                 let was_on = state.no_clip;
                 state.no_clip = on;

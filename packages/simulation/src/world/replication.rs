@@ -460,6 +460,7 @@ impl WorldState {
             homes,
             tombs,
             fields,
+            fluids: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,

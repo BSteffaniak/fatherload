@@ -943,6 +943,29 @@ pub enum GameplayEventKind {
         y: i32,
         count: u8,
     },
+    // Fluids (Part III F9, wave 7; netcode codes 380-389).
+    /// A terrain change opened a fluid body at tile `(x, y)`: the flood begins.
+    FluidBreached {
+        kind: crate::fluid::FluidKind,
+        x: i32,
+        y: i32,
+    },
+    /// A fluid reaction happened at tile `(x, y)` (at most one event per reaction per step).
+    FluidReacted {
+        reaction: crate::fluid::FluidReaction,
+        x: i32,
+        y: i32,
+    },
+    /// A rig went under (two thirds submerged: submarine mode).
+    RigSubmerged {
+        player_id: PlayerId,
+        kind: crate::fluid::FluidKind,
+    },
+    /// A rig came back up out of fluid.
+    RigSurfaced {
+        player_id: PlayerId,
+        kind: crate::fluid::FluidKind,
+    },
 }
 
 /// What a weapon shot struck.

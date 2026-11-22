@@ -887,6 +887,10 @@ impl Tile {
                 Some(tile) => TileKind::Lunar(tile),
                 None => return None,
             },
+            0xA00..=0xAFF => match crate::fluid::FluidKind::from_code(variant as u64) {
+                Some(fluid) => TileKind::Fluid(fluid),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

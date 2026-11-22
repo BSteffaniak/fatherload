@@ -143,6 +143,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `HazardGear::attitude` (tilt rating, gyro, horizon hold) in loadouts, the `FieldZones`
 ///   world field and `SectionKey::Fields` section, and `TestModeAction::{PlaceFieldZone,
 ///   ClearFieldZones}`.
+/// * F9 fluids: `TileKind::Fluid(FluidKind)` tiles in terrain ops, chunk refreshes and
+///   keyframes (the durability byte is the fluid's level), the fluid events 380-383
+///   (`FluidBreached`, `FluidReacted`, `RigSubmerged`, `RigSurfaced`) and
+///   `TestModeAction::PourTestPools`.
 pub const PROTOCOL_VERSION: u8 = 15;
 
 /// One client input frame: the controls and actions for exactly one tick.

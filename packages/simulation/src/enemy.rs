@@ -514,6 +514,19 @@ impl EnemyKind {
         Self::CryptLord,
     ];
 
+    /// Whether the creature goes into fluid (Part III F9). No creature does yet: every one
+    /// turns back at a fluid's edge (`WorldState::keep_out_of_fluid`). Descent IV's swimmers
+    /// (reef sharks, eel-dragons, anglerfish) answer `true` here.
+    #[must_use]
+    #[allow(
+        clippy::unused_self,
+        clippy::missing_const_for_fn,
+        reason = "the per-kind seam for the swimming creatures of later waves"
+    )]
+    pub fn can_swim(self) -> bool {
+        false
+    }
+
     /// The kind's stats.
     #[must_use]
     #[allow(clippy::too_many_lines, reason = "the stat table, one block per kind")]

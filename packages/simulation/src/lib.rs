@@ -28,6 +28,7 @@ pub mod environment;
 pub mod event;
 pub mod explosive;
 pub mod field;
+pub mod fluid;
 pub mod hash;
 pub mod hazard;
 pub mod home;

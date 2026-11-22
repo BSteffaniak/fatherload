@@ -77,6 +77,9 @@ mod flight_tests;
 mod frame;
 #[cfg(test)]
 mod frame_tests;
+#[cfg(test)]
+mod fluid_tests;
+mod fluids;
 mod garage;
 #[cfg(test)]
 mod god_mode_tests;
@@ -170,6 +173,7 @@ pub use enemies::{
     GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,
     SLAM_REACH, TURRET_MOUNTS, guardian_move, is_tomb_guardian,
 };
+pub use fluids::FluidSchedule;
 pub use homes::{
     CELLAR_ROWS, CONTRACTOR_REACH_COLUMNS, ContractorOffer, HireQuote, MAX_CONTRACTORS_LISTED,
 };
@@ -421,6 +425,10 @@ pub struct WorldState {
     /// over the stratum fields.
     #[serde(default)]
     fields: crate::field::FieldZones,
+    /// Which fluid cells the next fluid step looks at (Part III F9, see `world/fluids.rs`; the
+    /// fluid itself lives in the terrain). Saved with the world, never hashed or replicated.
+    #[serde(default)]
+    fluids: FluidSchedule,
 }
 
 impl WorldState {

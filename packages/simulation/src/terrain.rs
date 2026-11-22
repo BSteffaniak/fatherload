@@ -314,6 +314,10 @@ pub enum TileKind {
     /// A tile of the filled Moon ([`GeneratorVersion::V9`](worldgen::GeneratorVersion::V9)
     /// worlds; see [`crate::moon`]).
     Lunar(crate::moon::LunarTile),
+    /// A fluid cell (Part III F9, [`crate::fluid`]): open ground for everything that moves; the
+    /// tile's `durability` byte is the fluid's level ([`crate::fluid::FLUID_FULL`] per full
+    /// tile). Only V11+ worlds generate fluid; any world can hold it once it flows.
+    Fluid(crate::fluid::FluidKind),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -420,7 +424,15 @@ impl TileKind {
             Self::Surface(material) => material.name(),
             Self::Sky(tile) => tile.name(),
             Self::Lunar(tile) => tile.name(),
+            Self::Fluid(fluid) => fluid.name(),
         }
+    }
+
+    /// Whether bodies move through the tile: open air or fluid ([`Self::Fluid`]). Everything
+    /// else is solid ground.
+    #[must_use]
+    pub const fn is_open(self) -> bool {
+        matches!(self, Self::Air | Self::Fluid(_))
     }
 }
 
@@ -506,6 +518,7 @@ impl Tile {
             TileKind::Surface(material) => 0x500 | material.code(),
             TileKind::Sky(tile) => 0x600 | tile.code(),
             TileKind::Lunar(tile) => 0x700 | tile.code(),
+            TileKind::Fluid(fluid) => FLUID_TILE_CODE_BASE | fluid.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -514,6 +527,10 @@ impl Tile {
 /// Kind-code range of [`TileKind::Built`] tiles in [`Tile::code`] (`0xB00 | BuiltTile::code`),
 /// kept clear of the ranges other tile families use.
 pub const BUILT_TILE_CODE_BASE: u64 = 0xB00;
+
+/// Kind-code range of [`TileKind::Fluid`] tiles in [`Tile::code`] (`0xA00 | FluidKind::code`;
+/// the tile's durability byte is the fluid's level).
+pub const FLUID_TILE_CODE_BASE: u64 = 0xA00;
 
 /// Order-independent digest contribution of one tile at one index (bounded terrain).
 const fn tile_digest(index: usize, tile: Tile) -> u64 {
@@ -1332,8 +1349,13 @@ impl Terrain {
     #[must_use]
     pub fn is_solid_at(&self, position: TilePosition) -> bool {
         // Above the world is open sky; below it and past its sides is bedrock (no tile).
-        self.tile(position)
-            .is_some_and(|tile| tile.kind != TileKind::Air)
+        self.tile(position).is_some_and(|tile| !tile.kind.is_open())
+    }
+
+    /// The fluid at `position`, if it holds any ([`crate::fluid`]).
+    #[must_use]
+    pub fn fluid_at(&self, position: TilePosition) -> Option<crate::fluid::FluidCell> {
+        self.tile(position).and_then(crate::fluid::FluidCell::of)
     }
 
     #[must_use]
@@ -1431,7 +1453,7 @@ impl Terrain {
     }
 
     fn chip_tile(tile: &mut Tile, bite: u8, unrestricted: bool) -> MineResult {
-        if tile.kind == TileKind::Air || is_indestructible(tile.kind) {
+        if tile.kind.is_open() || is_indestructible(tile.kind) {
             return MineResult::Blocked;
         }
 
@@ -1489,7 +1511,9 @@ impl Terrain {
                 };
                 let before = self.read(slot).kind;
                 let left = match before {
+                    // Fluid rides out a blast (the blast opens its walls; the fluid flows).
                     TileKind::Air
+                    | TileKind::Fluid(_)
                     | TileKind::Lava
                     | TileKind::Foundation
                     | TileKind::Bedrock
@@ -1806,6 +1830,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
     match kind {
         TileKind::Bedrock | TileKind::Built(_) => UNBREAKABLE_HARDNESS,
         TileKind::Air
+        | TileKind::Fluid(_)
         | TileKind::Lava
         | TileKind::Gas
         | TileKind::ExplosivePocket
@@ -1856,6 +1881,8 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
 pub const fn tile_durability(kind: TileKind) -> u8 {
     match kind {
         TileKind::Air => 0,
+        // A fresh fluid tile is a full one (its durability byte is its level).
+        TileKind::Fluid(_) => crate::fluid::FLUID_FULL,
         TileKind::Dirt => 2,
         TileKind::Clay => 4,
         TileKind::Stone => 7,

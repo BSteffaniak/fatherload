@@ -314,7 +314,7 @@ impl WorldState {
             }
             generated += 1;
             if let Some(tile) = self.terrain.tile(position)
-                && tile.kind != TileKind::Air
+                && !tile.kind.is_open()
                 && !matches!(tile.kind, TileKind::Built(_))
             {
                 left.push((position, tile.kind));

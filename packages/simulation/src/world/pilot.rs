@@ -100,7 +100,17 @@ impl PilotTerrain for PilotView<'_> {
     }
 
     fn water(&self, tile: TilePosition) -> bool {
-        self.world.terrain.water_at(tile)
+        // Cave water, and any fluid deep enough to swim in (Part III F9).
+        self.world.terrain.water_at(tile) || self.world.swimmable_fluid_at(tile).is_some()
+    }
+
+    fn swim_sink(&self, tile: TilePosition) -> f32 {
+        match self.world.swimmable_fluid_at(tile) {
+            Some(crate::fluid::FluidKind::Brine) => -crate::pilot::SWIM_SINK * 0.4,
+            Some(crate::fluid::FluidKind::LiquidMetal) => -crate::pilot::SWIM_SINK * 1.5,
+            Some(crate::fluid::FluidKind::Acid) => crate::pilot::SWIM_SINK * 0.9,
+            Some(crate::fluid::FluidKind::Water) | None => crate::pilot::SWIM_SINK,
+        }
     }
 
     fn platform_top(&self, left: f32, right: f32, from_y: f32, to_y: f32) -> Option<f32> {
@@ -148,7 +158,7 @@ pub fn pilot_blocks(terrain: &Terrain, tile: TilePosition) -> bool {
     }
     terrain
         .tile(tile)
-        .is_some_and(|found| found.kind != TileKind::Air && !pilot_passable(found.kind))
+        .is_some_and(|found| !found.kind.is_open() && !pilot_passable(found.kind))
 }
 
 #[allow(
@@ -231,7 +241,7 @@ impl WorldState {
     #[must_use]
     pub fn pilot_air_at(&self, x: f32, y: f32) -> PilotAir {
         let tile = self.frame().tile_at(x, y);
-        if self.terrain.water_at(tile) {
+        if self.terrain.water_at(tile) || self.swimmable_fluid_at(tile).is_some() {
             return PilotAir::Water;
         }
         let in_cloud = self.entities.of_kind(EntityKind::GasCloud).any(|entity| {
@@ -726,6 +736,8 @@ impl WorldState {
             if self.touches_lava(&body, &state) {
                 damage = LAVA_DAMAGE_PER_SECOND.mul_add(dt, damage);
             }
+            // Acid and molten metal (Part III F9).
+            damage += self.pilot_fluid_damage(&body, state.height(), dt);
             if state.calm >= REGEN_AFTER_SECONDS && damage <= 0.0 && !downed {
                 // Second Wind and Restless Soul (WP-TOMBS relics) change the pace.
                 let regen =
@@ -769,6 +781,14 @@ impl WorldState {
         let mut air = self.pilot_air_at(hx, hy);
         if air == PilotAir::Thin && self.lunar_air(owner, hx, hy) {
             // WP-MOON: the colony's rooms and the rig's life-support air line.
+            air = PilotAir::Breathable;
+        }
+        if air == PilotAir::Water
+            && self
+                .swimmable_fluid_at(self.frame().tile_at(hx, hy))
+                .is_some_and(|kind| self.pilot_breathes_in(owner, kind))
+        {
+            // The Bio-Filter seam (Part III F9; no gear breathes fluid yet).
             air = PilotAir::Breathable;
         }
         let before = state.oxygen;

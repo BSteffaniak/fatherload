@@ -185,7 +185,7 @@ impl WorldState {
                 && self
                     .terrain
                     .tile(target)
-                    .is_none_or(|tile| tile.kind == TileKind::Air)
+                    .is_none_or(|tile| tile.kind.is_open())
         }) {
             // Steering past open air: a crown bore pressed into the ceiling still bores upward
             // (an analog stick is rarely dead centre while thrusting).
@@ -204,7 +204,7 @@ impl WorldState {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             };
-            if tile.kind == TileKind::Air || is_indestructible(tile.kind) {
+            if tile.kind.is_open() || is_indestructible(tile.kind) {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
@@ -526,7 +526,7 @@ pub fn authoritative_mine_target(
 #[must_use]
 pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
     match kind {
-        TileKind::Air => 0.0,
+        TileKind::Air | TileKind::Fluid(_) => 0.0,
         TileKind::Dirt => 0.09,
         TileKind::Clay => 0.12,
         TileKind::Stone => 0.15,

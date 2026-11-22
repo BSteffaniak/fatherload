@@ -47,4 +47,7 @@ pub enum TestModeAction {
     PlaceFieldZone(crate::field::FieldPreset),
     /// Remove every field zone.
     ClearFieldZones,
+    /// Carve a row of test pools, one per fluid kind, beside the submitting rig (Part III F9:
+    /// water, acid, brine and liquid metal to swim, dive and react in).
+    PourTestPools,
 }

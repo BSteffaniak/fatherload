@@ -160,6 +160,8 @@ impl WorldState {
             tombs: _,
             // Field zones are tile rectangles (F9), sampled through the frame.
             fields: _,
+            // The fluid schedule is woken tiles (F9 fluids live in the terrain).
+            fluids: _,
         } = self;
         player_template.reframe(shift);
         players.reframe(shift);

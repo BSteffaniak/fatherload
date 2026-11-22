@@ -637,7 +637,11 @@ impl WorldState {
         self.terrain.tile(tile).is_some_and(|t| {
             !matches!(
                 t.kind,
-                TileKind::Air | TileKind::Lava | TileKind::Gas | TileKind::MagmaVent
+                TileKind::Air
+                    | TileKind::Fluid(_)
+                    | TileKind::Lava
+                    | TileKind::Gas
+                    | TileKind::MagmaVent
             )
         })
     }
@@ -1614,7 +1618,9 @@ impl WorldState {
                     body.x,
                     body.y,
                 );
+                let before = (body.x, body.y);
                 let _report = physics::step_body(body, &params, &self.terrain, dt);
+                self.keep_out_of_fluid(state.kind, before, body);
             }
             Locomotion::Walking => self.walk(id, body, state, goal, intent.speed, now),
             Locomotion::Burrowing => self.burrow(id, now, body, state, goal, intent.speed),
@@ -1736,7 +1742,9 @@ impl WorldState {
             body.velocity_x = quantize(body.velocity_x * 6.0f32.mul_add(-dt, 1.0).max(0.0));
         }
         let params = params.at_fields(&self.terrain, &self.fields, body.x, body.y);
+        let before = (body.x, body.y);
         let _report = physics::step_body(body, &params, &self.terrain, dt);
+        self.keep_out_of_fluid(state.kind, before, body);
     }
 
     /// Whether the digging enemy `id` may bite a tile out of its way on the tick `now`: only

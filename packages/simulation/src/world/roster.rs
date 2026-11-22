@@ -14,7 +14,7 @@
 use crate::{
     ids::PlayerId,
     player::Player,
-    terrain::{TILE_SIZE, TileKind},
+    terrain::TILE_SIZE,
 };
 
 use super::{
@@ -111,6 +111,7 @@ impl WorldState {
             tombs: _,
             // Zones belong to places, not players.
             fields: _,
+            fluids: _,
         } = self;
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
@@ -199,7 +200,7 @@ impl WorldState {
         let tile = self.frame().tile_at(x, y);
         self.terrain
             .tile(tile)
-            .is_some_and(|tile| tile.kind != TileKind::Air)
+            .is_some_and(|tile| !tile.kind.is_open())
     }
 
     /// Squared distance from `(x, y)` to the nearest rig (infinite with no rigs).

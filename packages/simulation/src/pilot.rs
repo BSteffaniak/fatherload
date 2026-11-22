@@ -983,6 +983,13 @@ pub trait PilotTerrain {
     fn frame(&self) -> crate::position::Frame {
         crate::position::Frame::FIXED
     }
+    /// How fast a swimmer with its head in `tile` sinks when it neither strokes nor dives
+    /// (px/s²): [`SWIM_SINK`] in water; the world lifts swimmers in denser fluids (brine and
+    /// molten metal float a pilot up, Part III F9).
+    fn swim_sink(&self, tile: TilePosition) -> f32 {
+        let _ = tile;
+        SWIM_SINK
+    }
 }
 
 /// Whether a solid tile of `kind` lets a pilot through: vent grates (a crawlway's covers) are
@@ -1323,7 +1330,10 @@ fn step_once(
             } else if controls.down {
                 SWIM_ACCEL * 0.6
             } else {
-                SWIM_SINK
+                world.swim_sink(TilePosition {
+                    x: col(world, body.x),
+                    y: row(world, height.mul_add(-0.5, body.y)),
+                })
             };
             body.velocity_y = stroke.mul_add(dt, body.velocity_y);
             body.velocity_x = body.velocity_x.clamp(-SWIM_SPEED, SWIM_SPEED);
