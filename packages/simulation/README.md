@@ -1269,6 +1269,21 @@ minutes (13-17 per stratum), no deaths; the whole run 73.0 h.
   open water); the probe still models the fight as fixed minutes.
 - Breaching a big basin's side drains it through the budgeted fluid pass (slow levelling of
   wide bodies, see "Wave 7 fluids").
+- Weapons hit the Leviathan within its 44-pixel hit circle while its drawn body (and contact
+  box) is about 184 x 56: auto-aim and shots at its trunk land, a manual shot at the tip of
+  its head or tail passes by. A hit shape of its own would touch every hit test.
+- The Underground Ocean is many separate basins (one region stamp per 72 x 48 at most), not
+  one connected sea; the Pressure Rating's Hollow Seals (sold at Merrow City's outpost, tier 4)
+  hold the whole Pearl Abyss as the Cryo Hull does, so the Cryo Hull's pressure role is felt
+  only by rigs that skip them (it stays the Descent V gate's key either way).
+
+### Wave 9 drowned review
+
+An independent review re-ran the probe (same numbers: Descent IV ends at 33.0 h, Cryo Hull at
+31.1 h, gaps 13-17 minutes) and the screenshot scenes, and fixed: submerged rigs are drawn
+again over the water's tint and the deep's dark (a submarine all but vanished in every
+Descent IV scene); the eel-dragon is drawn half again larger, a mini-boss, its contact box
+grown to `(54, 15)` to match; the hull-frost pass skips warm rigs with no frost.
 
 ## Replication of entities
 
