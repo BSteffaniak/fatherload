@@ -167,6 +167,9 @@ pub enum ModalScreen {
     /// has read, chapter by chapter, and the trail's lead. After the tomb codex in the map's
     /// page cycle on Deep Descent worlds.
     ExpeditionLog,
+    /// The expedition codex (Wave 9 story, `shell/expedition.rs`): the Crust's strongbox diary
+    /// and the builders' tablets and inscriptions. After the journal in the page cycle.
+    ExpeditionCodex,
 }
 
 impl ModalScreen {
@@ -1628,6 +1631,10 @@ impl SeatUi {
             self.handle_expedition_log(input, ctx.world, cues);
             return true;
         }
+        if modal == ModalScreen::ExpeditionCodex {
+            self.handle_expedition_codex(input, ctx.world, cues);
+            return true;
+        }
         if modal == ModalScreen::Logistics {
             self.handle_logistics(input, ctx, cues, requests);
             return true;
@@ -1849,7 +1856,8 @@ impl SeatUi {
             | ModalScreen::TombSummary
             | ModalScreen::TombCodex
             | ModalScreen::Logistics
-            | ModalScreen::ExpeditionLog => None,
+            | ModalScreen::ExpeditionLog
+            | ModalScreen::ExpeditionCodex => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1

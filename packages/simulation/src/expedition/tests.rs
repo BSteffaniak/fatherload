@@ -240,7 +240,7 @@ fn sites_carve_a_room_on_a_floor_and_keep_off_the_landmarks() {
     }
 }
 
-/// The rooms of a strip of columns either side of the town, down through Descents I-III.
+/// The rooms of a strip of columns either side of the town, down through Descents I-VI.
 fn rooms_of(settings: &WorldSettings) -> Vec<anomaly::AnomalyRoom> {
     let layout = layout(settings);
     let area = TileRect {
@@ -250,7 +250,7 @@ fn rooms_of(settings: &WorldSettings) -> Vec<anomaly::AnomalyRoom> {
         },
         max: TilePosition {
             x: 1_200,
-            y: layout.descent_rows(Descent::LivingDark).1,
+            y: layout.descent_rows(Descent::StrangeLayers).1,
         },
     };
     anomaly::rooms_in(settings, &area)
@@ -260,13 +260,35 @@ fn rooms_of(settings: &WorldSettings) -> Vec<anomaly::AnomalyRoom> {
 fn anomaly_rooms_are_rare_varied_and_found_at_every_depth() {
     let settings = v11(0x5EED);
     let rooms = rooms_of(&settings);
-    // 22 % of the regions: rare, but a few dozen in a wide strip.
-    assert!(rooms.len() > 40, "{} rooms", rooms.len());
+    // 22 % of the regions: rare, but dozens in a wide strip.
+    assert!(rooms.len() > 80, "{} rooms", rooms.len());
     let kinds: BTreeSet<AnomalyKind> = rooms.iter().map(|room| room.kind).collect();
     assert_eq!(kinds.len(), AnomalyKind::ALL.len());
-    for descent in [Descent::Crust, Descent::OldDeep, Descent::LivingDark] {
+    for descent in [
+        Descent::Crust,
+        Descent::OldDeep,
+        Descent::LivingDark,
+        Descent::DrownedAndFrozen,
+        Descent::HollowWorld,
+        Descent::StrangeLayers,
+    ] {
         assert!(rooms.iter().any(|room| room.descent() == descent));
     }
+    // The deeper kinds (Wave 9) wait for Descent IV, and below it every kind turns up.
+    for room in &rooms {
+        if AnomalyKind::DEEP.contains(&room.kind) {
+            assert!(room.descent() >= AnomalyKind::DEEP_FROM, "{room:?}");
+            assert!(room.kind.inscription().is_some());
+        } else {
+            assert!(room.kind.inscription().is_none());
+        }
+    }
+    let deep: BTreeSet<AnomalyKind> = rooms
+        .iter()
+        .filter(|room| room.descent() >= AnomalyKind::DEEP_FROM)
+        .map(|room| room.kind)
+        .collect();
+    assert_eq!(deep.len(), AnomalyKind::ALL.len(), "{deep:?}");
     let layout = layout(&settings);
     let lift = landmarks::lift_column(&settings);
     for room in &rooms {
@@ -321,6 +343,20 @@ fn anomaly_room_fields_hold_inside_and_fade_out_past_the_walls() {
             AnomalyKind::Mirror => {
                 assert!(inside.mirrored());
                 assert!(inside.screen[field::ScreenEffect::Mirror.index()] > 0.9);
+            }
+            AnomalyKind::Sideways => {
+                assert!(inside.gravity_x > 0.9 && inside.gravity_y.abs() < 0.1);
+                assert!(inside.rotation_unlimited());
+            }
+            AnomalyKind::Sunlit => {
+                assert!(inside.screen[field::ScreenEffect::Exposure.index()] > 0.3);
+                assert!(inside.screen[field::ScreenEffect::Bloom.index()] > 0.3);
+            }
+            AnomalyKind::Weightless => {
+                assert!(inside.gravity_x.hypot(inside.gravity_y) < 0.1, "{inside:?}");
+            }
+            AnomalyKind::Lensing => {
+                assert!(inside.screen[field::ScreenEffect::Lensing.index()] > 0.5);
             }
         }
         // Six tiles outside the walls, the room's rule is gone.
@@ -434,10 +470,12 @@ fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_dr
                 .collect();
             assert_eq!(
                 doors.len(),
-                if kind == AnomalyKind::GravityFlip {
-                    2
-                } else {
-                    6
+                match kind {
+                    // The upturned room's floor hatch.
+                    AnomalyKind::GravityFlip => 2,
+                    // The sideways room's one doorway, in its left wall.
+                    AnomalyKind::Sideways => 3,
+                    _ => 6,
                 },
                 "{kind:?}"
             );

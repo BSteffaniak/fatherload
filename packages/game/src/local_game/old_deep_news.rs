@@ -12,38 +12,28 @@ use crate::{runtime::RuntimeEventKind, shell::FanfareKind};
 
 use super::LocalGame;
 
-/// A story log's title and text (`fatherload_simulation::old_deep::LOG_*`).
+/// A story log's title and text (`fatherload_simulation::old_deep::LOG_*`). The tablets and
+/// the core's revelation are the codex's ([`fatherload_simulation::expedition::codex`], Wave
+/// 9), which keeps them in the journal's Builder Tablets page once read.
 #[must_use]
-pub const fn deep_log(log: u8) -> (&'static str, &'static str) {
-    match log {
+pub fn deep_log(log: u8) -> (String, &'static str) {
+    use fatherload_simulation::{
+        expedition::codex::{BUILDER_TABLETS, CORE_REVELATION},
+        old_deep::{LOG_CORE_REVEAL, LOG_TABLET_FIRST},
+    };
+    if log < LOG_TABLET_FIRST {
         // The Fathers' camps hold the expedition's own logs (Wave 8 integration): the
         // journal's card tells them (`expedition_log_of_camp`), so this is only a fallback.
-        0..=6 => (
-            "A Fathers' camp",
+        return (
+            "A Fathers' camp".to_owned(),
             "A cache of the Fathers' expedition, its canister handed on to the journal.",
-        ),
-        7 => (
-            "Builder tablet: the anchor",
-            "WE SET THE ANCHOR IN THE FIRST FIRE AND HUNG THE CABLE FROM IT.",
-        ),
-        8 => (
-            "Builder tablet: the dock",
-            "THE STONE ABOVE IS A DOCK. THE HEART BELOW IS AN ENGINE. BETWEEN THEM, THE CABLE.",
-        ),
-        9 => (
-            "Builder tablet: the lock",
-            "WHEN THE FIRST CORE WAKES, DO NOT STOP. IT IS ONLY THE LOCK.",
-        ),
-        10 => (
-            "Builder tablet: the sleepers",
-            "WE WENT DOWN TO SLEEP WITH THE HEART. WAKE US GENTLY.",
-        ),
-        _ => (
-            "The first core was a lock",
-            "The Star Core goes dark. Under it the shaft runs on, down past the light, ringed in \
-             builder metal. It was never the bottom. The Pressure Hull seals around your rig.",
-        ),
+        );
     }
+    if log >= LOG_CORE_REVEAL {
+        return (CORE_REVELATION.0.to_owned(), CORE_REVELATION.1);
+    }
+    let (title, text) = BUILDER_TABLETS[usize::from(log - LOG_TABLET_FIRST).min(3)];
+    (format!("Builder tablet: {}", title.to_lowercase()), text)
 }
 
 impl LocalGame {
@@ -228,7 +218,7 @@ impl LocalGame {
                             seat_of(player_id).into_iter().collect()
                         };
                     for seat in seats {
-                        fanfares.push((seat, title.to_owned(), text.to_owned()));
+                        fanfares.push((seat, title.clone(), text.to_owned()));
                         messages.push((seat, text.to_owned()));
                     }
                 }

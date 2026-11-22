@@ -609,7 +609,8 @@ impl Milestone {
                 .take(usize::from(facts.expedition_echoes))
                 .any(|echo| echo.kind == crate::expedition::EchoKind::Ghost),
             Self::FirstAnomaly => facts.anomaly_kinds != 0,
-            Self::EveryAnomaly => crate::expedition::anomaly::AnomalyKind::ALL
+            // Wave 8's four (the deeper kinds of Wave 9 fill the codex instead).
+            Self::EveryAnomaly => crate::expedition::anomaly::AnomalyKind::SHALLOW
                 .iter()
                 .all(|kind| facts.anomaly_kinds & kind.bit() != 0),
         }

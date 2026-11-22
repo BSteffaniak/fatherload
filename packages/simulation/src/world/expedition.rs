@@ -34,6 +34,15 @@ impl WorldState {
         self.expedition = state;
     }
 
+    /// Marks the codex's finds made elsewhere (tests, scenes and tools, before play): the
+    /// Crust's strongbox entries `diary` ([`crate::crust::CRUST_LOGS`] indices) and the Old
+    /// Deep's story logs `deep_logs` (`old_deep::LOG_*`) as read.
+    #[doc(hidden)]
+    pub fn set_codex_finds_for_tests(&mut self, diary: &[u8], deep_logs: &[u8]) {
+        self.crust.logs.extend(diary.iter().copied());
+        self.old_deep.logs_read.extend(deep_logs.iter().copied());
+    }
+
     /// The terrain row the next unheard echo plays at, if any are left (Deep Descent worlds).
     #[must_use]
     pub fn next_echo_row(&self) -> Option<i32> {

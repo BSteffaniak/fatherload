@@ -698,6 +698,113 @@ fn draw_room(
             }
         }
         AnomalyKind::PixelRot | AnomalyKind::Mirror => {}
+        AnomalyKind::Sideways => {
+            if !glow {
+                // Rubble heaped against the right wall: the floor, once down swings round.
+                for index in 0..14 {
+                    let y = spot(index, height - 8);
+                    let h = 3 + spot(index + 40, 6);
+                    let w = 2 + spot(index + 80, 3);
+                    pen.rect(draw, width - w, y, w, h, STONE_DARK);
+                    pen.rect(draw, width - w, y + 1, w - 1, h - 2, STONE);
+                    pen.rect(draw, width - w, y + 1, 1, h - 3, STONE_LIGHT);
+                }
+                return;
+            }
+            // Dust streaming sideways toward the right wall, a short streak behind each mote.
+            for index in 0..26 {
+                let y = spot(index + 200, height - 2);
+                let run = (seconds * 8.0 + spot(index + 300, width) as f32).rem_euclid(width as f32)
+                    as i32;
+                pen.rect(draw, run - 6, y, 6, 1, with_alpha(ORANGE, 50));
+                pen.rect(draw, run, y - 1, 3, 3, with_alpha(SAND, 160));
+            }
+            // The glyph turned on its side: the cable runs left to right, its ball at the wall.
+            let (cx, cy) = (width / 2, height / 2);
+            pen.rect(draw, cx - 16, cy, 16, 1, with_alpha(ORANGE, 170));
+            ring(draw, pen, cx + 4, cy, 4, with_alpha(SAND, 190));
+            ring(draw, pen, cx, cy, 14, with_alpha(RUST, 140));
+        }
+        AnomalyKind::Sunlit => {
+            if !glow {
+                // A small brass sun-disc set in the back wall, with its builder rings.
+                let (cx, cy) = (width / 2, height / 3);
+                pen.boxed(draw, cx - 5, cy - 5, 10, 10, COPPER);
+                pen.rect(draw, cx - 3, cy - 3, 6, 6, GOLD);
+                return;
+            }
+            // Shafts of warm light leaning across the room, swaying very slowly.
+            let sway = (seconds * 0.4).sin() * 6.0;
+            for shaft in 0..4 {
+                let top = 10 + shaft * width / 4 + sway as i32;
+                for row in 0..height {
+                    let x = top + row / 2;
+                    if (0..width - 6).contains(&x) {
+                        pen.rect(draw, x, row, 6, 1, with_alpha(GOLD, 22));
+                    }
+                }
+            }
+            // Golden motes hanging in the light, rising a little.
+            for index in 0..24 {
+                let x = spot(index + 500, width);
+                let rise = (seconds * 2.0 + spot(index + 600, height) as f32)
+                    .rem_euclid(height as f32) as i32;
+                pen.rect(draw, x, height - rise, 2, 2, with_alpha(CREAM, 150));
+            }
+            let (cx, cy) = (width / 2, height / 3);
+            ring(draw, pen, cx, cy, 9, with_alpha(GOLD, 170));
+            ring(draw, pen, cx, cy, 13, with_alpha(AMBER, 110));
+        }
+        AnomalyKind::Weightless => {
+            // Stones adrift, each bobbing on its own slow beat (props and glow both: they are
+            // lit by the room's violet).
+            let bob = |index: u32| ((seconds * 0.7 + index as f32 * 1.3).sin() * 3.0) as i32;
+            if !glow {
+                for index in 0..9 {
+                    let x = spot(index, width - 10);
+                    let y = 12 + spot(index + 30, height - 30) + bob(index);
+                    let size = 3 + spot(index + 60, 4);
+                    pen.boxed(draw, x, y, size + 2, size, STONE);
+                    pen.px(draw, x + 1, y, STONE_LIGHT);
+                }
+                return;
+            }
+            for index in 0..20 {
+                let x = spot(index + 700, width);
+                let y = spot(index + 800, height) + bob(index + 3);
+                pen.rect(draw, x, y, 2, 2, with_alpha(LAVENDER, 140));
+                pen.px(draw, x, y + 3, with_alpha(VIOLET, 80));
+            }
+        }
+        AnomalyKind::Lensing => {
+            if !glow {
+                // A dark knot in the middle of the floor, the weight the room bends round.
+                let cx = width / 2;
+                pen.rect(draw, cx - 4, height - 6, 8, 6, NIGHT);
+                pen.rect(draw, cx - 2, height - 8, 4, 2, INK);
+                return;
+            }
+            // Rings of bent light round the middle, breathing in and out slowly.
+            let (cx, cy) = (width / 2, height / 2);
+            for band in 0..4 {
+                let breath = ((seconds * 0.6 + band as f32).sin() * 2.0) as i32;
+                let radius = 8 + band * 9 + breath;
+                ring(
+                    draw,
+                    pen,
+                    cx,
+                    cy,
+                    radius,
+                    with_alpha(SKY_LIGHT, 130 - band as u8 * 25),
+                );
+            }
+            // Stars seen through the fold: points that hold still in the bent light.
+            for index in 0..12 {
+                let x = spot(index + 900, width);
+                let y = spot(index + 950, height);
+                pen.px(draw, x, y, with_alpha(ICE, 200));
+            }
+        }
     }
 }
 
@@ -755,6 +862,10 @@ pub(super) fn draw_expedition_lights(draw: &mut impl RaylibDraw, scene: &Expedit
             AnomalyKind::PixelRot => LIME,
             AnomalyKind::TimeFrozen => ICE,
             AnomalyKind::Mirror => LAVENDER,
+            AnomalyKind::Sideways => ORANGE,
+            AnomalyKind::Sunlit => GOLD,
+            AnomalyKind::Weightless => ROSE,
+            AnomalyKind::Lensing => SKY_LIGHT,
         };
         let centre = inner.center();
         let x = col_px(centre.x) + 0.5 * TILE_SIZE;

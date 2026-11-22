@@ -71,7 +71,7 @@ fn reading_a_canister_puts_its_log_card_up_and_the_journal_lists_it() {
     );
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionLog));
     assert_eq!(game.shell.seat(0).selected_menu_item, 0);
-    // A tap on the last row turns the page.
+    // A tap on the last row turns the page: the codex (Wave 9), then the map.
     let _ = press(
         &mut game,
         PlayerInput {
@@ -79,7 +79,61 @@ fn reading_a_canister_puts_its_log_card_up_and_the_journal_lists_it() {
             ..PlayerInput::default()
         },
     );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionCodex));
+    // Nothing found yet: only "Turn the page", which goes on to the map.
+    let entries = crate::shell::expedition::codex_entries(game.world());
+    assert_eq!(crate::shell::expedition::codex_rows(&entries).len(), 1);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(0),
+            ..PlayerInput::default()
+        },
+    );
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
+}
+
+/// Wave 9: the codex keeps the strongbox diary and the builders' tablets the crew has read,
+/// rows by touch like the journal, and the tabs page back to the journal.
+#[test]
+fn the_codex_lists_the_diary_and_tablets_the_crew_has_read() {
+    use crate::shell::expedition::{CodexRow, codex_entries, codex_rows};
+    let mut world = deep_world();
+    world.set_codex_finds_for_tests(&[1], &[fatherload_simulation::old_deep::LOG_TABLET_FIRST]);
+    let mut game = playing(world, 1, "expedition-codex");
+    idle(&mut game, 2);
+    let entries = codex_entries(game.world());
+    let rows = codex_rows(&entries);
+    assert_eq!(rows.len(), 3);
+    let CodexRow::Entry(first) = rows[0] else {
+        panic!("a diary row first: {rows:?}");
+    };
+    assert_eq!(
+        entries[first].title,
+        fatherload_simulation::crust::CRUST_LOGS[1].0
+    );
+    let CodexRow::Entry(second) = rows[1] else {
+        panic!("a tablet row second: {rows:?}");
+    };
+    assert_eq!(entries[second].title, "The anchor");
+    game.shell.seat_mut(0).modal = Some(ModalScreen::ExpeditionCodex);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(1),
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionCodex));
+    assert_eq!(game.shell.seat(0).selected_menu_item, 1);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            tab_previous: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionLog));
 }
 
 #[test]

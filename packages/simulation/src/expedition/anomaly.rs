@@ -48,15 +48,50 @@ pub enum AnomalyKind {
     TimeFrozen,
     /// Screen and controls mirrored (the Mirror Strata).
     Mirror,
+    // --- Wave 9: the deeper rooms, from Descent IV down ([`Self::DEEP`]). -------------------
+    /// Gravity pulls to the right: the room's right wall is its floor (the Gravity Shear).
+    Sideways,
+    /// A slice of the inner sun's light: the picture blooms and washes out (the Sunforge).
+    Sunlit,
+    /// Next to no gravity: the rig drifts and turns, and the caches float under the ceiling
+    /// (the Dark Matter Veins, far below).
+    Weightless,
+    /// The picture bends round the middle of the room as if something heavy sat there (the
+    /// Singularity Fields, far below).
+    Lensing,
 }
 
 impl AnomalyKind {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 8] = [
+        Self::GravityFlip,
+        Self::PixelRot,
+        Self::TimeFrozen,
+        Self::Mirror,
+        Self::Sideways,
+        Self::Sunlit,
+        Self::Weightless,
+        Self::Lensing,
+    ];
+
+    /// The kinds a room above Descent IV may hold (Wave 8's four).
+    pub const SHALLOW: [Self; 4] = [
         Self::GravityFlip,
         Self::PixelRot,
         Self::TimeFrozen,
         Self::Mirror,
     ];
+
+    /// The kinds only found from Descent IV down (Wave 9): hints of the Strange Layers, the
+    /// Hollow World's sun and the Heart.
+    pub const DEEP: [Self; 4] = [
+        Self::Sideways,
+        Self::Sunlit,
+        Self::Weightless,
+        Self::Lensing,
+    ];
+
+    /// The first Descent whose rooms may hold [`Self::DEEP`] kinds.
+    pub const DEEP_FROM: Descent = Descent::DrownedAndFrozen;
 
     /// Bit in [`super::ExpeditionState::anomaly_kinds`].
     #[must_use]
@@ -71,6 +106,10 @@ impl AnomalyKind {
             Self::PixelRot => "The Rotten Room",
             Self::TimeFrozen => "The Stopped Room",
             Self::Mirror => "The Mirror Room",
+            Self::Sideways => "The Sideways Room",
+            Self::Sunlit => "The Sunlit Room",
+            Self::Weightless => "The Floating Room",
+            Self::Lensing => "The Bent Room",
         }
     }
 
@@ -93,6 +132,41 @@ impl AnomalyKind {
             Self::Mirror => {
                 "Left is right and right is left. The rock remembers a deeper place where \
                  everything has a twin."
+            }
+            Self::Sideways => {
+                "Down swings round to the right and the wall becomes the floor. Turn the rig \
+                 with its thrusters: below, gravity stops keeping one direction."
+            }
+            Self::Sunlit => {
+                "Light pours from nowhere, warm as noon. Somewhere below there is a sun, and \
+                 this is a slice of its day."
+            }
+            Self::Weightless => {
+                "The rig drifts free and the caches float under the ceiling. Something far \
+                 down weighs less the more there is of it."
+            }
+            Self::Lensing => {
+                "The walls bow round the middle of the room as if something very heavy sat \
+                 there. Near the bottom of the world, light itself will bend."
+            }
+        }
+    }
+
+    /// The builders' inscription cut over the room's glyph, which the crew copies into the
+    /// codex on entering (Wave 9: the deeper rooms speak; [`super::codex`]).
+    #[must_use]
+    pub const fn inscription(self) -> Option<&'static str> {
+        match self {
+            Self::GravityFlip | Self::PixelRot | Self::TimeFrozen | Self::Mirror => None,
+            Self::Sideways => Some("DOWN IS WHERE THE CABLE SAYS. FOLLOW IT, NOT YOUR FEET."),
+            Self::Sunlit => {
+                Some("WE HUNG A LAMP INSIDE THE WORLD SO THE SLEEPERS WOULD NOT WAKE IN THE DARK.")
+            }
+            Self::Weightless => {
+                Some("THE HEART'S FUEL WEIGHS NOTHING. CARRY IT GENTLY AND IT CARRIES YOU.")
+            }
+            Self::Lensing => {
+                Some("NEAR THE ENGINE THE SKY FOLDS. LOOK THROUGH THE FOLD: THERE IS THE DOCK.")
             }
         }
     }
@@ -124,6 +198,31 @@ impl AnomalyKind {
                 profile
             }
             Self::Mirror => FieldPreset::Mirror.profile(),
+            Self::Sideways => {
+                let mut profile = FieldPreset::GravityShear.profile();
+                profile.free_rotation = true;
+                profile.screen = profile
+                    .screen
+                    .with(ScreenEffect::ColourGrade, 25)
+                    .graded([255, 190, 150]);
+                profile
+            }
+            Self::Sunlit => FieldProfile::NEUTRAL.with_screen(
+                none.with(ScreenEffect::Exposure, 45)
+                    .with(ScreenEffect::Bloom, 50)
+                    .with(ScreenEffect::ColourGrade, 30)
+                    .with(ScreenEffect::Wobble, 15)
+                    .graded([255, 222, 160]),
+            ),
+            Self::Weightless => {
+                let mut profile = FieldPreset::Weightless.profile();
+                profile.screen = none
+                    .with(ScreenEffect::Vignette, 30)
+                    .with(ScreenEffect::ColourGrade, 30)
+                    .graded([190, 170, 255]);
+                profile
+            }
+            Self::Lensing => FieldPreset::Lens.profile(),
         }
     }
 }
@@ -193,12 +292,31 @@ impl AnomalyRoom {
                 }),
                 None,
             ],
-            AnomalyKind::PixelRot => [
+            AnomalyKind::PixelRot | AnomalyKind::Sunlit | AnomalyKind::Lensing => [
                 Some(TilePosition {
                     x: mid,
                     y: inner.max.y,
                 }),
                 None,
+            ],
+            // On the right wall: the floor, once gravity has swung round.
+            AnomalyKind::Sideways => [
+                Some(TilePosition {
+                    x: inner.max.x,
+                    y: i32::midpoint(inner.min.y, inner.max.y),
+                }),
+                None,
+            ],
+            // Floating under the ceiling at both ends.
+            AnomalyKind::Weightless => [
+                Some(TilePosition {
+                    x: inner.min.x + 2,
+                    y: inner.min.y + 1,
+                }),
+                Some(TilePosition {
+                    x: inner.max.x - 2,
+                    y: inner.min.y + 1,
+                }),
             ],
         }
     }
@@ -221,7 +339,20 @@ impl AnomalyRoom {
                 position.y == self.bounds.max.y
                     && (position.x == middle || position.x == middle + 1)
             }
-            AnomalyKind::PixelRot | AnomalyKind::TimeFrozen | AnomalyKind::Mirror => {
+            // The sideways room opens only in its left wall, at the floor: a rig drives in and
+            // falls on across the room to the right wall (a door in the right wall would be
+            // the floor the rig stands on once gravity swings).
+            AnomalyKind::Sideways => {
+                position.x == self.bounds.min.x
+                    && position.y >= self.bounds.max.y - 3
+                    && position.y < self.bounds.max.y
+            }
+            AnomalyKind::PixelRot
+            | AnomalyKind::TimeFrozen
+            | AnomalyKind::Mirror
+            | AnomalyKind::Sunlit
+            | AnomalyKind::Weightless
+            | AnomalyKind::Lensing => {
                 (position.x == self.bounds.min.x || position.x == self.bounds.max.x)
                     && position.y >= self.bounds.max.y - 3
                     && position.y < self.bounds.max.y
@@ -274,8 +405,13 @@ impl AnomalyRoom {
     pub const fn zone(&self) -> FieldZone {
         let inner = self.interior();
         let feather = match self.kind {
-            AnomalyKind::GravityFlip => 0,
-            AnomalyKind::PixelRot | AnomalyKind::TimeFrozen | AnomalyKind::Mirror => 1,
+            AnomalyKind::GravityFlip | AnomalyKind::Sideways => 0,
+            AnomalyKind::PixelRot
+            | AnomalyKind::TimeFrozen
+            | AnomalyKind::Mirror
+            | AnomalyKind::Sunlit
+            | AnomalyKind::Weightless
+            | AnomalyKind::Lensing => 1,
         };
         FieldZone::new(
             (inner.min.x, inner.min.y),
@@ -359,7 +495,13 @@ pub fn room_in_region(
     {
         return None;
     }
-    let kind = AnomalyKind::ALL[usize::try_from((roll >> 40) % 4).unwrap_or(0)];
+    // Rooms from Descent IV down may hold the deeper kinds too (Wave 9).
+    let pool: &[AnomalyKind] = if stratum.descent() >= AnomalyKind::DEEP_FROM {
+        &AnomalyKind::ALL
+    } else {
+        &AnomalyKind::SHALLOW
+    };
+    let kind = pool[usize::try_from((roll >> 40) % pool.len() as u64).unwrap_or(0)];
     Some(AnomalyRoom {
         kind,
         region: (rx, ry),
@@ -476,11 +618,15 @@ pub fn room_tile(room: &AnomalyRoom, x: i32, y: i32) -> Option<TileKind> {
     if y == room.bounds.min.y && (x == middle || x == middle + 1) {
         return Some(TileKind::Cave(CaveTile::RuinGlyph));
     }
+    // The deeper rooms share their linings with the first four (builder brick for the sunlit
+    // room's lamp rings, volcanic glass round the weightless one, crystal round the bent one)
+    // and are told apart by their tells; the sideways room stands in builder pillars.
     Some(match room.kind {
-        AnomalyKind::GravityFlip => TileKind::Cave(CaveTile::RuinBrick),
-        AnomalyKind::PixelRot => TileKind::Cave(CaveTile::Crystal),
-        AnomalyKind::TimeFrozen => TileKind::Cave(CaveTile::Obsidian),
+        AnomalyKind::GravityFlip | AnomalyKind::Sunlit => TileKind::Cave(CaveTile::RuinBrick),
+        AnomalyKind::PixelRot | AnomalyKind::Lensing => TileKind::Cave(CaveTile::Crystal),
+        AnomalyKind::TimeFrozen | AnomalyKind::Weightless => TileKind::Cave(CaveTile::Obsidian),
         AnomalyKind::Mirror => TileKind::Built(BuiltTile::Glass),
+        AnomalyKind::Sideways => TileKind::Cave(CaveTile::RuinPillar),
     })
 }
 

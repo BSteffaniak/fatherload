@@ -113,31 +113,7 @@ pub(super) fn decorate(
                 draw.draw_rectangle(px, py, 2, 2, with_alpha(tint, 200 - step as u8 * 4));
             }
         }
-        StoryMomentKind::BuilderEcho => {
-            // The ball-on-a-cable glyph in the corner, and slow rings of sound spreading from
-            // it across the card's foot like a voice under water.
-            let (gx, gy) = (x + 12, y + 4);
-            draw.draw_rectangle(gx, gy, 1, 7, color);
-            draw.draw_circle(gx, gy + 9, 3.0, color);
-            draw.draw_circle(gx, gy + 9, 1.0, INK);
-            let base = y + height - 6;
-            for wave in 0..3 {
-                let spread = ((age as i32 / 2 + wave * 30) % 90) + 4;
-                let fade = u8::try_from((90 - spread).clamp(0, 90) * 2).unwrap_or(0);
-                for index in 0..spread.min(width - 24) {
-                    let lift = (trace(index + wave * 50, age, 0.05) * 2.0) as i32;
-                    if index % 3 == 0 {
-                        draw.draw_rectangle(
-                            x + 12 + index,
-                            base + lift,
-                            1,
-                            1,
-                            with_alpha(color, fade),
-                        );
-                    }
-                }
-            }
-        }
+        StoryMomentKind::BuilderEcho => builder_echo(draw, (x, y, width, height), age, color),
         StoryMomentKind::Begun
         | StoryMomentKind::Climax
         | StoryMomentKind::Ended
@@ -145,5 +121,28 @@ pub(super) fn decorate(
         | StoryMomentKind::Remembered
         | StoryMomentKind::DeepLore
         | StoryMomentKind::StrangePlace => {}
+    }
+}
+
+/// A builder echo's card (Wave 9): the ball-on-a-cable glyph in the corner, and slow rings of
+/// sound spreading from it across the card's foot like a voice under water.
+fn builder_echo(
+    draw: &mut RaylibDrawHandle<'_>,
+    (x, y, width, height): (i32, i32, i32, i32),
+    age: u64,
+    color: Color,
+) {
+    let (gx, gy) = (x + 12, y + 4);
+    draw.draw_rectangle(gx, gy, 1, 7, color);
+    draw.draw_circle(gx, gy + 9, 3.0, color);
+    draw.draw_circle(gx, gy + 9, 1.0, INK);
+    let base = y + height - 6;
+    for wave in 0..3 {
+        let spread = ((age as i32 / 2 + wave * 30) % 90) + 4;
+        let fade = u8::try_from((90 - spread).clamp(0, 90) * 2).unwrap_or(0);
+        for index in (0..spread.min(width - 24)).step_by(3) {
+            let lift = (trace(index + wave * 50, age, 0.05) * 2.0) as i32;
+            draw.draw_rectangle(x + 12 + index, base + lift, 1, 1, with_alpha(color, fade));
+        }
     }
 }

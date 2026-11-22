@@ -1385,6 +1385,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::TombCodex => super::tomb_hud::draw_tomb_codex(draw, ui),
         ModalScreen::Logistics => super::logistics_hud::draw_logistics(draw, ui),
         ModalScreen::ExpeditionLog => super::expedition_hud::draw_expedition_journal(draw, ui),
+        ModalScreen::ExpeditionCodex => super::expedition_hud::draw_expedition_codex(draw, ui),
     }
 }
 

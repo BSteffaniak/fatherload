@@ -18,8 +18,10 @@
 //! * **Memories** ([`memories`]): stable-id lines for the people of Gravel Hollow, the Old Deep
 //!   camp and the Hive, opening as the crew reads the trail.
 //! * **Anomaly rooms** ([`anomaly`]): rare rooms at any depth where a deeper chapter's rule
-//!   leaks through (gravity flipped, pixel rot, time stopped, mirrored), each with a small
-//!   reward.
+//!   leaks through (gravity flipped, pixel rot, time stopped, mirrored; from Descent IV down
+//!   also sideways, sunlit, weightless and bent), each with a small reward.
+//! * **The codex** ([`codex`], Wave 9): the Crust's strongbox diary and the builders' tablets
+//!   and inscriptions, as pages of the journal beside the numbered logs.
 //!
 //! The crew shares one [`ExpeditionState`] (`WorldState::expedition`, the shared
 //! `SectionKey::Expedition` section, saved with the world and hashed only once something was
@@ -27,6 +29,7 @@
 //! place sites, echoes and rooms; every older world keeps an empty state.
 
 pub mod anomaly;
+pub mod codex;
 pub mod logs;
 pub mod memories;
 pub mod sites;

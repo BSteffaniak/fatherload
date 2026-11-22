@@ -34,6 +34,20 @@ fn world(seed: u64) -> WorldState {
     world
 }
 
+/// A world whose rig is fitted for Descents IV-VI: the crew holds the Deep Claim (or the
+/// Sinkhole's gate crushes it below Descent I), and the rig every earlier gate's reward, all
+/// its protection and a strong hull.
+fn deep_world(seed: u64) -> WorldState {
+    let mut world = world(seed);
+    world.grant_deep_claim();
+    let rig = world.player_mut(PLAYER).expect("rig");
+    rig.hazard_gear = crate::protection::HazardGear::MAXED;
+    rig.radiator_level = 15;
+    rig.hull_level = 15;
+    rig.hull = rig.max_hull();
+    world
+}
+
 fn step(world: &mut WorldState) -> Vec<GameplayEventKind> {
     let tick = world.simulation_tick();
     world
@@ -249,7 +263,7 @@ fn entering_anomaly_rooms_feels_their_fields_and_earns_the_milestones() {
     // The first milestone check records silently.
     step(&mut world);
     let settings = *world.terrain().settings();
-    for (index, kind) in anomaly::AnomalyKind::ALL.into_iter().enumerate() {
+    for (index, kind) in anomaly::AnomalyKind::SHALLOW.into_iter().enumerate() {
         let room = room_of(&settings, kind);
         // The generator stamped it: open inside, its caches in place.
         let centre = room.interior().center();
@@ -293,6 +307,7 @@ fn entering_anomaly_rooms_feels_their_fields_and_earns_the_milestones() {
             anomaly::AnomalyKind::PixelRot => assert!(fields.screen[0] > 0.0),
             anomaly::AnomalyKind::TimeFrozen => assert!(fields.time_scale < 0.5),
             anomaly::AnomalyKind::Mirror => assert!(fields.mirrored()),
+            _ => unreachable!("the shallow kinds only"),
         }
         if index == 0 {
             assert!(events.contains(&GameplayEventKind::MilestoneEarned {
@@ -310,6 +325,155 @@ fn entering_anomaly_rooms_feels_their_fields_and_earns_the_milestones() {
     assert_eq!(world.expedition().anomaly_kind_count(), 4);
     let player = world.player(PLAYER).expect("rig");
     assert!(player.milestones.has(Milestone::EveryAnomaly));
+}
+
+/// The first anomaly room of `kind` in a strip from Descent IV to the bottom of Descent VI.
+fn deep_room_of(settings: &WorldSettings, kind: anomaly::AnomalyKind) -> anomaly::AnomalyRoom {
+    use crate::descent::Descent;
+    let layout = layout(settings);
+    let area = TileRect {
+        min: TilePosition {
+            x: -1_500,
+            y: layout.descent_rows(Descent::DrownedAndFrozen).0,
+        },
+        max: TilePosition {
+            x: 1_500,
+            y: layout.descent_rows(Descent::StrangeLayers).1,
+        },
+    };
+    anomaly::rooms_in(settings, &area)
+        .into_iter()
+        .find(|room| room.kind == kind)
+        .expect("a deep room of the kind")
+}
+
+/// Wave 9: the deeper rooms below Descent IV. Entering each one feels its rule, and copies
+/// its builder inscription into the codex's tablets page.
+#[test]
+fn entering_the_deeper_rooms_feels_their_rules_and_fills_the_codex() {
+    use crate::expedition::codex::CodexPage;
+    let mut world = deep_world(0x5EED);
+    step(&mut world);
+    let settings = *world.terrain().settings();
+    let inscriptions = |world: &WorldState| {
+        world
+            .expedition_codex(CodexPage::Tablets)
+            .into_iter()
+            .filter(|entry| entry.found)
+            .count()
+    };
+    assert_eq!(inscriptions(&world), 0);
+    for (index, kind) in anomaly::AnomalyKind::DEEP.into_iter().enumerate() {
+        let room = deep_room_of(&settings, kind);
+        assert!(room.descent() >= anomaly::AnomalyKind::DEEP_FROM);
+        // Every way in is open, and the caches are stamped where the rule puts them.
+        let doors: Vec<TilePosition> = room
+            .bounds
+            .positions()
+            .filter(|tile| room.is_door(*tile))
+            .collect();
+        assert!(!doors.is_empty(), "{kind:?}");
+        for door in &doors {
+            assert_eq!(
+                world.terrain().tile(*door).map(|t| t.kind),
+                Some(TileKind::Air)
+            );
+        }
+        for cache in room.caches().into_iter().flatten() {
+            assert!(matches!(
+                world.terrain().tile(cache).map(|t| t.kind),
+                Some(TileKind::Cave(_))
+            ));
+        }
+        let centre = room.interior().center();
+        put(
+            &mut world,
+            PLAYER,
+            TilePosition {
+                x: room.interior().min.x + 2,
+                y: centre.y,
+            },
+        );
+        let events = step(&mut world);
+        assert!(
+            events.contains(&GameplayEventKind::AnomalyEntered {
+                player_id: PLAYER,
+                kind,
+                first_of_kind: true,
+            }),
+            "{kind:?}: {events:?}"
+        );
+        let fields = world.fields_for(PLAYER);
+        match kind {
+            anomaly::AnomalyKind::Sideways => assert!(fields.gravity_x > 0.9),
+            anomaly::AnomalyKind::Sunlit => assert!(fields.screen[2] > 0.3),
+            anomaly::AnomalyKind::Weightless => {
+                assert!(fields.gravity_x.hypot(fields.gravity_y) < 0.1);
+            }
+            anomaly::AnomalyKind::Lensing => assert!(fields.screen[9] > 0.5),
+            _ => unreachable!("the deep kinds only"),
+        }
+        assert_eq!(inscriptions(&world), index + 1, "{kind:?}");
+    }
+    // The deeper kinds are not needed for the four-kind milestone, and do not take it away.
+    assert_eq!(
+        world.expedition().anomaly_kind_count(),
+        u32::try_from(anomaly::AnomalyKind::DEEP.len()).unwrap_or(0)
+    );
+}
+
+/// Wave 9: the codex reads only saved, shared state, so it survives a save and load, and a
+/// co-op partner's client shows the same pages through the replicated sections.
+#[test]
+fn the_codex_saves_loads_and_reaches_co_op_partners() {
+    use crate::expedition::codex::{CodexPage, diary};
+    let mut host = world(0xC0DE);
+    host.add_player(PARTNER);
+    let mut replica = host.clone();
+    let found = |world: &WorldState, page: CodexPage| {
+        world
+            .expedition_codex(page)
+            .into_iter()
+            .filter(|entry| entry.found)
+            .map(|entry| entry.title)
+            .collect::<Vec<_>>()
+    };
+    assert!(found(&host, CodexPage::Diary).is_empty());
+    assert!(found(&host, CodexPage::Tablets).is_empty());
+    assert_eq!(diary(host.crust()).len(), crate::crust::CRUST_LOGS.len());
+    // The crew opens two strongboxes, reads a builder tablet and enters a deep room.
+    host.set_codex_finds_for_tests(&[0, 2], &[crate::old_deep::LOG_TABLET_FIRST + 1]);
+    let mut state = host.expedition().clone();
+    state.anomaly_kinds |= anomaly::AnomalyKind::Sunlit.bit();
+    host.set_expedition(state);
+    assert_eq!(
+        found(&host, CodexPage::Diary),
+        vec![crate::crust::CRUST_LOGS[0].0, crate::crust::CRUST_LOGS[2].0]
+    );
+    assert_eq!(
+        found(&host, CodexPage::Tablets),
+        vec!["The dock", "The Sunlit Room"]
+    );
+    // Saved and loaded.
+    let json = serde_json::to_string(&host).expect("json");
+    let loaded: WorldState = serde_json::from_str(&json).expect("load");
+    for page in CodexPage::ALL {
+        assert_eq!(loaded.expedition_codex(page), host.expedition_codex(page));
+    }
+    // Replicated: the sections the codex reads are all shared.
+    for key in [
+        SectionKey::Crust,
+        SectionKey::OldDeep,
+        SectionKey::Expedition,
+    ] {
+        assert!(SectionKey::SHARED.contains(&key), "{key:?}");
+        assert!(key.visible_to(Some(PARTNER)));
+        let payload = host.section(key).expect("shared section");
+        replica.apply_section(key, payload);
+    }
+    for page in CodexPage::ALL {
+        assert_eq!(replica.expedition_codex(page), host.expedition_codex(page));
+    }
 }
 
 #[test]
@@ -540,4 +704,78 @@ fn a_rig_drives_into_the_mirror_room_through_a_doorway() {
         room.bounds
     );
     assert!(world.expedition().anomaly_kinds & anomaly::AnomalyKind::Mirror.bit() != 0);
+}
+
+/// Wave 9: a rig drives into a sideways room through its one doorway (in the left wall, at the
+/// floor), and the room takes it on across to the right wall, its floor once down swings
+/// round (played, not teleported inside).
+#[test]
+fn a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall() {
+    let mut world = deep_world(0x5EED);
+    let settings = *world.terrain().settings();
+    let room = deep_room_of(&settings, anomaly::AnomalyKind::Sideways);
+    let floor_row = room.bounds.max.y - 1;
+    // Stream the room's chunks in first, so the tunnel dug to its door stays dug.
+    put(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: room.bounds.min.x - 3,
+            y: floor_row,
+        },
+    );
+    step(&mut world);
+    for x in room.bounds.min.x - 4..room.bounds.min.x {
+        for y in floor_row - 2..=floor_row {
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x, y }, TileKind::Air);
+        }
+        let _ = world.terrain_mut().set_kind(
+            TilePosition {
+                x,
+                y: floor_row + 1,
+            },
+            TileKind::Stone,
+        );
+    }
+    put(
+        &mut world,
+        PLAYER,
+        TilePosition {
+            x: room.bounds.min.x - 3,
+            y: floor_row,
+        },
+    );
+    let mut entered = false;
+    for _ in 0..600 {
+        let inputs = TickInputs::held(PLAYER, crate::ControlState::new(1.0, false, false));
+        let tick = world.simulation_tick();
+        let events = world.simulate_tick(tick, &inputs).events;
+        entered |= events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::AnomalyEntered { .. }));
+        if entered {
+            break;
+        }
+    }
+    assert!(
+        entered,
+        "stalled at {:?} for {:?}",
+        world.actor_tile(PLAYER),
+        room.bounds
+    );
+    // Let go: the room's gravity carries the rig across to the right wall.
+    let idle = TickInputs::held(PLAYER, crate::ControlState::new(0.0, false, false));
+    for _ in 0..360 {
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(tick, &idle);
+    }
+    let tile = world.actor_tile(PLAYER).expect("rig");
+    assert!(
+        room.interior().contains(tile) && tile.x >= room.interior().max.x - 2,
+        "the rig rests on the right wall: {tile:?} in {:?}",
+        room.interior()
+    );
+    assert!(world.fields_for(PLAYER).gravity_x > 0.9);
 }

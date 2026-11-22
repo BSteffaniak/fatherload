@@ -10,7 +10,10 @@
 use fatherload_simulation::{
     WorldState,
     expedition::{
-        CHAPTERS, ECHOES, EchoKind, ExpeditionState, LOGS, anomaly::AnomalyKind, chapter,
+        CHAPTERS, ECHOES, EchoKind, ExpeditionState, LOGS,
+        anomaly::AnomalyKind,
+        chapter,
+        codex::{CodexEntry, CodexPage},
     },
 };
 
@@ -135,11 +138,18 @@ pub fn echo_words(echo: u8) -> Option<(StoryMomentKind, String, String)> {
 /// The card an anomaly room raises: `(kind, title, text)`.
 #[must_use]
 pub fn anomaly_words(kind: AnomalyKind) -> (StoryMomentKind, String, String) {
-    (
-        StoryMomentKind::Anomaly,
-        kind.name().to_owned(),
-        kind.hint().to_owned(),
-    )
+    // The deeper rooms carry a builder inscription over their glyph (Wave 9): the card quotes
+    // it, and the codex keeps it.
+    let text = kind.inscription().map_or_else(
+        || kind.hint().to_owned(),
+        |inscription| {
+            format!(
+                "{} Over the glyph: {inscription} (Copied into the codex.)",
+                kind.hint()
+            )
+        },
+    );
+    (StoryMomentKind::Anomaly, kind.name().to_owned(), text)
 }
 
 /// The message for a canister reached before its turn, when the crew has read logs
@@ -200,7 +210,7 @@ impl SeatUi {
             return;
         }
         if input.tab_next {
-            self.open_modal(ModalScreen::Map);
+            self.open_modal(ModalScreen::ExpeditionCodex);
             return;
         }
         if !input.confirm {
@@ -208,7 +218,84 @@ impl SeatUi {
         }
         match rows.get(self.selected_menu_item) {
             Some(ExpeditionRow::Log(_)) => cues.push(SoundCue::UiMove),
-            Some(ExpeditionRow::TurnPage) | None => self.open_modal(ModalScreen::Map),
+            Some(ExpeditionRow::TurnPage) | None => {
+                self.open_modal(ModalScreen::ExpeditionCodex);
+            }
         }
     }
+
+    /// The expedition codex page (Wave 9): the diary and the builders' words.
+    pub(super) fn handle_expedition_codex(
+        &mut self,
+        input: PlayerInput,
+        world: &WorldState,
+        cues: &mut Vec<SoundCue>,
+    ) {
+        if input.backs_out() {
+            self.modal = None;
+            cues.push(SoundCue::UiBack);
+            return;
+        }
+        let rows = codex_rows(&codex_entries(world));
+        self.move_selection(input, rows.len().saturating_sub(1));
+        self.selected_menu_item = self.selected_menu_item.min(rows.len().saturating_sub(1));
+        if input.tab_previous {
+            self.open_modal(ModalScreen::ExpeditionLog);
+            return;
+        }
+        if input.tab_next {
+            self.open_modal(ModalScreen::Map);
+            return;
+        }
+        if !input.confirm {
+            return;
+        }
+        match rows.get(self.selected_menu_item) {
+            Some(CodexRow::Entry(..)) => cues.push(SoundCue::UiMove),
+            Some(CodexRow::TurnPage) | None => self.open_modal(ModalScreen::Map),
+        }
+    }
+}
+
+/// One row of the expedition codex.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CodexRow {
+    /// A found entry (index into [`codex_entries`]).
+    Entry(usize),
+    /// Back to the map.
+    TurnPage,
+}
+
+/// Every codex entry of `world`, found or not: the diary's, then the tablets'.
+#[must_use]
+pub fn codex_entries(world: &WorldState) -> Vec<CodexEntry> {
+    codex_entries_of(world.crust(), world.old_deep(), world.expedition())
+}
+
+/// [`codex_entries`] from the replicated states it reads (the renderer's snapshot holds them).
+#[must_use]
+pub fn codex_entries_of(
+    crust: &fatherload_simulation::crust::CrustState,
+    deep: &fatherload_simulation::old_deep::OldDeep,
+    expedition: &ExpeditionState,
+) -> Vec<CodexEntry> {
+    CodexPage::ALL
+        .iter()
+        .flat_map(|page| {
+            fatherload_simulation::expedition::codex::page(*page, crust, deep, expedition)
+        })
+        .collect()
+}
+
+/// The codex's rows for `entries`: every found entry in page order, then "Turn the page".
+#[must_use]
+pub fn codex_rows(entries: &[CodexEntry]) -> Vec<CodexRow> {
+    let mut rows: Vec<CodexRow> = entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.found)
+        .map(|(index, _)| CodexRow::Entry(index))
+        .collect();
+    rows.push(CodexRow::TurnPage);
+    rows
 }
