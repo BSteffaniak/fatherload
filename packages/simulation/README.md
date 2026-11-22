@@ -5546,6 +5546,26 @@ and `LandmarkKind::Distortion` in each stratum's content minutes.
 - The descent probe was not re-run in this track (the integrator re-runs it after stacking the
   six tracks).
 
+### Review fixes (w9-strange-a-review)
+
+- **Leashed glitchlings and bitworms go home.** A glitchling had no `Return` arm, so once its
+  leash caught it, it hung in place for good (too far from home ever to hunt again). It now
+  blinks home and settles; a bitworm runs the grid home at full speed and settles there.
+- **The aim reticle is reflected with mirrored controls.** The simulation reverses a mirrored
+  rig's sideways aim, so the reticle is drawn reflected about the muzzle too
+  (`WorldState::rig_controls_mirrored`, the one predicate for `simulate_tick` and the game's
+  `weapon_aim::reticle`). It used to sit on the far side from where shots went.
+- **The glitch pass is mediump-safe.** The band hash used `sin(..) * 43758` with a step up to
+  1000 x 78, past the 2^14 range a GLES2 `mediump` float guarantees on phones. The step now
+  reaches the shader as a 0..1 phase and the hash uses small constants.
+- New tests: a tumbler falls sideways onto a wall hall's turned floor, a dead pixel's pulse
+  rots the view of the rig it hits (and wears off), leashed glitchlings and bitworms go home,
+  and a mirrored rig's reticle is reflected (game).
+- Still open after review: the Gravity Shear's flow stone (pink hatching) reads loud next to
+  the stratum's purple rock. A mirror hall's top and bottom edges are rock, so a rig that digs
+  in through them flips at once (the glass in the frame is the only warning). The Spire scene
+  still catches the camera mid-turn.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
