@@ -214,6 +214,47 @@ pub(super) fn draw_hollow_backdrop(draw: &mut impl RaylibDraw, scene: &HollowSce
     }
     draw_inner_sun(draw, scene, stratum, (top_px, bottom_px), sun);
     draw_far_isles(draw, scene, stratum, (top_px, bottom_px), sun);
+    draw_well_backdrop(draw, scene);
+}
+
+/// Where the Sun Well's centre is in local pixels, if it is near the view.
+fn well_in_view(scene: &HollowScene<'_>) -> Option<(TilePosition, f32, f32)> {
+    let settings = scene.terrain.settings();
+    if !settings.generator.has_descents() {
+        return None;
+    }
+    let layout = fatherload_simulation::descent::fields::cached_layout(settings);
+    let centre = places::sun_well(settings, &layout)?;
+    let (cx, cy) = crate::view_frame::frame().tile_center(centre);
+    let reach = places::sun_well_rect(centre).width() as f32 * TILE_SIZE;
+    let visible = scene.visible;
+    (cx >= visible.x - reach
+        && cx <= visible.x + visible.width + reach
+        && cy >= visible.y - reach
+        && cy <= visible.y + visible.height + reach)
+        .then_some((centre, cx, cy))
+}
+
+/// The Sun Well's own sky behind its open air: an ember dusk darkening toward the wall and
+/// warming toward the inner sun, so the sun, the gold serpent and the pillars stand out
+/// instead of melting into the forge's glare.
+fn draw_well_backdrop(draw: &mut impl RaylibDraw, scene: &HollowScene<'_>) {
+    let Some((_, cx, cy)) = well_in_view(scene) else {
+        return;
+    };
+    let radius = (fatherload_simulation::hollow::WELL_RADIUS as f32 - 0.5) * TILE_SIZE;
+    let centre = Vector2::new(cx, cy);
+    for (share, colour) in [
+        (1.0_f32, rgb(58, 20, 26)),
+        (0.86, rgb(82, 28, 30)),
+        (0.72, rgb(112, 38, 32)),
+        (0.58, rgb(146, 54, 34)),
+        (0.45, rgb(184, 78, 38)),
+        (0.33, rgb(218, 112, 46)),
+        (0.24, rgb(240, 156, 66)),
+    ] {
+        draw.draw_circle_v(centre, radius * share, colour);
+    }
 }
 
 /// The inner sun: low over the far ground of the Inner Sky (it drifts slowly with travel),
@@ -244,14 +285,23 @@ fn draw_inner_sun(
             }
         }
         _ => {
-            // Far away: it drifts only slowly across the view as the rig travels.
-            let x = (visible.width * 0.22).mul_add((centre_x * 0.000_6).sin(), centre_x);
-            let horizon = bottom_px - (bottom_px - top_px) * 0.18;
-            let rise = (1.0 - light) * TILE_SIZE * 3.0;
-            let y = horizon + rise;
+            // Far away across the cavern, so it stays in sight wherever the rig flies (no
+            // parallax, like any distant sun): it drifts only slowly across the view as the rig
+            // travels, low in the view under the rock sky and higher as the rig goes deeper,
+            // and it sinks a little toward night.
+            let x = visible
+                .width
+                .mul_add(0.06f32.mul_add((centre_x * 0.000_6).sin(), 0.27), centre_x);
+            let middle = visible.height.mul_add(0.5, visible.y);
+            let share = ((middle - top_px) / (bottom_px - top_px).max(1.0)).clamp(0.0, 1.0);
+            let rise = (1.0 - light) * visible.height * 0.12;
+            let y = visible
+                .height
+                .mul_add(0.25f32.mul_add(-share, 0.62), visible.y)
+                + rise;
             let core = if sun.phase.sun_up() { CREAM } else { ORANGE };
             let body = if sun.phase.sun_up() { GOLD } else { RUST };
-            let size = 30.0f32.mul_add(light, 26.0) as i32;
+            let size = 22.0f32.mul_add(light, 20.0) as i32;
             disc(
                 draw,
                 x,
@@ -347,6 +397,52 @@ fn draw_far_isles(
     }
 }
 
+/// The inner sun's body over its tiles: slow corona rays (they turn, never blink), a gold
+/// rim, a blazing cream core and drifting white flecks.
+fn draw_sun_body(draw: &mut impl RaylibDraw, scene: &HollowScene<'_>, cx: f32, cy: f32) {
+    let body = ((fatherload_simulation::hollow::SUN_RADIUS as f32 + 0.5) * TILE_SIZE
+        / crate::pixel_scale::WORLD_PIXELS_PER_ART_PIXEL) as i32;
+    // Corona rays, turning slowly (slower still with reduced effects).
+    let turn = scene.seconds * 0.12 * scene.effects_strength.max(0.25);
+    let rays = 12;
+    for ray in 0..rays {
+        let angle = turn + ray as f32 * std::f32::consts::TAU / rays as f32;
+        let long = if ray % 2 == 0 { 2.1 } else { 1.65 };
+        let (sin, cos) = angle.sin_cos();
+        let (px, py) = (-sin, cos);
+        let inner = body as f32 * crate::pixel_scale::WORLD_PIXELS_PER_ART_PIXEL;
+        let width = inner * 0.28;
+        let tip = Vector2::new(cos.mul_add(inner * long, cx), sin.mul_add(inner * long, cy));
+        let a = Vector2::new(
+            px.mul_add(width, cos.mul_add(inner * 0.8, cx)),
+            py.mul_add(width, sin.mul_add(inner * 0.8, cy)),
+        );
+        let b = Vector2::new(
+            px.mul_add(-width, cos.mul_add(inner * 0.8, cx)),
+            py.mul_add(-width, sin.mul_add(inner * 0.8, cy)),
+        );
+        draw.draw_triangle(a, tip, b, with_alpha(GOLD, 120));
+        draw.draw_triangle(b, tip, a, with_alpha(GOLD, 120));
+    }
+    disc(draw, cx, cy, body + 6, with_alpha(ORANGE, 200));
+    disc(draw, cx, cy, body + 2, GOLD);
+    disc(draw, cx, cy, body - 6, AMBER);
+    disc(draw, cx, cy, body - 12, CREAM);
+    disc(draw, cx, cy, body - 30, BONE);
+    // Slow flecks crossing its face.
+    for fleck in 0..5 {
+        let angle = (fleck as f32).mul_add(1.3, scene.seconds * 0.2);
+        let reach = body as f32 * (0.35 + 0.1 * fleck as f32) * 2.0;
+        disc(
+            draw,
+            angle.cos().mul_add(reach, cx),
+            (angle.sin() * 0.8).mul_add(reach, cy),
+            3,
+            with_alpha(BONE, 220),
+        );
+    }
+}
+
 /// The Sun Well's flare and the serpent's body (see the module docs).
 pub(super) fn draw_sun_well(draw: &mut impl RaylibDraw, scene: &HollowScene<'_>) {
     let settings = scene.terrain.settings();
@@ -370,8 +466,9 @@ pub(super) fn draw_sun_well(draw: &mut impl RaylibDraw, scene: &HollowScene<'_>)
     let serpent = &scene.hollow.serpent;
     // The sun's own glow, always.
     let pulse = (scene.seconds * 0.8).sin() * 2.0;
-    disc(draw, cx, cy, 70 + pulse as i32, with_alpha(GOLD, 24));
-    disc(draw, cx, cy, 48, with_alpha(CREAM, 30));
+    disc(draw, cx, cy, 120 + pulse as i32, with_alpha(GOLD, 26));
+    disc(draw, cx, cy, 96, with_alpha(AMBER, 34));
+    draw_sun_body(draw, scene, cx, cy);
     // A flare coming: the glow swells smoothly over the warning.
     if let (Some(_), None) = (serpent.flare_warned, serpent.flare_burns) {
         let swell = ((scene.seconds * 1.2).sin() * 0.5 + 0.5) * scene.effects_strength.max(0.3);
@@ -399,7 +496,11 @@ pub(super) fn draw_sun_well(draw: &mut impl RaylibDraw, scene: &HollowScene<'_>)
             let length = dx.hypot(dy).max(1.0);
             let (nx, ny) = (dx / length, dy / length);
             let (sx, sy) = (-ny * TILE_SIZE * 1.6, nx * TILE_SIZE * 1.6);
-            let far = TILE_SIZE * 14.0;
+            // Out to the well's wall (the shadow's real reach), not past it.
+            let far = TILE_SIZE
+                * (fatherload_simulation::hollow::WELL_RADIUS
+                    - 2
+                    - fatherload_simulation::hollow::PILLAR_DISTANCE) as f32;
             let a = Vector2::new(px + sx, py + sy);
             let b = Vector2::new(px - sx, py - sy);
             let c = Vector2::new(

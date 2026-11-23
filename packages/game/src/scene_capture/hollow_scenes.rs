@@ -180,8 +180,10 @@ fn breach(stage: &mut SceneStage<'_>) {
         let Some(rect) = places::breach(&settings, &layout) else {
             return;
         };
+        // Parked on the deck, so the platform, its ropes and its winch fill the view's middle
+        // (below the stratum banner).
         let centre = rect.center();
-        stage_at(world, player, (centre.x, rect.max.y + 6), true, false);
+        stage_at(world, player, (centre.x + 2, rect.max.y - 1), true, false);
     });
     finish(stage, 200);
 }
@@ -413,9 +415,16 @@ fn sun_serpent(stage: &mut SceneStage<'_>, flare: bool) {
         let Some(centre) = places::sun_well(&settings, &layout) else {
             return;
         };
-        // On top of the lower-left shade pillar, the inner sun up and to the right.
+        // On top of the lower-left shade pillar, the inner sun up and to the right; for the
+        // flare, sheltering in that pillar's long shadow (on its far side from the sun).
         let pillar = places::shade_pillars(centre)[2];
-        stage_at(world, player, (pillar.x, pillar.y - 4), true, false);
+        let spot = if flare {
+            let (dx, dy) = (pillar.x - centre.x, pillar.y - centre.y);
+            (pillar.x + dx.signum() * 3, pillar.y + dy.signum() * 3)
+        } else {
+            (pillar.x, pillar.y - 4)
+        };
+        stage_at(world, player, spot, true, false);
         reveal(
             world,
             player,
@@ -423,8 +432,9 @@ fn sun_serpent(stage: &mut SceneStage<'_>, flare: bool) {
             centre.y - 30..centre.y + 30,
         );
     });
-    // It wakes on the first tick a rig is in the well, then orbits.
-    finish(stage, if flare { 470 } else { 160 });
+    // It wakes on the first tick a rig is in the well, then orbits; its first flare burns
+    // about 13 s later (half a flare's wait, then the warning).
+    finish(stage, if flare { 790 } else { 160 });
 }
 
 /// Settles `frames` frames, with everything round the seat's rig or pilot explored for the

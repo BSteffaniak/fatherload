@@ -37,6 +37,11 @@ use crate::render_snapshot::ViewSnapshot;
 pub const REVEAL_SECONDS: f32 = 7.0;
 /// How wide the camera starts at the breakthrough (a fraction of its usual scale).
 pub const REVEAL_WIDE: f32 = 0.55;
+/// How wide the camera pulls back inside the Sun Well (a fraction of its usual scale), so the
+/// inner sun, the pillars and the serpent's orbit fit the view together.
+pub const ARENA_WIDE: f32 = 0.7;
+/// Tiles past the Sun Well's wall over which the arena's wide view eases in.
+pub const ARENA_EASE_TILES: f32 = 12.0;
 
 /// The Gravity Anchor's state for the HUD.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -63,6 +68,9 @@ pub struct HollowView {
     pub riding: bool,
     /// In the Sun Well: the serpent's scales left, its phase, a flare coming or burning.
     pub serpent: Option<(usize, SerpentPhase, bool, bool)>,
+    /// How far inside the Sun Well's wide view the seat is, `0..=1` (1 inside the well, easing
+    /// to 0 over [`ARENA_EASE_TILES`] outside it).
+    pub arena: f32,
 }
 
 impl HollowView {
@@ -111,6 +119,12 @@ impl HollowView {
                 _ => AnchorView::Ready,
             }
         });
+        let arena = world.sun_well().map_or(0.0, |centre| {
+            let distance = ((tile.x - centre.x) as f32).hypot((tile.y - centre.y) as f32);
+            let outside = distance - fatherload_simulation::hollow::WELL_RADIUS as f32;
+            let t = (1.0 - outside / ARENA_EASE_TILES).clamp(0.0, 1.0);
+            t * t * 2.0f32.mul_add(-t, 3.0)
+        });
         let serpent = world.sun_well().and_then(|centre| {
             let close = (tile.x - centre.x).pow(2) + (tile.y - centre.y).pow(2)
                 <= (fatherload_simulation::hollow::WELL_RADIUS + 2).pow(2);
@@ -134,6 +148,7 @@ impl HollowView {
             anchor,
             riding: world.mount_of(player_id).is_some(),
             serpent,
+            arena,
         })
     }
 
@@ -145,6 +160,19 @@ impl HollowView {
             let eased = t * t * 2.0f32.mul_add(-t, 3.0);
             (1.0 - REVEAL_WIDE).mul_add(eased, REVEAL_WIDE)
         })
+    }
+
+    /// The camera's scale in and near the Sun Well: wide enough to read the serpent's orbit and
+    /// the sun's flares (it eases in with distance, so it never jumps).
+    #[must_use]
+    pub fn arena_zoom(&self) -> f32 {
+        (ARENA_WIDE - 1.0).mul_add(self.arena, 1.0)
+    }
+
+    /// The camera's scale for this seat: the breakthrough's or the arena's, whichever is wider.
+    #[must_use]
+    pub fn zoom(&self) -> f32 {
+        self.reveal_zoom().min(self.arena_zoom())
     }
 
     /// How much light floods the screen at the breakthrough (`0..=1`, one smooth fade).

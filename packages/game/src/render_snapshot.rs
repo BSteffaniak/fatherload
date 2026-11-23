@@ -1146,8 +1146,8 @@ fn view_snapshot(
         .into_iter()
         .find(|pilot| pilot.player_id == player_id);
     let (focus_x, focus_y) = pilot.map_or((player.x, player.y), |pilot| pilot.middle());
-    // The Hollow World (Wave 9): what the seat reads there, and the breakthrough's wide view
-    // easing back in.
+    // The Hollow World (Wave 9): what the seat reads there, the breakthrough's wide view
+    // easing back in, and the Sun Well's wide view (the serpent's orbit and the sun in sight).
     let hollow = crate::rendering::hollow_hud::HollowView::of(
         world,
         player_id,
@@ -1156,7 +1156,7 @@ fn view_snapshot(
     let world_scale = world_scale
         * hollow
             .as_ref()
-            .map_or(1.0, crate::rendering::hollow_hud::HollowView::reveal_zoom);
+            .map_or(1.0, crate::rendering::hollow_hud::HollowView::zoom);
     let camera = camera_for(viewport, world_scale, focus_x, focus_y);
     #[allow(
         clippy::cast_possible_truncation,
@@ -1185,6 +1185,16 @@ fn view_snapshot(
         fields.light = fields.light.min(1.0) * 0.4f32.mul_add(day, 0.6);
         let exposure = fatherload_simulation::field::ScreenEffect::Exposure.index();
         fields.screen[exposure] *= 0.35f32.mul_add(day, 0.65);
+        // In the Sun Well the forge's glare eases off so the fight reads (the well's own ember
+        // sky and the sun take over); a flare still glares.
+        if let Some(arena) = hollow.as_ref().map(|view| view.arena)
+            && arena > 0.0
+            && !world.hollow().serpent.flaring()
+        {
+            let bloom = fatherload_simulation::field::ScreenEffect::Bloom.index();
+            fields.screen[exposure] *= 0.75f32.mul_add(-arena, 1.0);
+            fields.screen[bloom] *= 0.5f32.mul_add(-arena, 1.0);
+        }
     }
     // The breakthrough: the light floods in, then fades (one smooth swell, never a blink).
     if let Some(flood) = hollow
