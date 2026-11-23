@@ -5918,6 +5918,183 @@ players and join stories like any resident, single-player, split-screen and onli
   bands describe, so settlement-bound arcs need a place trigger and the deeper settlements in
   the arc tests' binding worlds. The residents already take part in the existing arcs.
 
+## Wave 9 progression: Descents IV-VI economy, supplies, climate, hints and the probe
+
+The progression track of Wave 9 (expansion plan §13, §14 cross-Descent systems, F10).
+Modules: `src/workshop.rs` (deep supplies and recipes), `src/logistics.rs` (the supply kit),
+`src/world/logistics.rs` (buying, crafting, `take_supply`), `src/depth_progression.rs` (after
+"Wave 9": climate, specialties; the boss rewards), `src/balance/descent/mechanics.rs` (the
+probe's movement rules and boss fights); tests in `world/wave9_progression_tests.rs`,
+`workshop::tests`, `depth_progression::tests`, `balance::descent::{tests, mechanics::tests}`
+and the game's `shell::onboarding` tests. **No generation changed**: V1-V11 golden digests,
+`GOLDEN_V11_DIGEST` included, stand.
+
+### Upgrade tiers through Descent VI
+
+The ladders already ran to the Heart (Wave 7-8: core caps 15 / 17 / 19 for Descents IV / V /
+VI, Pressure Rating and Headlamp one tier per Descent, deep tier prices +135 % a tier). What
+changed:
+- **The gate systems of IV-VI are boss-won, never sold** (`RigSystem::boss_reward`): the
+  Leviathan's Sonar Suite and Cryo Hull, the Sun Serpent's Gravity Anchor and the Glitch's
+  Phase Drill, matching the registry's gate rewards. Every shop shows them
+  `UpgradeLock::Boss`; the Heart Key stays on sale until Wave 10. **Seam for the Descent
+  tracks:** each boss's death must call `economy::grant_rig_system` for its rewards (as the
+  Star Core and the Mycelial Mind do), or the next Descent stays shut.
+- **Deep settlements' specialties** (`outpost_specialty`, `outpost_price_percent`): Merrow
+  City's counter (Descent IV) sells Pressure Rating and Engine tiers, the Sunward Camp
+  (V) Radiator and Heat Shielding, the Prism Relay (VI) Headlamp and Drill at
+  `OUTPOST_SPECIALTY_PERCENT` (85 %) instead of 115 / 100 %. A counter lists only its own
+  Descent's boss prize among the locked rig systems.
+- Tried and reverted: steeper deep tiers (+150 % a tier) slowed the Strange Layers by 2.7 h,
+  but as a grind (four hour-long trips in the Mirror Strata, a 51-minute wait between new
+  things), so the curve stays at +135 %.
+
+### Deep supplies (the economy is this track's, the effect the Descent tracks')
+
+`workshop::DeepSupply` (append only; index = wire and save id), each answering one
+mechanic, crafted from its stratum's layer resource and sold at the deep counters:
+
+| Supply | Stratum | Recipe | Sold from | Base price |
+|---|---|---|---|---|
+| Ballast Tank | Underground Ocean | 5 Deep Pearl -> 2 | Hive Gate (III) | 320 |
+| Frost Heater | Brine Glaciers | 5 Brine Ice -> 2 | Hive Gate (III) | 330 |
+| Flare Buoy | Pearl Abyss | 4 Abyss Pearl -> 3 | Merrow (IV) | 200 |
+| Beast Bait | Megafauna Jungle | 5 Giant Hide -> 3 | Sunward Camp (V) | 260 |
+| Shade Canopy | The Sunforge | 5 Sun Glass -> 2 | Sunward Camp (V) | 410 |
+| Time-Bubble Bomb | Time Sludge | 5 Chrono Amber -> 2 | Prism Relay (VI) | 450 |
+| Echo Charge | Echo Caves | 4 Echo Quartz -> 3 | Prism Relay (VI) | 250 |
+| Lamp Filter | Prism Desert | 5 Prism Sand -> 2 | Prism Relay (VI) | 480 |
+
+- Ballast and heaters are stocked a Descent early because the Drowned and Frozen's outpost
+  is its fourth stratum (`DeepSupply::sold_from_descent`). Prices scale with the counter's
+  Descent (`supply_price`, the outposts' `scaled_price`) and the counter's percent; a recipe's
+  resources are worth about what buying its output at its own Descent's counter costs (test).
+- **The kit**: `Logistics::supplies` (player -> counts by index, up to `MAX_SUPPLY_STACK` 9
+  each; an emptied kit is dropped). `LogisticsCommand::BuySupply { outpost, supply }`
+  (`WorldState::supply_offer` checks: inside the outpost, `outpost_sells_supply`, not full)
+  and `CraftOutput::Supply(supply, count)` recipes fill it.
+- **Seam for the Descent tracks / integrator:** spend one with `WorldState::take_supply(player,
+  supply) -> bool` from inside the tick when the mechanic uses it (blow ballast, light a
+  heater, throw a bomb, fit a filter). The use action (a `LogisticsCommand` or the track's own
+  command) is the integrator's to wire; `WorldState::supplies_of` reads the kit for the HUD.
+  If a track names a supply differently, rename it here (names are display only).
+- 17 recipes appended to `RECIPES` (34 in all), one or more per stratum of Descents IV-VI:
+  the eight supplies and nine parts (Sinter Steam Turbine: Engine; Merrow Coral Seals:
+  Pressure Rating; Sky-amber Tank Liner: Fuel Tank; Lodestone Keel Plates: Hull; Sunforged
+  Radiator Core: Radiator; Mirror-ore Cargo Racks: Cargo Bay; Shear-stone Drill Crown: Drill;
+  Data-ore Scanner Core: Scanner; Prism-ground Beam Lens: Headlamp). One part per line per
+  Descent; never a rig system. Layer resource values keep Wave 8's curve
+  (`layer_resource_worth`), and new deep ores should take `deep_ore_value(descent, rank)`.
+
+### Climate: fair heat and cold per stratum (`deep_climate`)
+
+| Stratum | Heat | Cold | | Stratum | Heat | Cold |
+|---|---|---|---|---|---|---|
+| Underground Ocean | 16 | 0 | | Upside-Down Isles | 22 | 0 |
+| Brine Glaciers | 8 | 12 | | The Sunforge | 29 | 0 |
+| Geyser Fields | 23 | 0 | | Mirror Strata | 24 | 0 |
+| Merrow City | 17 | 0 | | Gravity Shear | 26 | 0 |
+| Pearl Abyss | 19 | 8 | | Pixel Rot | 27 | 0 |
+| Inner Sky | 21 | 0 | | Time Sludge | 28 | 0 |
+| Megafauna Jungle | 25 | 0 | | Echo Caves | 18 | 10 |
+| | | | | Prism Desert | 30 | 0 |
+
+- Heat units as `crate::protection` counts them; `crust::stratum_heat_units` reads the table,
+  so the tick's band heat, the probe and the HUD agree. Fair by test: every stratum is covered
+  by its Descent's radiator cap plus at most two Heat Shielding tiers, a Descent's first
+  stratum is at most 3 units (a warning) over a rig arriving with the previous cap, and a rig
+  with the cap and two shields loses no hull anywhere in IV-VI (a tick test). The placeholder
+  heat cap stays for VII-VIII only.
+- **Cold** is a seam for the Descent tracks' hull frost: `cold_excess(cold, heater_burning,
+  cryo_hull)` (a Frost Heater covers `FROST_HEATER_COVER_UNITS` 12, the Cryo Hull
+  `CRYO_HULL_COVER_UNITS` 15), `COLD_DAMAGE_PER_EXCESS_UNIT` 0.5 hull/s (at most 6 hull/s bare).
+  Not wired into the tick here, so the Brine Glaciers' track decides how frost bites.
+- Pressure stays per Descent (the Pressure Rating line, rated tier = Descent); the gates stay
+  the boss fights above.
+
+### First-time hints (`game/src/shell/onboarding.rs`)
+
+Eight more per-seat hints (appended `Hint`s): submarine water (Descent IV+ water or brine),
+deep cold (a cold stratum without the Cryo Hull), the inner sky (open air in it), the inner
+sun's glare (light over 1.3), turned gravity (down not down), a mirror zone, slow or fast time,
+and the stratum's deep supply when the kit holds none. They read replicated fields and
+sections, so they work online, per split-screen seat and by touch; their words name no key.
+
+### The descent probe (`balance::descent::mechanics`)
+
+Each stratum's registry fields become movement rules: submarine travel where the water is
+(drag over 1000, or the share of water and brine pockets; 55 % speed), open sky flown at
+9 rows/s and stone-hopping between floating ore, turned-gravity and mirrored cells (the Gravity
+Anchor eases turned gravity), slow time (everything takes 1/scale), the dark (the Sonar Suite
+eases it) and the glare. Descents I-III keep the Wave 8 model. The first meeting of a rule
+costs learning minutes and is new; each stratum's supply is crafted from the bay or bought (one
+a trip, two for the crossing); the expedition fuel reads the rules too. **Boss fights** are
+modelled (`boss_fight`): the winning attempt, a learning attempt from the Star Core on, and one
+more for each hull tier under `boss_ready_hull` (each failed attempt is a death, 40 % of a fight
+and two minutes back): Star Core 24 min, Mind 27, Leviathan 33, Sun Serpent 36, Glitch 44.
+The pacing table covers Descents I-VI.
+
+This branch (60 Hz, default seed, IV-VI still the Wave 7 placeholder strata):
+
+| Descent | Ends at (h) | Target (h) | Everyday fuel (max % of tank) | Expedition fuel (%) | Deaths |
+|---|---|---|---|---|---|
+| I The Crust | 6.4 | 5-8 | 49 | 28 | 0 |
+| II The Old Deep | 16.0 | 13-18 | 15 | 10 | 1 |
+| III The Living Dark | 23.0 | 22-29 | 17 | 4 | 1 |
+| IV The Drowned and Frozen | 31.0 | 31-40 | 14 | 4 | 1 |
+| V The Hollow World | 39.0 | 42-53 | 15 | 4 | 1 |
+| VI The Strange Layers | 51.9 | 53-66 | 14 | 2 | 1 |
+| (whole run, VIII) | 69.9 | 75-90 | 12 | 2 | 7 |
+
+| Stratum | Minutes | New things | Mechanics | Longest gap (min) | Check |
+|---|---|---|---|---|---|
+| IV Underground Ocean | 99 | 20 | 5 | 14 | pass |
+| IV Brine Glaciers | 81 | 11 | 4 | 14 | pass |
+| IV Geyser Fields | 83 | 6 | 3 | 17 | pass |
+| IV Merrow City | 89 | 6 | 2 | 17 | pass |
+| IV Pearl Abyss | 126 | 11 | 3 | 18 | pass |
+| V Inner Sky | 129 | 19 | 2 | 22 | pass |
+| V Megafauna Jungle | 90 | 6 | 1 | 22 | pass |
+| V Upside-Down Isles | 120 | 4 | 2 | 40 | FAIL |
+| V The Sunforge | 140 | 13 | 3 | 40 | FAIL |
+| VI Mirror Strata | 132 | 17 | 2 | 22 | pass |
+| VI Gravity Shear | 121 | 7 | 1 | 30 | pass |
+| VI Pixel Rot | 108 | 6 | 1 | 30 | pass |
+| VI Time Sludge | 135 | 8 | 4 | 22 | pass |
+| VI Echo Caves | 115 | 7 | 2 | 29 | pass |
+| VI Prism Desert | 161 | 10 | 1 | 29 | pass |
+
+- Descents I-III still pass (the bosses' deaths are one each, within the check's two). The
+  modelled rules and fights add 0.7 h to Descent IV, 0.5 h to V and 2.6 h to VI.
+- **Open for the integrator:** on placeholder strata no creature in IV-VI is new (their tables
+  reuse earlier kinds), so the Upside-Down Isles and the Sunforge wait 40 minutes; the content
+  tracks' creatures, set pieces and authored mechanics fill them. **The Hollow World ends 3 h
+  early** (39.0 against 42-53) and the Strange Layers 1 h early: the economy does not slow them
+  without a grind (the deep income buys each Descent's caps in about one trip a stratum, so the
+  time is the crossing and the content). Re-run the probe after stacking (`cargo test --release
+  -p fatherload_simulation descent_report -- --ignored --nocapture`); if V is still short,
+  give its authored content minutes (the jungle tribes, beast riding, the Sun Serpent's arena)
+  as `old_deep::authored_content` does, rather than raising prices.
+- Fuel: everyday trips stay calm (under 15 % of the tank); expeditions are still not
+  stressful past Descent II (the deep tanks dwarf a Descent's climb, even with the inner
+  sky flown both ways).
+
+### Formats, scenes and seams
+
+- `PROTOCOL_VERSION` 17 (`LogisticsCommand::BuySupply`, `Logistics::supplies`; the integrator
+  collapses it with the other tracks'). No save format bump: the kit is a serde default, and
+  an old save loads with an empty kit (test). No new events or audio patches (the dialog's own
+  sounds and toasts).
+- Game: the logistics dialog's **Deep supplies** section (`LogisticsGroup::Supplies`) and
+  **Supply kit** status, supply recipes in the workshop (this Descent's recipes first), the
+  inventory's kit lines, eight 9x9 supply icons (`sprites::deep_supplies`, appended to the
+  atlas). Scenes: `deep_counter_supplies`, `deep_counter_shop`, `deep_workshop_supplies`.
+- Shared-file edits (all additive): `logistics` (the field, helpers and appended command),
+  `world::logistics` (appended refusals and arms), `depth_progression` (boss rewards, the
+  placeholder cap's range, the Wave 9 section), `crust::stratum_heat_units` (the climate arm),
+  `workshop` (appended recipes, `CraftOutput::Supply`), `world/mod.rs` (the test module), the
+  netcode protocol doc, and in the game the dialog, HUD, onboarding, sprites and scenes.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

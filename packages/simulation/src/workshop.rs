@@ -10,7 +10,8 @@
 //! consumables (hull patches, fuel cells, dive charges, blasting charges) and **upgrade parts**:
 //! the next tier of a line, fitted for the resources plus [`PART_PRICE_PERCENT`] of its shop
 //! price. One recipe per stratum of Descents I-III ([`RECIPES`]), each sold at the outposts of
-//! its Descent and every deeper one. Waves 9-10 append the deeper Descents' recipes.
+//! its Descent and every deeper one; Wave 9 appends Descents IV-VI's parts and their deep
+//! supplies ([`DeepSupply`], also sold over the deep counters). Wave 10 appends VII-VIII's.
 //!
 //! **Value curve.** [`layer_resource_worth`] is what one unit is worth in credits (it grows with
 //! the Descent value curve and the stratum's place in its Descent): a part recipe saves about
