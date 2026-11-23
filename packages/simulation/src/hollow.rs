@@ -412,8 +412,9 @@ pub const EXPOSURE_GAIN_PER_SECOND: u32 = 55;
 pub const EXPOSURE_COOL_PER_SECOND: u32 = 140;
 /// Above this exposure (per mille) a rig's hull scorches.
 pub const EXPOSURE_SCORCH_AT: u16 = 1_000;
-/// Hull a second a fully exposed rig loses (scaled by the depth's creature scale).
-pub const EXPOSURE_DAMAGE_PER_SECOND: f32 = 2.2;
+/// Hull a second a fully exposed rig loses (scaled by the depth's creature scale: about 1 % of
+/// a Sunforge-tier hull a second, so a long crossing in the light really hurts).
+pub const EXPOSURE_DAMAGE_PER_SECOND: f32 = 4.5;
 /// How long an exposure step is (world time; tick-rate safe).
 pub const EXPOSURE_STEP_MILLIS: u64 = 250;
 
