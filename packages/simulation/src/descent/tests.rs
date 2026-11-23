@@ -325,6 +325,18 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                 ),
                 "{stratum:?}"
             );
+        } else if matches!(
+            stratum,
+            Stratum::TimeSludge | Stratum::EchoCaves | Stratum::PrismDesert
+        ) {
+            // So do the far Strange Layers (Wave 9 strange-b).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::TimeSludge | MusicCue::EchoCaves | MusicCue::PrismDesert
+                ),
+                "{stratum:?}"
+            );
         } else {
             assert_eq!(def.music as usize, def.descent as usize, "{stratum:?}");
         }
