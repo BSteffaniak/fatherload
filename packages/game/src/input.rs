@@ -143,6 +143,10 @@ pub struct PlayerInput {
     pub dpad_rotates: bool,
     /// A controller's stick share of `horizontal` (equal to `horizontal` on other devices).
     pub stick_horizontal: f32,
+    /// Pressed (in the rig, Wave 9): the Gravity Anchor: engage it (the rig's down becomes
+    /// gravity) or let it go (`/`, the arrow-keys seat's Numpad 9, a controller's scanner
+    /// bumper held, the touch ANCHOR button).
+    pub anchor: bool,
 }
 
 impl PlayerInput {
@@ -238,6 +242,7 @@ impl PlayerInput {
             rotate,
             dpad_rotates: _,
             stick_horizontal: _,
+            anchor,
         } = *self;
         horizontal.abs() > f32::EPSILON
             || rotate.abs() > f32::EPSILON
@@ -298,6 +303,7 @@ impl PlayerInput {
                 build_previous,
                 pointer_primary,
                 pointer_secondary,
+                anchor,
             ]
             .into_iter()
             .any(|pressed| pressed)
@@ -433,6 +439,7 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         } else {
             primary.stick_horizontal
         },
+        anchor: primary.anchor || secondary.anchor,
     }
 }
 
@@ -518,6 +525,8 @@ fn read_primary_keyboard_input_with_options(
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_X),
         // On foot R throws the rope (the relay kit it places from the rig is rig-only).
         rope: raylib.is_key_pressed(KeyboardKey::KEY_R),
+        // The Gravity Anchor beside the rotation thrusters' `,` and `.` (Wave 9).
+        anchor: raylib.is_key_pressed(KeyboardKey::KEY_SLASH),
         // Filled in by the app from its mouse tracker (see `crate::input::MouseAim`).
         pointer: None,
         auto_aim: false,
@@ -569,7 +578,7 @@ fn read_primary_keyboard_input_with_options(
 /// | Bomb, scanner | Numpad 0, Numpad . |
 /// | Next explosive, detonate, detonate in sequence | Numpad 3, Numpad 4, Numpad 5 |
 /// | Fire the weapon (auto-aimed), next weapon | Numpad 6, Numpad 7 |
-/// | On foot: rope (grapple / winch) | Numpad 9 |
+/// | On foot: rope (grapple / winch); in the rig: the Gravity Anchor | Numpad 9 |
 /// | Rotation thrusters (turn the rig left / right, F9) | Numpad /, Numpad * |
 /// | Build mode | Numpad 8 |
 /// | In build mode: remove, rotate, previous piece (next piece: Numpad 3) | Numpad 6, Numpad 7, Numpad 9 |
@@ -611,8 +620,10 @@ pub fn read_secondary_keyboard_input(raylib: &RaylibHandle) -> PlayerInput {
         scan: raylib.is_key_pressed(KeyboardKey::KEY_KP_DECIMAL),
         fire: raylib.is_key_down(KeyboardKey::KEY_KP_6),
         cycle_weapon: raylib.is_key_pressed(KeyboardKey::KEY_KP_7),
-        // On foot Numpad 9 throws the rope (in build mode it picks the previous piece).
+        // On foot Numpad 9 throws the rope (in build mode it picks the previous piece; in the
+        // rig it works the Gravity Anchor, Wave 9).
         rope: raylib.is_key_pressed(KeyboardKey::KEY_KP_9),
+        anchor: raylib.is_key_pressed(KeyboardKey::KEY_KP_9),
         auto_aim: true,
         // Build mode shares the weapon keys (weapons hold fire while a seat builds).
         build_mode: raylib.is_key_pressed(KeyboardKey::KEY_KP_8),

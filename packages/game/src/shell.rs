@@ -765,6 +765,21 @@ pub enum SoundCue {
     ClamSnap,
     LeviathanRoar,
     MerrowChime,
+    // The Hollow World (Wave 9).
+    /// The breakthrough into the Hollow World: the light floods in.
+    SunSting,
+    /// A gust bladder bursting.
+    WindGust,
+    /// A great beast's bellow (a crestback taking its rider).
+    BeastBellow,
+    /// A stoop roc's cry.
+    RocCry,
+    /// The Sun Serpent's roar.
+    SerpentRoar,
+    /// The inner sun about to flare.
+    FlareSwell,
+    /// The Gravity Anchor taking hold.
+    AnchorThunk,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

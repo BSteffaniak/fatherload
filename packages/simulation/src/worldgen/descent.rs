@@ -30,6 +30,7 @@
 
 pub mod crust;
 pub mod drowned;
+pub mod hollow;
 pub mod landmarks;
 pub mod living;
 

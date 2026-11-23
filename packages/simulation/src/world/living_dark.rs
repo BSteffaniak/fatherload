@@ -237,13 +237,17 @@ impl WorldState {
             .get(&player_id)
             .is_some_and(|player| player.hazard_gear.has_system(RigSystem::BioFilter));
         if !filtered || self.living_dark.spores.is_empty() {
-            return self.fields_at(x, y);
+            // The Hollow World's glare over the seat's view (Wave 9).
+            return self.hollow_view(player_id, self.fields_at(x, y));
         }
         let mut zones = self.fields.clone();
         for id in self.living_dark.spores.keys() {
             let _ = zones.remove(*id);
         }
-        crate::field::sample_in(&zones, self.terrain.settings(), self.terrain.frame(), x, y)
+        self.hollow_view(
+            player_id,
+            crate::field::sample_in(&zones, self.terrain.settings(), self.terrain.frame(), x, y),
+        )
     }
 
     // --- Commands -----------------------------------------------------------------------------

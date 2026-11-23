@@ -407,6 +407,7 @@ mod expedition_scenes;
 mod explosive_scenes;
 mod field_scenes;
 mod fluid_scenes;
+mod hollow_scenes;
 mod home_scenes;
 mod living_dark_scenes;
 mod logistics_scenes;
@@ -568,6 +569,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(old_deep_scenes::OLD_DEEP_SCENES)
         .chain(living_dark_scenes::LIVING_DARK_SCENES)
         .chain(drowned_scenes::DROWNED_SCENES)
+        .chain(hollow_scenes::HOLLOW_SCENES)
         .chain(expedition_scenes::EXPEDITION_SCENES)
 }
 

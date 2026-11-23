@@ -1240,6 +1240,15 @@ pub enum GameplayEventKind {
         kind: crate::expedition::anomaly::AnomalyKind,
         first_of_kind: bool,
     },
+    // The Hollow World (Wave 9, Descent V; netcode codes 540-559).
+    /// Something of the Hollow World happened at tile `(x, y)`; `player_id` is whose deed or
+    /// whom it concerns, if anyone's.
+    Hollow {
+        what: crate::hollow::HollowEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

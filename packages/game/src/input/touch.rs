@@ -202,6 +202,9 @@ pub struct TouchContext {
     /// On foot in a top-down crypt (WP-TOMBS T29): the stick walks eight ways (no drill lock),
     /// the right thumb's FIRE aims anywhere while held, and ROLL replaces JUMP.
     pub crypt: bool,
+    /// In the rig with the Gravity Anchor fitted (Wave 9): the ANCHOR button shows under the
+    /// rotation pair.
+    pub anchor: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -318,6 +321,8 @@ pub enum TouchControl {
     RotateLeft,
     /// Hold to turn the rig clockwise.
     RotateRight,
+    /// The Gravity Anchor (Wave 9): tap to engage it or let it go (shown once the rig has it).
+    Anchor,
 }
 
 /// Where the controls are this frame.
@@ -424,7 +429,7 @@ impl TouchLayout {
                     layout.push_play(cluster, settings, context);
                 }
                 if !context.pilot.on_foot() {
-                    layout.push_rotation(settings.left_handed);
+                    layout.push_rotation(settings.left_handed, context.anchor);
                 }
                 if context.prompt {
                     let (x, y) = safe.centre();
@@ -571,7 +576,7 @@ impl TouchLayout {
 
     /// The rotation thruster pair (F9): small buttons at the top of the stick zone's inner
     /// edge, under the thumb that steers, away from the action cluster.
-    fn push_rotation(&mut self, left_handed: bool) {
+    fn push_rotation(&mut self, left_handed: bool, anchor: bool) {
         let zone = self.stick_zone;
         let radius = self.button * ROTATE_BUTTON_RADIUS;
         let pitch = self.button * 0.95;
@@ -599,6 +604,13 @@ impl TouchLayout {
             TouchControl::RotateRight,
             TouchRect::around(inner + pitch, y, radius),
         ));
+        if anchor {
+            // The Gravity Anchor under the pair (Wave 9): turn the rig, then anchor it.
+            self.controls.push((
+                TouchControl::Anchor,
+                TouchRect::around(inner + pitch * 0.5, y + radius * 2.0 + margin, radius),
+            ));
+        }
     }
 
     /// A row of small buttons centred on the top edge. When the gap between the HUD's corner
@@ -955,6 +967,7 @@ impl TouchInput {
             TouchControl::CycleWeapon => input.cycle_weapon = true,
             TouchControl::CycleExplosive => input.cycle_explosive = true,
             TouchControl::Scan => input.scan = true,
+            TouchControl::Anchor => input.anchor = true,
             TouchControl::Tools => self.tools_open = !self.tools_open,
             TouchControl::Kit(slot) => {
                 self.tools_open = false;
@@ -1161,6 +1174,7 @@ pub const fn pad_action_control(action: PadAction) -> TouchReach {
         PadAction::Jump => Control(C::Jump),
         PadAction::BoardRig => Control(C::BoardRig),
         PadAction::Rope => Control(C::Rope),
+        PadAction::Anchor => Control(C::Anchor),
     }
 }
 
@@ -1205,6 +1219,7 @@ pub const fn touch_labels(prompt: Prompt) -> &'static [&'static str] {
         | Prompt::ExitRig
         | Prompt::BoardRig
         | Prompt::Rope
+        | Prompt::Anchor
         // Not on touch: desktop hotkeys, text editing keys and controller seat claims.
         | Prompt::Help
         | Prompt::Fullscreen

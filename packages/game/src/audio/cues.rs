@@ -290,6 +290,13 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::ClamSnap => Patch::ClamSnap,
         SoundCue::LeviathanRoar => Patch::LeviathanRoar,
         SoundCue::MerrowChime => Patch::MerrowChime,
+        SoundCue::SunSting => Patch::SunSting,
+        SoundCue::WindGust => Patch::WindGust,
+        SoundCue::BeastBellow => Patch::BeastBellow,
+        SoundCue::RocCry => Patch::RocCry,
+        SoundCue::SerpentRoar => Patch::SerpentRoar,
+        SoundCue::FlareSwell => Patch::FlareSwell,
+        SoundCue::AnchorThunk => Patch::AnchorThunk,
     }
 }
 
@@ -408,6 +415,43 @@ pub const fn living_dark_cue(
         E::MindDefeated => SoundCue::CreatureDeath,
         E::CapBounce => SoundCue::BombBounce,
         E::Bought => SoundCue::Upgrade,
+    }
+}
+
+/// The voice of a Hollow World beast (Wave 9) for its tell: a roc's cry from its perch, a
+/// longneck's or crestback's bellow, the serpent's roar. `None` for the rest.
+#[must_use]
+pub const fn hollow_voice(kind: EnemyKind) -> Option<SoundCue> {
+    Some(match kind {
+        EnemyKind::StoopRoc => SoundCue::RocCry,
+        EnemyKind::Skyneck | EnemyKind::Crestback => SoundCue::BeastBellow,
+        EnemyKind::SunSerpent => SoundCue::SerpentRoar,
+        _ => return None,
+    })
+}
+
+/// The sound of a Hollow World event (Wave 9; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn hollow_cue(what: fatherload_simulation::hollow::HollowEvent) -> SoundCue {
+    use fatherload_simulation::hollow::HollowEvent as E;
+    match what {
+        E::Breakthrough => SoundCue::SunSting,
+        E::InnerDawn => SoundCue::DawnRelief,
+        E::InnerNight => SoundCue::NightFalls,
+        E::Mounted => SoundCue::BeastBellow,
+        E::Dismounted | E::LandedUpsideDown => SoundCue::BombBounce,
+        E::RoofLanding => SoundCue::Damage,
+        E::Overexposed => SoundCue::GeigerAlert,
+        E::AnchorEngaged => SoundCue::AnchorThunk,
+        E::AnchorReleased => SoundCue::UiBack,
+        E::SerpentAwakened | E::SerpentExposed => SoundCue::SerpentRoar,
+        E::ScaleBroken => SoundCue::CoreStrike,
+        E::ScalesReignited | E::SerpentTell => SoundCue::FireWhoosh,
+        E::FlareWarning => SoundCue::FlareSwell,
+        E::SerpentDefeated => SoundCue::MilestoneFanfare,
+        E::GustBurst => SoundCue::WindGust,
+        E::MiteLatched => SoundCue::MothFlutter,
+        E::FlareflyBurst => SoundCue::SmallBlast,
     }
 }
 
@@ -596,6 +640,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // Night monsters (WP-NIGHT) have their own voices for the tell and the wind-up.
         GameplayEventKind::EnemyAlerted { kind, .. } => match night_voice(*kind) {
             Some(voice) => Some(voice),
+            // The Hollow World's beasts (Wave 9): a roc's cry, a longneck's bellow.
+            None if hollow_voice(*kind).is_some() => hollow_voice(*kind),
             None if tomb_voice(*kind).is_some() => tomb_voice(*kind),
             None => Some(enemy_cue(
                 *kind,
@@ -902,6 +948,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::AnomalyEntered { .. } => Some(SoundCue::AnomalyHum),
         // The Drowned and Frozen (Wave 9).
         GameplayEventKind::Drowned { what, .. } => Some(drowned_cue(*what)),
+        // The Hollow World (Wave 9).
+        GameplayEventKind::Hollow { what, .. } => Some(hollow_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1240,7 +1288,8 @@ mod tests {
             | GameplayEventKind::ExpeditionLogSealed { .. }
             | GameplayEventKind::ExpeditionEcho { .. }
             | GameplayEventKind::AnomalyEntered { .. }
-            | GameplayEventKind::Drowned { .. } => {}
+            | GameplayEventKind::Drowned { .. }
+            | GameplayEventKind::Hollow { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2303,6 +2352,13 @@ mod tests {
             SoundCue::ClamSnap,
             SoundCue::LeviathanRoar,
             SoundCue::MerrowChime,
+            SoundCue::SunSting,
+            SoundCue::WindGust,
+            SoundCue::BeastBellow,
+            SoundCue::RocCry,
+            SoundCue::SerpentRoar,
+            SoundCue::FlareSwell,
+            SoundCue::AnchorThunk,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

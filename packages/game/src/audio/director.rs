@@ -86,6 +86,7 @@ pub enum Material {
 
 impl Material {
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per tile family")]
     pub const fn of(kind: TileKind) -> Self {
         match kind {
             TileKind::Air
@@ -163,6 +164,19 @@ impl Material {
                 | fatherload_simulation::moon::LunarTile::RelicCache
                 | fatherload_simulation::moon::LunarTile::CrystalBloom
                 | fatherload_simulation::moon::LunarTile::CrystalStalk => Self::Ore,
+                _ => Self::Hard,
+            },
+            // The Hollow World (Wave 9): ferns, canopy and tar give, amber and glass ring.
+            TileKind::Hollow(tile) => match tile {
+                fatherload_simulation::hollow::HollowTile::Fern
+                | fatherload_simulation::hollow::HollowTile::Canopy
+                | fatherload_simulation::hollow::HollowTile::Tar
+                | fatherload_simulation::hollow::HollowTile::Loam
+                | fatherload_simulation::hollow::HollowTile::IsleGrass => Self::Soft,
+                fatherload_simulation::hollow::HollowTile::SkyAmber
+                | fatherload_simulation::hollow::HollowTile::SunGlass
+                | fatherload_simulation::hollow::HollowTile::Lodestone
+                | fatherload_simulation::hollow::HollowTile::GiantBone => Self::Ore,
                 _ => Self::Hard,
             },
             TileKind::Cave(tile) => match tile {

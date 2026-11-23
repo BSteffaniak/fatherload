@@ -276,10 +276,16 @@ impl PilotPresentation {
             .pilots()
             .map(|(_, body, state)| {
                 let owner = world.player(state.owner);
+                // A rider sits up on its crestback's saddle (Wave 9).
+                let saddle = if world.mount_of(state.owner).is_some() {
+                    fatherload_simulation::hollow::MOUNT_SADDLE_PIXELS
+                } else {
+                    0.0
+                };
                 Self {
                     player_id: state.owner,
                     x: body.x,
-                    y: body.y,
+                    y: body.y - saddle,
                     state: *state,
                     pose: state.pose(body),
                     cosmetics: RigCosmetics::resolve(
@@ -568,6 +574,8 @@ pub struct ViewSnapshot<'w> {
     /// The camera's roll (F9): the seat's rig orientation while the seat is in its rig (the
     /// world turns around the craft, the HUD stays upright), 0 on foot.
     pub roll: f32,
+    /// What the seat reads of the Hollow World (Wave 9; `None` elsewhere).
+    pub hollow: Option<crate::rendering::hollow_hud::HollowView>,
 }
 
 impl ViewSnapshot<'_> {
@@ -797,6 +805,8 @@ pub struct RenderSnapshot<'w> {
     pub effects: crate::screen_fx::EffectsIntensity,
     /// Descent II's live state (Wave 8): dose meters, mutations, halls, the set pieces' fights.
     pub old_deep: &'w fatherload_simulation::old_deep::OldDeep,
+    /// The Hollow World's shared state (Wave 9): exposure, anchors, rides, the serpent.
+    pub hollow: &'w fatherload_simulation::hollow::Hollow,
     /// Where Descent II's set pieces stand in this world.
     pub deep_sites: DeepSites,
     /// The Drowned and Frozen's live state (Wave 9): sonar pings, the eel-dragon, the
@@ -932,6 +942,7 @@ impl<'w> RenderSnapshot<'w> {
             logistics: world.logistics(),
             crust: world.crust(),
             old_deep: world.old_deep(),
+            hollow: world.hollow(),
             deep_sites: DeepSites {
                 cathedral: world.cathedral_site(),
                 arena: world.star_core_arena(),
@@ -1135,6 +1146,17 @@ fn view_snapshot(
         .into_iter()
         .find(|pilot| pilot.player_id == player_id);
     let (focus_x, focus_y) = pilot.map_or((player.x, player.y), |pilot| pilot.middle());
+    // The Hollow World (Wave 9): what the seat reads there, and the breakthrough's wide view
+    // easing back in.
+    let hollow = crate::rendering::hollow_hud::HollowView::of(
+        world,
+        player_id,
+        crate::view_frame::frame().tile_at(focus_x, focus_y),
+    );
+    let world_scale = world_scale
+        * hollow
+            .as_ref()
+            .map_or(1.0, crate::rendering::hollow_hud::HollowView::reveal_zoom);
     let camera = camera_for(viewport, world_scale, focus_x, focus_y);
     #[allow(
         clippy::cast_possible_truncation,
@@ -1156,6 +1178,25 @@ fn view_snapshot(
         // the post-process does not darken the screen again round a lamp of its own.
         fields.light = 1.0;
     }
+    // The Hollow World's inner day (Wave 9): its light follows the inner sun, dim but never
+    // black at night; the Sunforge's glare falls with it.
+    if world.hollow_stratum_at(tile).is_some() {
+        let day = f32::from(world.inner_sun_now().light) / 1_000.0;
+        fields.light = fields.light.min(1.0) * 0.4f32.mul_add(day, 0.6);
+        let exposure = fatherload_simulation::field::ScreenEffect::Exposure.index();
+        fields.screen[exposure] *= 0.35f32.mul_add(day, 0.65);
+    }
+    // The breakthrough: the light floods in, then fades (one smooth swell, never a blink).
+    if let Some(flood) = hollow
+        .as_ref()
+        .map(crate::rendering::hollow_hud::HollowView::flood)
+        .filter(|flood| *flood > 0.0)
+    {
+        let exposure = fatherload_simulation::field::ScreenEffect::Exposure.index();
+        let bloom = fatherload_simulation::field::ScreenEffect::Bloom.index();
+        fields.screen[exposure] = fields.screen[exposure].max(flood);
+        fields.screen[bloom] = fields.screen[bloom].max(flood * 0.8);
+    }
     let roll = if pilot.is_some() {
         0.0
     } else {
@@ -1164,6 +1205,7 @@ fn view_snapshot(
     Some(ViewSnapshot {
         fields,
         roll,
+        hollow,
         aim_preview: None,
         reticle: None,
         build_preview: None,

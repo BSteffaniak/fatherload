@@ -503,6 +503,13 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
         return crate::drowned::drowned_rules(settings)
             .then_some((Landscape::Caverns, Culture::Merrow));
     }
+    if site == crate::worldgen::streamed::villages::SUNFOLK_SITE
+        && underground
+        && settings.generator.has_descents()
+    {
+        // The Sunfolk (Wave 9): the jungle tribes of the Hollow World.
+        return Some((Landscape::Caverns, Culture::Deepfolk));
+    }
     let surface = placement::surface_site(settings.seed, site)?;
     if underground {
         placement::underground_site(settings, site)?;

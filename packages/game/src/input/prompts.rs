@@ -96,6 +96,8 @@ pub enum Prompt {
     BoardRig,
     /// The rope: grapple, winch, let go (on foot, WP-PILOT).
     Rope,
+    /// The Gravity Anchor (in the rig, Wave 9).
+    Anchor,
 }
 
 /// A controller glyph: a button or a direction cluster.
@@ -244,7 +246,8 @@ pub const fn keyboard_keys(prompt: Prompt, layout: KeyboardLayout) -> &'static [
         (Prompt::BuildCycle, Arrows) => &["Num9", "Num3"],
         (Prompt::BuildCursor, Full) => &["Mouse", "W", "A", "S", "D"],
         (Prompt::Jump, Full | Wasd) => &["Space"],
-        (Prompt::Rope, Arrows) => &["Num9"],
+        (Prompt::Rope | Prompt::Anchor, Arrows) => &["Num9"],
+        (Prompt::Anchor, Full | Wasd) => &["/"],
         // The arrow-keys seat leaves the global hotkeys and scrolling to the main keyboard,
         // and keyboards never "join".
         (
@@ -308,6 +311,7 @@ pub fn pad_glyphs(prompt: Prompt) -> Vec<PadGlyph> {
         Prompt::Pick => button(PadAction::SwingPick).into_iter().collect(),
         Prompt::ExitRig | Prompt::BoardRig => button(PadAction::BoardRig).into_iter().collect(),
         Prompt::Rope => button(PadAction::Rope).into_iter().collect(),
+        Prompt::Anchor => button(PadAction::Anchor).into_iter().collect(),
         // Keyboard-only: no controller binding.
         Prompt::Help
         | Prompt::Fullscreen

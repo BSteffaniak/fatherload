@@ -7,6 +7,7 @@ pub mod deep_gear;
 pub mod drowned;
 pub mod enemies;
 pub mod explosives;
+pub mod hollow;
 pub mod icons;
 pub mod interior;
 pub mod living;
@@ -504,6 +505,20 @@ pub const ALL: &[&SpriteDef] = &[
     &drowned::GULPER_EEL,
     &drowned::LEVIATHAN,
     &drowned::SHOT_PRESSURE_BUBBLE,
+    // The Hollow World (Wave 9).
+    &hollow::SKY_MANTA,
+    &hollow::STOOP_ROC,
+    &hollow::GUST_BLADDER,
+    &hollow::CRESTBACK,
+    &hollow::SKYNECK,
+    &hollow::FANGRUNNER,
+    &hollow::HANGCLAW,
+    &hollow::LODE_MITE,
+    &hollow::CINDER_DRAKE,
+    &hollow::SHADE_STALKER,
+    &hollow::FLAREFLY,
+    &hollow::SUN_SERPENT,
+    &hollow::SERPENT_COIL,
 ];
 
 #[cfg(test)]

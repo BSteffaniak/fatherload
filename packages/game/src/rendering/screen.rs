@@ -186,6 +186,20 @@ pub(super) fn draw_view_hud(
     // Descent II, the Old Deep (Wave 8): dose, storms, tides, the valves and the Star Core.
     super::old_deep_hud::draw_old_deep_hud(draw, snapshot, view, rect, top + 124);
     super::drowned_hud::draw_drowned_hud(draw, snapshot, view, rect, top + 196);
+    // Descent V, the Hollow World (Wave 9): the breakthrough's card, the inner sun, light and
+    // shade, the serpent, the anchor and a ride.
+    super::hollow_hud::draw_breakthrough(draw, view, rect);
+    super::hollow_hud::draw_hollow_hud(
+        draw,
+        view,
+        rect,
+        top + 124,
+        &crate::input::prompts::inline_text(
+            crate::input::prompts::Prompt::Anchor,
+            super::prompts::menu_device(),
+        )
+        .unwrap_or_else(|| "ANCHOR".to_owned()),
+    );
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.
@@ -1057,6 +1071,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Fluid(fluid) => super::terrain::tile_art::fluid_color(fluid),
         TileKind::Crust(tile) => super::terrain::tile_art::crust_color(tile),
         TileKind::Deep(tile) => super::terrain::tile_art::deep_color(tile),
+        TileKind::Hollow(tile) => super::terrain::tile_art::hollow_color(tile),
     }
 }
 
@@ -2032,6 +2047,7 @@ fn draw_help_ui(draw: &mut RaylibDrawHandle<'_>) {
                 (Prompt::Inventory, "Inventory"),
                 (Prompt::Infrastructure, "Field kits"),
                 (Prompt::BuildMode, "Build mode"),
+                (Prompt::Anchor, "Gravity Anchor (Hollow World)"),
             ],
         ),
         (

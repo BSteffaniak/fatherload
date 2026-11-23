@@ -174,7 +174,11 @@ impl WorldState {
             expedition: _,
             // Pings are tiles; the Leviathan's moves are offsets from its arena (Wave 9).
             drowned: _,
+            // The Hollow World's state is ticks, meters, entity ids and world times; the
+            // serpent's lunge mark is moved with the frame below.
+            hollow,
         } = self;
+        hollow.serpent.reframe_mark(shift);
         player_template.reframe(shift);
         players.reframe(shift);
         lost_cargo_sites.reframe(shift);

@@ -105,6 +105,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Lunar(tile) => super::lunar::lunar_light(tile),
         // The Old Deep's glowing rock, crystal, vents and the core (Wave 8).
         TileKind::Deep(tile) => super::old_deep::deep_light(tile),
+        // The Hollow World's sun glass, amber, slag and the inner sun (Wave 9).
+        TileKind::Hollow(tile) => tile.glow() as f32 / 255.0 * 3.2,
         _ => 0.0,
     }
 }

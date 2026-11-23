@@ -81,6 +81,7 @@ fn deep_strata_spawn_their_registry_creatures() {
 /// the surface reaches the bedrock floor of a V11 world: every stratum, the Hollow World's
 /// drop and every gate chamber included.
 #[test]
+#[allow(clippy::too_many_lines, reason = "one walk through every check")]
 fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
     let settings = v11(0x00C0_FFEE);
     // A low tick rate keeps the run short. 20 Hz is below the 30-240 Hz range the tick-rate
@@ -115,9 +116,14 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
                 stalled = 0;
             } else {
                 stalled += 1;
-                if stalled > 40 && world.fields_for(PLAYER).gravity_y < 0.5 {
+                let afloat = world
+                    .terrain()
+                    .tile(tile)
+                    .is_some_and(|found| matches!(found.kind, TileKind::Fluid(_)));
+                if stalled > 40 && (world.fields_for(PLAYER).gravity_y < 0.5 || afloat) {
                     // A Gravity Shear or Upside-Down Isles region turned gravity away from
-                    // "down" (the stratum fields, Wave 7): this bot only digs down, so it
+                    // "down" (the stratum fields, Wave 7), or the rig floats in a fluid pocket
+                    // (Wave 9: it bobs instead of drilling): this bot only digs down, so it
                     // hops a region cell lower into a pocket.
                     let below = TilePosition {
                         x: tile.x,
@@ -139,9 +145,17 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
                     );
                     stalled = 0;
                 } else if stalled > 40 {
-                    // Nudge sideways off anything undiggable (an outpost's plating).
+                    // Off centre (the Inner Sky's wind blew it aside as it fell, Wave 9): it
+                    // straddles its one-tile shaft, so it is set back over its column. Else
+                    // nudge sideways off anything undiggable (an outpost's plating).
+                    let frame = world.frame();
                     let rig = world.player_mut(PLAYER).expect("a rig");
-                    rig.x = TILE_SIZE.mul_add(3.0, rig.x);
+                    let centred = frame.centre_of(frame.col(rig.x), 0).0;
+                    rig.x = if (rig.x - centred).abs() > 1.0 {
+                        centred
+                    } else {
+                        TILE_SIZE.mul_add(3.0, rig.x)
+                    };
                     stalled = 0;
                 }
             }
@@ -151,9 +165,23 @@ fn a_cheating_bot_drills_to_the_bottom_of_the_deep_descent() {
             }
         }
     }
+    let stuck = world.player(PLAYER).expect("a rig").tile_in(world.frame());
+    let around: Vec<String> = (-1..=2)
+        .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+        .map(|(dx, dy)| {
+            let at = TilePosition {
+                x: stuck.x + dx,
+                y: stuck.y + dy,
+            };
+            format!(
+                "{dx},{dy}: {:?}",
+                world.terrain().tile(at).map(|tile| tile.kind)
+            )
+        })
+        .collect();
     assert!(
         deepest >= floor - 1,
-        "the bot stopped at row {deepest} of {floor} ({:?})",
+        "the bot stopped at row {deepest} of {floor} ({:?}), at {stuck:?} among {around:?}",
         world.terrain().stratum_at(TilePosition {
             x: start.x,
             y: deepest

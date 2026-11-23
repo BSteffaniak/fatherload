@@ -577,6 +577,17 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
                 || "The workshop hums.".to_owned(),
                 |found| format!("The workshop turns out {}.", found.name),
             ),
+        LogisticsCommand::Hollow(action) => match action {
+            fatherload_simulation::hollow::HollowAction::EngageAnchor => {
+                "Gravity Anchor engaged: down is where the rig's feet are.".to_owned()
+            }
+            fatherload_simulation::hollow::HollowAction::ReleaseAnchor => {
+                "Gravity Anchor released.".to_owned()
+            }
+            fatherload_simulation::hollow::HollowAction::ToggleAnchor => {
+                "Gravity Anchor.".to_owned()
+            }
+        },
         LogisticsCommand::LivingDark(action) => match action {
             LivingDarkAction::BuyRootAxes => "Root axes racked.".to_owned(),
             LivingDarkAction::FireRootAxe => {

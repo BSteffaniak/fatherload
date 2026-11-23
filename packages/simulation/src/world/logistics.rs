@@ -94,6 +94,8 @@ pub enum LogisticsRefusal {
     },
     /// A Living Dark command's own refusal (Wave 8).
     LivingDark(crate::living_dark::LivingDarkRefusal),
+    /// A Hollow World command's own refusal (Wave 9).
+    Hollow(crate::hollow::HollowRefusal),
 }
 
 impl LogisticsRefusal {
@@ -145,6 +147,7 @@ impl LogisticsRefusal {
                 stratum.name()
             ),
             Self::LivingDark(refusal) => refusal.message(),
+            Self::Hollow(refusal) => refusal.message(),
         }
     }
 }
@@ -594,6 +597,10 @@ impl WorldState {
                 }
                 self.check_dive_purchase(player_id)
             }
+            LogisticsCommand::Hollow(action) => self
+                .check_hollow(player_id, action)
+                .map_err(LogisticsRefusal::Hollow)
+                .map(|()| LogisticsQuote::credits(0)),
             LogisticsCommand::LivingDark(action) => self
                 .check_living_dark(player_id, tile, action)
                 .map_err(LogisticsRefusal::LivingDark)
@@ -1075,6 +1082,9 @@ impl WorldState {
             }
             LogisticsCommand::LivingDark(action) => {
                 self.apply_living_dark(player_id, tile, action, output);
+            }
+            LogisticsCommand::Hollow(action) => {
+                self.apply_hollow(player_id, action, output);
             }
             LogisticsCommand::FireDiveCharge => {
                 let cut = self.dive_cut(tile);

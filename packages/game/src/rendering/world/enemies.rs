@@ -26,8 +26,8 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
-        crypt as crypt_art, drowned as drowned_art, enemies as art, living as living_art,
-        moon as moon_art, old_deep as deep_art, tomb as tomb_art,
+        crypt as crypt_art, drowned as drowned_art, enemies as art, hollow as hollow_art,
+        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
     },
 };
 
@@ -126,6 +126,20 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::LureAngler => &drowned_art::LURE_ANGLER,
         EnemyKind::GulperEel => &drowned_art::GULPER_EEL,
         EnemyKind::Leviathan => &drowned_art::LEVIATHAN,
+        // The Hollow World (Wave 9).
+        EnemyKind::SkyManta => &hollow_art::SKY_MANTA,
+        EnemyKind::StoopRoc => &hollow_art::STOOP_ROC,
+        EnemyKind::GustBladder => &hollow_art::GUST_BLADDER,
+        EnemyKind::Crestback => &hollow_art::CRESTBACK,
+        EnemyKind::Skyneck => &hollow_art::SKYNECK,
+        EnemyKind::Fangrunner => &hollow_art::FANGRUNNER,
+        EnemyKind::Hangclaw => &hollow_art::HANGCLAW,
+        EnemyKind::LodeMite => &hollow_art::LODE_MITE,
+        EnemyKind::CinderDrake => &hollow_art::CINDER_DRAKE,
+        EnemyKind::ShadeStalker => &hollow_art::SHADE_STALKER,
+        EnemyKind::Flarefly => &hollow_art::FLAREFLY,
+        EnemyKind::SunSerpent => &hollow_art::SUN_SERPENT,
+        EnemyKind::SerpentCoil => &hollow_art::SERPENT_COIL,
     }
 }
 
@@ -519,6 +533,65 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
             1 | 2 => 2,
             _ => sprite.frame_at(phase) % 2,
         },
+        // The Hollow World (Wave 9).
+        EnemyKind::SkyManta
+        | EnemyKind::GustBladder
+        | EnemyKind::LodeMite
+        | EnemyKind::Flarefly => sprite.frame_at(phase),
+        EnemyKind::StoopRoc => {
+            if attacking {
+                2
+            } else {
+                usize::from(((phase * 2.5) as usize).is_multiple_of(3))
+            }
+        }
+        EnemyKind::Crestback => {
+            if state.mode == EnemyMode::Dormant {
+                2
+            } else if moving {
+                ((phase * 6.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Skyneck => {
+            if moving {
+                ((phase * 2.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Fangrunner | EnemyKind::CinderDrake => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 9.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Hangclaw => match state.mode {
+            EnemyMode::Dormant => 0,
+            EnemyMode::Windup | EnemyMode::Strike => 2,
+            _ => 1,
+        },
+        EnemyKind::ShadeStalker => {
+            if attacking {
+                2
+            } else {
+                sprite.frame_at(phase)
+            }
+        }
+        EnemyKind::SunSerpent => match state.mode {
+            EnemyMode::Windup => 1,
+            EnemyMode::Stunned => 2,
+            _ => 0,
+        },
+        EnemyKind::SerpentCoil => match state.phase {
+            fatherload_simulation::world::SERPENT_SCALE_PHASE => 0,
+            fatherload_simulation::world::SERPENT_CRACKED_PHASE => 2,
+            _ => 1,
+        },
     }
 }
 
@@ -530,9 +603,12 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         EnemyKind::SunColossus
         | EnemyKind::HollowMatriarch
         | EnemyKind::MycelialMind
-        | EnemyKind::EelDragon => ART * 1.5,
+        | EnemyKind::EelDragon
+        | EnemyKind::SunSerpent => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
+        // The Sun Serpent's coils loom large too (Wave 9).
+        EnemyKind::SerpentCoil => ART * 1.25,
         _ => ART,
     }
 }
@@ -589,6 +665,14 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::LureAngler
             | EnemyKind::GulperEel
             | EnemyKind::Leviathan
+            // The Hollow World's (Wave 9) asymmetric kinds.
+            | EnemyKind::SkyManta
+            | EnemyKind::StoopRoc
+            | EnemyKind::Crestback
+            | EnemyKind::Skyneck
+            | EnemyKind::Fangrunner
+            | EnemyKind::CinderDrake
+            | EnemyKind::SunSerpent
     )
 }
 
@@ -730,6 +814,40 @@ fn draw_enemy(
         }
         EnemyKind::LureFish => {
             disc(draw, x, y, 10, with_alpha(MINT, 30));
+        }
+        // The Hollow World (Wave 9): little suns, a blazing serpent and its glowing scales.
+        EnemyKind::Flarefly => {
+            let pulse = ((seconds * 9.0 + state.seed as f32 * 0.1).sin() * 1.5) as i32;
+            disc(draw, x, y, 10 + pulse, with_alpha(GOLD, 40));
+            disc(draw, x, y, 5, with_alpha(CREAM, 60));
+        }
+        EnemyKind::SunSerpent => {
+            let pulse = ((seconds * 2.0).sin() * 3.0) as i32;
+            let tell = state.mode == EnemyMode::Windup;
+            disc(
+                draw,
+                x,
+                y,
+                44 + pulse,
+                with_alpha(ORANGE, if tell { 70 } else { 36 }),
+            );
+            disc(
+                draw,
+                x,
+                y,
+                28 + pulse / 2,
+                with_alpha(GOLD, if tell { 80 } else { 40 }),
+            );
+        }
+        EnemyKind::SerpentCoil
+            if state.phase == fatherload_simulation::world::SERPENT_SCALE_PHASE =>
+        {
+            let pulse = ((seconds * 4.0 + state.seed as f32 * 0.05).sin() * 2.0) as i32;
+            disc(draw, x, y, 24 + pulse, with_alpha(GOLD, 52));
+            disc(draw, x, y, 14, with_alpha(BONE, 60));
+        }
+        EnemyKind::CinderDrake => {
+            disc(draw, x, y - ART * 3.0, 9, with_alpha(ORANGE, 28));
         }
         EnemyKind::Angler => {
             // The bait dangles ahead of the jaws on its rod.

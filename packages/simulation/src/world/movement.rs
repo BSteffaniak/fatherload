@@ -189,15 +189,35 @@ impl WorldState {
         let drilling = self.active_drills.contains_key(&player_id);
         // Wave 8, Descent worlds: thrusters below the rig's Pressure Rating burn more.
         let pressure_burn = self.pressure_burn_factor(player_id);
+        // The Hollow World (Wave 9): the Gravity Anchor's pull, the Inner Sky's wind and tar.
+        let anchor = self.anchor_quarter_for(player_id);
+        let (wind, tar) = self
+            .players
+            .get(&player_id)
+            .filter(|_| settings.generator.has_descents())
+            .map_or((None, false), |player| {
+                (
+                    self.hollow_wind_at(player.x, player.y),
+                    self.tar_under(player.x, player.y),
+                )
+            });
         let player = self.players.get_mut(&player_id)?;
         // Field effects (F9): neutral everywhere without zones or stratum profiles.
-        let field = crate::field::sample_in(
+        let mut field = crate::field::sample_in(
             &self.fields,
             &settings,
             self.terrain.frame(),
             player.x,
             player.y,
         );
+        if let Some(quarter) = anchor {
+            // The rig's own down (as it was turned when the anchor took hold) is gravity.
+            let (gx, gy) = crate::hollow::anchor_gravity(quarter);
+            let strength = field.gravity_x.hypot(field.gravity_y).max(1.0);
+            field.gravity_x = gx * strength;
+            field.gravity_y = gy * strength;
+            field.free_rotation = 1.0;
+        }
         let attitude_before = player.attitude;
         let level = field.down_angle();
         let grounded = match level {
@@ -359,6 +379,10 @@ impl WorldState {
                     .in_thin_air(environment.air_density, side_efficiency)
                     .step_tick(player.velocity_x - air, horizontal, timing.rate)
                     + air
+            } else if let Some(wind) = wind.filter(|_| !grounded) {
+                // The Inner Sky's wind (Wave 9): an airborne rig moves relative to the air,
+                // so it coasts with the wind and steers across it.
+                tuning.step_tick(player.velocity_x - wind, horizontal, timing.rate) + wind
             } else {
                 tuning.step_tick(player.velocity_x, horizontal, timing.rate)
             };
@@ -460,6 +484,21 @@ impl WorldState {
                 (-AUTHORITATIVE_RIG_GRAVITY * WATER_BUOYANCY).mul_add(seconds, player.velocity_y)
                     * drag,
             );
+        }
+        // Off the classic path (a turned rig, a field), the Inner Sky's wind eases an airborne
+        // rig's sideways speed toward its own (Wave 9); tar grips a rig driving on it.
+        if let Some(wind) = wind
+            && !grounded
+            && !classic
+        {
+            let pull = (crate::hollow::WIND_GRIP * seconds).min(1.0);
+            player.velocity_x = quantize_simulation_scalar(
+                (wind - player.velocity_x).mul_add(pull, player.velocity_x),
+            );
+        }
+        if tar && grounded {
+            let keep = crate::field::trig::exp_neg(crate::hollow::TAR_GRIP_PER_SECOND * seconds);
+            player.velocity_x = quantize_simulation_scalar(player.velocity_x * keep);
         }
         if thrusting {
             let thrust_efficiency = efficiency;

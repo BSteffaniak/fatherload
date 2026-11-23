@@ -234,6 +234,9 @@ pub enum SectionKey {
     /// The Drowned and Frozen (Wave 9): sonar pings, ink clouds, the eel-dragon, the
     /// Leviathan's fight and the lore found (refrozen ice travels as terrain ops).
     Drowned,
+    /// The Hollow World (Wave 9): breakthroughs, exposure, Gravity Anchors, rides and the Sun
+    /// Serpent's fight.
+    Hollow,
 }
 
 impl SectionKey {
@@ -253,7 +256,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 25] = [
+    pub const SHARED: [Self; 26] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -280,6 +283,7 @@ impl SectionKey {
         // The authored Crust (Wave 8 integration: it was left out, so clients never saw it).
         Self::Crust,
         Self::Drowned,
+        Self::Hollow,
     ];
 }
 
@@ -313,6 +317,7 @@ pub enum SectionPayload {
     LivingDark(Box<crate::living_dark::LivingDark>),
     Drowned(Box<crate::drowned::DrownedState>),
     Expedition(Box<crate::expedition::ExpeditionState>),
+    Hollow(Box<crate::hollow::Hollow>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -511,6 +516,7 @@ impl WorldState {
             living_schedule: _,
             expedition,
             drowned,
+            hollow,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -614,6 +620,7 @@ impl WorldState {
             SectionKey::LivingDark => SectionPayload::LivingDark(Box::new(living_dark.clone())),
             SectionKey::Expedition => SectionPayload::Expedition(Box::new(expedition.clone())),
             SectionKey::Drowned => SectionPayload::Drowned(Box::new(drowned.clone())),
+            SectionKey::Hollow => SectionPayload::Hollow(Box::new(hollow.clone())),
         })
     }
 
@@ -791,6 +798,9 @@ impl WorldState {
             }
             (SectionKey::Drowned, SectionPayload::Drowned(drowned)) => {
                 self.drowned = *drowned;
+            }
+            (SectionKey::Hollow, SectionPayload::Hollow(hollow)) => {
+                self.hollow = *hollow;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

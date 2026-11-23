@@ -36,6 +36,7 @@ pub mod field;
 pub mod fluid;
 pub mod hash;
 pub mod hazard;
+pub mod hollow;
 pub mod home;
 pub mod ids;
 pub mod infrastructure;

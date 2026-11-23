@@ -267,7 +267,14 @@ mod tests {
                 | Patch::OceanLoop
                 | Patch::GeyserLoop
                 | Patch::AbyssLoop
-                | Patch::LeviathanLoop => (40.0, 3_000.0),
+                | Patch::LeviathanLoop
+                // The Hollow World (wave 9): beasts, the serpent's drums, the forge's roar,
+                // the anchor's thunk and the forge's drone.
+                | Patch::BeastBellow
+                | Patch::SerpentLoop
+                | Patch::ForgeAmbienceLoop
+                | Patch::AnchorThunk
+                | Patch::SunforgeLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

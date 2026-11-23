@@ -182,7 +182,7 @@ impl WorldState {
             // The Living Dark's peaceful folk (the Amber Court's drones while it is friendly,
             // the Swarm under a truce, lure fish) are never locked onto (Wave 8).
             if let EntityState::Enemy(state) = &entity.state
-                && self.living_peaceful(state)
+                && (self.living_peaceful(state) || Self::hollow_peaceful(state))
             {
                 continue;
             }

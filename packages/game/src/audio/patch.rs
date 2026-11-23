@@ -15,6 +15,7 @@
 use std::f32::consts::TAU;
 
 mod drowned;
+mod hollow;
 mod old_deep;
 
 use super::{
@@ -419,6 +420,23 @@ patches! {
     MerrowLoop => "loop_merrow_city",
     AbyssLoop => "loop_pearl_abyss",
     LeviathanLoop => "loop_leviathan",
+    // The Hollow World (wave 9, Descent V), appended at the end so every earlier patch keeps
+    // its seeds.
+    SunSting => "sun_sting",
+    WindGust => "wind_gust",
+    BeastBellow => "beast_bellow",
+    RocCry => "roc_cry",
+    SerpentRoar => "serpent_roar",
+    FlareSwell => "flare_swell",
+    AnchorThunk => "anchor_thunk",
+    InnerSkyLoop => "loop_inner_sky",
+    JungleLoop => "loop_jungle",
+    IslesLoop => "loop_isles",
+    SunforgeLoop => "loop_sunforge",
+    SerpentLoop => "loop_serpent",
+    JungleAmbienceLoop => "loop_jungle_ambience",
+    UpdraftLoop => "loop_updraft",
+    ForgeAmbienceLoop => "loop_forge_ambience",
 }
 
 /// Playback metadata of a patch.
@@ -803,6 +821,42 @@ impl Patch {
                 .instances(1)
                 .send(0.5)
                 .jitter(0.0, 0.5),
+            // The Hollow World (wave 9): the breakthrough's sting and the serpent are set
+            // pieces that hush the mix; the beasts, gusts and the anchor are heard where they
+            // happen; its beds loop.
+            Self::SunSting => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.6)
+                .jitter(0.0, 0.0)
+                .ducking(0.45)
+                .priority(9),
+            Self::SerpentRoar => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.02, 0.5)
+                .ducking(0.35)
+                .priority(8),
+            Self::FlareSwell => PatchInfo::new(Alarm).instances(1).send(0.4).jitter(0.0, 0.0),
+            Self::WindGust | Self::RocCry => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.35)
+                .jitter(0.06, 1.0),
+            Self::BeastBellow => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.5)
+                .jitter(0.05, 1.0),
+            Self::AnchorThunk => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.25)
+                .jitter(0.02, 0.5),
+            Self::InnerSkyLoop
+            | Self::JungleLoop
+            | Self::IslesLoop
+            | Self::SunforgeLoop
+            | Self::SerpentLoop
+            | Self::JungleAmbienceLoop
+            | Self::UpdraftLoop
+            | Self::ForgeAmbienceLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1374,6 +1428,21 @@ impl Patch {
             Self::MerrowLoop => drowned::merrow_loop(rng),
             Self::AbyssLoop => drowned::abyss_loop(rng),
             Self::LeviathanLoop => drowned::leviathan_loop(rng),
+            Self::SunSting => hollow::sun_sting(rng),
+            Self::WindGust => hollow::wind_gust(rng),
+            Self::BeastBellow => hollow::beast_bellow(rng),
+            Self::RocCry => hollow::roc_cry(rng),
+            Self::SerpentRoar => hollow::serpent_roar(rng),
+            Self::FlareSwell => hollow::flare_swell(rng),
+            Self::AnchorThunk => hollow::anchor_thunk(rng),
+            Self::InnerSkyLoop => hollow::inner_sky_loop(rng),
+            Self::JungleLoop => hollow::jungle_loop(rng),
+            Self::IslesLoop => hollow::isles_loop(rng),
+            Self::SunforgeLoop => hollow::sunforge_loop(rng),
+            Self::SerpentLoop => hollow::serpent_loop(rng),
+            Self::JungleAmbienceLoop => hollow::jungle_ambience_loop(rng),
+            Self::UpdraftLoop => hollow::updraft_loop(rng),
+            Self::ForgeAmbienceLoop => hollow::forge_ambience_loop(rng),
         }
     }
 }

@@ -65,6 +65,8 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
                 &super::pixel_art::sprites::deep_gear::WORKSHOP
             }
         }
+        // The Hollow World (Wave 9): the Gravity Anchor.
+        LogisticsCommand::Hollow(_) => &menu_icons::SIGNAL,
         // The Living Dark (Wave 8): root axes and the Amber Court's counter.
         LogisticsCommand::LivingDark(action) => match action {
             LivingDarkAction::BuyRootAxes | LivingDarkAction::FireRootAxe => &menu_icons::HAMMER,

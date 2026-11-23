@@ -343,6 +343,8 @@ pub enum LogisticsCommand {
     /// A Living Dark command (Wave 8): root axes and the Amber Court's counter, served by the
     /// same dialog.
     LivingDark(crate::living_dark::LivingDarkAction),
+    /// A Hollow World command (Wave 9): the Gravity Anchor.
+    Hollow(crate::hollow::HollowAction),
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.

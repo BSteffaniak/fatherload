@@ -99,6 +99,9 @@ mod god_mode_tests;
 #[cfg(test)]
 mod hazard_counter_tests;
 mod hazards;
+mod hollow;
+#[cfg(test)]
+mod hollow_tests;
 #[cfg(test)]
 mod home_tests;
 mod homes;
@@ -196,6 +199,11 @@ pub use discovery::{DiscoveredTiles, Discovery};
 pub use enemies::{
     GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,
     SLAM_REACH, TURRET_MOUNTS, guardian_move, is_tomb_guardian,
+};
+// The Hollow World's creatures (Wave 9): how a coil's sun scale and a clinging mite show.
+pub use enemies::hollow::{
+    CLINGING_PHASE as LODE_MITE_CLINGING_PHASE, CRACKED_PHASE as SERPENT_CRACKED_PHASE,
+    SCALE_PHASE as SERPENT_SCALE_PHASE,
 };
 pub use fluids::FluidSchedule;
 pub use homes::{
@@ -481,6 +489,11 @@ pub struct WorldState {
     /// sonar pings, ink clouds, the eel-dragon, the Leviathan's fight, the lore found.
     #[serde(default)]
     drowned: crate::drowned::DrownedState,
+    /// The Hollow World's shared state (Wave 9, Descent V, see [`crate::hollow`]): the crew's
+    /// breakthroughs, exposure to the inner sun, Gravity Anchors, rides and the Sun Serpent's
+    /// fight.
+    #[serde(default)]
+    hollow: crate::hollow::Hollow,
 }
 
 impl WorldState {

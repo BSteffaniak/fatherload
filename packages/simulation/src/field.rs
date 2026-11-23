@@ -681,6 +681,9 @@ pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] = &[
     // Wave 8 story: anomaly rooms answer inside their walls (blending in the stratum's own
     // profile), and nowhere else.
     crate::expedition::anomaly::anomaly_field_source,
+    // Wave 9: the Upside-Down Isles' inverted gravity under each isle (it blends the stratum's
+    // own field in itself).
+    crate::hollow::fields::isle_field_source,
     crate::descent::fields::stratum_field_source,
 ];
 

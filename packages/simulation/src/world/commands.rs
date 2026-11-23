@@ -587,6 +587,13 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
             4 => 0.18,
             _ => 0.22,
         },
+        // Hollow World tiles (Wave 9): ferns and tar give quickly, sun glass slowly.
+        TileKind::Hollow(tile) => match tile.hardness() {
+            0..=2 => 0.09,
+            3 => 0.14,
+            4 => 0.18,
+            _ => 0.21,
+        },
     }
 }
 

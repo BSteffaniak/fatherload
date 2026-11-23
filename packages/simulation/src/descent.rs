@@ -626,6 +626,17 @@ pub enum MusicCue {
     PearlAbyss,
     /// The Leviathan's fight.
     Leviathan,
+    // --- The Hollow World's own pieces (Wave 9), appended -----------------------------------
+    /// Inner Sky: a wide, airy horn theme over a slow pulse of wind; the sun's warmth.
+    InnerSky,
+    /// Megafauna Jungle: hand drums, a marimba and far bellows of giant beasts.
+    MegafaunaJungle,
+    /// Upside-Down Isles: a dreamy, upside-down arpeggio that rises where it should fall.
+    UpsideDownIsles,
+    /// The Sunforge: a shimmering, blazing drone with a slow brass swell.
+    Sunforge,
+    /// The Sun Serpent's fight.
+    SunSerpent,
 }
 
 /// A stratum's ambience bed.
@@ -680,6 +691,13 @@ pub enum AmbienceCue {
     Bubble,
     /// The trench: pressure groans and the hull ticking.
     Trench,
+    // --- The Hollow World (Wave 9), appended ------------------------------------------------
+    /// Birds, insects and the far bellow of giant beasts.
+    Jungle,
+    /// Air whistling the wrong way past hanging stone.
+    Updraft,
+    /// The roar of the inner sun and ticking, cooling stone.
+    Forge,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -712,10 +730,14 @@ pub enum LandmarkKind {
     /// Faithful, Merrow City's bubble, pearl beds and the Leviathan's arena
     /// ([`crate::worldgen::descent::drowned`]).
     Drowned,
+    /// The Hollow World's set pieces (Wave 9): the Breach, the jungle halls and giant trees,
+    /// the hanging isles, the forge sky and the Sun Well
+    /// ([`crate::worldgen::descent::hollow`]).
+    HollowWorld,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -726,6 +748,7 @@ impl LandmarkKind {
         Self::Tombs,
         Self::LivingDark,
         Self::Drowned,
+        Self::HollowWorld,
     ];
 }
 

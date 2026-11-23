@@ -267,6 +267,7 @@ impl ItemKind {
             TileKind::Sky(SkyTile::TempleKeystone) => Some(TEMPLE_KEYSTONE),
             TileKind::Lunar(tile) => tile.item(),
             TileKind::Deep(tile) => tile.item(),
+            TileKind::Hollow(tile) => tile.item(),
             _ => match BlockKind::from_tile(kind) {
                 Some(block) => Some(Self::Block(block)),
                 None => None,

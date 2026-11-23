@@ -9,6 +9,7 @@
 use crate::{
     cave::CaveTile,
     enemy::EnemyKind,
+    hollow::HollowTile,
     terrain::{DeepStratum, MineralKind, StrategicResourceKind, TileKind},
     worldgen::{Band, HazardKind},
 };
@@ -30,6 +31,11 @@ use EnemyKind::{
     CaveBat, FossilEel, GlowGnat, GlowGrub, GlowJelly, HiveDrone, HiveSoldier, JetRay, Leechling,
     LureFish, MagmaSalamander, MagmaWisp, MawWorm, MiningDrone, PistonWarden, PrismMoth, RockMimic,
     RogueExcavator, RootSnapper, SentryTurret, Shellback, SporePuffer, ThornWisp, VoidJelly,
+};
+// The Hollow World's creatures (Wave 9).
+use EnemyKind::{
+    CinderDrake, Crestback, Fangrunner, Flarefly, GustBladder, Hangclaw, LodeMite, ShadeStalker,
+    SkyManta, Skyneck, StoopRoc,
 };
 use HazardKind::{Explosive, Gas, Lava, MagmaVent, Pressure};
 use MineralKind::{Copper, Diamond, Emerald, Gold, Iron, Mythril, Platinum, Ruby, Silver, Uranium};
@@ -994,35 +1000,43 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ],
         ..TEMPLATE
     },
-    // --- Descent V: The Hollow World -----------------------------------------------------------
+    // --- Descent V: The Hollow World (Wave 9, authored: `crate::hollow`) ---------------------
     StratumDef {
         stratum: Stratum::InnerSky,
         descent: Descent::HollowWorld,
         name: "Inner Sky",
-        signature: "A giant open cavern under a rock sky, with floating stones and wind.",
+        signature: "The breakthrough: a giant open cavern under a rock sky, lit by an inner sun, \
+                    its wind bands gusting harder deeper.",
         share_per_mille: 330,
         host_band: deep(DeepStratum::VoidGeodeFields),
+        soft: TileKind::Hollow(HollowTile::SkyStone),
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(150, 160, 176),
-            Rgb(112, 120, 140),
-            Rgb(77, 142, 213),
-            Some(Rgb(255, 240, 200)),
+            Rgb(206, 196, 178),
+            Rgb(150, 142, 132),
+            Rgb(58, 66, 92),
+            Some(Rgb(255, 214, 120)),
         ),
-        ores: &[ore(Diamond, 500, 800, 40), ore(Platinum, 500, 600, 40)],
+        ores: &[
+            ore(Diamond, 400, 700, 40),
+            ore(Platinum, 500, 600, 35),
+            ore(Gold, 300, 500, 20),
+        ],
         layer_resource: resource("Sky Amber", StrategicResourceKind::AetherCrystal),
-        creatures: &[(CaveBat, 5), (MagmaWisp, 2)],
-        hazards: &[(Pressure, 3), (Gas, 2)],
+        creatures: &[(SkyManta, 4), (StoopRoc, 4), (GustBladder, 5)],
+        hazards: &[(Gas, 2), (Pressure, 1)],
         field: FieldProfile {
-            // Brighter than any cave: light past 1000 reads as exposure on screen.
-            light_permille: 1_400,
-            screen: &[screen(ScreenEffect::ColourGrade, 200)],
+            // Brighter than any cave: a touch of glare from the inner sun.
+            light_permille: 1_250,
+            screen: &[screen(ScreenEffect::ColourGrade, 160)],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::HollowWorld,
+        music: MusicCue::InnerSky,
         ambience: AmbienceCue::Wind,
         landmarks: &[
             LandmarkKind::HollowCavern,
             LandmarkKind::Outpost,
+            LandmarkKind::HollowWorld,
             LandmarkKind::Prefabs,
         ],
         variants: &["Cloud Halls", "Stone Archipelago"],
@@ -1032,26 +1046,40 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::MegafaunaJungle,
         descent: Descent::HollowWorld,
         name: "Megafauna Jungle",
-        signature: "Dinosaurs and giant beasts; the jungle tribes' village.",
+        signature: "Giant beasts under giant trees: ride a crestback, mind the fangrunner packs \
+                    at night and the tar on the floors; the Sunfolk's village.",
         share_per_mille: 250,
         host_band: deep(DeepStratum::FossilOceans),
-        soft: TileKind::Stone,
+        soft: TileKind::Hollow(HollowTile::Loam),
+        hard: TileKind::Stone,
         palette: palette(
-            Rgb(52, 120, 44),
-            Rgb(52, 92, 46),
-            Rgb(22, 40, 20),
-            Some(Rgb(255, 120, 200)),
+            Rgb(58, 70, 34),
+            Rgb(46, 52, 34),
+            Rgb(26, 54, 30),
+            Some(Rgb(150, 230, 90)),
         ),
-        ores: &[ore(Emerald, 500, 800, 60), ore(Gold, 300, 600, 40)],
+        ores: &[
+            ore(Emerald, 500, 800, 55),
+            ore(Gold, 300, 600, 35),
+            ore(Ruby, 700, 400, 15),
+        ],
         layer_resource: resource("Giant Hide", StrategicResourceKind::RadiantFossil),
-        creatures: &[(Burrower, 4), (Shellback, 4), (AcidSpitter, 2)],
-        hazards: &[(Gas, 4), (Explosive, 2)],
-        music: MusicCue::HollowWorld,
-        ambience: AmbienceCue::Living,
+        creatures: &[(Crestback, 5), (Skyneck, 2), (Fangrunner, 4)],
+        hazards: &[(Gas, 3), (Explosive, 1)],
+        field: FieldProfile {
+            light_permille: 900,
+            screen: &[
+                screen(ScreenEffect::ColourGrade, 220),
+                screen(ScreenEffect::Fog, 90),
+            ],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::MegafaunaJungle,
+        ambience: AmbienceCue::Jungle,
         landmarks: &[
             LandmarkKind::Settlements,
+            LandmarkKind::HollowWorld,
             LandmarkKind::Prefabs,
-            LandmarkKind::CaveEcosystems,
         ],
         variants: &["Fern Valleys", "Tar Pits"],
         ..TEMPLATE
@@ -1060,29 +1088,37 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::UpsideDownIsles,
         descent: Descent::HollowWorld,
         name: "Upside-Down Isles",
-        signature: "Local inverted gravity: islands hang from the ceiling.",
+        signature: "Local inverted gravity: isles hang from the roof and gravity points up under \
+                    them; flip the rig with its thrusters to land on them.",
         share_per_mille: 210,
         host_band: deep(DeepStratum::VoidGeodeFields),
+        soft: TileKind::Hollow(HollowTile::IsleRock),
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(196, 164, 120),
-            Rgb(150, 124, 88),
-            Rgb(70, 56, 40),
-            Some(Rgb(160, 220, 255)),
+            Rgb(184, 142, 160),
+            Rgb(140, 106, 124),
+            Rgb(70, 92, 136),
+            Some(Rgb(150, 210, 255)),
         ),
-        ores: &[ore(Mythril, 500, 800, 50), ore(Platinum, 300, 600, 30)],
+        ores: &[
+            ore(Mythril, 500, 800, 50),
+            ore(Platinum, 300, 600, 30),
+            ore(Diamond, 700, 400, 15),
+        ],
         layer_resource: resource("Lodestone", StrategicResourceKind::VoidGlass),
-        creatures: &[(CaveBat, 4), (RockMimic, 3), (MiningDrone, 2)],
-        hazards: &[(Pressure, 5), (Explosive, 2)],
+        creatures: &[(Hangclaw, 4), (LodeMite, 5), (SkyManta, 1)],
+        hazards: &[(Pressure, 3), (Explosive, 2)],
         field: FieldProfile {
+            // The rig turns freely anywhere here: the player flips it to land under an isle
+            // (the isles' own upside-down pull is `hollow::fields`).
             free_rotation: true,
-            regions: FieldRegions::GravityTurns {
-                per_mille: 350,
-                turns: &[180],
-            },
+            light_permille: 1_050,
+            screen: &[screen(ScreenEffect::ColourGrade, 140)],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::HollowWorld,
-        ambience: AmbienceCue::Wind,
+        music: MusicCue::UpsideDownIsles,
+        ambience: AmbienceCue::Updraft,
+        landmarks: &[LandmarkKind::HollowWorld, LandmarkKind::Prefabs],
         variants: &["Hanging Isles", "Flip Reefs"],
         ..TEMPLATE
     },
@@ -1090,30 +1126,43 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::TheSunforge,
         descent: Descent::HollowWorld,
         name: "The Sunforge",
-        signature: "Overexposure near the inner sun: blooming light and extreme heat.",
+        signature: "Overexposure near the inner sun: the light below blooms the screen and heats \
+                    the rig; the floating stones' shade cools it, so routes hop from shadow to \
+                    shadow.",
         share_per_mille: 210,
         host_band: deep(DeepStratum::MantleStormZone),
+        soft: TileKind::Hollow(HollowTile::SunRock),
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(232, 188, 92),
-            Rgb(196, 140, 60),
-            Rgb(120, 70, 30),
-            Some(Rgb(255, 255, 230)),
+            Rgb(236, 196, 112),
+            Rgb(196, 140, 72),
+            Rgb(132, 72, 38),
+            Some(Rgb(255, 250, 214)),
         ),
-        ores: &[ore(Mythril, 600, 800, 60), ore(Ruby, 400, 600, 30)],
+        ores: &[
+            ore(Ruby, 400, 700, 45),
+            ore(Mythril, 600, 800, 45),
+            ore(Diamond, 800, 400, 15),
+        ],
         layer_resource: resource("Sun Glass", StrategicResourceKind::StormGlass),
-        creatures: &[(MagmaWisp, 6), (RogueExcavator, 2)],
-        hazards: &[(Lava, 8), (MagmaVent, 3)],
+        creatures: &[(CinderDrake, 4), (ShadeStalker, 3), (Flarefly, 5)],
+        hazards: &[(Lava, 6), (MagmaVent, 3)],
         field: FieldProfile {
-            light_permille: 1_800,
+            light_permille: 1_500,
             screen: &[
-                screen(ScreenEffect::Exposure, 600),
-                screen(ScreenEffect::Bloom, 500),
+                screen(ScreenEffect::Exposure, 380),
+                screen(ScreenEffect::Bloom, 560),
             ],
+            deepening: true,
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::HollowWorld,
-        ambience: AmbienceCue::Lava,
-        landmarks: WITH_GATE,
+        music: MusicCue::Sunforge,
+        ambience: AmbienceCue::Forge,
+        landmarks: &[
+            LandmarkKind::GateChamber,
+            LandmarkKind::HollowWorld,
+            LandmarkKind::Prefabs,
+        ],
         variants: &["Shadow Paths", "Solar Flats"],
         gate: Some(GateDef {
             boss: DescentBoss::SunSerpent,
@@ -1123,7 +1172,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::GravityAnchor],
         }),
-        fluids: &[FluidPocketRule::sealed(LiquidMetal, 80)],
+        fluids: &[FluidPocketRule::sealed(LiquidMetal, 60)],
         ..TEMPLATE
     },
     // --- Descent VI: The Strange Layers --------------------------------------------------------

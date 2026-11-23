@@ -185,6 +185,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `PlayerTickState::water` (ballast and hull frost, per tick), the `DrownedState` world
 ///   field and `SectionKey::Drowned` section, `Culture::Merrow`, five appended `Furniture`
 ///   pieces and the Drowned events 520-539 (`GameplayEventKind::Drowned`).
+///
+/// Version 17 (Wave 9; the integrator collapses the wave's tracks into one bump). The Hollow
+/// World (Descent V): `TileKind::Hollow(HollowTile)` tiles (codes `0x900`) in terrain ops, chunk
+/// refreshes and keyframes, thirteen appended `EnemyKind`s (`SkyManta` .. `SerpentCoil`) in
+/// entity records, the `Hollow` world field and `SectionKey::Hollow` section (breakthroughs,
+/// exposure, Gravity Anchors, rides, isle landings, the Sun Serpent's fight),
+/// `LogisticsCommand::Hollow` (the Gravity Anchor), and the Hollow World events 540-559
+/// (`GameplayEventKind::Hollow`).
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

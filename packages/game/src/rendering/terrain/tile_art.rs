@@ -43,6 +43,7 @@ mod cave_art;
 mod crust_art;
 mod deep_art;
 mod drowned_art;
+mod hollow_art;
 mod living_art;
 mod lunar_art;
 mod poi_art;
@@ -52,6 +53,7 @@ pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use crust_art::{crust_color, crust_glow};
 pub use deep_art::deep_color;
+pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
@@ -420,6 +422,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Lunar(tile) => return lunar_art::lunar_color(tile),
         TileKind::Crust(tile) => return crust_art::crust_color(tile),
         TileKind::Deep(tile) => return deep_art::deep_color(tile),
+        TileKind::Hollow(tile) => return hollow_art::hollow_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -602,7 +605,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Sky(_)
         | TileKind::Lunar(_)
         | TileKind::Crust(_)
-        | TileKind::Deep(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Deep(_)
+        | TileKind::Hollow(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -812,6 +816,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else if crust_art::paint_crust_air(&mut canvas, terrain, position, &strata) {
             // The Crust's mine galleries and lava tubes (Wave 8).
+        } else if hollow_art::paint_hollow_air(&mut canvas, terrain, position, up, left, right) {
+            // The Hollow World's open caverns (transparent: the backdrop's sky) and jungle
+            // halls (Wave 9).
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             // The Living Dark's open ground shows its stratum's own wall (Wave 8).
             if let Some(stratum) = living_art::living_stratum(terrain, position) {
@@ -878,6 +885,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         poi_art::paint(
             &mut canvas,
             terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // Descent V's materials and set pieces (Wave 9).
+    if let TileKind::Hollow(tile) = kind {
+        hollow_art::paint(
+            &mut canvas,
             position,
             tile,
             &strata,
@@ -1331,6 +1355,7 @@ const fn grows_grass(material: TileKind) -> bool {
         TileKind::Surface(_)
             | TileKind::Lunar(_)
             | TileKind::Deep(_)
+            | TileKind::Hollow(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

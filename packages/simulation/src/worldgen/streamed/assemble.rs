@@ -296,6 +296,31 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The Hollow World (Wave 9, Descent V): its jungle halls, isles, forge sky, the Breach
+        // and the Sun Well, over the landmarks (the Sun Well grows round Descent V's gate
+        // chamber).
+        use crate::worldgen::descent::hollow;
+        let (first, last) = hollow::pass_rows(layout);
+        if rect.max.y >= first && rect.min.y <= last {
+            let context = hollow::chunk_context(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = hollow::hollow_tile(
+                    &ctx.settings,
+                    layout,
+                    &context,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     if ctx.descent.is_some() {
         // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.
         super::crust_pass::apply_sinkhole(ctx, &mut chunk_kinds);

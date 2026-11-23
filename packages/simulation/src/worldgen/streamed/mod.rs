@@ -43,17 +43,19 @@ mod regions;
 #[cfg(test)]
 mod tests;
 pub mod tomb_sites;
-mod villages;
+pub(crate) mod villages;
 mod window;
 
 use std::sync::Arc;
 
 pub use assemble::CHUNK_TILES;
+// The Sunfolk village's hall (Wave 9): scenes, tools and tests find the jungle tribes here.
 pub use base::{
     MAX_SURFACE_DIP_ROWS, TOWN_FLAT_FIRST_COLUMN, TOWN_FLAT_LAST_COLUMN, deepest_surface_row,
     raw_surface_row, surface_row, top_row, village_ground_row,
 };
 pub use regions::{POI_REGION_WIDTH, TRANSITION_REGION_WIDTH};
+pub use villages::{SUNFOLK_SITE, sunfolk_hall};
 
 pub use cave_biomes::{BiomeCell, CAVE_REGION, CaveBiome, CaveRegion};
 

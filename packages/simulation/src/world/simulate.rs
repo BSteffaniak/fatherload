@@ -564,6 +564,9 @@ impl WorldState {
         self.advance_old_deep(next_tick, &mut output);
         // The Fathers' expedition: canisters, echoes and anomaly rooms (Wave 8 story).
         self.advance_expedition(next_tick, &mut output);
+        // The Hollow World (Wave 9): the inner sun, the breakthrough, exposure, isle landings,
+        // the Gravity Anchor, rides, its creatures and the Sun Serpent.
+        self.advance_hollow(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

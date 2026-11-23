@@ -99,6 +99,27 @@
 //! | [`EnemyKind::Angler`] | creature (ambusher, swims) | Glow Sea | a light dangled as bait; it lunges when you come close | do not chase lights blindly |
 //! | [`EnemyKind::MycelialMind`] | creature (boss) | the Mind's hollow | spore storms, possession | kill its nodes, then it |
 //! | [`EnemyKind::MindNode`] | creature (shield) | the Mind's hollow | a pulsing sac | anything, fire |
+//!
+//! The Hollow World's creatures (Wave 9, Descent V, [`crate::hollow`]) live under the inner
+//! sun; `world/enemies/hollow.rs` gives them their own ways (wind-gliding, stooping from
+//! perches, pack circling, riding, clinging, sun power and shade-dwelling) and drives the
+//! Sun Serpent:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::SkyManta`] | creature (megafauna, peaceful) | Inner Sky | glides on the wind bands; a tail-slap only if struck | leave it be |
+//! | [`EnemyKind::StoopRoc`] | creature (diver) | perches on the Inner Sky's floating stones | a cry from its perch, then a stoop at a rig passing below | keep out from under its perch; shoot it on the climb back |
+//! | [`EnemyKind::GustBladder`] | creature (drifter) | Inner Sky | a swelling sac adrift on the wind; bursts into a gust | shoot it from afar |
+//! | [`EnemyKind::Crestback`] | creature (herbivore, rideable) | jungle halls | grazes by day, sleeps at night, flees fangrunners | climb on and ride it |
+//! | [`EnemyKind::Skyneck`] | creature (megafauna, peaceful) | jungle halls | a slow towering walk; stamps if hurt | leave it be |
+//! | [`EnemyKind::Fangrunner`] | creature (pack predator) | jungle halls, bolder at night | the pack circles, then leaps together | break the circle, blasts |
+//! | [`EnemyKind::Hangclaw`] | creature (ambusher) | the isles' undersides | hangs still, then drops on a rig below | look up under an isle |
+//! | [`EnemyKind::LodeMite`] | creature (clinger) | Upside-Down Isles | a buzzing swarm that clings to a rig and drags it | spin the rig to shake them off |
+//! | [`EnemyKind::CinderDrake`] | creature (sun-powered) | the Sunforge's stones | quick and fiery in sunlight, sluggish in shade | draw it into the shade |
+//! | [`EnemyKind::ShadeStalker`] | creature (shade-dweller) | the Sunforge's shadows | a shape in the shade; it never leaves it | cross the light |
+//! | [`EnemyKind::Flarefly`] | creature (swarmer) | the Sunforge | tiny suns; one bursts into heat on a rig | shoot them first |
+//! | [`EnemyKind::SunSerpent`] | creature (boss) | the Sun Well | orbits the inner sun; its head glows before a lunge | break its four sun scales, then strike the head; hide from the sun's flares behind a pillar |
+//! | [`EnemyKind::SerpentCoil`] | creature (boss part) | the Sun Well | armoured coils; the glowing ones are sun scales | shoot the glowing scales |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -278,6 +299,33 @@ pub enum EnemyKind {
     GulperEel,
     /// The Descent IV gate boss: the Leviathan, a giant sea beast fought from the submarine.
     Leviathan,
+    // --- The Hollow World (Wave 9, Descent V, `crate::hollow`), appended -------------------
+    /// Inner Sky: a great manta gliding on the wind bands; peaceful unless struck.
+    SkyManta,
+    /// Inner Sky: a raptor perched on the floating stones; it stoops at rigs passing below.
+    StoopRoc,
+    /// Inner Sky: a drifting gas sac that bursts into a gust.
+    GustBladder,
+    /// Megafauna Jungle: a friendly herbivore the pilot can ride.
+    Crestback,
+    /// Megafauna Jungle: a towering longneck; peaceful unless hurt.
+    Skyneck,
+    /// Megafauna Jungle: a pack predator that circles before the pack leaps together.
+    Fangrunner,
+    /// Upside-Down Isles: a clawed thing hanging under an isle that drops on rigs below.
+    Hangclaw,
+    /// Upside-Down Isles: a magnetic mite that clings to a rig and drags it.
+    LodeMite,
+    /// The Sunforge: a salamander that runs on sunlight (fiery in the light, sluggish in shade).
+    CinderDrake,
+    /// The Sunforge: a predator of the shadows that never leaves them.
+    ShadeStalker,
+    /// The Sunforge: a tiny sun that bursts into heat on a rig.
+    Flarefly,
+    /// The Descent V gate boss: the Sun Serpent, orbiting the inner sun.
+    SunSerpent,
+    /// One of the Sun Serpent's coils (the glowing ones carry sun scales).
+    SerpentCoil,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -637,7 +685,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 85] = [
+    pub const ALL: [Self; 98] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -723,7 +771,41 @@ impl EnemyKind {
         Self::LureAngler,
         Self::GulperEel,
         Self::Leviathan,
+        Self::SkyManta,
+        Self::StoopRoc,
+        Self::GustBladder,
+        Self::Crestback,
+        Self::Skyneck,
+        Self::Fangrunner,
+        Self::Hangclaw,
+        Self::LodeMite,
+        Self::CinderDrake,
+        Self::ShadeStalker,
+        Self::Flarefly,
+        Self::SunSerpent,
+        Self::SerpentCoil,
     ];
+
+    /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
+    #[must_use]
+    pub const fn is_hollow(self) -> bool {
+        matches!(
+            self,
+            Self::SkyManta
+                | Self::StoopRoc
+                | Self::GustBladder
+                | Self::Crestback
+                | Self::Skyneck
+                | Self::Fangrunner
+                | Self::Hangclaw
+                | Self::LodeMite
+                | Self::CinderDrake
+                | Self::ShadeStalker
+                | Self::Flarefly
+                | Self::SunSerpent
+                | Self::SerpentCoil
+        )
+    }
 
     /// Whether the creature goes into fluid (Part III F9). Most turn back at a fluid's edge
     /// (`WorldState::keep_out_of_fluid`); the Glow Sea's fish and jellies and the Flesh
@@ -809,6 +891,11 @@ impl EnemyKind {
             Self::LureAngler => 3.2,
             Self::EelDragon => 2.0,
             Self::Leviathan => 4.0,
+            // The Hollow World (Wave 9): little suns and glowing scales.
+            Self::Flarefly => 1.8,
+            Self::SunSerpent => 5.0,
+            Self::SerpentCoil => 1.6,
+            Self::CinderDrake => 1.0,
             _ => 0.0,
         }
     }
@@ -2179,6 +2266,206 @@ impl EnemyKind {
                 // It moves on its own pattern (`world/enemies/drowned.rs`).
                 ..stats("The Leviathan", Creature, Stationary, AttackStyle::Contact)
             },
+            // --- The Hollow World (Wave 9) ------------------------------------------------
+            Self::SkyManta => EnemyStats {
+                radius: 12.0,
+                health: 160.0,
+                speed: 70.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 40.0,
+                contact_damage: 8.0,
+                windup_millis: 0,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 0.8,
+                knockback: 260.0,
+                ..stats("Sky Manta", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::StoopRoc => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 120.0,
+                dash_speed: 420.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 22.0,
+                contact_damage: 13.0,
+                windup_millis: 650,
+                cooldown_millis: 3_600,
+                attack_range_tiles: 11.0,
+                knockback: 230.0,
+                ..stats("Stoop Roc", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::GustBladder => EnemyStats {
+                radius: 8.0,
+                health: 18.0,
+                speed: 40.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 60.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_500,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Gust Bladder", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Crestback => EnemyStats {
+                radius: 11.0,
+                health: 140.0,
+                speed: 60.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Crestback", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Skyneck => EnemyStats {
+                radius: 15.0,
+                health: 600.0,
+                speed: 26.0,
+                dash_speed: 160.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 20.0,
+                windup_millis: 1_100,
+                cooldown_millis: 4_500,
+                attack_range_tiles: 2.5,
+                knockback: 320.0,
+                elite: true,
+                ..stats("Skyneck", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Fangrunner => EnemyStats {
+                radius: 9.0,
+                health: 75.0,
+                speed: 130.0,
+                dash_speed: 340.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 9.0,
+                leash_tiles: 30.0,
+                contact_damage: 11.0,
+                windup_millis: 450,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 5.0,
+                knockback: 190.0,
+                ..stats("Fangrunner", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Hangclaw => EnemyStats {
+                radius: 9.0,
+                health: 95.0,
+                speed: 60.0,
+                dash_speed: 380.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 12.0,
+                contact_damage: 15.0,
+                windup_millis: 380,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 8.0,
+                knockback: 230.0,
+                ..stats("Hangclaw", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::LodeMite => EnemyStats {
+                radius: 5.0,
+                health: 16.0,
+                speed: 150.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 900,
+                attack_range_tiles: 0.6,
+                knockback: 30.0,
+                ..stats("Lode Mite", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::CinderDrake => EnemyStats {
+                radius: 10.0,
+                health: 110.0,
+                speed: 80.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 10.0,
+                windup_millis: 700,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 9.0,
+                knockback: 180.0,
+                ..stats(
+                    "Cinder Drake",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Fireball, 1),
+                )
+            },
+            Self::ShadeStalker => EnemyStats {
+                radius: 9.0,
+                health: 85.0,
+                speed: 110.0,
+                dash_speed: 360.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 16.0,
+                contact_damage: 14.0,
+                windup_millis: 500,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 4.5,
+                knockback: 200.0,
+                ..stats("Shade Stalker", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Flarefly => EnemyStats {
+                radius: 5.0,
+                health: 10.0,
+                speed: 135.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 24.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Flarefly", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::SunSerpent => EnemyStats {
+                radius: 18.0,
+                health: 230.0,
+                speed: 0.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 0.0,
+                contact_damage: 12.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.0,
+                knockback: 280.0,
+                elite: true,
+                ..stats(
+                    "The Sun Serpent",
+                    Creature,
+                    Stationary,
+                    AttackStyle::Contact,
+                )
+            },
+            Self::SerpentCoil => EnemyStats {
+                radius: 12.0,
+                health: 45.0,
+                speed: 0.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 7.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.0,
+                knockback: 220.0,
+                ..stats("Serpent Coil", Creature, Stationary, AttackStyle::Contact)
+            },
         }
     }
 
@@ -2355,6 +2642,20 @@ impl EnemyKind {
             Self::GulperEel => (24.0, 11.0),
             // The Leviathan's great body (its head and trunk; the tail is drawn).
             Self::Leviathan => (92.0, 28.0),
+            // The Hollow World (Wave 9), sized to their art (two world pixels an art pixel).
+            Self::SkyManta => (30.0, 10.0),
+            Self::StoopRoc => (15.0, 10.0),
+            Self::GustBladder => (11.0, 12.0),
+            Self::Crestback => (26.0, 16.0),
+            Self::Skyneck => (34.0, 44.0),
+            Self::Fangrunner => (16.0, 10.0),
+            Self::Hangclaw => (13.0, 12.0),
+            Self::LodeMite => (7.0, 6.0),
+            Self::CinderDrake => (18.0, 10.0),
+            Self::ShadeStalker => (14.0, 13.0),
+            Self::Flarefly => (7.0, 7.0),
+            Self::SunSerpent => (30.0, 22.0),
+            Self::SerpentCoil => (20.0, 20.0),
         }
     }
 
@@ -2478,6 +2779,15 @@ impl EnemyKind {
                 | Self::EelDragon,
                 DamageKind::Fire,
             ) => 0.5,
+            // The Hollow World (Wave 9): sun creatures shrug off fire, armoured coils turn
+            // bullets, megafauna hides are thick.
+            (
+                Self::CinderDrake | Self::Flarefly | Self::SunSerpent | Self::SerpentCoil,
+                DamageKind::Fire,
+            ) => 0.2,
+            (Self::ShadeStalker | Self::Fangrunner | Self::Crestback, DamageKind::Fire) => 1.5,
+            (Self::Skyneck | Self::SkyManta, DamageKind::Kinetic) => 0.6,
+            (Self::LodeMite, DamageKind::Explosive) => 1.6,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -2595,6 +2905,7 @@ impl EnemyState {
                 | EnemyKind::AnimatedStatue
                 | EnemyKind::RootSnapper
                 | EnemyKind::Angler
+                | EnemyKind::Hangclaw
         );
         Self {
             kind,
@@ -3418,6 +3729,47 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 14 + extra);
             add(ItemKind::Material(StrategicResourceKind::PressurePearl), 8);
             add(ItemKind::Artifact(ArtifactKind::VoidPearl), 2);
+        }
+        // The Hollow World (Wave 9): megafauna pay in hide and bone, sky creatures in amber,
+        // the forge's in sun glass.
+        EnemyKind::SkyManta | EnemyKind::StoopRoc => {
+            add(richer, 1 + extra / 2);
+            add(ItemKind::Material(StrategicResourceKind::AetherCrystal), 1);
+        }
+        EnemyKind::GustBladder | EnemyKind::Flarefly => {
+            if rare < 40 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::Crestback | EnemyKind::Fangrunner => {
+            add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+            if rare < 30 {
+                add(richer, 1);
+            }
+        }
+        EnemyKind::Skyneck => {
+            add(richer, 4 + extra);
+            add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 3);
+            add(ItemKind::Artifact(ArtifactKind::Fossil), 1);
+        }
+        EnemyKind::Hangclaw | EnemyKind::LodeMite => {
+            if rare < 50 {
+                add(ItemKind::Material(StrategicResourceKind::VoidGlass), 1);
+            }
+        }
+        EnemyKind::CinderDrake | EnemyKind::ShadeStalker => {
+            add(richer, 1 + extra / 2);
+            if rare < 35 {
+                add(ItemKind::Material(StrategicResourceKind::StormGlass), 1);
+            }
+        }
+        EnemyKind::SerpentCoil => {
+            add(ItemKind::Material(StrategicResourceKind::StormGlass), 1);
+        }
+        EnemyKind::SunSerpent => {
+            add(richer, 12 + extra);
+            add(ItemKind::Material(StrategicResourceKind::StormGlass), 6);
+            add(ItemKind::Artifact(ArtifactKind::RadiantShell), 1);
         }
     }
     drops

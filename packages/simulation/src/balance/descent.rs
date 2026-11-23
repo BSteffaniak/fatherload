@@ -283,6 +283,16 @@ pub fn registry_markers() -> Vec<Vec<Novelty>> {
                     markers.push(Novelty::new(NoveltyKind::Landmark, format!("{kind:?}")));
                 }
             }
+            // Wave 9: the Hollow World's own named new things (the reveal, wind, riding, the
+            // Sunfolk, inverted gravity, exposure and shade, the Sun Well).
+            for (index, name) in crate::hollow::authored_markers(*stratum).iter().enumerate() {
+                let kind = if index % 2 == 0 {
+                    NoveltyKind::Mechanic
+                } else {
+                    NoveltyKind::Landmark
+                };
+                markers.push(Novelty::new(kind, *name));
+            }
             for source in STORY_LOG_SOURCES {
                 for log in source(*stratum) {
                     markers.push(Novelty::new(NoveltyKind::StoryLog, log));
@@ -398,6 +408,7 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::Settlements
                                     | LandmarkKind::LivingDark
                                     | LandmarkKind::Drowned
+                                    | LandmarkKind::HollowWorld
                             )
                         })
                         .count(),
@@ -410,6 +421,12 @@ impl StratumRegistry for RegistryStrata {
                     crate::drowned::authored_content(*stratum);
                 let authored_mechanics = old_mechanics.saturating_add(drowned_mechanics);
                 let authored_pieces = old_pieces.saturating_add(drowned_pieces);
+                // Wave 9: the Hollow World's authored mechanics and set pieces.
+                let (hollow_mechanics, hollow_pieces) = crate::hollow::authored_content(*stratum);
+                let (authored_mechanics, authored_pieces) = (
+                    authored_mechanics.saturating_add(hollow_mechanics),
+                    authored_pieces.saturating_add(hollow_pieces),
+                );
                 let set_pieces = set_pieces.saturating_add(authored_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(

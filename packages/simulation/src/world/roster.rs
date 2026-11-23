@@ -120,7 +120,10 @@ impl WorldState {
             expedition: _,
             // A leaving rig's pings fade with it; the fights belong to the world (Wave 9).
             drowned,
+            // A leaving player's exposure, anchor and ride go with them (Wave 9).
+            hollow,
         } = self;
+        hollow.forget(player_id);
         logistics.forget_transient(player_id);
         crust.forget(player_id);
         old_deep.forget(player_id);

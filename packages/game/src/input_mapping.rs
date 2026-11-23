@@ -168,6 +168,14 @@ pub fn gameplay_actions(input: &PlayerInput, explosives: ExplosiveSelection) -> 
     if input.scan {
         actions.push(PlayerCommand::UseScanner);
     }
+    if input.anchor {
+        // The Gravity Anchor (Wave 9): engage it, or let it go while it holds.
+        actions.push(PlayerCommand::Logistics(
+            fatherload_simulation::logistics::LogisticsCommand::Hollow(
+                fatherload_simulation::hollow::HollowAction::ToggleAnchor,
+            ),
+        ));
+    }
     if input.bomb {
         actions.push(explosives.deploy_command(input));
     }

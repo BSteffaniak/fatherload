@@ -540,9 +540,11 @@ impl WorldState {
             PlayerCommand::Pilot(_) if !self.is_on_foot(player_id) => {
                 Some(PlayerScopedCommandOutcome::IgnoredUnavailable)
             }
-            PlayerCommand::Pilot(crate::pilot::PilotAction::Use) => {
-                Some(self.pilot_use(player_id, output))
-            }
+            PlayerCommand::Pilot(crate::pilot::PilotAction::Use) => Some(
+                // The Hollow World's crestbacks first (Wave 9): climb on, or get down.
+                self.hollow_use(player_id, output)
+                    .unwrap_or_else(|| self.pilot_use(player_id, output)),
+            ),
             PlayerCommand::Pilot(action) => self.pilot_gear_action(player_id, action, output),
             PlayerCommand::PilotPack {
                 item,

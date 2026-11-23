@@ -360,6 +360,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Drowned {
             what, player_id, ..
         } => (520 + what.code() as u32, player_id),
+        // The Hollow World (wave 9, Descent V): 540-559.
+        GameplayEventKind::Hollow {
+            what, player_id, ..
+        } => (540 + what.code() as u32, player_id),
     }
 }
 

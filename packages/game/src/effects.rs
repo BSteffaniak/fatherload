@@ -1182,7 +1182,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         GameplayEventKind::MechanismUsed { player_id, .. }
         | GameplayEventKind::TombSeal { player_id, .. }
         | GameplayEventKind::LivingDark { player_id, .. }
-        | GameplayEventKind::Drowned { player_id, .. } => player_id,
+        | GameplayEventKind::Drowned { player_id, .. }
+        | GameplayEventKind::Hollow { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

@@ -471,6 +471,8 @@ impl RigSystem {
             Self::BioFilter | Self::LampII => Some(crate::descent::DescentBoss::MycelialMind),
             // Wave 9: the Leviathan's Sonar Suite and Cryo Hull (Descent IV's gate).
             Self::SonarSuite | Self::CryoHull => Some(crate::descent::DescentBoss::Leviathan),
+            // The Sun Serpent's Gravity Anchor (Wave 9: the Hollow World's gate).
+            Self::GravityAnchor => Some(crate::descent::DescentBoss::SunSerpent),
             _ => None,
         }
     }

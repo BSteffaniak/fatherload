@@ -332,6 +332,11 @@ pub enum TileKind {
     /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
     /// [`crate::old_deep`]).
     Deep(crate::old_deep::DeepTile),
+    /// A tile of the Hollow World's strata (Wave 9, Descent V of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
+    /// [`crate::hollow`]): sky stone and amber, jungle loam, ferns, trunks and tar, the isles'
+    /// rock, sun rock and glass, the Sun Well and the inner sun.
+    Hollow(crate::hollow::HollowTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -441,6 +446,7 @@ impl TileKind {
             Self::Fluid(fluid) => fluid.name(),
             Self::Crust(tile) => tile.name(),
             Self::Deep(tile) => tile.name(),
+            Self::Hollow(tile) => tile.name(),
         }
     }
 
@@ -537,6 +543,7 @@ impl Tile {
             TileKind::Fluid(fluid) => FLUID_TILE_CODE_BASE | fluid.code(),
             TileKind::Crust(tile) => CRUST_TILE_CODE_BASE | tile.code(),
             TileKind::Deep(tile) => crate::old_deep::DEEP_TILE_CODE_BASE | tile.code(),
+            TileKind::Hollow(tile) => crate::hollow::HOLLOW_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1573,6 +1580,8 @@ impl Terrain {
                     TileKind::Sky(sky) if sky.is_cache() => continue,
                     // The Old Deep's fixtures and the Star Core itself (only a drill strikes
                     // the core; bombs still break pylons and pistons).
+                    // The Sun Well and the inner sun (Wave 9) shrug off every blast.
+                    TileKind::Hollow(tile) if tile.indestructible() => continue,
                     TileKind::Deep(tile)
                         if tile.indestructible()
                             || matches!(tile, crate::old_deep::DeepTile::FirstCore) =>
@@ -1858,6 +1867,7 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Lunar(tile) => tile.indestructible(),
         // The Star Core arena, the shielded core and the Cathedral Lift's fixtures (Wave 8).
         TileKind::Deep(tile) => tile.indestructible(),
+        TileKind::Hollow(tile) => tile.indestructible(),
         _ => false,
     }
 }
@@ -1914,6 +1924,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Lunar(tile) => tile.hardness(),
         TileKind::Crust(tile) => tile.hardness(),
         TileKind::Deep(tile) => tile.hardness(),
+        TileKind::Hollow(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1957,6 +1968,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Lunar(tile) => tile.durability(),
         TileKind::Crust(tile) => tile.durability(),
         TileKind::Deep(tile) => tile.durability(),
+        TileKind::Hollow(tile) => tile.durability(),
     }
 }
 

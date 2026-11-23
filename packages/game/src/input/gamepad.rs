@@ -116,6 +116,9 @@ pub enum PadAction {
     /// On foot, pressed (WP-PILOT): the rope: fire the grapple, clip onto the rig's winch, or
     /// let go (the scanner's bumper, which is rig-only).
     Rope,
+    /// In the rig, held past [`ANCHOR_HOLD_SECONDS`] (Wave 9): the Gravity Anchor (shares the
+    /// scanner's bumper: a press scans, a hold anchors).
+    Anchor,
 }
 
 /// The controller layout: every `(action, button)` pair. An action may have several buttons
@@ -132,6 +135,7 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
     (PadAction::Map, PadButton::View),
     (PadAction::Pause, PadButton::Menu),
     (PadAction::Scan, PadButton::LeftBumper),
+    (PadAction::Anchor, PadButton::LeftBumper),
     (PadAction::Bomb, PadButton::RightBumper),
     (PadAction::Detonate, PadButton::LeftTrigger),
     (PadAction::CycleExplosive, PadButton::RightStick),
@@ -151,6 +155,8 @@ pub const PAD_BINDINGS: &[(PadAction, PadButton)] = &[
 pub const DETONATE_HOLD_SECONDS: f32 = 0.4;
 /// Holding the weapon-cycle button this long toggles build mode instead (a tap cycles).
 pub const BUILD_HOLD_SECONDS: f32 = 0.4;
+/// Seconds the scanner's bumper is held to work the Gravity Anchor (Wave 9).
+pub const ANCHOR_HOLD_SECONDS: f32 = 0.45;
 
 /// The first button bound to `action` (what prompts show).
 #[must_use]
@@ -305,6 +311,10 @@ pub struct PadMapper {
     cycle_held: Option<f32>,
     /// The current hold already toggled build mode.
     cycle_built: bool,
+    /// How long the anchor's bumper has been held (`None`: not held).
+    anchor_held: Option<f32>,
+    /// The current hold already worked the anchor.
+    anchor_fired: bool,
 }
 
 impl PadMapper {
@@ -316,6 +326,7 @@ impl PadMapper {
             state.action_held(PadAction::CycleWeapon) || state.action_held(PadAction::BuildMode),
             delta_seconds,
         );
+        let anchor = self.anchor_hold(state.action_held(PadAction::Anchor), delta_seconds);
         let previous = &self.previous;
         let pressed = |action| state.action_pressed_since(previous, action);
         let vertical = state.vertical_direction();
@@ -373,6 +384,7 @@ impl PadMapper {
             build_mode,
             build_rotate: pressed(PadAction::BuildRotate),
             rope: pressed(PadAction::Rope),
+            anchor,
             ..PlayerInput::default()
         };
         self.previous.clone_from(state);
@@ -429,6 +441,23 @@ impl PadMapper {
             }
             (false, None) => (false, false),
         }
+    }
+
+    /// The anchor's bumper: held past [`ANCHOR_HOLD_SECONDS`], it works the anchor once a
+    /// hold (a press alone only scans).
+    fn anchor_hold(&mut self, held: bool, delta_seconds: f32) -> bool {
+        if !held {
+            self.anchor_held = None;
+            self.anchor_fired = false;
+            return false;
+        }
+        let seconds = self.anchor_held.unwrap_or(0.0) + delta_seconds.max(0.0);
+        self.anchor_held = Some(seconds);
+        if seconds >= ANCHOR_HOLD_SECONDS && !self.anchor_fired {
+            self.anchor_fired = true;
+            return true;
+        }
+        false
     }
 
     /// The state mapped last frame.

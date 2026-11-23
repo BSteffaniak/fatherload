@@ -900,6 +900,10 @@ impl Tile {
                 Some(tile) => TileKind::Deep(tile),
                 None => return None,
             },
+            0x900..=0x9FF => match crate::hollow::HollowTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Hollow(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

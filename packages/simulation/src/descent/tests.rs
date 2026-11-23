@@ -255,6 +255,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::TombSites
                     | LandmarkGenerator::LivingDark
                     | LandmarkGenerator::Drowned
+                    | LandmarkGenerator::HollowWorld
             ));
         }
         let field = def.field;
@@ -298,6 +299,18 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                         | MusicCue::Hive
                         | MusicCue::FleshCaverns
                         | MusicCue::GlowSea
+                ),
+                "{stratum:?}"
+            );
+        } else if def.descent == Descent::HollowWorld {
+            // The Hollow World's strata have pieces of their own (Wave 9).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::InnerSky
+                        | MusicCue::MegafaunaJungle
+                        | MusicCue::UpsideDownIsles
+                        | MusicCue::Sunforge
                 ),
                 "{stratum:?}"
             );

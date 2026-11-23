@@ -5160,6 +5160,167 @@ them. `old_deep_fathers_log` reads its camp's expedition log, and
   not conversations.
 - The probe models every gate fight as fixed minutes.
 
+## Wave 9 hollow: Descent V, the Hollow World (`src/hollow.rs`, `src/hollow/fields.rs`, `src/world/hollow.rs`, `src/world/enemies/hollow.rs`, `src/worldgen/descent/hollow.rs`)
+
+The Hollow World (rows about 5,800-7,600 of a V11 world, §14 Descent V) stops being a
+placeholder. The planet is hollow: a rig breaks through a rock sky into a giant open cavern
+with its own inner sun and its own day. Every stratum has a signature rule introduced gently
+and pushed deeper, its own rock (a `TileKind::Hollow` family), palette, ores and layer
+resource, native creatures with their own behaviour, set pieces, a music bed and an ambience
+bed, and the Descent ends at the Sun Serpent, whose Gravity Anchor opens Descent VI.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (pushed deeper) | Creatures | Set pieces | Rock, ores, layer resource | Music, ambience |
+|---|---|---|---|---|---|
+| Inner Sky | the **breakthrough** (reveal: wide camera easing in, light flood, card, sting); **wind bands** (`hollow::wind_at`) carry a flying rig, calm under the rock sky and gusty deeper; the **inner day** | sky manta (wind-glider, peaceful until struck), stoop roc (sees only what passes below, dives; roosts at night), gust bladder (drifts on the wind, bursts into a shove) | the cavern (base layer), a **sky-stone archipelago** (`sky_stone`, denser in "Stone Archipelago"), the Fathers' **Breach** (`breach`) | sky stone, diamond/platinum/gold; Sky Amber (`SkyAmber` in the stones' skins) | `InnerSky` / `Wind` |
+| Megafauna Jungle | **riding**: the pilot climbs onto a crestback (`PilotAction::Use`) and runs faster, jumps higher, no fall damage; **tar** floors grip a rig; fangrunner packs hunt at night | crestback (grazes by day, sleeps at night, flees fangrunners; rideable), skyneck (towering, stamps if hurt), fangrunner (packs circle, then leap together on a shared world-time rhythm; see farther at night) | **jungle halls** (`jungle_open`, bigger deeper), **giant trees** (trunks floor to roof, crowns under the roof), tar pits ("Tar Pits" variant), giant bones, the **Sunfolk Kraal** in its valley | loam, emerald/gold/ruby; Giant Hide (bones) | `MegafaunaJungle` / `Jungle` |
+| Upside-Down Isles | **local inverted gravity**: under each hanging isle gravity points up (`hollow::fields::isle_field_source`); rotation is free stratum-wide and the player flips the rig with its thrusters: feet first is cheered (`LandedUpsideDown`), roof first dents the hull (`RoofLanding`, `ROOF_LANDING_DEGREES`) | hangclaw (hangs still under an isle, drops on rigs below, climbs back), lode mite (clings to a rig, drags and nibbles until the rig spins hard: `SHAKE_SPIN`) | the **isle sea** (`isle_sea_rows`), **isles** (`Isle`: flat undersides with hanging grass, crowned tops, stalks to the roof for the upper ones, lodestone) | isle rock, mythril/platinum/diamond; Lodestone | `UpsideDownIsles` / `Updraft` |
+| The Sunforge | **overexposure**: in the inner sun's light (nothing solid below for `SHADE_SCAN_ROWS`, along the day's slant) a rig's exposure climbs (more by day, twice at the bottom, radiators blunt it), the screen blooms, past the scorch line the hull burns; floating stones' **shade** cools it, so routes hop shadow to shadow | cinder drake (fiery in the light, sluggish and silent in shade), shade stalker (hunts only in shade, never leaves it), flarefly (bursts into heat: exposure and hull) | the **forge sky** (`forge_rows`, small stones close enough to hop), lava lakes and slag, sun glass, the **Sun Well** | sun rock, ruby/mythril/diamond; Sun Glass | `Sunforge` / `Forge` |
+
+`MusicCue::{InnerSky, MegafaunaJungle, UpsideDownIsles, Sunforge, SunSerpent}`,
+`AmbienceCue::{Jungle, Updraft, Forge}` and `LandmarkKind::HollowWorld` (generator
+`LandmarkGenerator::HollowWorld`) are appended.
+
+### The inner sun's day
+
+`hollow::inner_sun_at(world_millis)` (16 minutes: dawn, day, dusk, night) is a pure function of
+the world clock's time (`WorldState::clock().world_millis()`: it saves, replicates and moves
+with a skipped night), so every peer and tick rate agrees. It drives the seat's light in the
+Hollow World (`render_snapshot`: never black at night), the Sunforge's heat and glare, the
+light's slant (shadows lean through the day), the creatures (crestbacks sleep, rocs roost,
+fangrunners see farther at night) and the HUD's countdown. Dawn and night are announced
+(`InnerDawn`, `InnerNight`) once a crew has broken through.
+
+### Generation (V11 only; `worldgen/descent/hollow.rs`)
+
+One pass in `streamed::assemble` after the Living Dark's (pure functions of the settings and
+the tile): the jungle halls, trees, floors, tar and bones; the isle sea and its isles; the
+forge sky, its floor and seams; the Breach; the Sun Well (a ring of indestructible builder
+stone, radius `WELL_RADIUS`, round the inner sun's body with four shade pillars and four
+doorways, grown round Descent V's gate chamber); sky amber and the archipelago. It never carves
+the outposts, anomaly rooms or the Sunfolk hall. The registry's rock for each stratum is a
+`HollowTile` (`TileKind::Hollow`, codes `0x900`), counted as plain rock by the deposit and cave
+passes (`HollowTile::plain_rock`). The story's camps and rooms keep off the open caverns and
+set pieces (`expedition::sites::crosses_strata_set_pieces` asks `hollow::crosses_set_pieces`).
+**`GOLDEN_V11_DIGEST` changed**; the V1-V10 digests are unchanged.
+
+### The Sunfolk Kraal (the jungle tribes)
+
+A real settlement from the village machinery (residents, routines, market, inn, specialty,
+quests, rumours): the underground hall of the reserved site `SUNFOLK_SITE` (one past every placed
+site, so its id never meets another), standing on the floor of the Sunfolk valley
+(`sunfolk_valley`, 100-150 columns past the outposts' column), wired everywhere Gravel Hollow
+is (lookups, features, stamps, cave keep-out). Its people are Deepfolk-cultured for now (a
+Sunfolk culture with its own names, art and dialogue is a seam for the content wave).
+
+### The Gravity Anchor (the Sun Serpent's reward)
+
+A rig system with a button (`/`, the arrow-keys seat's Numpad 9, a controller's scanner bumper
+held, the touch ANCHOR button under the rotation pair). `LogisticsCommand::Hollow(
+HollowAction::ToggleAnchor)` engages it: the rig's own down, as the player has turned it with
+the rotation thrusters and snapped to the nearest quarter (`anchor_quarter`), becomes its
+gravity for `ANCHOR_MILLIS` (rotation free meanwhile), so it walks on walls and ceilings; it
+lets go early on a second press, then recharges for `ANCHOR_COOLDOWN_MILLIS`. Applied in the
+rig's movement step (`WorldState::anchor_quarter_for`), so it is predicted like the pose. Never
+sold (`UpgradeLock::Boss` through `RigSystem::boss_reward`).
+
+### The Sun Serpent (`world/enemies/hollow.rs`)
+
+Wakes when a rig enters the Sun Well: a head (`EnemyKind::SunSerpent`, drawn half as large
+again) and twelve coils (`SerpentCoil`), four carrying glowing **sun scales**. Every point of
+its body is a pure function of world time and the fight's replicated state
+(`WorldState::serpent_point`: an orbit breathing between `SERPENT_ORBIT_TILES`, each coil
+`COIL_LAG_MILLIS` behind the one ahead along the same path), so hosts and clients agree and the
+section only changes on the fight's beats. Plain coils turn every hit; a scale cracks when
+broken; with all four cracked the serpent **falls from its orbit** (`SerpentExposed`) and its
+head takes damage for `SERPENT_EXPOSED_MILLIS`, then the scales blaze back and it orbits
+faster. It **lunges** at a marked point after a tell (`SerpentTell`, its head glows) and the
+inner sun **flares** after a warning (`FlareWarning`: the sun swells smoothly, no flashing):
+rigs it can see burn, the pillars' long shadows are safe (`WorldState::sun_sees`). No
+countdown: with no rig in the well for `SERPENT_SLEEP_MILLIS` it sinks back and heals. Its fall
+fits every rig with the Gravity Anchor (and later joiners). On a Peaceful world the well yields
+its gate unfought.
+
+### Creatures (`enemy.rs`, appended `EnemyKind`s; `world/enemies/hollow.rs`)
+
+Thirteen kinds (`SkyManta`, `StoopRoc`, `GustBladder`, `Crestback`, `Skyneck`, `Fangrunner`,
+`Hangclaw`, `LodeMite`, `CinderDrake`, `ShadeStalker`, `Flarefly`, `SunSerpent`,
+`SerpentCoil`) with stats, contact boxes sized to their sprites, loot and resistances. They
+follow the body rules through the generic state machine (`step_body`, `free_from_rock`,
+`keep_off_bodies`, `site_fits`, `CONTACT_MARGIN` / `STANDOFF_PIXELS`, line of sight), with three
+hooks: `hollow_notice` (who they see), `hollow_behave` (their own movement: wind-gliding,
+night roosts, herd flight, pack circling, sun power, shade-bound) and `hollow_habitat` (hangclaws
+under rock, stalkers in shade, the serpent only in its well). A ridden crestback, the serpent
+and clinging mites are carried by the Hollow tick instead (`hollow_holds`). Auto-aim spares the
+peaceful (`hollow_peaceful`).
+
+### State, formats and events
+
+- `Hollow` (world field, appended shared `SectionKey::Hollow`, saved with serde defaults,
+  hashed once non-empty): breakthrough ticks, exposure, anchors, rides, the landing check, isle
+  landings, the sun's phase, the serpent's fight. Entity ids and world times only; the lunge's
+  mark moves with a frame shift.
+- `LogisticsCommand::Hollow(HollowAction)` (refusals `LogisticsRefusal::Hollow`).
+- Events: `GameplayEventKind::Hollow { what, player_id, x, y }`, netcode codes
+  `540 + HollowEvent::code()` (540-559, all twenty used).
+- **`PROTOCOL_VERSION` 17** (this track's one bump; the integrator collapses). No save format
+  bump (every new field has a serde default).
+
+### Game side
+
+- Tile art for every Hollow tile (`tile_art/hollow_art.rs`); open air in the three great caverns
+  paints transparent over the **hollow backdrop** (`rendering/world/hollow.rs`: a sky with the
+  inner sun low over the far ground, parallax far isles, the far side's lights at night; cooler
+  and crowded with hanging isles over the isle sea; blazing amber over the forge), the jungle's
+  halls show their own back wall. The Sun Well draws the sun's glow, the flare's swell and burn
+  with the pillars' shadows, and the serpent's body as one gold band through its coils.
+- Thirteen sprites (`pixel_art/sprites/hollow.rs`), a rider sits up on its crestback.
+- HUD (`rendering/hollow_hud.rs`): the breakthrough card, and a panel for the serpent's fight,
+  sunlight (exposure bar, in light / in shade / scorching), the ride, the anchor (ready, holding,
+  recharging) and the inner day's countdown.
+- Input and prompts for the anchor on every device (keyboard, both keyboard seats, controller,
+  touch); `Prompt::Anchor`, `PadAction::Anchor`, `TouchControl::Anchor`.
+- Audio: fifteen patches appended at the end of `patches!` (`audio/patch/hollow.rs`: five music
+  beds, three ambience beds, the breakthrough's sting, gust, bellow, roc cry, the serpent's roar,
+  the flare's swell, the anchor's thunk), `hollow_cue` and `hollow_voice`.
+- Scenes: `hollow_breakthrough`, `hollow_inner_sky`, `hollow_inner_night`, `hollow_breach`,
+  `hollow_jungle`, `hollow_jungle_night`, `hollow_sunfolk_village`, `hollow_ride`, `hollow_isles`,
+  `hollow_upside_down_landing`, `hollow_sunforge`, `hollow_sunforge_shade`,
+  `hollow_gravity_anchor`, `hollow_sun_serpent`, `hollow_serpent_flare`.
+
+### Tests
+
+`world/hollow_tests.rs` (the inner day at 20-120 Hz; the breakthrough once, dawn and night;
+wind alike at 30-120 Hz; riding faster and getting down; inverted gravity and a feet-first
+landing at 30 and 60 Hz, a roof landing; exposure in the light and cooling in the shade; the
+Gravity Anchor holding a turned rig to a wall, letting go, recharging, the toggle; gust
+bladders and clinging mites; the section's replication, hash and JSON; **a bot beating the
+Sun Serpent** with a railgun at the Sunforge's arrival hull tier and keeping 20 % of its hull,
+the Gravity Anchor won; a Peaceful world's open gate; older worlds untouched),
+`worldgen/descent/hollow/tests.rs` (halls, trees, tar; isles and their grass; the well, its
+pillars and doorways; the forge's stones; the Breach; the Sunfolk hall and its people),
+`hollow::tests`, `hollow::fields::tests`.
+
+### Descent probe
+
+`hollow::authored_content` and `authored_markers` feed the probe. Default seed, this branch
+(Descent IV still a placeholder ending at 30.0 h): the Hollow World runs 30.0 h to about 39 h
+(it was 30.0-36.4 h), every gap between new things 20 minutes or less in its strata (the
+Upside-Down Isles and the Sunforge used to wait 48 minutes). Once Descent IV's track lengthens
+its chapter, Descent V ends inside §14's 42-53 h window; re-check at integration.
+
+### Seams and known limits
+
+- The Sunfolk's culture is Deepfolk for now (names, art and dialogue of their own are content
+  work); their memories of the Fathers are for the story track (`expedition::memories`).
+- The Breach is a set piece without a log; the story track places Descent V's logs (they keep
+  off the open caverns).
+- Wind acts on rigs only (pilots and drops are not blown); the field drive's wind is a nudge.
+- The Gravity Anchor's gravity applies to the rig, not to a pilot on foot.
+- The Sun Serpent's flare damage reads line of sight through tiles (the pillars and walls).
+- The descent probe still models the gate fight as fixed minutes.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

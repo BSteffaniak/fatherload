@@ -27,6 +27,7 @@ mod expedition_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
+pub mod hollow_hud;
 mod homes;
 mod interior;
 mod layout;
@@ -786,6 +787,7 @@ impl GameRenderer {
                 crate::screen_fx::EffectsIntensity::Off => 0.0,
             },
             expedition: snapshot.expedition,
+            hollow: snapshot.hollow,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

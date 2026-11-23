@@ -68,6 +68,7 @@ use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
 mod crypt;
 mod drowned;
+pub(super) mod hollow;
 mod living;
 mod sky;
 mod tomb;
@@ -676,8 +677,14 @@ impl WorldState {
 
     /// Whether the ground around `tile` suits an enemy of `kind`.
     fn habitat_fits(&self, kind: EnemyKind, tile: TilePosition) -> bool {
-        if !self.living_spawn_allowed(kind) || !Self::drowned_spawn_allowed(kind) {
+        if !self.living_spawn_allowed(kind)
+            || !Self::drowned_spawn_allowed(kind)
+            || !Self::hollow_spawn_allowed(kind)
+        {
             return false;
+        }
+        if let Some(fits) = self.hollow_habitat(kind, tile) {
+            return fits;
         }
         let spec = kind.stats();
         let big = spec.radius > TILE_SIZE * 0.5;
@@ -1148,6 +1155,11 @@ impl WorldState {
             self.advance_crypt_enemy(id, now, output);
             return;
         }
+        // The Hollow World (Wave 9) carries a ridden crestback, the Sun Serpent and clinging
+        // lode mites itself (`world/hollow.rs`, `world/enemies/hollow.rs`).
+        if start_state.kind.is_hollow() && self.hollow_holds(id, start_state.kind) {
+            return;
+        }
         let mut body = start_body;
         let mut state = start_state;
         let dt = self.timing.delta_seconds;
@@ -1246,6 +1258,7 @@ impl WorldState {
             .living_notice(body, state)
             // The Drowned and Frozen (Wave 9): the Leviathan knows its arena.
             .or_else(|| self.drowned_notice(body, state))
+            .or_else(|| self.hollow_notice(body, state, || self.perceive(body, state)))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1305,6 +1318,12 @@ impl WorldState {
         now: SimulationTick,
         output: &mut TickOutput,
     ) -> Intent {
+        // The Hollow World's creatures have ways of their own (Wave 9).
+        if state.kind.is_hollow()
+            && let Some(intent) = self.hollow_behave(body, state, now)
+        {
+            return intent;
+        }
         let spec = state.kind.stats();
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
         let target = self.rig_position(state.target, (body.x, body.y));
@@ -2453,6 +2472,12 @@ impl WorldState {
         let mut amount = (damage.amount * state.kind.resistance(damage.kind)).max(0.0)
             // The Leviathan's open maw takes double (Wave 9).
             * self.drowned_damage_factor(state.kind);
+        // The Sun Serpent's armour and scales (Wave 9).
+        if state.kind.is_hollow()
+            && let Some(outcome) = self.hollow_damage(id, &state, amount, output)
+        {
+            return outcome;
+        }
         let mut stunned = false;
         if damage.kind == DamageKind::Emp && state.kind.is_machine() {
             stunned = true;
@@ -2566,6 +2591,10 @@ impl WorldState {
             // The eel-dragon's bounty and the Leviathan's gate (Wave 9).
             let tile = self.frame().tile_at(body.x, body.y);
             self.drowned_kill(state.kind, tile, state.last_attacker, output);
+        }
+        if state.kind.is_hollow() {
+            // Bladders burst, the serpent falls (Wave 9).
+            self.hollow_kill(state.kind, &body, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2781,5 +2810,20 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
             tags.nests || tags.burrowers
         }
         EnemyKind::EelDragon | EnemyKind::Leviathan => false,
+        // The Hollow World (Wave 9): its creatures live in the open caverns, placed by the
+        // Hollow World's own roster (`world/enemies/hollow.rs`), not in cave lairs.
+        EnemyKind::SkyManta
+        | EnemyKind::StoopRoc
+        | EnemyKind::GustBladder
+        | EnemyKind::Crestback
+        | EnemyKind::Skyneck
+        | EnemyKind::Fangrunner
+        | EnemyKind::Hangclaw
+        | EnemyKind::LodeMite
+        | EnemyKind::CinderDrake
+        | EnemyKind::ShadeStalker
+        | EnemyKind::Flarefly
+        | EnemyKind::SunSerpent
+        | EnemyKind::SerpentCoil => false,
     }
 }

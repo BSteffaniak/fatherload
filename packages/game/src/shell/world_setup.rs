@@ -366,6 +366,7 @@ mod tests {
         rotate: 0.0,
         dpad_rotates: false,
         stick_horizontal: 0.0,
+        anchor: false,
     };
     const DOWN: PlayerInput = PlayerInput {
         menu_down: true,

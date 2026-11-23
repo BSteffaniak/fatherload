@@ -45,6 +45,7 @@ mod expedition;
 mod explosives;
 mod fluids;
 mod fx;
+mod hollow;
 mod homes;
 mod lighting;
 mod living_dark;
@@ -214,6 +215,8 @@ pub(super) struct WorldScene<'a> {
     pub effects_strength: f32,
     /// The Fathers' expedition journal (Wave 8 story): which canisters are read or sealed.
     pub expedition: &'a fatherload_simulation::expedition::ExpeditionState,
+    /// The Hollow World's shared state (Wave 9): the Sun Serpent's fight and the flares.
+    pub hollow: &'a fatherload_simulation::hollow::Hollow,
 }
 
 impl WorldScene<'_> {
@@ -264,6 +267,18 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     sky_lands::draw_sky_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
     // A V9 sky's islands: jet streams and vent columns behind them (WP-SKY).
     sky_isles::draw_isle_backdrop(draw, scene.terrain.settings(), scene.visible, seconds);
+    // The Hollow World's skies and its inner sun behind its open caverns (Wave 9).
+    let hollow_scene = hollow::HollowScene {
+        terrain: scene.terrain,
+        hollow: scene.hollow,
+        enemies: scene.enemies,
+        visible: scene.visible,
+        // The inner day runs on the world clock (it saves and moves with a skipped night).
+        world_millis: scene.clock.world_millis(),
+        seconds,
+        effects_strength: scene.effects_strength,
+    };
+    hollow::draw_hollow_backdrop(draw, &hollow_scene);
     buildings::draw_town(draw, scene.visible, scene.local, seconds);
     villages::draw_villages(
         draw,
@@ -466,6 +481,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         players: scene.players,
     };
     logistics::draw_logistics(draw, &logistics_scene);
+    // The Sun Well's flares and the Sun Serpent's body behind its sprites (Wave 9).
+    hollow::draw_sun_well(draw, &hollow_scene);
     // The Fathers' expedition (Wave 8 story): camps, wrecks, cairns and anomaly rooms.
     let expedition_scene = expedition::ExpeditionScene {
         settings: scene.terrain.settings(),

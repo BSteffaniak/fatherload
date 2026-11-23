@@ -156,23 +156,6 @@ fn merrow_village(settings: &WorldSettings) -> Option<Arc<Village>> {
     built.as_ref().clone()
 }
 
-/// The special halls of a Deep Descent world (Gravel Hollow, Merrow City): each hall, its
-/// centre column and its village.
-fn special_halls(settings: &WorldSettings) -> impl Iterator<Item = (UndergroundSite, i32)> {
-    gravel_hollow_hall(settings)
-        .into_iter()
-        .chain(merrow_hall(settings))
-}
-
-/// The village of a special hall's site.
-fn special_village(settings: &WorldSettings, site: i32) -> Option<Arc<Village>> {
-    if site == 0 {
-        gravel_hollow(settings)
-    } else {
-        merrow_village(settings)
-    }
-}
-
 /// Gravel Hollow's village (Wave 8), built on first use, named for the place.
 fn gravel_hollow(settings: &WorldSettings) -> Option<Arc<Village>> {
     let (site, center) = gravel_hollow_hall(settings)?;
@@ -183,6 +166,65 @@ fn gravel_hollow(settings: &WorldSettings) -> Option<Arc<Village>> {
         Some(Arc::new(village))
     });
     built.as_ref().clone()
+}
+
+/// The site index of the Sunfolk village (Wave 9): two past every site a world places (Merrow
+/// City takes the first), so its id never meets another village's.
+pub const SUNFOLK_SITE: i32 = placement::MAX_SITE + 2;
+
+/// The Sunfolk village's hall and centre column (Wave 9); `None` before V11.
+///
+/// The jungle tribes' settlement in the Megafauna Jungle of a Deep Descent world, its hall on
+/// the floor of the Sunfolk valley ([`crate::worldgen::descent::hollow::sunfolk_valley`]).
+#[must_use]
+pub fn sunfolk_hall(settings: &WorldSettings) -> Option<(UndergroundSite, i32)> {
+    if !settings.generator.has_villages() || !settings.generator.has_descents() {
+        return None;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    let valley = crate::worldgen::descent::hollow::sunfolk_valley(settings, &layout)?;
+    let center = valley.center().x;
+    Some((
+        UndergroundSite {
+            site: SUNFOLK_SITE,
+            center,
+            top: valley.max.y - HALL_AIR_ROWS,
+            slide: 1,
+        },
+        center,
+    ))
+}
+
+/// The Sunfolk village (Wave 9), built on first use, named for the place.
+fn sunfolk(settings: &WorldSettings) -> Option<Arc<Village>> {
+    let (site, center) = sunfolk_hall(settings)?;
+    let built = VILLAGES.get_or_compute((*settings, SUNFOLK_SITE, 1), || {
+        let mut village = layout::build(settings, &SiteSpec::Underground { site, center });
+        crate::hollow::SUNFOLK_NAME.clone_into(&mut village.name);
+        crate::hollow::SUNFOLK_NAME.clone_into(&mut village.population.village_name);
+        Some(Arc::new(village))
+    });
+    built.as_ref().clone()
+}
+
+/// The fixed deep halls (Gravel Hollow, Merrow City, the Sunfolk village) as `(hall, centre)`.
+fn deep_halls(settings: &WorldSettings) -> Vec<(UndergroundSite, i32)> {
+    gravel_hollow_hall(settings)
+        .into_iter()
+        .chain(merrow_hall(settings))
+        .chain(sunfolk_hall(settings))
+        .collect()
+}
+
+/// The village of a fixed deep hall's site.
+fn deep_hall_village(settings: &WorldSettings, site: i32) -> Option<Arc<Village>> {
+    if site == SUNFOLK_SITE {
+        sunfolk(settings)
+    } else if site == crate::drowned::MERROW_SITE {
+        merrow_village(settings)
+    } else {
+        gravel_hollow(settings)
+    }
 }
 
 /// Site `site`'s geometry (`None` for sites the world does not place, or a world without
@@ -226,11 +268,11 @@ pub fn keeps_caves_out(ctx: &Ctx, x: i32, y: i32) -> bool {
     {
         return true;
     }
-    if let Some((hall, center)) = gravel_hollow_hall(&ctx.settings)
-        && hall_rect(center, hall.top)
+    if deep_halls(&ctx.settings).iter().any(|(hall, center)| {
+        hall_rect(*center, hall.top)
             .expanded(CAVE_KEEP_OUT)
             .contains(TilePosition { x, y })
-    {
+    }) {
         return true;
     }
     // Merrow City's bubble and the sea round it (Wave 9): no cave pierces the glass.
@@ -305,6 +347,9 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
     if site == crate::drowned::MERROW_SITE && underground {
         return merrow_village(settings);
     }
+    if site == SUNFOLK_SITE && underground {
+        return sunfolk(settings);
+    }
     let geometry = geometry(&ctx, site)?;
     if underground && geometry.underground.is_none() {
         return None;
@@ -328,9 +373,9 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
 pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<Arc<Village>> {
     let ctx = ctx(settings);
     let mut found = Vec::new();
-    for (hall, center) in special_halls(settings) {
+    for (hall, center) in deep_halls(settings) {
         if (first..=last).contains(&center) {
-            found.extend(special_village(settings, hall.site));
+            found.extend(deep_hall_village(settings, hall.site));
         }
     }
     for site in sites_reaching(first, last) {
@@ -368,9 +413,9 @@ pub fn village_containing(
         return sky_town(settings, site.block.0, site.block.1);
     }
     let ctx = ctx(settings);
-    for (hall, center) in special_halls(settings) {
+    for (hall, center) in deep_halls(settings) {
         if hall_rect(center, hall.top).contains(position) {
-            return special_village(settings, hall.site);
+            return deep_hall_village(settings, hall.site);
         }
     }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, 0)
@@ -416,8 +461,8 @@ pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin:
         return true;
     }
     let ctx = ctx(settings);
-    if special_halls(settings).any(|(hall, center)| {
-        hall_rect(center, hall.top)
+    if deep_halls(settings).iter().any(|(hall, center)| {
+        hall_rect(*center, hall.top)
             .expanded(margin)
             .contains(position)
     }) {
@@ -449,7 +494,7 @@ pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
         out.push(surface_feature(ctx, &geometry));
         out.extend(underground_feature(ctx, &geometry));
     }
-    for hall in special_halls(&ctx.settings) {
+    for hall in deep_halls(&ctx.settings) {
         if hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH)) {
             out.push(hall_feature(ctx, hall));
         }
@@ -547,6 +592,9 @@ pub fn feature(ctx: &Ctx, site: i32, ry: i32) -> Option<WorldFeature> {
     if site == crate::drowned::MERROW_SITE && ry == 1 {
         return merrow_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
     }
+    if site == SUNFOLK_SITE && ry == 1 {
+        return sunfolk_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
+    }
     let geometry = geometry(ctx, site)?;
     match ry {
         0 => Some(surface_feature(ctx, &geometry)),
@@ -576,6 +624,13 @@ pub fn stamps_touching(ctx: &Ctx, rect: &TileRect) -> Vec<Arc<VillageStamp>> {
                 merrow_stamp(&ctx.settings, hall, center)
             }),
         );
+    }
+    if let Some((hall, center)) = sunfolk_hall(&ctx.settings)
+        && hall_rect(center, hall.top).expanded(7).intersects(rect)
+    {
+        found.push(STAMPS.get_or_compute((ctx.settings, SUNFOLK_SITE, 1), || {
+            sunfolk_stamp(&ctx.settings, hall, center)
+        }));
     }
     for site in sites_reaching(rect.min.x, rect.max.x) {
         let Some(geometry) = geometry(ctx, site) else {
@@ -716,6 +771,34 @@ fn merrow_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) ->
     }
     if let Some(found) = merrow_village(settings) {
         lot_foundations(settings.seed, &found, &mut out.cells);
+    }
+    out.bounds = Some(air.expanded(6));
+    out
+}
+/// The Sunfolk village's stamp (Wave 9): its hall carved out of the valley's floor, a fern
+/// floor over foundations, and its buildings' lots.
+fn sunfolk_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -> VillageStamp {
+    use crate::hollow::HollowTile;
+    let mut out = VillageStamp::default();
+    let air = hall_rect(center, hall.top);
+    out.clear.push(air.expanded(3));
+    for y in air.min.y..hall.floor_row() {
+        for x in air.min.x..=air.max.x {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    for x in air.min.x - 2..=air.max.x + 2 {
+        out.cells
+            .push((x, hall.floor_row(), TileKind::Hollow(HollowTile::Fern)));
+        out.cells
+            .push((x, hall.floor_row() + 1, TileKind::Foundation));
+    }
+    if let Some(found) = sunfolk(settings) {
+        for building in &found.buildings {
+            for x in building.first_column..=building.last_column() {
+                out.cells.push((x, hall.floor_row(), TileKind::Foundation));
+            }
+        }
     }
     out.bounds = Some(air.expanded(6));
     out
