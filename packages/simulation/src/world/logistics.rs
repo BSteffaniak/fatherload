@@ -98,7 +98,7 @@ pub enum LogisticsRefusal {
     Hollow(crate::hollow::HollowRefusal),
     /// A far Strange Layers command's own refusal (Wave 9).
     FarStrange(crate::far_strange::FarStrangeRefusal),
-    /// The kit already holds as many of that supply as it can (Wave 9).
+    /// The kit has no room for that supply (or a crafted batch of it) (Wave 9).
     SupplyFull,
     /// This counter does not sell that supply: a deeper outpost does (Wave 9).
     SupplyNotSoldHere,
@@ -155,7 +155,7 @@ impl LogisticsRefusal {
             Self::LivingDark(refusal) => refusal.message(),
             Self::Hollow(refusal) => refusal.message(),
             Self::FarStrange(refusal) => refusal.message(),
-            Self::SupplyFull => "The supply kit holds no more of those.".to_owned(),
+            Self::SupplyFull => "The supply kit has no room for more of those.".to_owned(),
             Self::SupplyNotSoldHere => {
                 "This counter does not stock that supply: a deeper outpost does.".to_owned()
             }
@@ -791,9 +791,13 @@ impl WorldState {
                 Ok(LogisticsQuote::default())
             }
             CraftOutput::Bombs(_) => Ok(LogisticsQuote::default()),
-            CraftOutput::Supply(supply, _) => {
-                if self.logistics.supplies_of(player_id, supply)
-                    >= crate::workshop::MAX_SUPPLY_STACK
+            CraftOutput::Supply(supply, count) => {
+                // The whole batch must fit: a part-full kit never eats resources for nothing.
+                if self
+                    .logistics
+                    .supplies_of(player_id, supply)
+                    .saturating_add(count)
+                    > crate::workshop::MAX_SUPPLY_STACK
                 {
                     return Err(LogisticsRefusal::SupplyFull);
                 }

@@ -198,6 +198,26 @@ fn workshops_craft_deep_supplies_from_layer_resources() {
     let rig = world.player(PLAYER).expect("rig");
     assert_eq!(rig.carried(ItemKind::Layer(Stratum::BrineGlaciers)), 1);
     assert_eq!(rig.credits, credits, "supplies cost only their resources");
+    // A batch that would overflow the kit is refused before it eats the resources.
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, DeepSupply::FrostHeater, MAX_SUPPLY_STACK - 3);
+    world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .cargo_bay
+        .add(ItemKind::Layer(Stratum::BrineGlaciers), 4);
+    assert_eq!(
+        world.check_logistics(PLAYER, &heaters),
+        Err(LogisticsRefusal::SupplyFull)
+    );
+    assert_eq!(
+        world
+            .player(PLAYER)
+            .expect("rig")
+            .carried(ItemKind::Layer(Stratum::BrineGlaciers)),
+        5
+    );
     // The Hollow World's recipes are not known at Merrow City.
     let bait = LogisticsCommand::Craft {
         outpost: merrow.id,
