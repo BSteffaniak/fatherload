@@ -574,9 +574,13 @@ fn v11_generation_is_pinned() {
 /// The digest [`v11_generation_is_pinned`] expects (Wave 7 integration: the stratum fluid
 /// pockets, the outposts on the builders' cable and the ancient lifts' carve; Wave 8: the
 /// authored Crust, Old Deep and Living Dark, the expedition's log sites and anomaly rooms,
-/// kept off the strata's set pieces by the integration; Wave 9: the Drowned and Frozen's
-/// basins, ice, geysers, Merrow City and the Leviathan's arena).
-const GOLDEN_V11_DIGEST: u64 = 0xa443_78a8_e403_3f8b;
+/// kept off the strata's set pieces by the integration; Wave 9 integration: Descents IV-VI
+/// authored, the Drowned and Frozen's basins, ice, geysers, Merrow City and the Leviathan's arena,
+/// the Hollow World's inner sky, jungle, isles, Sunforge, Sunfolk Kraal and Sun Well, the
+/// distortion strata's mirror and shear halls, rot grid and Parallax Station, the far Strange
+/// Layers' time pockets, echo hollows, keyed vaults, the Rewrite Hall and the alloy seal, and the
+/// story's logs 31-60 and deeper anomaly rooms kept off them).
+const GOLDEN_V11_DIGEST: u64 = 0x4e9d_92cc_a15c_769d;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]
