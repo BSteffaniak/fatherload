@@ -5324,6 +5324,25 @@ window; re-check at integration.
 - The Sun Serpent's flare damage reads line of sight through tiles (the pillars and walls).
 - The descent probe still models the gate fight as fixed minutes.
 
+### Review pass (Wave 9 hollow review)
+
+- The Sunforge's scorch (`EXPOSURE_DAMAGE_PER_SECOND`) is 4.5 (was 2.2): about 1 % of a
+  Sunforge-tier hull a second, so a long crossing in the light hurts and the shade routes
+  matter. The Sun Serpent bot still wins with 57 % of its hull.
+- The Sun Well is an arena on screen: inside and near it the seat's camera pulls back to
+  `hollow_hud::ARENA_WIDE` (0.7, eased by distance over `ARENA_EASE_TILES`, so it never
+  jumps), the well has its own ember sky behind its open air, the inner sun a drawn body
+  (slowly turning rays, no flashing), and the forge's exposure and bloom ease off inside it
+  (a flare still glares). Before, the serpent's orbit and lunges came from off screen over a
+  flat yellow glare.
+- The Inner Sky's inner sun is drawn like a distant sun (no parallax), so it is in sight at the
+  breakthrough and wherever the rig flies; before, it hung at the cavern's far horizon,
+  hundreds of rows below any view.
+- The inner night darkens the scene a little more (light x0.48 at night, was x0.6), still
+  readable.
+- Probe re-run on this branch: the same numbers as above (Inner Sky 32.4 h, Jungle 34.6 h,
+  Isles 36.9 h, Sunforge 39.7 h, whole run 73.0 h); the probe does not model exposure.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

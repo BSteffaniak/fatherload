@@ -1182,7 +1182,7 @@ fn view_snapshot(
     // black at night; the Sunforge's glare falls with it.
     if world.hollow_stratum_at(tile).is_some() {
         let day = f32::from(world.inner_sun_now().light) / 1_000.0;
-        fields.light = fields.light.min(1.0) * 0.4f32.mul_add(day, 0.6);
+        fields.light = fields.light.min(1.0) * 0.52f32.mul_add(day, 0.48);
         let exposure = fatherload_simulation::field::ScreenEffect::Exposure.index();
         fields.screen[exposure] *= 0.35f32.mul_add(day, 0.65);
         // In the Sun Well the forge's glare eases off so the fight reads (the well's own ember

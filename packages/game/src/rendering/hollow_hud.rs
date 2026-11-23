@@ -394,3 +394,33 @@ fn capitalised(text: &str) -> String {
         first.to_uppercase().collect::<String>() + chars.as_str()
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(arena: f32, since_reveal: Option<f32>) -> HollowView {
+        HollowView {
+            stratum: Stratum::TheSunforge,
+            exposure: 0.0,
+            sunlit: false,
+            phase: InnerPhase::Day,
+            phase_seconds: 60.0,
+            since_reveal,
+            anchor: None,
+            riding: false,
+            serpent: None,
+            arena,
+        }
+    }
+
+    #[test]
+    fn the_sun_well_widens_the_view_smoothly_and_the_wider_zoom_wins() {
+        assert!((view(0.0, None).zoom() - 1.0).abs() < 1e-6);
+        assert!((view(1.0, None).zoom() - ARENA_WIDE).abs() < 1e-6);
+        let half = view(0.5, None).zoom();
+        assert!(half < 1.0 && half > ARENA_WIDE, "{half}");
+        // The breakthrough's wider start beats the arena's.
+        assert!((view(1.0, Some(0.0)).zoom() - REVEAL_WIDE).abs() < 1e-6);
+    }
+}
