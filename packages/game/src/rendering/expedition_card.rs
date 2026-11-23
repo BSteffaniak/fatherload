@@ -118,6 +118,7 @@ pub(super) fn decorate(
         | StoryMomentKind::Ended
         | StoryMomentKind::Lost
         | StoryMomentKind::Remembered
-        | StoryMomentKind::DeepLore => {}
+        | StoryMomentKind::DeepLore
+        | StoryMomentKind::StrangePlace => {}
     }
 }

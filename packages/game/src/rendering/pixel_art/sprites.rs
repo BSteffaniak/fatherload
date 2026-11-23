@@ -4,6 +4,7 @@
 
 pub mod crypt;
 pub mod deep_gear;
+pub mod distortion;
 pub mod drowned;
 pub mod enemies;
 pub mod explosives;
@@ -519,6 +520,18 @@ pub const ALL: &[&SpriteDef] = &[
     &hollow::FLAREFLY,
     &hollow::SUN_SERPENT,
     &hollow::SERPENT_COIL,
+    // The distortion strata (Wave 9).
+    &distortion::MIRROR_TWIN,
+    &distortion::GLASSBACK,
+    &distortion::GAZER,
+    &distortion::TUMBLER,
+    &distortion::LODESTAR,
+    &distortion::SHEAR_MANTIS,
+    &distortion::GLITCHLING,
+    &distortion::BITWORM,
+    &distortion::DEAD_PIXEL,
+    &distortion::SHOT_MIRROR_SHARD,
+    &distortion::SHOT_ROT_PULSE,
 ];
 
 #[cfg(test)]

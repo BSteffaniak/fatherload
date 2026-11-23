@@ -1072,6 +1072,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Crust(tile) => super::terrain::tile_art::crust_color(tile),
         TileKind::Deep(tile) => super::terrain::tile_art::deep_color(tile),
         TileKind::Hollow(tile) => super::terrain::tile_art::hollow_color(tile),
+        TileKind::Warped(tile) => super::terrain::tile_art::warped_color(tile),
     }
 }
 

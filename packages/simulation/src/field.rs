@@ -69,6 +69,8 @@ pub enum ScreenEffect {
     Fog,
     /// Blur: the picture smears soft (the Fungal Forest's spore clouds, Wave 8).
     Blur,
+    /// Glitch: slow, slipping bands of the picture with a colour split (Pixel Rot, Wave 9).
+    Glitch,
 }
 
 impl ScreenEffect {
@@ -88,6 +90,7 @@ impl ScreenEffect {
         Self::Vignette,
         Self::Fog,
         Self::Blur,
+        Self::Glitch,
     ];
 
     /// Index into [`ScreenEffects::levels`].
@@ -114,12 +117,13 @@ impl ScreenEffect {
             Self::Vignette => "vignette",
             Self::Fog => "fog",
             Self::Blur => "blur",
+            Self::Glitch => "glitch",
         }
     }
 }
 
 /// Number of [`ScreenEffect`]s.
-pub const SCREEN_EFFECT_COUNT: usize = 14;
+pub const SCREEN_EFFECT_COUNT: usize = 15;
 
 /// Screen effects as plain data: a level (percent, 0..=100) per [`ScreenEffect`] plus the
 /// colours the grade and the fog lean toward.

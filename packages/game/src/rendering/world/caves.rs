@@ -107,6 +107,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Deep(tile) => super::old_deep::deep_light(tile),
         // The Hollow World's sun glass, amber, slag and the inner sun (Wave 9).
         TileKind::Hollow(tile) => tile.glow() as f32 / 255.0 * 3.2,
+        // The distortion strata's glass, ore and lit pixels (Wave 9).
+        TileKind::Warped(tile) => tile.glow() as f32 / 64.0,
         _ => 0.0,
     }
 }

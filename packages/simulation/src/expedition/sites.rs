@@ -215,6 +215,26 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
             pieces.push(rect((camp.x - 3, camp.y - 3), (camp.x + 3, camp.y + 1)));
         }
     }
+    // The distortion strata (Wave 9): the Looking-Glass Hall, the Shear Spire, the Dead
+    // Screen, and every mirror and shear hall.
+    {
+        use crate::distortion::{mirror, rot, shear};
+        pieces.extend(
+            mirror::looking_glass_hall(settings, &layout).map(|hall| hall.bounds.expanded(2)),
+        );
+        pieces.extend(shear::spire(settings, &layout).map(|spire| spire.expanded(2)));
+        pieces.extend(rot::dead_screen(settings, &layout).map(|screen| screen.expanded(2)));
+        pieces.extend(
+            mirror::zones_touching(settings, &layout, area)
+                .iter()
+                .map(|zone| zone.bounds.expanded(2)),
+        );
+        pieces.extend(
+            shear::regions_touching(settings, &layout, area)
+                .iter()
+                .map(|region| region.bounds.expanded(2)),
+        );
+    }
     pieces.iter().any(|piece| piece.intersects(area))
         || crust_rules::works_touching(settings, &layout, area)
             .iter()

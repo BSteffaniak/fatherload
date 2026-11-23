@@ -268,6 +268,7 @@ impl ItemKind {
             TileKind::Lunar(tile) => tile.item(),
             TileKind::Deep(tile) => tile.item(),
             TileKind::Hollow(tile) => tile.item(),
+            TileKind::Warped(tile) => tile.item(),
             _ => match BlockKind::from_tile(kind) {
                 Some(block) => Some(Self::Block(block)),
                 None => None,

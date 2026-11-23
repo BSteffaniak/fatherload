@@ -29,6 +29,7 @@
 )]
 
 pub mod crust;
+pub mod distortion;
 pub mod drowned;
 pub mod hollow;
 pub mod landmarks;

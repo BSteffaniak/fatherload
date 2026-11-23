@@ -780,6 +780,17 @@ pub enum SoundCue {
     FlareSwell,
     /// The Gravity Anchor taking hold.
     AnchorThunk,
+    // --- The distortion strata (Wave 9) ---
+    /// A mirror hall's boundary crossed, a twin stepping out of the glass: a reversed chime.
+    GlassChime,
+    /// Glass breaking: a reflection drilled, a twin broken, a shot thrown back.
+    MirrorShatter,
+    /// Gravity turning: a shear hall entered, a mantis dropping, a lodestar's pull.
+    GravityGroan,
+    /// A glitch: a teleport, a rot pulse, a deeper rot tier.
+    GlitchBlip,
+    /// A data core recovered: an eight-bit chime.
+    DataChirp,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

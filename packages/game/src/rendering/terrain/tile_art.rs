@@ -42,6 +42,7 @@ mod built_art;
 mod cave_art;
 mod crust_art;
 mod deep_art;
+mod distortion_art;
 mod drowned_art;
 mod hollow_art;
 mod living_art;
@@ -53,6 +54,7 @@ pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use crust_art::{crust_color, crust_glow};
 pub use deep_art::deep_color;
+pub use distortion_art::warped_color;
 pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
@@ -423,6 +425,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Crust(tile) => return crust_art::crust_color(tile),
         TileKind::Deep(tile) => return deep_art::deep_color(tile),
         TileKind::Hollow(tile) => return hollow_art::hollow_color(tile),
+        TileKind::Warped(tile) => return distortion_art::warped_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -606,7 +609,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Lunar(_)
         | TileKind::Crust(_)
         | TileKind::Deep(_)
-        | TileKind::Hollow(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Hollow(_)
+        | TileKind::Warped(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -826,6 +830,15 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             } else if let Some(stratum) = drowned_art::drowned_stratum(terrain, position) {
                 // So does the Drowned and Frozen's (Wave 9).
                 drowned_art::paint_back(&mut canvas, stratum, up, left, right);
+            } else if let Some(stratum) = distortion_art::distortion_stratum(terrain, position) {
+                // The distortion strata's halls of mirrors, tipped strata and rot (Wave 9).
+                distortion_art::paint_back(
+                    &mut canvas,
+                    terrain,
+                    position,
+                    stratum,
+                    (up, left, right),
+                );
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }
@@ -902,6 +915,24 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     if let TileKind::Hollow(tile) = kind {
         hollow_art::paint(
             &mut canvas,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // The distortion strata's materials (Wave 9).
+    if let TileKind::Warped(tile) = kind {
+        distortion_art::paint(
+            &mut canvas,
+            terrain,
             position,
             tile,
             &strata,
@@ -1356,6 +1387,7 @@ const fn grows_grass(material: TileKind) -> bool {
             | TileKind::Lunar(_)
             | TileKind::Deep(_)
             | TileKind::Hollow(_)
+            | TileKind::Warped(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

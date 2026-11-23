@@ -544,6 +544,7 @@ impl LocalGame {
         self.announce_old_deep(&players);
         self.announce_living_dark(&players);
         self.announce_drowned(&players);
+        self.announce_distortion(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1309,6 +1310,63 @@ impl LocalGame {
                 crate::shell::StoryMomentKind::DeepLore,
                 lore.title(),
                 lore.text(),
+            );
+        }
+    }
+
+    /// The distortion strata's news for each local seat (Wave 9): the first mirror hall, twins,
+    /// gazes, reflections, data cores and deeper rot; a story card when the crew finds one of
+    /// the Strange Layers' places.
+    fn announce_distortion(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::distortion::DistortionEvent as E;
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(usize, &'static str, &'static str)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            match gameplay.kind {
+                GameplayEventKind::DistortionLandmarkFound { landmark, .. } => {
+                    // The crew's find: every local seat reads the place's story.
+                    for seat in 0..players.len() {
+                        cards.push((seat, landmark.name(), landmark.story()));
+                    }
+                }
+                GameplayEventKind::Distortion {
+                    what, player_id, ..
+                } => {
+                    let text = match what {
+                        E::MirrorEntered => "A mirror hall: the screen and the controls flip.",
+                        E::TwinAppeared => {
+                            "Your reflection steps out of the glass. It moves as you move."
+                        }
+                        E::TwinBroken => "The twin shatters. The hall's glass goes quiet.",
+                        E::GhostShattered => "Only a reflection: it shatters into nothing.",
+                        E::Gazed => "A gazer has your eye: your controls are mirrored!",
+                        E::ShotReflected => "The glassback's face throws your shot back!",
+                        E::DataCore => "A whole block of data ore: a data core recovered.",
+                        E::RotDeepened => "The rot deepens: the world loses resolution.",
+                        E::ShearEntered => "Gravity turns here. Turn the rig to land on it.",
+                        _ => continue,
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_some_and(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (seat, title, text) in cards {
+            self.shell.story_moment(
+                seat,
+                crate::shell::StoryMomentKind::StrangePlace,
+                title,
+                text,
             );
         }
     }

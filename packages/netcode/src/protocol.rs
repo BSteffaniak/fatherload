@@ -193,6 +193,13 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// exposure, Gravity Anchors, rides, isle landings, the Sun Serpent's fight),
 /// `LogisticsCommand::Hollow` (the Gravity Anchor), and the Hollow World events 540-559
 /// (`GameplayEventKind::Hollow`).
+///
+/// The distortion strata (Descent VI part A): `TileKind::Warped(WarpedTile)` tiles (codes
+/// `0x1600`) in terrain ops and keyframes, nine appended `EnemyKind`s (mirror twin to dead pixel)
+/// and two `ShotKind`s (`MirrorShard`, `RotPulse`), `ScreenEffect::Glitch`, the `Distortion`
+/// world field and `SectionKey::Distortion` section (gazers' holds, rot pulses, the mirror halls'
+/// twin cooldowns, landmarks found) and the distortion events 560-579
+/// (`GameplayEventKind::Distortion`, `DistortionLandmarkFound`).
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

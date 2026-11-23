@@ -1041,6 +1041,7 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::ExpeditionLogSealed { player_id, .. }
         | GameplayEventKind::ExpeditionEcho { player_id, .. }
         | GameplayEventKind::AnomalyEntered { player_id, .. }
+        | GameplayEventKind::DistortionLandmarkFound { player_id, .. }
         | GameplayEventKind::PurchaseCompleted { player_id }
         | GameplayEventKind::CargoChanged { player_id }
         | GameplayEventKind::BombPlaced { player_id }
@@ -1183,7 +1184,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::TombSeal { player_id, .. }
         | GameplayEventKind::LivingDark { player_id, .. }
         | GameplayEventKind::Drowned { player_id, .. }
-        | GameplayEventKind::Hollow { player_id, .. } => player_id,
+        | GameplayEventKind::Hollow { player_id, .. }
+        | GameplayEventKind::Distortion { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

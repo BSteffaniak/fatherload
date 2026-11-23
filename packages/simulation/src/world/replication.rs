@@ -237,6 +237,9 @@ pub enum SectionKey {
     /// The Hollow World (Wave 9): breakthroughs, exposure, Gravity Anchors, rides and the Sun
     /// Serpent's fight.
     Hollow,
+    /// The distortion strata (Wave 9, Descent VI part A): gazers' holds, rot pulses, the
+    /// mirror halls' twin cooldowns and the landmarks found.
+    Distortion,
 }
 
 impl SectionKey {
@@ -256,7 +259,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 26] = [
+    pub const SHARED: [Self; 27] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -284,6 +287,7 @@ impl SectionKey {
         Self::Crust,
         Self::Drowned,
         Self::Hollow,
+        Self::Distortion,
     ];
 }
 
@@ -318,6 +322,7 @@ pub enum SectionPayload {
     Drowned(Box<crate::drowned::DrownedState>),
     Expedition(Box<crate::expedition::ExpeditionState>),
     Hollow(Box<crate::hollow::Hollow>),
+    Distortion(Box<crate::distortion::Distortion>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -517,6 +522,7 @@ impl WorldState {
             expedition,
             drowned,
             hollow,
+            distortion,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -621,6 +627,7 @@ impl WorldState {
             SectionKey::Expedition => SectionPayload::Expedition(Box::new(expedition.clone())),
             SectionKey::Drowned => SectionPayload::Drowned(Box::new(drowned.clone())),
             SectionKey::Hollow => SectionPayload::Hollow(Box::new(hollow.clone())),
+            SectionKey::Distortion => SectionPayload::Distortion(Box::new(distortion.clone())),
         })
     }
 
@@ -801,6 +808,9 @@ impl WorldState {
             }
             (SectionKey::Hollow, SectionPayload::Hollow(hollow)) => {
                 self.hollow = *hollow;
+            }
+            (SectionKey::Distortion, SectionPayload::Distortion(distortion)) => {
+                self.distortion = *distortion;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

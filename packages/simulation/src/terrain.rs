@@ -337,6 +337,10 @@ pub enum TileKind {
     /// [`crate::hollow`]): sky stone and amber, jungle loam, ferns, trunks and tar, the isles'
     /// rock, sun rock and glass, the Sun Well and the inner sun.
     Hollow(crate::hollow::HollowTile),
+    /// A tile of the distortion strata (Wave 9, Descent VI part A of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
+    /// [`crate::distortion`]): mirror glass and mirror ore, flow stone, data ore, rotten blocks.
+    Warped(crate::distortion::WarpedTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -447,6 +451,7 @@ impl TileKind {
             Self::Crust(tile) => tile.name(),
             Self::Deep(tile) => tile.name(),
             Self::Hollow(tile) => tile.name(),
+            Self::Warped(tile) => tile.name(),
         }
     }
 
@@ -544,6 +549,7 @@ impl Tile {
             TileKind::Crust(tile) => CRUST_TILE_CODE_BASE | tile.code(),
             TileKind::Deep(tile) => crate::old_deep::DEEP_TILE_CODE_BASE | tile.code(),
             TileKind::Hollow(tile) => crate::hollow::HOLLOW_TILE_CODE_BASE | tile.code(),
+            TileKind::Warped(tile) => crate::distortion::WARPED_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1925,6 +1931,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Crust(tile) => tile.hardness(),
         TileKind::Deep(tile) => tile.hardness(),
         TileKind::Hollow(tile) => tile.hardness(),
+        TileKind::Warped(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1969,6 +1976,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Crust(tile) => tile.durability(),
         TileKind::Deep(tile) => tile.durability(),
         TileKind::Hollow(tile) => tile.durability(),
+        TileKind::Warped(tile) => tile.durability(),
     }
 }
 

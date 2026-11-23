@@ -42,6 +42,9 @@ pub enum StoryMomentKind {
     Remembered,
     /// One of the Drowned and Frozen's story beats found at its landmark (Wave 9).
     DeepLore,
+    /// A place of the Strange Layers found (Wave 9: the Looking-Glass Hall, Parallax Station,
+    /// the Shear Spire, the Dead Screen).
+    StrangePlace,
 }
 
 /// A card across the seat's view telling a moment of a story.

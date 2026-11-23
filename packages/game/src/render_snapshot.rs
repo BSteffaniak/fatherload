@@ -1173,6 +1173,8 @@ fn view_snapshot(
     );
     // The abyss darkens and greys with its pressure, frost rimes the view (Wave 9).
     fields = crate::rendering::drowned_hud::drowned_screen(world, player_id, fields);
+    // A gazer's gaze mirrors the seat's screen; a dead pixel's pulse rots it (Wave 9).
+    fields = world.distortion_view_fields(player_id, fields);
     if world.glow_light_at(focus_x, focus_y).is_some() {
         // The Glow Sea's dark is drawn in the world, cut back by its living lights (Wave 8):
         // the post-process does not darken the screen again round a lamp of its own.

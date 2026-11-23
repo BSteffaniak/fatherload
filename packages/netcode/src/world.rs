@@ -364,6 +364,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Hollow {
             what, player_id, ..
         } => (540 + what.code() as u32, player_id),
+        // The distortion strata (wave 9, Descent VI part A): 560-579.
+        GameplayEventKind::Distortion {
+            what, player_id, ..
+        } => (560 + what.code() as u32, player_id),
+        GameplayEventKind::DistortionLandmarkFound { player_id, .. } => (579, Some(player_id)),
     }
 }
 

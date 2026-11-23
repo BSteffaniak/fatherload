@@ -120,6 +120,21 @@
 //! | [`EnemyKind::Flarefly`] | creature (swarmer) | the Sunforge | tiny suns; one bursts into heat on a rig | shoot them first |
 //! | [`EnemyKind::SunSerpent`] | creature (boss) | the Sun Well | orbits the inner sun; its head glows before a lunge | break its four sun scales, then strike the head; hide from the sun's flares behind a pillar |
 //! | [`EnemyKind::SerpentCoil`] | creature (boss part) | the Sun Well | armoured coils; the glowing ones are sun scales | shoot the glowing scales |
+//!
+//! The distortion strata's creatures (Wave 9, Descent VI part A, [`crate::distortion`]);
+//! `world/enemies/distortion.rs` drives the ones the generic state machine cannot:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::MirrorTwin`] | creature (copy) | mirror halls: one steps out of the glass for a rig inside | stands at the rig's reflection and moves as it does, mirrored; fires the rig's shots back, mirrored | strand it on the rock its side of the axis, then shoot from where its mirrored shot hits a wall; bombs are not copied |
+//! | [`EnemyKind::Glassback`] | creature (armoured) | Mirror Strata floors | a mirrored face that throws frontal shots back | flank it, come from above, blasts |
+//! | [`EnemyKind::Gazer`] | creature (caster) | Mirror Strata | its eye opens: while it sees a rig, the rig's controls mirror | break its line of sight, or shoot it with your aim reversed |
+//! | [`EnemyKind::Tumbler`] | creature (roller) | Gravity Shear | rolls downhill, whichever way down is, and hits hard when fast | step off its line; lure it across a shear boundary |
+//! | [`EnemyKind::Lodestar`] | creature (gravity well) | Gravity Shear | a ring of pull: rigs drift toward it | thrust away, kill it from range |
+//! | [`EnemyKind::ShearMantis`] | creature (ambusher) | Gravity Shear ceilings | hangs still, drops along gravity when a rig passes under | look up (whichever way up is) |
+//! | [`EnemyKind::Glitchling`] | creature (teleporter) | Pixel Rot voids | a ghost of it flickers where it will land, then it is there | move off the ghost; shoot where it lands |
+//! | [`EnemyKind::Bitworm`] | creature (grid runner) | Pixel Rot voids | runs straight lines on the grid, turning square corners | step off its line |
+//! | [`EnemyKind::DeadPixel`] | creature (ranged) | Pixel Rot voids | a black square that pulses rot: a hit rots the view | dodge the slow pulse, blasts |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -326,6 +341,26 @@ pub enum EnemyKind {
     SunSerpent,
     /// One of the Sun Serpent's coils (the glowing ones carry sun scales).
     SerpentCoil,
+    // --- The distortion strata (Wave 9, Descent VI part A, `crate::distortion`), appended --
+    /// Mirror Strata: a rig's reflection stepped out of a mirror hall: it copies the rig's moves
+    /// and shots, mirrored about the hall's axis.
+    MirrorTwin,
+    /// Mirror Strata: a crab with a mirror for a face: shots hitting its face fly back.
+    Glassback,
+    /// Mirror Strata: a crystal eye on a stalk: while it sees a rig, the rig's controls mirror.
+    Gazer,
+    /// Gravity Shear: a boulder-backed roller that rolls downhill, whichever way down is.
+    Tumbler,
+    /// Gravity Shear: a floating knot of gravity that pulls rigs toward it.
+    Lodestar,
+    /// Gravity Shear: a mantis hanging from a ceiling that drops along gravity onto rigs.
+    ShearMantis,
+    /// Pixel Rot: a scrap of broken pixels that teleports between pixels of the rot grid.
+    Glitchling,
+    /// Pixel Rot: a segmented worm that runs the rot grid in straight lines.
+    Bitworm,
+    /// Pixel Rot: a black square that pulses rot (a hit rots the view).
+    DeadPixel,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -416,6 +451,11 @@ pub enum ShotKind {
     MindSpore,
     /// The Leviathan's pressure bubble: a slow, wobbling sphere of crushed water (Wave 9).
     PressureBubble,
+    /// A shard of mirror: a twin's copy of its rig's shot, or a shot a glassback threw back
+    /// (Wave 9).
+    MirrorShard,
+    /// A dead pixel's slow pulse of rot: a hit rots the rig's view for a while.
+    RotPulse,
 }
 
 impl ShotKind {
@@ -436,6 +476,8 @@ impl ShotKind {
             Self::Thorn => 340.0,
             Self::MindSpore => 120.0,
             Self::PressureBubble => 110.0,
+            Self::MirrorShard => 320.0,
+            Self::RotPulse => 105.0,
         }
     }
 
@@ -452,6 +494,8 @@ impl ShotKind {
             // A pressure bubble drifts up as it flies.
             Self::PressureBubble => -40.0,
             Self::MindSpore
+            | Self::MirrorShard
+            | Self::RotPulse
             | Self::Fireball
             | Self::Bolt
             | Self::Wispfire
@@ -479,6 +523,8 @@ impl ShotKind {
             Self::Spore => 5.0,
             Self::MindSpore => 7.0,
             Self::PressureBubble => 9.0,
+            Self::MirrorShard => 4.0,
+            Self::RotPulse => 8.0,
         }
     }
 
@@ -502,6 +548,8 @@ impl ShotKind {
             Self::Thorn => 6.5,
             Self::MindSpore => 4.0,
             Self::PressureBubble => 5.0,
+            Self::MirrorShard => 6.0,
+            Self::RotPulse => 3.5,
         }
     }
 
@@ -512,7 +560,7 @@ impl ShotKind {
         match self {
             Self::Acid | Self::CryptArrow => 2_500,
             Self::Fireball => 4_000,
-            Self::Bolt | Self::Arrow => 2_200,
+            Self::Bolt | Self::Arrow | Self::MirrorShard => 2_200,
             Self::Cannonball | Self::Wispfire | Self::Rubble => 3_500,
             Self::Hex => 4_500,
             Self::CryptHex => 3_200,
@@ -520,6 +568,7 @@ impl ShotKind {
             Self::Spore | Self::Thorn => 2_600,
             Self::MindSpore => 5_000,
             Self::PressureBubble => 4_500,
+            Self::RotPulse => 4_800,
         }
     }
 
@@ -685,7 +734,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 98] = [
+    pub const ALL: [Self; 107] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -784,6 +833,15 @@ impl EnemyKind {
         Self::Flarefly,
         Self::SunSerpent,
         Self::SerpentCoil,
+        Self::MirrorTwin,
+        Self::Glassback,
+        Self::Gazer,
+        Self::Tumbler,
+        Self::Lodestar,
+        Self::ShearMantis,
+        Self::Glitchling,
+        Self::Bitworm,
+        Self::DeadPixel,
     ];
 
     /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
@@ -804,6 +862,23 @@ impl EnemyKind {
                 | Self::Flarefly
                 | Self::SunSerpent
                 | Self::SerpentCoil
+        )
+    }
+
+    /// Whether this is one of the distortion strata's creatures (Wave 9, Descent VI part A).
+    #[must_use]
+    pub const fn is_distortion(self) -> bool {
+        matches!(
+            self,
+            Self::MirrorTwin
+                | Self::Glassback
+                | Self::Gazer
+                | Self::Tumbler
+                | Self::Lodestar
+                | Self::ShearMantis
+                | Self::Glitchling
+                | Self::Bitworm
+                | Self::DeadPixel
         )
     }
 
@@ -2466,6 +2541,144 @@ impl EnemyKind {
                 knockback: 220.0,
                 ..stats("Serpent Coil", Creature, Stationary, AttackStyle::Contact)
             },
+            // --- The distortion strata (Wave 9) ------------------------------------------
+            Self::MirrorTwin => EnemyStats {
+                // It moves as its rig does (`world/enemies/distortion.rs`), so its own speed
+                // and sight are only its leash's business.
+                radius: 9.0,
+                health: 46.0,
+                speed: 0.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 7.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.8,
+                knockback: 160.0,
+                ..stats("Mirror Twin", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Glassback => EnemyStats {
+                radius: 10.0,
+                health: 72.0,
+                speed: 56.0,
+                dash_speed: 240.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 12.0,
+                windup_millis: 650,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 3.5,
+                knockback: 210.0,
+                ..stats("Glassback", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Gazer => EnemyStats {
+                radius: 8.0,
+                health: 30.0,
+                speed: 0.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 4.0,
+                // The eye opens this long before its gaze takes hold.
+                windup_millis: 800,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.8,
+                knockback: 90.0,
+                ..stats("Gazer", Creature, Stationary, AttackStyle::Contact)
+            },
+            Self::Tumbler => EnemyStats {
+                radius: 10.0,
+                health: 92.0,
+                speed: 150.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 30.0,
+                contact_damage: 14.0,
+                windup_millis: 0,
+                cooldown_millis: 1_300,
+                attack_range_tiles: 0.8,
+                knockback: 240.0,
+                ..stats("Tumbler", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Lodestar => EnemyStats {
+                radius: 9.0,
+                health: 60.0,
+                speed: 46.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 20.0,
+                contact_damage: 8.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.8,
+                knockback: 120.0,
+                ..stats("Lodestar", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::ShearMantis => EnemyStats {
+                radius: 9.0,
+                health: 66.0,
+                speed: 78.0,
+                dash_speed: 280.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 18.0,
+                contact_damage: 13.0,
+                windup_millis: 420,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 3.0,
+                knockback: 200.0,
+                ..stats("Shear Mantis", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Glitchling => EnemyStats {
+                radius: 7.0,
+                health: 26.0,
+                speed: 70.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 28.0,
+                contact_damage: 6.0,
+                // The ghost shows where it lands this long before it is there.
+                windup_millis: 520,
+                cooldown_millis: 1_700,
+                attack_range_tiles: 0.7,
+                knockback: 110.0,
+                ..stats("Glitchling", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Bitworm => EnemyStats {
+                radius: 8.0,
+                health: 74.0,
+                speed: 118.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 30.0,
+                contact_damage: 10.0,
+                windup_millis: 0,
+                cooldown_millis: 900,
+                attack_range_tiles: 0.8,
+                knockback: 170.0,
+                ..stats("Bitworm", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::DeadPixel => EnemyStats {
+                radius: 10.0,
+                health: 84.0,
+                speed: 16.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 10.0,
+                contact_damage: 5.0,
+                windup_millis: 950,
+                cooldown_millis: 3_600,
+                attack_range_tiles: 10.0,
+                knockback: 100.0,
+                ..stats(
+                    "Dead Pixel",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::RotPulse, 1),
+                )
+            },
         }
     }
 
@@ -2542,6 +2755,7 @@ impl EnemyKind {
     #[must_use]
     #[allow(
         clippy::match_same_arms,
+        clippy::too_many_lines,
         reason = "one row per kind, like the stat table"
     )]
     pub const fn contact_half(self) -> (f32, f32) {
@@ -2656,6 +2870,16 @@ impl EnemyKind {
             Self::Flarefly => (7.0, 7.0),
             Self::SunSerpent => (30.0, 22.0),
             Self::SerpentCoil => (20.0, 20.0),
+            // The distortion strata (Wave 9), sized to their art; a twin is its rig's size.
+            Self::MirrorTwin => (15.0, 13.0),
+            Self::Glassback => (15.0, 11.0),
+            Self::Gazer => (9.0, 13.0),
+            Self::Tumbler => (12.0, 12.0),
+            Self::Lodestar => (12.0, 12.0),
+            Self::ShearMantis => (13.0, 10.0),
+            Self::Glitchling => (9.0, 9.0),
+            Self::Bitworm => (10.0, 10.0),
+            Self::DeadPixel => (11.0, 11.0),
         }
     }
 
@@ -2674,6 +2898,7 @@ impl EnemyKind {
     #[must_use]
     #[allow(
         clippy::match_same_arms,
+        clippy::too_many_lines,
         reason = "one arm per kind's quirk reads best"
     )]
     pub const fn resistance(self, kind: DamageKind) -> f32 {
@@ -2788,6 +3013,12 @@ impl EnemyKind {
             (Self::ShadeStalker | Self::Fangrunner | Self::Crestback, DamageKind::Fire) => 1.5,
             (Self::Skyneck | Self::SkyManta, DamageKind::Kinetic) => 0.6,
             (Self::LodeMite, DamageKind::Explosive) => 1.6,
+            // The distortion strata (Wave 9): glass shrugs off fire and cracks under blasts,
+            // a tumbler's stone back turns bullets, rot and glitches fold to shocks.
+            (Self::Glassback | Self::Gazer | Self::MirrorTwin, DamageKind::Explosive) => 1.5,
+            (Self::Glassback | Self::Gazer, DamageKind::Fire) => 0.5,
+            (Self::Tumbler, DamageKind::Kinetic) => 0.5,
+            (Self::Tumbler | Self::DeadPixel, DamageKind::Explosive) => 1.4,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -2906,6 +3137,7 @@ impl EnemyState {
                 | EnemyKind::RootSnapper
                 | EnemyKind::Angler
                 | EnemyKind::Hangclaw
+                | EnemyKind::ShearMantis
         );
         Self {
             kind,
@@ -3770,6 +4002,30 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 12 + extra);
             add(ItemKind::Material(StrategicResourceKind::StormGlass), 6);
             add(ItemKind::Artifact(ArtifactKind::RadiantShell), 1);
+        }
+        // The distortion strata (Wave 9): their layer resources.
+        EnemyKind::MirrorTwin => {
+            add(richer, 1 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::MirrorStrata), 2);
+        }
+        EnemyKind::Glassback | EnemyKind::Gazer => {
+            add(mineral, 1 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::MirrorStrata), 1);
+        }
+        EnemyKind::Tumbler | EnemyKind::Lodestar | EnemyKind::ShearMantis => {
+            add(mineral, 1 + extra);
+            if rare < 50 {
+                add(ItemKind::Layer(crate::descent::Stratum::GravityShear), 1);
+            }
+        }
+        EnemyKind::Glitchling => {
+            if rare < 60 {
+                add(ItemKind::Layer(crate::descent::Stratum::PixelRot), 1);
+            }
+        }
+        EnemyKind::Bitworm | EnemyKind::DeadPixel => {
+            add(richer, 1 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::PixelRot), 2);
         }
     }
     drops

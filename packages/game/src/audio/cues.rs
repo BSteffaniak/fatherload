@@ -297,6 +297,11 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SerpentRoar => Patch::SerpentRoar,
         SoundCue::FlareSwell => Patch::FlareSwell,
         SoundCue::AnchorThunk => Patch::AnchorThunk,
+        SoundCue::GlassChime => Patch::GlassChime,
+        SoundCue::MirrorShatter => Patch::MirrorShatter,
+        SoundCue::GravityGroan => Patch::GravityGroan,
+        SoundCue::GlitchBlip => Patch::GlitchBlip,
+        SoundCue::DataChirp => Patch::DataChirp,
     }
 }
 
@@ -368,6 +373,8 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::Boulder => SoundCue::GateRumble,
         ShotKind::Spore | ShotKind::MindSpore => SoundCue::SporePuff,
         ShotKind::PressureBubble => SoundCue::FluidRush,
+        ShotKind::MirrorShard => SoundCue::GlassChime,
+        ShotKind::RotPulse => SoundCue::GlitchBlip,
     }
 }
 
@@ -392,6 +399,24 @@ pub const fn drowned_cue(what: fatherload_simulation::drowned::DrownedEvent) -> 
         E::EelDragonDefeated => SoundCue::CreatureDeath,
         E::LeviathanDefeated | E::GateRewards => SoundCue::DeepClaimFanfare,
         E::LoreFound | E::CityReached => SoundCue::MerrowChime,
+    }
+}
+
+/// The sound of a distortion strata event (Wave 9; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn distortion_cue(what: fatherload_simulation::distortion::DistortionEvent) -> SoundCue {
+    use fatherload_simulation::distortion::DistortionEvent as E;
+    match what {
+        E::MirrorEntered | E::MirrorLeft | E::TwinAppeared | E::TwinFaded | E::Gazed => {
+            SoundCue::GlassChime
+        }
+        E::TwinFired => SoundCue::DartFire,
+        E::TwinBroken | E::GhostShattered | E::ShotReflected => SoundCue::MirrorShatter,
+        E::MirrorOreMined => SoundCue::ResonanceChime,
+        E::ShearEntered | E::LodestarPull | E::MantisDropped => SoundCue::GravityGroan,
+        E::RotDeepened | E::GlitchTeleport | E::RotBurst => SoundCue::GlitchBlip,
+        E::DataCore => SoundCue::DataChirp,
+        E::LandmarkFound => SoundCue::AnomalyHum,
     }
 }
 
@@ -927,6 +952,9 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::GlowmotherDefeated { .. } => Some(SoundCue::CreatureDeath),
         // The Living Dark (Wave 8).
         GameplayEventKind::LivingDark { what, .. } => Some(living_dark_cue(*what)),
+        // The distortion strata (Wave 9).
+        GameplayEventKind::Distortion { what, .. } => Some(distortion_cue(*what)),
+        GameplayEventKind::DistortionLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
@@ -1289,7 +1317,9 @@ mod tests {
             | GameplayEventKind::ExpeditionEcho { .. }
             | GameplayEventKind::AnomalyEntered { .. }
             | GameplayEventKind::Drowned { .. }
-            | GameplayEventKind::Hollow { .. } => {}
+            | GameplayEventKind::Hollow { .. }
+            | GameplayEventKind::Distortion { .. }
+            | GameplayEventKind::DistortionLandmarkFound { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2359,6 +2389,11 @@ mod tests {
             SoundCue::SerpentRoar,
             SoundCue::FlareSwell,
             SoundCue::AnchorThunk,
+            SoundCue::GlassChime,
+            SoundCue::MirrorShatter,
+            SoundCue::GravityGroan,
+            SoundCue::GlitchBlip,
+            SoundCue::DataChirp,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

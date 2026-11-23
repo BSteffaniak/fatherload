@@ -122,8 +122,11 @@ impl WorldState {
             drowned,
             // A leaving player's exposure, anchor and ride go with them (Wave 9).
             hollow,
+            // A leaving rig's gaze and rot go with it; halls and landmarks stay (Wave 9).
+            distortion,
         } = self;
         hollow.forget(player_id);
+        distortion.forget(player_id);
         logistics.forget_transient(player_id);
         crust.forget(player_id);
         old_deep.forget(player_id);

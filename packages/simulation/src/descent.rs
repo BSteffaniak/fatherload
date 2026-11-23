@@ -457,10 +457,12 @@ pub enum ScreenEffect {
     Vignette,
     Fog,
     Blur,
+    /// Sprites and the picture glitch: slow, slipping bands (Pixel Rot, Wave 9).
+    Glitch,
 }
 
 impl ScreenEffect {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Pixelate,
         Self::PaletteReduce,
         Self::Exposure,
@@ -475,6 +477,7 @@ impl ScreenEffect {
         Self::Vignette,
         Self::Fog,
         Self::Blur,
+        Self::Glitch,
     ];
 }
 
@@ -533,6 +536,20 @@ pub enum FieldRegions {
     },
     /// In `per_mille` of the cells the controls and the screen mirror (the Mirror Strata).
     Mirrored { per_mille: u16 },
+    /// Hand-shaped departures of the distortion strata (Wave 9, [`crate::distortion`]): the
+    /// mirror halls, the shear halls and the Shear Spire, the rot tiers.
+    Authored(AuthoredRegions),
+}
+
+/// Which authored departure a distortion stratum's field takes (Wave 9).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthoredRegions {
+    /// The Mirror Strata's mirror halls ([`crate::distortion::mirror`]).
+    MirrorHalls,
+    /// The Gravity Shear's shear halls and the Shear Spire ([`crate::distortion::shear`]).
+    ShearHalls,
+    /// Pixel Rot's tiers ([`crate::distortion::rot`]).
+    RotTiers,
 }
 
 /// Size (columns, rows) of a field region cell.
@@ -637,6 +654,13 @@ pub enum MusicCue {
     Sunforge,
     /// The Sun Serpent's fight.
     SunSerpent,
+    // --- The distortion strata (Wave 9, Descent VI part A), appended -------------------------
+    /// Mirror Strata: a palindrome: a glassy celesta line played forward, then backward.
+    MirrorStrata,
+    /// Gravity Shear: an arpeggio that turns over itself, low strings sliding in pitch.
+    GravityShear,
+    /// Pixel Rot: a chiptune that bit-crushes coarser the deeper the rig is.
+    PixelRot,
 }
 
 /// A stratum's ambience bed.
@@ -698,6 +722,13 @@ pub enum AmbienceCue {
     Updraft,
     /// The roar of the inner sun and ticking, cooling stone.
     Forge,
+    // --- The distortion strata (Wave 9), appended --------------------------------------------
+    /// Ringing glass: a bowed rim, far chimes, a reversed swell.
+    Glass,
+    /// A groaning, turning wind: the shear's flow.
+    Shear,
+    /// Digital hiss: static, stray bits, a dropping sample rate.
+    Static,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -734,10 +765,14 @@ pub enum LandmarkKind {
     /// the hanging isles, the forge sky and the Sun Well
     /// ([`crate::worldgen::descent::hollow`]).
     HollowWorld,
+    /// The distortion strata's set pieces (Wave 9): mirror halls and the Looking-Glass Hall,
+    /// shear halls and the Shear Spire, the rot grid and the Dead Screen
+    /// ([`crate::worldgen::descent::distortion`]).
+    Distortion,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -749,6 +784,7 @@ impl LandmarkKind {
         Self::LivingDark,
         Self::Drowned,
         Self::HollowWorld,
+        Self::Distortion,
     ];
 }
 

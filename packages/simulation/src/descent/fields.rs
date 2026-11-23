@@ -73,6 +73,7 @@ pub const fn screen_effect(effect: ScreenEffect) -> Option<field::ScreenEffect> 
         ScreenEffect::Vignette => field::ScreenEffect::Vignette,
         ScreenEffect::Fog => field::ScreenEffect::Fog,
         ScreenEffect::Blur => field::ScreenEffect::Blur,
+        ScreenEffect::Glitch => field::ScreenEffect::Glitch,
     })
 }
 
@@ -166,6 +167,9 @@ fn with_regions(
     let regions = stratum.def().field.regions;
     let share = match regions {
         FieldRegions::None => return profile,
+        FieldRegions::Authored(authored) => {
+            return crate::distortion::fields::authored(settings, authored, profile, column, row);
+        }
         FieldRegions::GravityTurns { per_mille, .. } | FieldRegions::Mirrored { per_mille } => {
             per_mille
         }
@@ -194,7 +198,7 @@ fn with_regions(
     };
     let weight = smoothstep(inside / FIELD_REGION_FEATHER_TILES);
     let departed = match regions {
-        FieldRegions::None => profile,
+        FieldRegions::None | FieldRegions::Authored(_) => profile,
         FieldRegions::GravityTurns { turns, .. } => {
             let pick = usize::try_from((roll >> 16) % turns.len().max(1) as u64).unwrap_or(0);
             let degrees = turns.get(pick).copied().unwrap_or(0);

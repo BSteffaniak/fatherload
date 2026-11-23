@@ -20,17 +20,19 @@ use crate::fluid::{
 };
 
 use super::{
-    AmbienceCue, Descent, DescentBoss, DescentKey, FieldProfile, FieldRegions, GateDef,
-    GateRequirement, LandmarkKind, LayerResource, MusicCue, OreCurve, Rgb, ScreenEffect,
+    AmbienceCue, AuthoredRegions, Descent, DescentBoss, DescentKey, FieldProfile, FieldRegions,
+    GateDef, GateRequirement, LandmarkKind, LayerResource, MusicCue, OreCurve, Rgb, ScreenEffect,
     ScreenEffectLevel, Stratum, StratumDef, StratumPalette,
 };
 
 use DescentKey as Key;
 use EnemyKind::{
-    AcidLancer, AcidSpitter, AncientGuardian, Angler, BarkBeetle, BilePolyp, Burrower, CapCrawler,
-    CaveBat, FossilEel, GlowGnat, GlowGrub, GlowJelly, HiveDrone, HiveSoldier, JetRay, Leechling,
-    LureFish, MagmaSalamander, MagmaWisp, MawWorm, MiningDrone, PistonWarden, PrismMoth, RockMimic,
-    RogueExcavator, RootSnapper, SentryTurret, Shellback, SporePuffer, ThornWisp, VoidJelly,
+    AcidLancer, AcidSpitter, AncientGuardian, Angler, BarkBeetle, BilePolyp, Bitworm, Burrower,
+    CapCrawler, CaveBat, DeadPixel, FossilEel, Gazer, Glassback, Glitchling, GlowGnat, GlowGrub,
+    GlowJelly, HiveDrone, HiveSoldier, JetRay, Leechling, Lodestar, LureFish, MagmaSalamander,
+    MagmaWisp, MawWorm, MiningDrone, MirrorTwin, PistonWarden, PrismMoth, RockMimic,
+    RogueExcavator, RootSnapper, SentryTurret, ShearMantis, Shellback, SporePuffer, ThornWisp,
+    Tumbler, VoidJelly,
 };
 // The Hollow World's creatures (Wave 9).
 use EnemyKind::{
@@ -1180,62 +1182,80 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::MirrorStrata,
         descent: Descent::StrangeLayers,
         name: "Mirror Strata",
-        signature: "Screen and controls mirror in zones; mirror twins copy your moves.",
+        signature: "Mirror halls flip the screen and the controls; mirror twins copy your \
+                    moves and shots; mirror ore lies in pairs, one real, one reflection.",
         share_per_mille: 170,
         host_band: deep(DeepStratum::CrystalFaults),
+        soft: TileKind::Stone,
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(232, 236, 244),
-            Rgb(140, 148, 164),
-            Rgb(60, 64, 76),
-            Some(Rgb(255, 255, 255)),
+            Rgb(198, 202, 234),
+            Rgb(124, 130, 156),
+            Rgb(30, 32, 48),
+            Some(Rgb(200, 236, 255)),
         ),
-        ores: &[ore(Diamond, 500, 800, 50), ore(Silver, 500, 800, 50)],
+        ores: &[
+            ore(Silver, 150, 450, 40),
+            ore(Diamond, 500, 600, 45),
+            ore(Platinum, 850, 500, 35),
+        ],
         layer_resource: resource("Mirror Ore", StrategicResourceKind::CrystalLens),
-        creatures: &[(RockMimic, 5), (CaveBat, 3)],
-        hazards: &[(Explosive, 5), (Pressure, 2)],
+        // Twins never roam (they step out of the halls); the weight names them for the probe.
+        creatures: &[(Glassback, 5), (Gazer, 3), (MirrorTwin, 1)],
+        hazards: &[(Explosive, 3), (Pressure, 3)],
         field: FieldProfile {
-            regions: FieldRegions::Mirrored { per_mille: 400 },
+            screen: &[screen(ScreenEffect::ColourGrade, 120)],
+            regions: FieldRegions::Authored(AuthoredRegions::MirrorHalls),
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Strange,
+        music: MusicCue::MirrorStrata,
+        ambience: AmbienceCue::Glass,
         landmarks: &[
-            LandmarkKind::AnomalyRoom,
             LandmarkKind::Outpost,
+            LandmarkKind::Distortion,
+            LandmarkKind::AnomalyRoom,
             LandmarkKind::Prefabs,
         ],
-        variants: &["Glass Halls", "Twin Galleries"],
+        variants: &["Glass Halls", "Twin Galleries", "Silver Seams"],
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::GravityShear,
         descent: Descent::StrangeLayers,
         name: "Gravity Shear",
-        signature: "Gravity rotates 90 and 180 degrees in regions; walk walls and ceilings.",
+        signature: "Gravity turns 90 and then 180 degrees in shear halls; turn the rig with its \
+                    thrusters and walk the walls and ceilings.",
         share_per_mille: 170,
         host_band: deep(DeepStratum::VoidGeodeFields),
+        soft: TileKind::Stone,
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(200, 60, 130),
-            Rgb(124, 50, 120),
-            Rgb(52, 18, 52),
-            Some(Rgb(255, 160, 255)),
+            Rgb(156, 82, 142),
+            Rgb(102, 56, 108),
+            Rgb(38, 16, 44),
+            Some(Rgb(255, 176, 244)),
         ),
-        ores: &[ore(Mythril, 500, 800, 50), ore(Platinum, 400, 600, 30)],
+        ores: &[
+            ore(Platinum, 250, 500, 45),
+            ore(Mythril, 650, 500, 45),
+            ore(Uranium, 900, 400, 25),
+        ],
         layer_resource: resource("Shear Stone", StrategicResourceKind::VoidGlass),
-        creatures: &[(CaveBat, 4), (MiningDrone, 3), (RockMimic, 2)],
-        hazards: &[(Pressure, 6), (Explosive, 2)],
+        creatures: &[(Tumbler, 4), (Lodestar, 3), (ShearMantis, 3)],
+        hazards: &[(Pressure, 5), (Explosive, 2)],
         field: FieldProfile {
-            screen: &[screen(ScreenEffect::Wobble, 150)],
+            screen: &[screen(ScreenEffect::ColourGrade, 100)],
             free_rotation: true,
-            regions: FieldRegions::GravityTurns {
-                per_mille: 450,
-                turns: &[90, 180, 270],
-            },
+            regions: FieldRegions::Authored(AuthoredRegions::ShearHalls),
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Strange,
-        landmarks: STRANGE,
+        music: MusicCue::GravityShear,
+        ambience: AmbienceCue::Shear,
+        landmarks: &[
+            LandmarkKind::Distortion,
+            LandmarkKind::AnomalyRoom,
+            LandmarkKind::Prefabs,
+        ],
         variants: &["Turned Halls", "Shear Lines"],
         ..TEMPLATE
     },
@@ -1243,30 +1263,37 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::PixelRot,
         descent: Descent::StrangeLayers,
         name: "Pixel Rot",
-        signature: "The deeper you go, the lower-resolution the world gets.",
+        signature: "The deeper you go, the lower the resolution: bigger pixels, fewer colours, \
+                    glitching sprites and rock quantized into blocks.",
         share_per_mille: 170,
         host_band: deep(DeepStratum::AncientMachineLayer),
+        soft: TileKind::Stone,
+        hard: TileKind::HardRock,
         palette: palette(
-            Rgb(64, 200, 96),
-            Rgb(40, 148, 68),
-            Rgb(10, 50, 24),
-            Some(Rgb(255, 60, 255)),
+            Rgb(70, 178, 104),
+            Rgb(40, 124, 78),
+            Rgb(8, 34, 22),
+            Some(Rgb(255, 72, 255)),
         ),
-        ores: &[ore(Uranium, 500, 800, 40), ore(Mythril, 500, 600, 40)],
+        ores: &[
+            ore(Uranium, 200, 450, 40),
+            ore(Mythril, 550, 500, 45),
+            ore(Diamond, 850, 450, 30),
+        ],
         layer_resource: resource("Data Ore", StrategicResourceKind::MachineRelic),
-        creatures: &[(MiningDrone, 4), (SentryTurret, 2), (CaveBat, 2)],
-        hazards: &[(Explosive, 6), (MagmaVent, 2)],
+        creatures: &[(Glitchling, 5), (Bitworm, 3), (DeadPixel, 2)],
+        hazards: &[(Explosive, 4), (MagmaVent, 2)],
         field: FieldProfile {
-            screen: &[
-                screen(ScreenEffect::Pixelate, 400),
-                screen(ScreenEffect::PaletteReduce, 400),
-            ],
-            deepening: true,
+            regions: FieldRegions::Authored(AuthoredRegions::RotTiers),
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Strange,
-        landmarks: STRANGE,
+        music: MusicCue::PixelRot,
+        ambience: AmbienceCue::Static,
+        landmarks: &[
+            LandmarkKind::Distortion,
+            LandmarkKind::AnomalyRoom,
+            LandmarkKind::Prefabs,
+        ],
         variants: &["Low Res", "Glitch Fields"],
         ..TEMPLATE
     },

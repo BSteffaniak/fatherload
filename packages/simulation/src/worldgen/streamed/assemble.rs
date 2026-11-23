@@ -321,6 +321,29 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The distortion strata (Wave 9, Descent VI part A): mirror halls, shear halls, the
+        // rot grid and their landmarks, over the Descent landmarks (which they keep clear of).
+        use crate::worldgen::descent::distortion;
+        if distortion::touches_rows(&ctx.settings, layout, &rect) {
+            let plan = distortion::plan_for(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = distortion::distortion_tile(
+                    &ctx.settings,
+                    layout,
+                    &plan,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     if ctx.descent.is_some() {
         // The Sinkhole (V11, Wave 8): the core and the funnel over Descent I's gate chamber.
         super::crust_pass::apply_sinkhole(ctx, &mut chunk_kinds);

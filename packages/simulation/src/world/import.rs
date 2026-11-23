@@ -223,6 +223,7 @@ impl WorldState {
             expedition: crate::expedition::ExpeditionState::default(),
             drowned: crate::drowned::DrownedState::default(),
             hollow: crate::hollow::Hollow::default(),
+            distortion: crate::distortion::Distortion::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

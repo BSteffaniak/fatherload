@@ -142,6 +142,17 @@ impl Material {
                 | fatherload_simulation::sky::SkyTile::TempleKeystone
                 | fatherload_simulation::sky::SkyTile::TempleCache => Self::Hard,
             },
+            // The distortion strata (Wave 9): glass and ore ring, plates and blocks grind.
+            TileKind::Warped(tile) => match tile {
+                fatherload_simulation::distortion::WarpedTile::MirrorGlass
+                | fatherload_simulation::distortion::WarpedTile::MirrorOre
+                | fatherload_simulation::distortion::WarpedTile::MirrorGhost
+                | fatherload_simulation::distortion::WarpedTile::DataOre
+                | fatherload_simulation::distortion::WarpedTile::ScreenPixel => Self::Ore,
+                fatherload_simulation::distortion::WarpedTile::ShearStone
+                | fatherload_simulation::distortion::WarpedTile::ShearPlate
+                | fatherload_simulation::distortion::WarpedTile::RotBlock => Self::Hard,
+            },
             // The Old Deep (Wave 8): shale and amber give, crystal and gems ring, the rest grinds.
             TileKind::Deep(tile) => match tile {
                 fatherload_simulation::old_deep::DeepTile::Shale
@@ -294,6 +305,12 @@ enum SeatLoop {
     JungleAmbience,
     UpdraftAmbience,
     ForgeAmbience,
+    // The distortion strata's beds (Wave 9): Pixel Rot's in three bit depths.
+    MirrorMusic,
+    ShearMusic,
+    RotMusic,
+    RotMusicCrushed,
+    RotMusicRuined,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -922,6 +939,7 @@ impl Director {
         self.living_dark_music(live, listener, snapshot);
         self.drowned_music(live, listener, snapshot);
         self.hollow_music(live, listener, snapshot);
+        self.distortion_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1622,6 +1640,70 @@ impl Director {
         }
     }
 
+    /// The distortion strata's beds (Wave 9): the Mirror Strata's palindrome, the Gravity
+    /// Shear's turning arpeggio, and Pixel Rot's chiptune, crossfaded from clean to crushed to
+    /// ruined as the rot tier deepens (`distortion_bed_mix`).
+    fn distortion_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::descent::MusicCue;
+        let terrain = snapshot.terrain;
+        let settings = terrain.settings();
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let (cue, tier) = if settings.generator.has_descents() {
+            let layout = fatherload_simulation::descent::fields::cached_layout(settings);
+            (
+                Some(terrain.stratum_at(tile).def().music),
+                fatherload_simulation::distortion::rot::tier_at(&layout, tile.y),
+            )
+        } else {
+            (None, None)
+        };
+        let (clean, crushed, ruined) = distortion_bed_mix(tier);
+        let rot = cue == Some(MusicCue::PixelRot);
+        let beds = [
+            (
+                SeatLoop::MirrorMusic,
+                Patch::MirrorLoop,
+                if cue == Some(MusicCue::MirrorStrata) {
+                    0.4
+                } else {
+                    0.0
+                },
+            ),
+            (
+                SeatLoop::ShearMusic,
+                Patch::ShearLoop,
+                if cue == Some(MusicCue::GravityShear) {
+                    0.4
+                } else {
+                    0.0
+                },
+            ),
+            (
+                SeatLoop::RotMusic,
+                Patch::RotLoop,
+                if rot { 0.36 * clean } else { 0.0 },
+            ),
+            (
+                SeatLoop::RotMusicCrushed,
+                Patch::RotLoopCrushed,
+                if rot { 0.36 * crushed } else { 0.0 },
+            ),
+            (
+                SeatLoop::RotMusicRuined,
+                Patch::RotLoopRuined,
+                if rot { 0.36 * ruined } else { 0.0 },
+            ),
+        ];
+        for (slot, patch, gain) in beds {
+            self.loop_command(live, listener, slot, patch, (gain, 0.0, 1.0, OPEN_CUTOFF));
+        }
+    }
+
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
     /// one, the guardian's theme instead while its guardian is awake. Crypts (T29) bring their
     /// own.
@@ -1957,6 +2039,19 @@ fn nearest_lava(terrain: &fatherload_simulation::terrain::Terrain, x: f32, y: f3
         }
     }
     nearest
+}
+
+/// How much of Pixel Rot's clean, crushed and ruined beds plays at rot tier `tier` (`None`
+/// above Pixel Rot): the bed bit-crushes deeper, tier by tier.
+#[must_use]
+pub const fn distortion_bed_mix(tier: Option<u8>) -> (f32, f32, f32) {
+    match tier {
+        None | Some(0) => (1.0, 0.0, 0.0),
+        Some(1) => (0.5, 0.5, 0.0),
+        Some(2) => (0.0, 1.0, 0.0),
+        Some(3) => (0.0, 0.5, 0.5),
+        Some(_) => (0.0, 0.0, 1.0),
+    }
 }
 
 #[cfg(test)]

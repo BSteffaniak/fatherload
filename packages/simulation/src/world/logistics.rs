@@ -1382,6 +1382,9 @@ impl WorldState {
         if !self.logistics.rules.is_descent() {
             return;
         }
+        // The distortion strata (Wave 9): mirror ore's mythril, a reflection's shards, data
+        // cores.
+        self.distortion_dig_extras(player_id, target, mined);
         let settings = *self.terrain.settings();
         if matches!(mined, TileKind::Ore(_)) {
             let descent = descent_index_at_row(&settings, target.y);

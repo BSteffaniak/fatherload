@@ -63,7 +63,7 @@ pub const OUTPOST_NAMES: [&str; 8] = [
     "Hive Gate Outpost",
     "Merrow Air Dock",
     "Sunward Camp",
-    "Prism Relay",
+    "Parallax Station",
     "Megacity Archive Post",
     "Heart's Edge",
 ];

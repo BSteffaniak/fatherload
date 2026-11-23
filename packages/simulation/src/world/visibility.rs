@@ -97,6 +97,7 @@ impl WorldState {
             old_deep: _,
             living_dark: _,
             living_schedule: _,
+            distortion: _,
             expedition: _,
             drowned: _,
             hollow: _,

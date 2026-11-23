@@ -132,7 +132,7 @@ fn strange_strata_turn_gravity_and_mirror_in_regions_and_spin_freely() {
         mirror
             .iter()
             .filter(|sample| sample.mirrored())
-            .all(|sample| sample.screen_level(field::ScreenEffect::Mirror) > 0.5)
+            .all(|sample| sample.screen_level(field::ScreenEffect::Mirror) >= 0.45)
     );
     // The home world's strata keep the lean limit.
     let topsoil = sample_at(

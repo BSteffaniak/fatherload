@@ -67,6 +67,7 @@ use crate::{
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
 mod crypt;
+mod distortion;
 mod drowned;
 pub(super) mod hollow;
 mod living;
@@ -74,6 +75,7 @@ mod sky;
 mod tomb;
 
 pub use crypt::SLAM_REACH;
+pub(super) use distortion::distortion_event;
 pub use sky::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
 pub use tomb::{GuardianMove, MAX_BATS, MAX_RAISED, guardian_move, is_tomb_guardian};
 
@@ -1147,19 +1149,27 @@ impl WorldState {
         now: SimulationTick,
         output: &mut TickOutput,
     ) {
-        let Some((start_body, start_state)) = self.enemy_parts(id) else {
+        let Some(start_kind) = self.enemy_parts(id).map(|(_, state)| state.kind) else {
             return;
         };
         // Crypt creatures (WP-TOMBS T29) move on the room grid seen from above.
-        if start_state.kind.is_crypt() {
+        if start_kind.is_crypt() {
             self.advance_crypt_enemy(id, now, output);
             return;
         }
         // The Hollow World (Wave 9) carries a ridden crestback, the Sun Serpent and clinging
         // lode mites itself (`world/hollow.rs`, `world/enemies/hollow.rs`).
-        if start_state.kind.is_hollow() && self.hollow_holds(id, start_state.kind) {
+        if start_kind.is_hollow() && self.hollow_holds(id, start_kind) {
             return;
         }
+        // The distortion strata's creatures (Wave 9): twins, rollers, teleporters, grid
+        // runners, hanging mantises and gazers drive themselves; a lodestar pulls first.
+        if start_kind.is_distortion() && self.advance_distortion_creature(id, now, output) {
+            return;
+        }
+        let Some((start_body, start_state)) = self.enemy_parts(id) else {
+            return;
+        };
         let mut body = start_body;
         let mut state = start_state;
         let dt = self.timing.delta_seconds;
@@ -2410,7 +2420,7 @@ impl WorldState {
                 ((player.x - body.x).hypot(player.y - body.y) <= reach).then_some(*player_id)
             });
             if let Some(player_id) = victim {
-                let _landed = self.strike_rig(
+                let landed = self.strike_rig(
                     player_id,
                     shot.damage,
                     (body.x, body.y),
@@ -2419,6 +2429,10 @@ impl WorldState {
                     now,
                     output,
                 );
+                // A dead pixel's rot pulse rots the view of the rig it hits (Wave 9).
+                if landed && shot.kind == ShotKind::RotPulse {
+                    self.rot_burst(player_id, now, output);
+                }
                 if !self.damage_immune() {
                     self.burst_spore_shot(shot.kind, body.x, body.y, output);
                     self.entities.despawn(id);
@@ -2465,6 +2479,14 @@ impl WorldState {
         };
         // The Mycelial Mind cannot be hurt while its nerve nodes live (Wave 8).
         if self.mind_shields(state.kind) {
+            return DamageOutcome::Ignored;
+        }
+        // A glassback's mirrored face throws a frontal shot back at its shooter (Wave 9).
+        if let Some(at) =
+            self.glassback_reflects(&body, &state, damage.source.player(), damage.kind)
+        {
+            state.last_attacker = damage.source.player();
+            self.reflect_shot(id, &body, &state, at, output);
             return DamageOutcome::Ignored;
         }
         let now = self.simulation_tick.next();
@@ -2595,6 +2617,11 @@ impl WorldState {
         if state.kind.is_hollow() {
             // Bladders burst, the serpent falls (Wave 9).
             self.hollow_kill(state.kind, &body, state.last_attacker, output);
+        }
+        if state.kind.is_distortion() {
+            // A twin's hall rests (Wave 9).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.distortion_kill(state.kind, state.home, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2825,5 +2852,14 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::Flarefly
         | EnemyKind::SunSerpent
         | EnemyKind::SerpentCoil => false,
+        // The distortion strata (Wave 9): flyers roost, floor-dwellers nest; twins only ever
+        // step out of a mirror hall.
+        EnemyKind::Lodestar | EnemyKind::Glitchling | EnemyKind::Bitworm | EnemyKind::DeadPixel => {
+            tags.swarmers || tags.nests
+        }
+        EnemyKind::Glassback | EnemyKind::Gazer | EnemyKind::Tumbler | EnemyKind::ShearMantis => {
+            tags.nests
+        }
+        EnemyKind::MirrorTwin => false,
     }
 }

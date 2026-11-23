@@ -399,7 +399,12 @@ impl PostProcess {
             ),
             (
                 self.locations.e,
-                vec4([level(ScreenEffect::Blur), 0.0, 0.0, 0.0]),
+                vec4([
+                    level(ScreenEffect::Blur),
+                    level(ScreenEffect::Glitch),
+                    fx.glitch_step.floor(),
+                    0.0,
+                ]),
                 4,
             ),
         ];
@@ -499,7 +504,7 @@ uniform vec4 uB;
 uniform vec4 uC;
 // fog, wobble phase (cycles), light, one art pixel (texels)
 uniform vec4 uD;
-// blur (Wave 8 spore clouds), unused, unused, unused
+// blur (Wave 8 spore clouds), glitch (Wave 9 Pixel Rot), glitch step, unused
 uniform vec4 uE;
 uniform vec3 uGrade;
 uniform vec3 uFogColor;
@@ -525,6 +530,19 @@ void main() {
         float t = uD.y * 6.2831853;
         uv.x += sin(uv.y * 36.0 + t) * 0.004 * uC.x;
         uv.y += sin(uv.x * 22.0 + t * 0.7) * 0.0025 * uC.x;
+    }
+    // Glitch: a few horizontal slices of the picture slip sideways, picked anew each slow step
+    // (at most 1.5 a second), with a little colour split inside them. No brightness change.
+    float glitchSplit = 0.0;
+    if (uE.y > 0.0) {
+        float rows = 18.0;
+        float band = floor(uv.y * rows);
+        float seed = fract(sin(band * 12.9898 + uE.z * 78.233) * 43758.5453);
+        if (seed < 0.25 * uE.y + 0.05) {
+            float shift = (fract(seed * 91.7) - 0.5) * 0.06 * uE.y;
+            uv.x = uv.x + shift;
+            glitchSplit = 0.004 * uE.y;
+        }
     }
     // Pixelation: blocks of whole art pixels.
     if (uA.x > 0.0) {
@@ -556,6 +574,10 @@ void main() {
         sum += fetch(suv + vec2(0.0, r.y * 2.0));
         sum += fetch(suv - vec2(0.0, r.y * 2.0));
         colour = mix(colour, sum / 13.0, clamp(uE.x * 1.3, 0.0, 1.0));
+    }
+    if (glitchSplit > 0.0) {
+        colour.r = fetch(suv + vec2(glitchSplit, 0.0)).r;
+        colour.b = fetch(suv - vec2(glitchSplit, 0.0)).b;
     }
     // Chromatic aberration: red and blue split outward.
     if (uB.z > 0.0) {

@@ -26,8 +26,9 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
-        crypt as crypt_art, drowned as drowned_art, enemies as art, hollow as hollow_art,
-        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
+        crypt as crypt_art, distortion as warp_art, drowned as drowned_art, enemies as art,
+        hollow as hollow_art, living as living_art, moon as moon_art, old_deep as deep_art,
+        tomb as tomb_art,
     },
 };
 
@@ -35,6 +36,7 @@ use super::{ART, Pen, fx::disc, snap};
 
 /// The sprite of an enemy kind (exhaustive: a new kind needs art).
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "one row per kind")]
 pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
     match kind {
         EnemyKind::CaveBat => &art::CAVE_BAT,
@@ -140,6 +142,16 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Flarefly => &hollow_art::FLAREFLY,
         EnemyKind::SunSerpent => &hollow_art::SUN_SERPENT,
         EnemyKind::SerpentCoil => &hollow_art::SERPENT_COIL,
+        // The distortion strata (Wave 9).
+        EnemyKind::MirrorTwin => &warp_art::MIRROR_TWIN,
+        EnemyKind::Glassback => &warp_art::GLASSBACK,
+        EnemyKind::Gazer => &warp_art::GAZER,
+        EnemyKind::Tumbler => &warp_art::TUMBLER,
+        EnemyKind::Lodestar => &warp_art::LODESTAR,
+        EnemyKind::ShearMantis => &warp_art::SHEAR_MANTIS,
+        EnemyKind::Glitchling => &warp_art::GLITCHLING,
+        EnemyKind::Bitworm => &warp_art::BITWORM,
+        EnemyKind::DeadPixel => &warp_art::DEAD_PIXEL,
     }
 }
 
@@ -162,6 +174,8 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::Thorn => &living_art::SHOT_THORN,
         ShotKind::MindSpore => &living_art::SHOT_MIND_SPORE,
         ShotKind::PressureBubble => &drowned_art::SHOT_PRESSURE_BUBBLE,
+        ShotKind::MirrorShard => &warp_art::SHOT_MIRROR_SHARD,
+        ShotKind::RotPulse => &warp_art::SHOT_ROT_PULSE,
     }
 }
 
@@ -592,6 +606,54 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
             fatherload_simulation::world::SERPENT_CRACKED_PHASE => 2,
             _ => 1,
         },
+        // The distortion strata (Wave 9): a twin's thrust flickers as its rig's does, the
+        // glassback strides and rears, the gazer's eye opens with its wind-up and stares while
+        // it hunts, a tumbler's frames turn with its roll, the mantis hangs then strikes with
+        // its scythes open, a glitchling never holds a frame, a dead pixel pulses before a
+        // pulse.
+        EnemyKind::MirrorTwin => usize::from(entity.body.velocity_y < -20.0),
+        EnemyKind::Glassback => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 6.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Gazer => match state.mode {
+            EnemyMode::Chase | EnemyMode::Windup | EnemyMode::Strike | EnemyMode::Recover => {
+                if state.volley == 0 {
+                    1
+                } else {
+                    2
+                }
+            }
+            _ => 0,
+        },
+        EnemyKind::Tumbler => {
+            let speed = entity.body.velocity_x.hypot(entity.body.velocity_y);
+            let turns = (seconds * speed / 18.0).abs() as usize;
+            let step = turns % 4;
+            if state.facing < 0 {
+                (4 - step) % 4
+            } else {
+                step
+            }
+        }
+        EnemyKind::ShearMantis => match state.mode {
+            EnemyMode::Dormant => 0,
+            EnemyMode::Windup | EnemyMode::Strike => 2,
+            _ if moving => ((phase * 5.0) as usize) % 2,
+            _ => 0,
+        },
+        EnemyKind::Glitchling => {
+            // A hashed frame every tenth of a second: it jitters, never animates smoothly.
+            let step = (seconds * 10.0) as u64 + u64::from(state.seed);
+            usize::try_from(step.wrapping_mul(0x9E37_79B9) >> 7).unwrap_or(0) % 3
+        }
+        EnemyKind::DeadPixel => usize::from(state.mode == EnemyMode::Windup),
+        EnemyKind::Lodestar | EnemyKind::Bitworm => sprite.frame_at(phase),
     }
 }
 
@@ -676,6 +738,10 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::Fangrunner
             | EnemyKind::CinderDrake
             | EnemyKind::SunSerpent
+            // The distortion strata's (Wave 9) asymmetric kinds.
+            | EnemyKind::MirrorTwin
+            | EnemyKind::Glassback
+            | EnemyKind::ShearMantis
     )
 }
 
@@ -872,6 +938,15 @@ fn draw_enemy(
         EnemyKind::MindNode => {
             let pulse = ((seconds * 3.0).sin() * 2.0) as i32;
             disc(draw, x, y + ART, 11 + pulse, with_alpha(LIME, 34));
+        }
+        // The distortion strata (Wave 9): their tells and glows.
+        EnemyKind::MirrorTwin
+        | EnemyKind::Gazer
+        | EnemyKind::Lodestar
+        | EnemyKind::Glitchling
+        | EnemyKind::Bitworm
+        | EnemyKind::DeadPixel => {
+            super::distortion::draw_creature_tell(draw, entity, state, (x, y), seconds);
         }
         EnemyKind::ShadowHound => {
             for puff in 0..3 {
@@ -1273,7 +1348,8 @@ fn draw_shot(
         ShotKind::Hex => VIOLET,
         ShotKind::CryptHex => LAVENDER,
         ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
-        ShotKind::PressureBubble => SKY_LIGHT,
+        ShotKind::PressureBubble | ShotKind::MirrorShard => SKY_LIGHT,
+        ShotKind::RotPulse => PINK,
     };
     disc(
         draw,

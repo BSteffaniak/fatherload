@@ -177,6 +177,8 @@ impl WorldState {
             // The Hollow World's state is ticks, meters, entity ids and world times; the
             // serpent's lunge mark is moved with the frame below.
             hollow,
+            // Distortion state is ticks and tile keys (Wave 9).
+            distortion: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         player_template.reframe(shift);

@@ -252,6 +252,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::PointsOfInterest
                     | LandmarkGenerator::CaveEcosystems
                     | LandmarkGenerator::Villages
+                    | LandmarkGenerator::Distortion
                     | LandmarkGenerator::TombSites
                     | LandmarkGenerator::LivingDark
                     | LandmarkGenerator::Drowned
@@ -311,6 +312,15 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                         | MusicCue::MegafaunaJungle
                         | MusicCue::UpsideDownIsles
                         | MusicCue::Sunforge
+                ),
+                "{stratum:?}"
+            );
+        } else if crate::distortion::is_distortion(stratum) {
+            // The distortion strata's own beds (Wave 9).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::MirrorStrata | MusicCue::GravityShear | MusicCue::PixelRot
                 ),
                 "{stratum:?}"
             );

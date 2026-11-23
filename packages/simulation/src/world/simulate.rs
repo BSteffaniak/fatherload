@@ -57,9 +57,12 @@ impl WorldState {
             if let Some(controls) = input.controls.map(|controls| {
                 if on_foot {
                     ControlState::default().with_weapon(sentry.unwrap_or_default())
-                } else if self.fields_for(player_id).mirrored() {
-                    // A mirror field (F9) swaps left and right for the rig's steering.
-                    controls.mirrored()
+                } else if self.fields_for(player_id).mirrored() || self.distortion_gazed(player_id)
+                {
+                    // A mirror field (F9) swaps left and right for the rig's steering; the
+                    // Mirror Strata's halls and gazers mirror its aim too, as the screen does
+                    // (Wave 9).
+                    self.mirror_controls(player_id, controls)
                 } else {
                     controls
                 }
@@ -549,6 +552,8 @@ impl WorldState {
         // The Drowned and Frozen (Wave 9): refreezing ice, clams, frost, pressure, geysers,
         // sonar, lore, the eel-dragon and the Leviathan.
         self.advance_drowned(next_tick, &mut output);
+        // The distortion strata (Wave 9): mirror halls and their twins, gazes, rot, landmarks.
+        self.advance_distortion(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

@@ -59,6 +59,9 @@ mod descent_tests;
 #[cfg(test)]
 mod determinism_tests;
 mod discovery;
+mod distortion;
+#[cfg(test)]
+mod distortion_tests;
 #[cfg(test)]
 mod drill_tests;
 #[cfg(test)]
@@ -494,6 +497,11 @@ pub struct WorldState {
     /// fight.
     #[serde(default)]
     hollow: crate::hollow::Hollow,
+    /// The distortion strata's shared state (Wave 9, Descent VI part A, see
+    /// [`crate::distortion`]): gazers' holds, rot pulses, the mirror halls' twin cooldowns and
+    /// the landmarks found.
+    #[serde(default)]
+    distortion: crate::distortion::Distortion,
 }
 
 impl WorldState {

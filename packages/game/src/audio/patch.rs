@@ -14,6 +14,7 @@
 
 use std::f32::consts::TAU;
 
+mod distortion;
 mod drowned;
 mod hollow;
 mod old_deep;
@@ -437,6 +438,18 @@ patches! {
     JungleAmbienceLoop => "loop_jungle_ambience",
     UpdraftLoop => "loop_updraft",
     ForgeAmbienceLoop => "loop_forge_ambience",
+    // The distortion strata (wave 9, Descent VI part A), appended at the end so every earlier
+    // patch keeps its seeds.
+    GlassChime => "glass_chime",
+    MirrorShatter => "mirror_shatter",
+    GravityGroan => "gravity_groan",
+    GlitchBlip => "glitch_blip",
+    DataChirp => "data_chirp",
+    MirrorLoop => "loop_mirror_strata",
+    ShearLoop => "loop_gravity_shear",
+    RotLoop => "loop_pixel_rot",
+    RotLoopCrushed => "loop_pixel_rot_crushed",
+    RotLoopRuined => "loop_pixel_rot_ruined",
 }
 
 /// Playback metadata of a patch.
@@ -857,6 +870,25 @@ impl Patch {
             | Self::JungleAmbienceLoop
             | Self::UpdraftLoop
             | Self::ForgeAmbienceLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            // The distortion strata (Wave 9): their beds loop; glass and glitches are heard
+            // from where they happen.
+            Self::MirrorLoop
+            | Self::ShearLoop
+            | Self::RotLoop
+            | Self::RotLoopCrushed
+            | Self::RotLoopRuined => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::GlassChime | Self::MirrorShatter => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.4)
+                .jitter(0.03, 1.0),
+            Self::GravityGroan => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.05, 1.0),
+            Self::GlitchBlip | Self::DataChirp => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.1)
+                .jitter(0.0, 0.5),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1443,6 +1475,16 @@ impl Patch {
             Self::JungleAmbienceLoop => hollow::jungle_ambience_loop(rng),
             Self::UpdraftLoop => hollow::updraft_loop(rng),
             Self::ForgeAmbienceLoop => hollow::forge_ambience_loop(rng),
+            Self::GlassChime => distortion::glass_chime(rng),
+            Self::MirrorShatter => distortion::mirror_shatter(rng),
+            Self::GravityGroan => distortion::gravity_groan(rng),
+            Self::GlitchBlip => distortion::glitch_blip(rng),
+            Self::DataChirp => distortion::data_chirp(rng),
+            Self::MirrorLoop => distortion::mirror_loop(rng),
+            Self::ShearLoop => distortion::shear_loop(rng),
+            Self::RotLoop => distortion::rot_loop(rng),
+            Self::RotLoopCrushed => distortion::rot_loop_crushed(rng),
+            Self::RotLoopRuined => distortion::rot_loop_ruined(rng),
         }
     }
 }

@@ -904,6 +904,10 @@ impl Tile {
                 Some(tile) => TileKind::Hollow(tile),
                 None => return None,
             },
+            0x1600..=0x16FF => match crate::distortion::WarpedTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Warped(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

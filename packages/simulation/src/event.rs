@@ -1215,6 +1215,21 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The distortion strata (Wave 9, Descent VI part A; netcode codes 560-579).
+    /// Something of the distortion strata happened at tile `(x, y)`; `player_id` is whose deed
+    /// or whom it concerns, if anyone's.
+    Distortion {
+        what: crate::distortion::DistortionEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
+    /// The crew found a landmark of the distortion strata (its story beat); `player_id` found
+    /// it.
+    DistortionLandmarkFound {
+        landmark: crate::distortion::DistortionLandmark,
+        player_id: PlayerId,
+    },
     /// The crew read log `log` (1-based) of the Fathers' expedition; `player_id` opened the
     /// canister (or reached a sealed one that the log before has just opened). Wave 8 story.
     ExpeditionLogFound {

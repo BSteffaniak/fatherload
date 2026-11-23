@@ -51,6 +51,9 @@ pub enum LandmarkGenerator {
     Drowned,
     /// The Hollow World's caverns and set pieces ([`super::hollow`], Wave 9).
     HollowWorld,
+    /// The distortion strata's halls, the rot grid and their landmarks
+    /// ([`super::distortion`], Wave 9).
+    Distortion,
 }
 
 /// The generator behind `kind`.
@@ -68,6 +71,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::LivingDark => LandmarkGenerator::LivingDark,
         LandmarkKind::Drowned => LandmarkGenerator::Drowned,
         LandmarkKind::HollowWorld => LandmarkGenerator::HollowWorld,
+        LandmarkKind::Distortion => LandmarkGenerator::Distortion,
     }
 }
 
@@ -411,6 +415,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::Tombs
         | LandmarkKind::LivingDark
         | LandmarkKind::Drowned
-        | LandmarkKind::HollowWorld => return None,
+        | LandmarkKind::HollowWorld
+        | LandmarkKind::Distortion => return None,
     })
 }

@@ -37,6 +37,7 @@ mod caves;
 mod crust;
 mod crypt;
 pub(super) mod daylight;
+mod distortion;
 mod drops;
 pub(super) use drops::drop_sprite;
 mod drowned;
@@ -379,6 +380,14 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         scene.terrain,
         scene.visible,
         scene.world_millis,
+        scene.effects_strength,
+    );
+    // The distortion strata (Wave 9): mirror halls' curtains, shear flow, breathing reflections.
+    distortion::draw_distortion_world(
+        draw,
+        scene.terrain,
+        scene.visible,
+        seconds,
         scene.effects_strength,
     );
     lunar::draw_lunar_glows(draw, scene.terrain, scene.explored, scene.visible, seconds);

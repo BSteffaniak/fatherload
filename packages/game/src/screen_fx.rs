@@ -57,7 +57,12 @@ impl EffectsIntensity {
                 ScreenEffect::Wobble
                 | ScreenEffect::Lensing
                 | ScreenEffect::Chromatic
-                | ScreenEffect::Scanlines => 0.25,
+                | ScreenEffect::Scanlines
+                | ScreenEffect::Glitch => 0.25,
+                // The mirror is the screen agreeing with the mirrored controls (Wave 9): a
+                // half-faded mirror would be a double image, the harder thing to look at, so
+                // it stays whole (still eased in and out across a hall's boundary).
+                ScreenEffect::Mirror => 1.0,
                 _ => 0.45,
             },
             Self::Off => 0.0,
@@ -77,6 +82,10 @@ pub const MAX_EXPOSURE: f32 = 0.8;
 pub const MAX_WOBBLE_HZ: f32 = 0.8;
 /// Darkest the light ever gets (a sliver of the world always shows around the rig).
 pub const MIN_LIGHT: f32 = 0.08;
+/// Fastest the glitch pass picks new bands (steps per second; Wave 9's Pixel Rot). Each step
+/// only shifts slices of the picture sideways (no brightness change), well under the
+/// photosensitive range.
+pub const MAX_GLITCH_STEPS_HZ: f32 = 1.5;
 
 /// Whether `effect` changes the picture's brightness (rate limited harder).
 const fn changes_luminance(effect: ScreenEffect) -> bool {
@@ -104,6 +113,9 @@ pub struct ScreenFx {
     pub light: f32,
     /// The wobble ripple's phase, in cycles.
     pub phase: f32,
+    /// The glitch pass's slow step counter (whole numbers pick new bands; it advances at most
+    /// [`MAX_GLITCH_STEPS_HZ`] steps a second, so the picture never strobes).
+    pub glitch_step: f32,
 }
 
 impl ScreenFx {
@@ -114,6 +126,7 @@ impl ScreenFx {
         fog_rgb: [0.5; 3],
         light: 1.0,
         phase: 0.0,
+        glitch_step: 0.0,
     };
 
     /// The level of `effect`.
@@ -195,6 +208,8 @@ impl SeatFx {
         let wobble = self.current.level(ScreenEffect::Wobble);
         self.current.phase =
             MAX_WOBBLE_HZ.mul_add(dt * wobble.max(0.25), self.current.phase) % 1_000.0;
+        self.current.glitch_step =
+            MAX_GLITCH_STEPS_HZ.mul_add(dt, self.current.glitch_step) % 1_000.0;
         self.current
     }
 }
@@ -248,8 +263,14 @@ mod tests {
         let reduced = target(&showcase, EffectsIntensity::Reduced);
         let off = target(&showcase, EffectsIntensity::Off);
         for effect in ScreenEffect::ALL {
+            // The mirror stays whole when reduced (a half mirror is a double image).
+            let most = if effect == ScreenEffect::Mirror {
+                1.0
+            } else {
+                0.5
+            };
             assert!(
-                reduced.level(effect) <= full.level(effect).mul_add(0.5, 1e-6),
+                reduced.level(effect) <= full.level(effect).mul_add(most, 1e-6),
                 "{effect:?}"
             );
             assert!(off.level(effect).abs() < f32::EPSILON, "{effect:?}");
