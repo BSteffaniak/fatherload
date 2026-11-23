@@ -1055,7 +1055,37 @@ world dug to the floor, the browser memory fixture) show it.
   of its own, a music bed per stratum, and at its end **the Star Core**: break its four pylons
   to drop the shield, then strike the core. Beating it wins the **Pressure Hull** (never sold),
   which Descent III needs. Scenes: `old_deep_*`.
-- Descents IV to VIII are still **placeholders**: their own rock colours, ores and hazards
+- **Descent IV, the Drowned and Frozen, is authored (Wave 9):** the rig becomes a submarine
+  under water (thrust and drill trim its ballast; gyre currents carry it) in the **Underground
+  Ocean**, where the scanner is a **sonar** that lights the water and an electric eel-dragon
+  coils in its grotto; ice that steals traction, tunnels that refreeze and hull frost (warm the
+  rig at thermal vents) in the **Brine Glaciers**; geysers on a beat (a warning hiss, then a
+  jet to ride) and Old Faithful in the **Geyser Fields**; **Merrow City**, the fish-folk's
+  bubble under the sea with its shop, moon pools and aquarium furniture; and the crushing,
+  darkening **Pearl Abyss** (watch the pressure against your seals). At its end the
+  **Leviathan**, a three-phase sea beast fought from the submarine, wins the **Sonar Suite**
+  and the **Cryo Hull** (never sold). Scenes: `drowned_*`.
+- **Descent V, the Hollow World, is authored (Wave 9):** break through into the **Inner Sky**,
+  a cavern under an inner sun with its own day and night and wind bands; ride crestbacks
+  through the **Megafauna Jungle** past the **Sunfolk Kraal**, the jungle tribes' village;
+  under the **Upside-Down Isles** gravity points up (flip the rig with its rotation thrusters
+  and land on the roof); in **the Sunforge** the light scorches (shelter in the shade) and the
+  **Gravity Anchor** is won from the **Sun Serpent**, orbiting the inner sun in its well:
+  break its sun scales, then strike its head, and hide from its flares. Scenes: `hollow_*`.
+- **The far Strange Layers** (Descent VI, Wave 9): slow pools and fast lanes, time bubbles and
+  creatures at their own speeds in the **Time Sludge**; total darkness in the **Echo Caves**,
+  where only the sonar shows the way and blind hunters hear thrusters; colour-keyed walls
+  opened by swapping the lamp filter in the **Prism Desert**; and at Descent VI's end **The
+  Glitch**, which rewrites the rules of its hall (gravity up, mirrored, sideways) until its
+  shards fall. It wins the **Phase Drill**, which alone cuts the builder alloy sealed over
+  Descent VII. Scenes: `far_*`.
+- **Wired together (Wave 9 integration):** one **Sonar Suite** for the water and the Echo
+  Caves (the scanner pings both, the Leviathan's Suite reaches further in both); the deep
+  counters' supplies work from the kit (an **Echo Charge** pings as far as the Suite, a **Frost
+  Heater** burns hull frost off, a **Shade Canopy** cools a scorching rig); and the people of
+  Merrow City, the Sunfolk Kraal and Parallax Station remember the Fathers when you talk to
+  them.
+- Descents VII and VIII are still **placeholders**: their own rock colours, ores and hazards
   from the stratum registry, creatures borrowed from the classic roster, and the rules of the
   classic layer each stands in for. Strata meet in ragged transition zones, wider between
   Descents.
@@ -1141,7 +1171,9 @@ came back up. In a Deep Descent world their trail is the story's backbone:
   intensity setting and never flash.
 - **The settlements remember them**: Gravel Hollow's people tell of the Fathers when asked for
   news, and arriving at Gravel Hollow puts up a card with what they remember (more as the crew
-  reads further). The Old Deep's Fathers' camps hold the journal's own logs.
+  reads further); deeper down, Cathedral Station's and the Amber Court's residents and the
+  people of Merrow City, the Sunfolk Kraal and Parallax Station tell their own memories in
+  conversation. The Old Deep's Fathers' camps hold the journal's own logs.
 - Seven story milestones (each unlocks a paint). Review scenes: `expedition_camp`,
   `expedition_log_read`, `expedition_cairn`, `expedition_journal`, `expedition_radio_echo`,
   `expedition_ghost_recording`, `anomaly_gravity_flip`, `anomaly_pixel_rot`,

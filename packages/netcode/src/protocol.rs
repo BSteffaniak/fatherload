@@ -180,45 +180,41 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   Fathers' expedition logs read, sealed canisters, echoes heard, anomaly rooms entered), the
 ///   story events 490-493 (`ExpeditionLogFound`, `ExpeditionLogSealed`, `ExpeditionEcho`,
 ///   `AnomalyEntered`), the story `Milestone`s and their `PaintColor` rewards.
-/// * The Drowned and Frozen (Descent IV, Wave 9): thirteen appended `CaveTile`s, eleven
-///   appended `EnemyKind`s and `ShotKind::PressureBubble`, `Player::water` /
-///   `PlayerTickState::water` (ballast and hull frost, per tick), the `DrownedState` world
-///   field and `SectionKey::Drowned` section, `Culture::Merrow`, five appended `Furniture`
-///   pieces and the Drowned events 520-539 (`GameplayEventKind::Drowned`).
 ///
-/// Version 17 (Wave 9; the integrator collapses the wave's tracks into one bump). The Hollow
-/// World (Descent V): `TileKind::Hollow(HollowTile)` tiles (codes `0x900`) in terrain ops, chunk
-/// refreshes and keyframes, thirteen appended `EnemyKind`s (`SkyManta` .. `SerpentCoil`) in
-/// entity records, the `Hollow` world field and `SectionKey::Hollow` section (breakthroughs,
-/// exposure, Gravity Anchors, rides, isle landings, the Sun Serpent's fight),
-/// `LogisticsCommand::Hollow` (the Gravity Anchor), and the Hollow World events 540-559
-/// (`GameplayEventKind::Hollow`).
-///
-/// The distortion strata (Descent VI part A): `TileKind::Warped(WarpedTile)` tiles (codes
-/// `0x1600`) in terrain ops and keyframes, nine appended `EnemyKind`s (mirror twin to dead pixel)
-/// and two `ShotKind`s (`MirrorShard`, `RotPulse`), `ScreenEffect::Glitch`, the `Distortion`
-/// world field and `SectionKey::Distortion` section (gazers' holds, rot pulses, the mirror halls'
-/// twin cooldowns, landmarks found) and the distortion events 560-579
-/// (`GameplayEventKind::Distortion`, `DistortionLandmarkFound`).
-///
-/// The far Strange Layers (strange-b, Descent VI strata 4-6 and its gate):
-/// * six appended `CaveTile`s (echo quartz, the red, green and blue keyed walls, builder alloy,
-///   chronoglass) in terrain ops and keyframes, eleven appended `EnemyKind`s (`TickMite` ..
-///   `GlitchShard`) and four `ShotKind`s (`PrismRed`, `PrismGreen`, `PrismBlue`, `GlitchBolt`)
-///   in entity records, `ExplosiveKind::TimeBubble` (item id 11) in charges, bays and commands,
-///   the `FarStrange` world field and `SectionKey::FarStrange` section (lamp filters, sonar
-///   pings, amber, landmarks found, The Glitch's fight), `LogisticsCommand::FarStrange` (lamp
-///   filters, time bubbles) and the far Strange Layers events 580-599
-///   (`GameplayEventKind::FarStrange`).
-///
-/// Story (Wave 9): the four deeper `AnomalyKind`s (`Sideways`, `Sunlit`, `Weightless`,
-/// `Lensing`) in `AnomalyEntered` events, and NPC entities of Cathedral Station's and the Amber
-/// Court's residents (their `CharacterId`s name the fixed `people::deep_folk` settlement ids).
-///
-/// Progression (Wave 9):
-/// * `LogisticsCommand::BuySupply` (the deep supplies counter), `CraftOutput::Supply` recipes
-///   (no wire change: recipes are ids), and `Logistics::supplies` (each player's supply kit of
-///   `workshop::DeepSupply`) in the logistics section. No new events.
+/// Version 17 (Wave 9: Descents IV-VI; the integration collapses the six tracks' bumps into
+/// this one):
+/// * The Drowned and Frozen (Descent IV): thirteen appended `CaveTile`s, eleven appended
+///   `EnemyKind`s and `ShotKind::PressureBubble`, `Player::water` / `PlayerTickState::water`
+///   (ballast and hull frost, per tick), the `DrownedState` world field and
+///   `SectionKey::Drowned` section, `Culture::Merrow`, five appended `Furniture` pieces and the
+///   Drowned events 520-539 (`GameplayEventKind::Drowned`).
+/// * The Hollow World (Descent V): `TileKind::Hollow(HollowTile)` tiles (codes `0x900`) in
+///   terrain ops, chunk refreshes and keyframes, thirteen appended `EnemyKind`s (`SkyManta` ..
+///   `SerpentCoil`) in entity records, the `Hollow` world field and `SectionKey::Hollow` section
+///   (breakthroughs, exposure, Gravity Anchors, rides, isle landings, the Sun Serpent's fight),
+///   `LogisticsCommand::Hollow` (the Gravity Anchor), and the Hollow World events 540-559
+///   (`GameplayEventKind::Hollow`).
+/// * The distortion strata (Descent VI part A): `TileKind::Warped(WarpedTile)` tiles (codes
+///   `0x1600`) in terrain ops and keyframes, nine appended `EnemyKind`s (mirror twin to dead
+///   pixel) and two `ShotKind`s (`MirrorShard`, `RotPulse`), `ScreenEffect::Glitch`, the
+///   `Distortion` world field and `SectionKey::Distortion` section (gazers' holds, rot pulses,
+///   the mirror halls' twin cooldowns, landmarks found) and the distortion events 560-579
+///   (`GameplayEventKind::Distortion`, `DistortionLandmarkFound`).
+/// * The far Strange Layers (Descent VI part B and its gate): six appended `CaveTile`s (codes
+///   35-40: echo quartz, the red, green and blue keyed walls, builder alloy, chronoglass) in
+///   terrain ops and keyframes, eleven appended `EnemyKind`s (`TickMite` .. `GlitchShard`) and
+///   four `ShotKind`s (`PrismRed`, `PrismGreen`, `PrismBlue`, `GlitchBolt`) in entity records,
+///   `ExplosiveKind::TimeBubble` (item id 11) in charges, bays and commands, the `FarStrange`
+///   world field and `SectionKey::FarStrange` section (lamp filters, sonar pings, amber,
+///   landmarks found, The Glitch's fight), `LogisticsCommand::FarStrange` (lamp filters, time
+///   bubbles) and the far Strange Layers events 580-599 (`GameplayEventKind::FarStrange`).
+/// * The story: the four deeper `AnomalyKind`s (`Sideways`, `Sunlit`, `Weightless`, `Lensing`)
+///   in `AnomalyEntered` events, and NPC entities of Cathedral Station's and the Amber Court's
+///   residents (their `CharacterId`s name the fixed `people::deep_folk` settlement ids).
+/// * Progression: `LogisticsCommand::BuySupply` (the deep supplies counter),
+///   `CraftOutput::Supply` recipes (no wire change: recipes are ids), and `Logistics::supplies`
+///   (each player's supply kit of `workshop::DeepSupply`) in the logistics section.
+/// * The integration: no wire change (the Sonar Suite's one API reads the two sections above).
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

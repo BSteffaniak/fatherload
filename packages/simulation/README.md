@@ -1041,249 +1041,6 @@ generalized; `Blast::explosive` for any explosive kind: linear falloff, line of 
 bodies), `steer_toward` (accelerate toward a point with a speed cap) and `find_tile_path` (a
 budgeted, deterministic 4-connected BFS over open tiles for creature AI).
 
-### Wave 9 drowned: Descent IV, the Drowned and Frozen (`src/drowned.rs`, `src/world/drowned.rs`, `src/world/enemies/drowned.rs`, `src/worldgen/descent/drowned.rs`)
-
-Descent IV of a V11 world (rows about 4,200-5,800, §14) stops being a placeholder: water and
-ice everywhere, each with a new movement rule, a friendly fish-folk city in an air bubble, and
-the Leviathan at the gate. Nothing here touches V1-V10: every rule returns at once on worlds
-without Descents (`drowned::drowned_rules`), only V11 generation places the new tiles, and the
-V1-V10 golden digests are unchanged. **`GOLDEN_V11_DIGEST` changed** to `0xa443_78a8_e403_3f8b`.
-
-### The strata (registry, `descent/registry.rs`)
-
-| Stratum | Signature rule (introduced gently, pushed deeper) | Natives | Set pieces | Rock, ores, layer resource | Music / ambience | Story beat |
-|---|---|---|---|---|---|---|
-| The Underground Ocean | **submarine mode**: ballast trims the sub to rise, hover or sink; **gyre currents** circle every basin (weak at the top, strong at the bottom, half again in "Current Gyres"); the scanner becomes a **sonar ping** | reef shark (circles between dashes), ink squid (bites, inks the water black, darts away); mini-boss **the eel-dragon** | flooded **basins** (kelp forests, coral, a breath of air under the roof, bigger deeper), the eel-dragon's **grotto**, the **drowned builder sub** | seabed rock, coral seams; platinum, diamond, mythril; Deep Pearl | `UndergroundOcean` / `Reef` | the drowned sub |
-| Brine Glaciers | **ice physics** (rigs slide on brine ice, pack ice and rime), **frozen-over tunnels** (dug tiles refreeze as rime, 70 s at the top, 35 s at the bottom), **hull frost** (a cold meter that slows the rig until a thermal vent, an outpost or the city warms it) | frost mite (bites frost the hull), tusk seal (a straight belly-slide charge) | **ice galleries**, **vent grottos** (common at the top, rare deeper), the **frozen figures** round the cable | brine ice / pack ice; diamond, platinum, uranium; Brine Ice | `BrineGlaciers` / `Ice` | builder figures in the ice |
-| Geyser Fields | **geysers**: each vent blows on its own world-time beat, telegraphed by a 1.5 s gurgle; a rig in the chimney is thrown upward (an elevator), one on the throat is scalded | scald beetle (rides the jets up), sinter snail (armoured; seals tunnels behind it with sinter) | geyser **chimneys** (taller deeper), **Old Faithful** (a 5-wide, 60-row shaft on a 16 s beat) | sinter; platinum, mythril, uranium; Sinter Crust | `GeyserFields` / `Geysers` | Dov's soaked tape |
-| Merrow City | a **friendly city** of fish-folk in an air bubble: residents with routines, dialogue and trades (the village machinery), the Descent IV outpost's shop, fuel and repairs, the merrow's **aquarium furniture line** | spinepuff (harmless until close, then a ball of spines), reef shark | **Merrow City**: a glass dome round the outpost and the merrow's hall, the sea held round it, a glass airlock tube, a harbour under the streets with two **moon pools**; reef terraces | reef stone; emerald, platinum, diamond; Coral Glass | `MerrowCity` / `Bubble` | the merrow remember the Fathers, and Sefa |
-| Pearl Abyss | **crushing pressure** (`abyss_pressure`: the trench's depth plus the water over the hull) against the seals (`pressure_capacity`: the Pressure Rating's Abyssal Seals hold its upper part, the Cryo Hull all of it); past them the hull cracks; **the screen darkens and desaturates as the pressure rises**; **pearl clams** gape and bite on a beat | lure angler (its light drags rigs toward its jaws), gulper eel (a long gape, a gulp that stalls the rig) | **pearl beds**, **the Leviathan's arena** (a 104 x 40 flooded hall, clear of the cable) | pillow basalt; diamond, mythril, uranium; Abyss Pearl | `PearlAbyss` / `Trench` | the floor is a ceiling |
-
-`MusicCue` (six), `AmbienceCue` (four), `LandmarkKind::Drowned` (generator
-`LandmarkGenerator::Drowned`), thirteen `CaveTile`s (codes 22-34: `Seabed`, `Kelp`, `Coral`,
-`BrineIce`, `PackIce`, `Rime`, `ThermalVent`, `FrozenFigure`, `Sinter`, `GeyserVent`,
-`PillowBasalt`, `PearlClam`, `MerrowStone`) are appended. The strata's rock counts as plain rock
-for ore and hazards (`streamed::base::is_plain_rock`).
-
-### Generation (V11 only; `worldgen/descent/drowned.rs`)
-
-A pure function of the settings and the tile, run by `streamed::assemble` after the Living
-Dark's pass (before the Sinkhole, the Old Deep, the story and the cable, which carve over it):
-region stamps (`DROWNED_REGION` 72 x 48, one per region at most, rolled more often deeper,
-kept off stratum edges, the fixed stamps, the city and the outposts' column) and fixed stamps
-(`eel_grotto`, `drowned_sub`, `frozen_figures`, `old_faithful`, `leviathan_arena`,
-`merrow_city`). Generated water is full fluid tiles at rest (it costs nothing until a
-neighbour changes; breaching a basin from the side drains it through the budgeted fluid pass).
-The fluid-pocket pass skips the city's bounds (its streets stay dry), and caves keep out of it
-(`villages::keeps_caves_out`). `set_piece_bounds` lists the fixed set pieces for the story
-pass. `basins_in` gives the tick its gyres.
-
-**Merrow City** (`MerrowSite`): the merrow's settlement hall (`HALL_WIDTH` x
-`HALL_AIR_ROWS`) beside the Descent IV outpost on the spawn side, sharing its floor (like
-Gravel Hollow); a half-ellipse dome 24 rows tall over both, cut at the cable's rail on the far
-side; `Built(Glass)` round it, sea water six tiles thick outside the glass, a coral rim; a glass
-airlock tube on the hall's side at the floor; the harbour under the floor with two moon pools.
-The village is `placement::underground_id(drowned::MERROW_SITE)` (one past the last site any
-world places), culture `Culture::Merrow`, name "Merrow City", found by every village lookup
-(`villages::merrow_hall`, `special_halls`).
-
-### Rules (`world/drowned.rs`; all timing from world milliseconds or per-second rates)
-
-- **Ballast** (`RigWater::ballast`, per mille, in the rig's per-tick state `Player::water`, so
-  it is predicted and reconciled like the pose): under water (`SUBMARINE_SHARE`), thrust blows
-  the tanks and the drill floods them (`BALLAST_RATE_PER_SECOND`), let go and the trim holds;
-  a neutral trim carries the weight the water does not (the sub hovers), a full one pushes
-  `BALLAST_ACCELERATION` up or down. Out of water the tanks vent to neutral.
-  `apply_submarine` runs after the fluid step. A sinking sub within `SETTLE_REACH` (4 px) of
-  the bottom settles onto it (searched in quarter pixels) and rests, so its drill bites: the
-  movement sweep stops a rig a step short of a floor, and at 20 Hz the water's sink speed kept
-  that step longer than the gap tick after tick (a flooded shaft stalled the cheating bot).
-- **Currents** (`current_at`: a basin's gyre, `gyre_velocity`, and the Leviathan's maelstrom
-  toward its maw) carry a submerged rig as a drift (`CURRENT_DRIFT` of the current's speed,
-  through `nudge_rig`, which only moves a rig where it fits): the drive's braking cannot cancel
-  the sea.
-- **Sonar** (`sonar_ping`, `sonar_reach`, `sonar_pings`, `sonar_light_at`, `drowned::sonar_light`):
-  the scanner under water (or anywhere in Descent IV) also pings: a ring spreading
-  `SONAR_RING_TILES_PER_SECOND`, fading by `SONAR_PING_MILLIS`, mapping the tiles in reach
-  (12 tiles, 26 with the Sonar Suite); one ping a second per rig at most, however long the
-  scanner is held. **Seam for the Echo Caves (Descent VI)**: call
-  `WorldState::sonar_ping(player, output)` and read `sonar_light_at(x, y)` for the moment a
-  ping lights total darkness.
-- **Ice** (`apply_drowned_drive`, after the ground grip): on brine ice, pack ice and rime the
-  drive's push takes `ICE_TRACTION` and braking almost nothing (`ICE_DRAG_PER_SECOND`); the
-  rig slides the distance the drive braked away.
-- **Hull frost** (`RigWater::frost_micro`, millionths, so a slow freeze moves every tick at
-  every rate): +12/s at the glaciers' top to +34/s at the bottom (twice in brine), -260/s by a
-  thermal vent, -400/s at an outpost or in the city, -70/s elsewhere; frost mites add 70 a bite.
-  It takes up to `FROST_SLOW_MAX` (55 %) of every push and of the top speed, never hull: the
-  frost slows, it never kills. The Cryo Hull shrugs it off. `FrostWarning` at 600.
-- **Refreezing**: openings in the Brine Glaciers (outside outposts, lift columns and the city)
-  are scheduled on the Living Dark's regrowth schedule as `Regrowth::Rime` (appended), so the
-  regrowth budget and the never-into-a-body rule apply; `TunnelRefroze` when they freeze.
-- **Geysers** (`geyser_phase`, `geyser_jet_at`): a vent's period is 7-10 s by column (Old
-  Faithful 16 s), the last 1.8 s erupting after a 1.5 s gurgle; a rig whose column runs open
-  down to a vent within `GEYSER_MAX_ROWS` is thrown up at `GEYSER_LIFT_SPEED` (Old Faithful
-  1.3 x); within `GEYSER_SCALD_ROWS` of the throat it is scalded. Pure world time: every tick
-  rate erupts together.
-- **Pressure** (`abyss_pressure_for`): over the seals, hull is lost in proportion to the
-  overshoot (`PRESSURE_DAMAGE_PER_SECOND` per 100, times the depth's creature scale);
-  `PressureWarning` every 3 s while it bites. On Descent worlds the Pressure Rating and the
-  Pressure Hull also deepen the fluids' pressure rows (`submersion_gear`), so a Descent IV rig
-  can swim its deep basins.
-- **Clams** (`clam_open`, 2.6 s of every 6 s): drilled open while gaping, an Abyss Pearl
-  (`ItemKind::Layer`) and `CLAM_PEARL_CREDITS`; shut, it bites the nearest rig and closes back.
-- **Lore** (`DrownedLore`, one per stratum, `DrownedState::lore`): found entering the wreck's
-  hull, the frozen figures' gallery, Old Faithful, the city (with `CityReached`) and on the
-  Leviathan's fall; the game shows each as a story card.
-- **Lure anglers** drag rigs in their light (9 tiles, line of sight) at 55 px/s.
-
-### Creatures (`enemy.rs`, `world/enemies/drowned.rs`)
-
-Eleven appended `EnemyKind`s on the generic body rules (`step_body`, `free_from_rock`,
-`keep_off_bodies`, `site_fits`, contact boxes sized to the sprites, `CONTACT_MARGIN` /
-`STANDOFF_PIXELS`, line-of-sight noticing), each with its own twist: reef shark (circles its
-prey between dashes, `drowned_chase`), ink squid (inks and flees on a bite), frost mite (frost
-on a bite), tusk seal (a straight belly slide until a wall, `drowned_after_move`), scald beetle
-(rides erupting jets), sinter snail (seals the open tile behind it every 6 s while idle, never
-over a body or fluid), spinepuff (sight 3: harmless until close, drawn swollen while hunting),
-lure angler (the drag), gulper eel (a gulp stalls the bitten rig), the eel-dragon and the
-Leviathan. Sea creatures can swim and appear swimming in deep water (`drowned_swim_site`). The
-bosses never roam (`drowned_spawn_allowed`). `ShotKind::PressureBubble` appended.
-
-- **The eel-dragon** (`advance_eel_dragon`): wakes when a rig comes within 18 tiles of its
-  grotto (hostile worlds only); besides its lunges, every 7 s it crackles for 1.3 s
-  (`EelDragonPulse`, drawn as sparks and its ring) and then jolts every rig in the water within
-  5 tiles. Its death pays `EEL_BOUNTY` to the killer.
-- **The Leviathan** (`advance_leviathan`, the gate): wakes when a rig enters its arena. Its pose
-  is a pure function of its move and the world time since the move began (`LeviathanMove`),
-  so it swims alike at every tick rate. *Circling* (above 2/3): laps the arena, and every 5.5 s
-  stops, flares its eyes and roars (1.4 s, the charge's path drawn in red), then charges across
-  to 8 tiles past where the target was. *The maelstrom* (above 1/3): alternates charges with
-  sinking to the floor and opening its maw for 5 s (the whirlpool pulls rigs in, the open maw
-  takes `MAW_DAMAGE_FACTOR` damage), then spits pressure bubbles at every rig. *Thrashing*:
-  1.0 s tells, each charge shakes three boulders off the roof over each rig, and it calls two
-  reef sharks once. No clock: with no rig in its arena for 30 s it sinks back to sleep, healed.
-  On a Peaceful world it yields its gate to the first rig in the arena. Its death fits **the
-  Sonar Suite and the Cryo Hull** to every rig (later joiners too): `RigSystem::boss_reward`
-  answers `DescentBoss::Leviathan` for both, so no shop sells them on Descent worlds.
-  `MAX_HIT_RADIUS` grew to 1.5 tiles so its 44-pixel body is a fair target.
-
-### State, events and formats
-
-- `DrownedState` (`WorldState::drowned`, serde default, hashed only once non-empty, the
-  appended shared section `SectionKey::Drowned` in `SHARED`): sonar pings, ink clouds (field
-  zones of `FieldPreset::Dark`), the eel-dragon, the Leviathan, the lore found.
-  `Player::water` (`RigWater`) rides `PlayerRig` / `PlayerTickState`.
-- Events: `GameplayEventKind::Drowned { what, player_id, x, y }`, netcode codes
-  `520 + DrownedEvent::code()` (520-539; 20 kinds).
-- **`PROTOCOL_VERSION` 17** (one bump for the track). **No save format bump**: every new field
-  has a serde default.
-- The merrow: `Culture::Merrow` (in `EVERY`, not `ALL`; names, local colour, roles: traders,
-  storytellers, scholars; cloister style; a fountain), `Furniture::{Aquarium, CoralLamp,
-  KelpPlanter, ShellChair, PearlMirror}` (`AQUARIUM_LINE`; the reef aquarium is the merrow's
-  signature piece, their makers sell the rest of the line).
-- Shared-file edits (all additive): registry, `cave.rs`, `enemy.rs`, `event.rs`, `descent.rs`
-  enums, `landmarks.rs`, `assemble.rs` (the pass and the dry city), `villages.rs` (Merrow
-  City's hall), `layout.rs`, `people/*`, `home/decor.rs`, `simulate.rs` (two movement hooks,
-  the scanner hook, `advance_drowned` after the Living Dark), `world/enemies.rs` (notice,
-  habitat, chase, after-move, bite, maw damage, kill hooks), `world/living_dark.rs` (the rime
-  arm of the regrowth), `fluids.rs` (pressure rows), `depth_progression.rs` (boss rewards),
-  `balance/descent.rs` (authored content and the lore as story markers).
-
-### Game side
-
-Tile art and back walls for every stratum (`tile_art/drowned_art.rs`: barnacled seabed,
-kelp fronds, branching coral, bubbly brine ice, fractured pack ice, feathered rime, amber vents,
-figures in clear ice, banded sinter, geyser throats, pillow basalt, giant clams, reef stone);
-eleven creature sprites and the bubble (`sprites/drowned.rs`; the Leviathan a 52 x 18 sprite
-drawn at twice the scale, three frames: swim A/B, maw agape); the world layer
-(`rendering/world/drowned.rs`: geyser tells and columns, clams gaping with a pearl, vent
-shimmer, current motes along each gyre and spiralling into the maelstrom, fish past Merrow
-City's glass, the Leviathan's eye flare and red charge line, its breathing maw, the eel-dragon's
-crackle, sonar rings breaking on rock and echoing creature outlines, frost riming the rigs;
-sea creatures are drawn again over the water's darkness so they read, and the Pearl Abyss keeps
-field light 820 per mille so the Leviathan stays visible as the pressure greys the view);
-the per-seat panel and screen (`rendering/drowned_hud.rs`: ballast gauge, frost meter,
-pressure meter against the seals, the Leviathan's health, phase and what to do; the abyss's
-pressure desaturates, vignettes and darkens the view and frost grades it cold, all through the
-field-effect stack, so the accessibility setting applies and nothing flashes); the merrow's
-look (teal scales, crest fins, gills, shell necklaces, kelp and sea-glass cloth) and the
-aquarium line's furniture art; news lines and lore story cards (`StoryMomentKind::DeepLore`,
-appended); audio (appended at the end of `patches!`: sonar ping, geyser blast, ice crack, hull
-groan, clam snap, the Leviathan's roar, the merrow chime, five stratum beds and the
-Leviathan's theme; `drowned_music` in the director). Input needs nothing new: ballast is
-thrust and drill, the sonar is the scanner, so keyboard, pads, touch and split-screen seats all
-play it. Scenes: `drowned_ocean_basin`, `drowned_sonar`, `drowned_eel_dragon`,
-`drowned_builder_sub`, `drowned_glaciers`, `drowned_frozen_figures`, `drowned_thermal_vent`,
-`drowned_geyser`, `drowned_old_faithful`, `drowned_merrow_city`, `drowned_merrow_arrival`,
-`drowned_moon_pool`, `drowned_pearl_abyss`, `drowned_leviathan`, `drowned_leviathan_roar`,
-`drowned_leviathan_maelstrom`.
-
-### Tests
-
-`drowned::tests` (geysers' beat with a tell before every eruption, pressure and seals, frost,
-clams, the sonar ring, gyres, the Leviathan's phases), `worldgen::descent::drowned::tests`
-(every stratum's rock and set pieces, the fixed stamps where their functions say, a dry
-Merrow City with glass, sea and moon pools, determinism, none on older worlds; an ignored ASCII
-dump), `world::drowned_tests` (older worlds untouched; ballast rises, hovers and sinks, alike
-at 20/30/60 Hz; a basin's gyre carries a hovering sub; the scanner's sonar and the Sonar
-Suite's reach; ice slides where stone brakes; frost builds, slows, thaws at a vent and the Cryo
-Hull ignores it; a tunnel refreezes but never on a rig; a geyser throws a rig up, erupts at the
-same moment at 20/30/60 Hz and scalds a rig on its throat; pressure past weak seals, held by
-the Cryo Hull; clams pay or bite; Merrow City peopled under its bubble; every stratum's
-natives; mites, squid, angler and snail at work; the eel-dragon's wake, tell and bounty; **a
-bot with Descent IV kit (hull tier 11, the Abyssal Seals, a railgun) beats the Leviathan**
-through all three phases with a fifth of its hull left, winning the Sonar Suite and the Cryo
-Hull, the Descent V gate crushing before and passing after; the gate rewards are boss rewards;
-an empty arena puts it to sleep; Peaceful yields the gate; JSON saves, the section and the
-hash; a flooded sub settles on the bottom and drills through it at 20-120 Hz). The audio
-director's every-stratum test covers Descent IV's five beds.
-
-Shared tests adjusted for the authored strata (additively, each with a note): the registry's
-music check accepts Descent IV's own pieces and its landmark check `LandmarkGenerator::Drowned`;
-the Pearl Abyss desaturates from 0.15 at its top (the rest comes with the pressure on each
-seat) and the ocean's water is the submarine's rather than a field drag; the Pearl Abyss and
-Geyser Fields rocks were retinted to stay distinct from every other Descent's; the Leviathan
-is the one enemy past a 20-pixel radius and keeps its own path (out of the generic body
-sweep, held by the bot fight instead); the frost mite's radius is 6; the unknown-tile-code
-probe moved past the new cave codes; and the "rig systems go on sale once felt" tests use the
-Gravity Anchor, the first gate system still sold now the Cryo Hull is the Leviathan's.
-
-### Descent probe
-
-`descent_report` on the registry (default seed): Descent IV ends at **33.0 h** (Ocean 25.0,
-Glaciers 26.8, Geysers 28.6, Merrow City 30.6, Pearl Abyss 33.0; the task's target 31-40 h, §14
-26-36 h); the Cryo Hull is won at 31.1 h; Descent IV's longest gap between new things is 17
-minutes (13-17 per stratum), no deaths; the whole run 73.0 h.
-
-### Seams and known limits
-
-- The expedition's logs 31-40 belong to the story track: this track's story beats are its own
-  lore cards, and `set_piece_bounds` lists the set pieces the story's sites should keep off
-  (`expedition::sites::crosses_strata_set_pieces` does not read it yet: the integrator wires
-  it).
-- Merrow City's buildings use the cloister style (pale stone and blue tile) rather than a
-  coral-and-shell style of their own; its residents are drawn as merrow.
-- Pilots on foot swim as before; currents, geysers and frost act on rigs only.
-- The Leviathan moves on its own path and passes over terrain inside its arena (the arena is
-  open water); the probe still models the fight as fixed minutes.
-- Breaching a big basin's side drains it through the budgeted fluid pass (slow levelling of
-  wide bodies, see "Wave 7 fluids").
-- Weapons hit the Leviathan within its 44-pixel hit circle while its drawn body (and contact
-  box) is about 184 x 56: auto-aim and shots at its trunk land, a manual shot at the tip of
-  its head or tail passes by. A hit shape of its own would touch every hit test.
-- The Underground Ocean is many separate basins (one region stamp per 72 x 48 at most), not
-  one connected sea. (The Hollow Seals, tier 4, would hold the whole abyss, but the depth-line
-  cap keeps them locked until a rig has reached Descent V, so the Cryo Hull is what lifts it.)
-
-### Wave 9 drowned review
-
-An independent review re-ran the probe (same numbers: Descent IV ends at 33.0 h, Cryo Hull at
-31.1 h, gaps 13-17 minutes) and the screenshot scenes, and fixed: submerged rigs are drawn
-again over the water's tint and the deep's dark (a submarine all but vanished in every
-Descent IV scene); the eel-dragon is drawn half again larger, a mini-boss, its contact box
-grown to `(54, 15)` to match; the hull-frost pass skips warm rigs with no frost.
-
 ## Replication of entities
 
 Entities replicate per client as deltas: the host keeps each client's `(EntityId, revision)`
@@ -5160,6 +4917,249 @@ them. `old_deep_fathers_log` reads its camp's expedition log, and
   not conversations.
 - The probe models every gate fight as fixed minutes.
 
+## Wave 9 drowned: Descent IV, the Drowned and Frozen (`src/drowned.rs`, `src/world/drowned.rs`, `src/world/enemies/drowned.rs`, `src/worldgen/descent/drowned.rs`)
+
+Descent IV of a V11 world (rows about 4,200-5,800, §14) stops being a placeholder: water and
+ice everywhere, each with a new movement rule, a friendly fish-folk city in an air bubble, and
+the Leviathan at the gate. Nothing here touches V1-V10: every rule returns at once on worlds
+without Descents (`drowned::drowned_rules`), only V11 generation places the new tiles, and the
+V1-V10 golden digests are unchanged. **`GOLDEN_V11_DIGEST` changed** to `0xa443_78a8_e403_3f8b`.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (introduced gently, pushed deeper) | Natives | Set pieces | Rock, ores, layer resource | Music / ambience | Story beat |
+|---|---|---|---|---|---|---|
+| The Underground Ocean | **submarine mode**: ballast trims the sub to rise, hover or sink; **gyre currents** circle every basin (weak at the top, strong at the bottom, half again in "Current Gyres"); the scanner becomes a **sonar ping** | reef shark (circles between dashes), ink squid (bites, inks the water black, darts away); mini-boss **the eel-dragon** | flooded **basins** (kelp forests, coral, a breath of air under the roof, bigger deeper), the eel-dragon's **grotto**, the **drowned builder sub** | seabed rock, coral seams; platinum, diamond, mythril; Deep Pearl | `UndergroundOcean` / `Reef` | the drowned sub |
+| Brine Glaciers | **ice physics** (rigs slide on brine ice, pack ice and rime), **frozen-over tunnels** (dug tiles refreeze as rime, 70 s at the top, 35 s at the bottom), **hull frost** (a cold meter that slows the rig until a thermal vent, an outpost or the city warms it) | frost mite (bites frost the hull), tusk seal (a straight belly-slide charge) | **ice galleries**, **vent grottos** (common at the top, rare deeper), the **frozen figures** round the cable | brine ice / pack ice; diamond, platinum, uranium; Brine Ice | `BrineGlaciers` / `Ice` | builder figures in the ice |
+| Geyser Fields | **geysers**: each vent blows on its own world-time beat, telegraphed by a 1.5 s gurgle; a rig in the chimney is thrown upward (an elevator), one on the throat is scalded | scald beetle (rides the jets up), sinter snail (armoured; seals tunnels behind it with sinter) | geyser **chimneys** (taller deeper), **Old Faithful** (a 5-wide, 60-row shaft on a 16 s beat) | sinter; platinum, mythril, uranium; Sinter Crust | `GeyserFields` / `Geysers` | Dov's soaked tape |
+| Merrow City | a **friendly city** of fish-folk in an air bubble: residents with routines, dialogue and trades (the village machinery), the Descent IV outpost's shop, fuel and repairs, the merrow's **aquarium furniture line** | spinepuff (harmless until close, then a ball of spines), reef shark | **Merrow City**: a glass dome round the outpost and the merrow's hall, the sea held round it, a glass airlock tube, a harbour under the streets with two **moon pools**; reef terraces | reef stone; emerald, platinum, diamond; Coral Glass | `MerrowCity` / `Bubble` | the merrow remember the Fathers, and Sefa |
+| Pearl Abyss | **crushing pressure** (`abyss_pressure`: the trench's depth plus the water over the hull) against the seals (`pressure_capacity`: the Pressure Rating's Abyssal Seals hold its upper part, the Cryo Hull all of it); past them the hull cracks; **the screen darkens and desaturates as the pressure rises**; **pearl clams** gape and bite on a beat | lure angler (its light drags rigs toward its jaws), gulper eel (a long gape, a gulp that stalls the rig) | **pearl beds**, **the Leviathan's arena** (a 104 x 40 flooded hall, clear of the cable) | pillow basalt; diamond, mythril, uranium; Abyss Pearl | `PearlAbyss` / `Trench` | the floor is a ceiling |
+
+`MusicCue` (six), `AmbienceCue` (four), `LandmarkKind::Drowned` (generator
+`LandmarkGenerator::Drowned`), thirteen `CaveTile`s (codes 22-34: `Seabed`, `Kelp`, `Coral`,
+`BrineIce`, `PackIce`, `Rime`, `ThermalVent`, `FrozenFigure`, `Sinter`, `GeyserVent`,
+`PillowBasalt`, `PearlClam`, `MerrowStone`) are appended. The strata's rock counts as plain rock
+for ore and hazards (`streamed::base::is_plain_rock`).
+
+### Generation (V11 only; `worldgen/descent/drowned.rs`)
+
+A pure function of the settings and the tile, run by `streamed::assemble` after the Living
+Dark's pass (before the Sinkhole, the Old Deep, the story and the cable, which carve over it):
+region stamps (`DROWNED_REGION` 72 x 48, one per region at most, rolled more often deeper,
+kept off stratum edges, the fixed stamps, the city and the outposts' column) and fixed stamps
+(`eel_grotto`, `drowned_sub`, `frozen_figures`, `old_faithful`, `leviathan_arena`,
+`merrow_city`). Generated water is full fluid tiles at rest (it costs nothing until a
+neighbour changes; breaching a basin from the side drains it through the budgeted fluid pass).
+The fluid-pocket pass skips the city's bounds (its streets stay dry), and caves keep out of it
+(`villages::keeps_caves_out`). `set_piece_bounds` lists the fixed set pieces for the story
+pass. `basins_in` gives the tick its gyres.
+
+**Merrow City** (`MerrowSite`): the merrow's settlement hall (`HALL_WIDTH` x
+`HALL_AIR_ROWS`) beside the Descent IV outpost on the spawn side, sharing its floor (like
+Gravel Hollow); a half-ellipse dome 24 rows tall over both, cut at the cable's rail on the far
+side; `Built(Glass)` round it, sea water six tiles thick outside the glass, a coral rim; a glass
+airlock tube on the hall's side at the floor; the harbour under the floor with two moon pools.
+The village is `placement::underground_id(drowned::MERROW_SITE)` (one past the last site any
+world places), culture `Culture::Merrow`, name "Merrow City", found by every village lookup
+(`villages::merrow_hall`, `special_halls`).
+
+### Rules (`world/drowned.rs`; all timing from world milliseconds or per-second rates)
+
+- **Ballast** (`RigWater::ballast`, per mille, in the rig's per-tick state `Player::water`, so
+  it is predicted and reconciled like the pose): under water (`SUBMARINE_SHARE`), thrust blows
+  the tanks and the drill floods them (`BALLAST_RATE_PER_SECOND`), let go and the trim holds;
+  a neutral trim carries the weight the water does not (the sub hovers), a full one pushes
+  `BALLAST_ACCELERATION` up or down. Out of water the tanks vent to neutral.
+  `apply_submarine` runs after the fluid step. A sinking sub within `SETTLE_REACH` (4 px) of
+  the bottom settles onto it (searched in quarter pixels) and rests, so its drill bites: the
+  movement sweep stops a rig a step short of a floor, and at 20 Hz the water's sink speed kept
+  that step longer than the gap tick after tick (a flooded shaft stalled the cheating bot).
+- **Currents** (`current_at`: a basin's gyre, `gyre_velocity`, and the Leviathan's maelstrom
+  toward its maw) carry a submerged rig as a drift (`CURRENT_DRIFT` of the current's speed,
+  through `nudge_rig`, which only moves a rig where it fits): the drive's braking cannot cancel
+  the sea.
+- **Sonar** (`sonar_ping`, `sonar_reach`, `sonar_pings`, `sonar_light_at`, `drowned::sonar_light`):
+  the scanner under water (or anywhere in Descent IV) also pings: a ring spreading
+  `SONAR_RING_TILES_PER_SECOND`, fading by `SONAR_PING_MILLIS`, mapping the tiles in reach
+  (12 tiles, 26 with the Sonar Suite); one ping a second per rig at most, however long the
+  scanner is held. **Seam for the Echo Caves (Descent VI)**: call
+  `WorldState::sonar_ping(player, output)` and read `sonar_light_at(x, y)` for the moment a
+  ping lights total darkness.
+- **Ice** (`apply_drowned_drive`, after the ground grip): on brine ice, pack ice and rime the
+  drive's push takes `ICE_TRACTION` and braking almost nothing (`ICE_DRAG_PER_SECOND`); the
+  rig slides the distance the drive braked away.
+- **Hull frost** (`RigWater::frost_micro`, millionths, so a slow freeze moves every tick at
+  every rate): +12/s at the glaciers' top to +34/s at the bottom (twice in brine), -260/s by a
+  thermal vent, -400/s at an outpost or in the city, -70/s elsewhere; frost mites add 70 a bite.
+  It takes up to `FROST_SLOW_MAX` (55 %) of every push and of the top speed, never hull: the
+  frost slows, it never kills. The Cryo Hull shrugs it off. `FrostWarning` at 600.
+- **Refreezing**: openings in the Brine Glaciers (outside outposts, lift columns and the city)
+  are scheduled on the Living Dark's regrowth schedule as `Regrowth::Rime` (appended), so the
+  regrowth budget and the never-into-a-body rule apply; `TunnelRefroze` when they freeze.
+- **Geysers** (`geyser_phase`, `geyser_jet_at`): a vent's period is 7-10 s by column (Old
+  Faithful 16 s), the last 1.8 s erupting after a 1.5 s gurgle; a rig whose column runs open
+  down to a vent within `GEYSER_MAX_ROWS` is thrown up at `GEYSER_LIFT_SPEED` (Old Faithful
+  1.3 x); within `GEYSER_SCALD_ROWS` of the throat it is scalded. Pure world time: every tick
+  rate erupts together.
+- **Pressure** (`abyss_pressure_for`): over the seals, hull is lost in proportion to the
+  overshoot (`PRESSURE_DAMAGE_PER_SECOND` per 100, times the depth's creature scale);
+  `PressureWarning` every 3 s while it bites. On Descent worlds the Pressure Rating and the
+  Pressure Hull also deepen the fluids' pressure rows (`submersion_gear`), so a Descent IV rig
+  can swim its deep basins.
+- **Clams** (`clam_open`, 2.6 s of every 6 s): drilled open while gaping, an Abyss Pearl
+  (`ItemKind::Layer`) and `CLAM_PEARL_CREDITS`; shut, it bites the nearest rig and closes back.
+- **Lore** (`DrownedLore`, one per stratum, `DrownedState::lore`): found entering the wreck's
+  hull, the frozen figures' gallery, Old Faithful, the city (with `CityReached`) and on the
+  Leviathan's fall; the game shows each as a story card.
+- **Lure anglers** drag rigs in their light (9 tiles, line of sight) at 55 px/s.
+
+### Creatures (`enemy.rs`, `world/enemies/drowned.rs`)
+
+Eleven appended `EnemyKind`s on the generic body rules (`step_body`, `free_from_rock`,
+`keep_off_bodies`, `site_fits`, contact boxes sized to the sprites, `CONTACT_MARGIN` /
+`STANDOFF_PIXELS`, line-of-sight noticing), each with its own twist: reef shark (circles its
+prey between dashes, `drowned_chase`), ink squid (inks and flees on a bite), frost mite (frost
+on a bite), tusk seal (a straight belly slide until a wall, `drowned_after_move`), scald beetle
+(rides erupting jets), sinter snail (seals the open tile behind it every 6 s while idle, never
+over a body or fluid), spinepuff (sight 3: harmless until close, drawn swollen while hunting),
+lure angler (the drag), gulper eel (a gulp stalls the bitten rig), the eel-dragon and the
+Leviathan. Sea creatures can swim and appear swimming in deep water (`drowned_swim_site`). The
+bosses never roam (`drowned_spawn_allowed`). `ShotKind::PressureBubble` appended.
+
+- **The eel-dragon** (`advance_eel_dragon`): wakes when a rig comes within 18 tiles of its
+  grotto (hostile worlds only); besides its lunges, every 7 s it crackles for 1.3 s
+  (`EelDragonPulse`, drawn as sparks and its ring) and then jolts every rig in the water within
+  5 tiles. Its death pays `EEL_BOUNTY` to the killer.
+- **The Leviathan** (`advance_leviathan`, the gate): wakes when a rig enters its arena. Its pose
+  is a pure function of its move and the world time since the move began (`LeviathanMove`),
+  so it swims alike at every tick rate. *Circling* (above 2/3): laps the arena, and every 5.5 s
+  stops, flares its eyes and roars (1.4 s, the charge's path drawn in red), then charges across
+  to 8 tiles past where the target was. *The maelstrom* (above 1/3): alternates charges with
+  sinking to the floor and opening its maw for 5 s (the whirlpool pulls rigs in, the open maw
+  takes `MAW_DAMAGE_FACTOR` damage), then spits pressure bubbles at every rig. *Thrashing*:
+  1.0 s tells, each charge shakes three boulders off the roof over each rig, and it calls two
+  reef sharks once. No clock: with no rig in its arena for 30 s it sinks back to sleep, healed.
+  On a Peaceful world it yields its gate to the first rig in the arena. Its death fits **the
+  Sonar Suite and the Cryo Hull** to every rig (later joiners too): `RigSystem::boss_reward`
+  answers `DescentBoss::Leviathan` for both, so no shop sells them on Descent worlds.
+  `MAX_HIT_RADIUS` grew to 1.5 tiles so its 44-pixel body is a fair target.
+
+### State, events and formats
+
+- `DrownedState` (`WorldState::drowned`, serde default, hashed only once non-empty, the
+  appended shared section `SectionKey::Drowned` in `SHARED`): sonar pings, ink clouds (field
+  zones of `FieldPreset::Dark`), the eel-dragon, the Leviathan, the lore found.
+  `Player::water` (`RigWater`) rides `PlayerRig` / `PlayerTickState`.
+- Events: `GameplayEventKind::Drowned { what, player_id, x, y }`, netcode codes
+  `520 + DrownedEvent::code()` (520-539; 20 kinds).
+- **`PROTOCOL_VERSION` 17** (one bump for the track). **No save format bump**: every new field
+  has a serde default.
+- The merrow: `Culture::Merrow` (in `EVERY`, not `ALL`; names, local colour, roles: traders,
+  storytellers, scholars; cloister style; a fountain), `Furniture::{Aquarium, CoralLamp,
+  KelpPlanter, ShellChair, PearlMirror}` (`AQUARIUM_LINE`; the reef aquarium is the merrow's
+  signature piece, their makers sell the rest of the line).
+- Shared-file edits (all additive): registry, `cave.rs`, `enemy.rs`, `event.rs`, `descent.rs`
+  enums, `landmarks.rs`, `assemble.rs` (the pass and the dry city), `villages.rs` (Merrow
+  City's hall), `layout.rs`, `people/*`, `home/decor.rs`, `simulate.rs` (two movement hooks,
+  the scanner hook, `advance_drowned` after the Living Dark), `world/enemies.rs` (notice,
+  habitat, chase, after-move, bite, maw damage, kill hooks), `world/living_dark.rs` (the rime
+  arm of the regrowth), `fluids.rs` (pressure rows), `depth_progression.rs` (boss rewards),
+  `balance/descent.rs` (authored content and the lore as story markers).
+
+### Game side
+
+Tile art and back walls for every stratum (`tile_art/drowned_art.rs`: barnacled seabed,
+kelp fronds, branching coral, bubbly brine ice, fractured pack ice, feathered rime, amber vents,
+figures in clear ice, banded sinter, geyser throats, pillow basalt, giant clams, reef stone);
+eleven creature sprites and the bubble (`sprites/drowned.rs`; the Leviathan a 52 x 18 sprite
+drawn at twice the scale, three frames: swim A/B, maw agape); the world layer
+(`rendering/world/drowned.rs`: geyser tells and columns, clams gaping with a pearl, vent
+shimmer, current motes along each gyre and spiralling into the maelstrom, fish past Merrow
+City's glass, the Leviathan's eye flare and red charge line, its breathing maw, the eel-dragon's
+crackle, sonar rings breaking on rock and echoing creature outlines, frost riming the rigs;
+sea creatures are drawn again over the water's darkness so they read, and the Pearl Abyss keeps
+field light 820 per mille so the Leviathan stays visible as the pressure greys the view);
+the per-seat panel and screen (`rendering/drowned_hud.rs`: ballast gauge, frost meter,
+pressure meter against the seals, the Leviathan's health, phase and what to do; the abyss's
+pressure desaturates, vignettes and darkens the view and frost grades it cold, all through the
+field-effect stack, so the accessibility setting applies and nothing flashes); the merrow's
+look (teal scales, crest fins, gills, shell necklaces, kelp and sea-glass cloth) and the
+aquarium line's furniture art; news lines and lore story cards (`StoryMomentKind::DeepLore`,
+appended); audio (appended at the end of `patches!`: sonar ping, geyser blast, ice crack, hull
+groan, clam snap, the Leviathan's roar, the merrow chime, five stratum beds and the
+Leviathan's theme; `drowned_music` in the director). Input needs nothing new: ballast is
+thrust and drill, the sonar is the scanner, so keyboard, pads, touch and split-screen seats all
+play it. Scenes: `drowned_ocean_basin`, `drowned_sonar`, `drowned_eel_dragon`,
+`drowned_builder_sub`, `drowned_glaciers`, `drowned_frozen_figures`, `drowned_thermal_vent`,
+`drowned_geyser`, `drowned_old_faithful`, `drowned_merrow_city`, `drowned_merrow_arrival`,
+`drowned_moon_pool`, `drowned_pearl_abyss`, `drowned_leviathan`, `drowned_leviathan_roar`,
+`drowned_leviathan_maelstrom`.
+
+### Tests
+
+`drowned::tests` (geysers' beat with a tell before every eruption, pressure and seals, frost,
+clams, the sonar ring, gyres, the Leviathan's phases), `worldgen::descent::drowned::tests`
+(every stratum's rock and set pieces, the fixed stamps where their functions say, a dry
+Merrow City with glass, sea and moon pools, determinism, none on older worlds; an ignored ASCII
+dump), `world::drowned_tests` (older worlds untouched; ballast rises, hovers and sinks, alike
+at 20/30/60 Hz; a basin's gyre carries a hovering sub; the scanner's sonar and the Sonar
+Suite's reach; ice slides where stone brakes; frost builds, slows, thaws at a vent and the Cryo
+Hull ignores it; a tunnel refreezes but never on a rig; a geyser throws a rig up, erupts at the
+same moment at 20/30/60 Hz and scalds a rig on its throat; pressure past weak seals, held by
+the Cryo Hull; clams pay or bite; Merrow City peopled under its bubble; every stratum's
+natives; mites, squid, angler and snail at work; the eel-dragon's wake, tell and bounty; **a
+bot with Descent IV kit (hull tier 11, the Abyssal Seals, a railgun) beats the Leviathan**
+through all three phases with a fifth of its hull left, winning the Sonar Suite and the Cryo
+Hull, the Descent V gate crushing before and passing after; the gate rewards are boss rewards;
+an empty arena puts it to sleep; Peaceful yields the gate; JSON saves, the section and the
+hash; a flooded sub settles on the bottom and drills through it at 20-120 Hz). The audio
+director's every-stratum test covers Descent IV's five beds.
+
+Shared tests adjusted for the authored strata (additively, each with a note): the registry's
+music check accepts Descent IV's own pieces and its landmark check `LandmarkGenerator::Drowned`;
+the Pearl Abyss desaturates from 0.15 at its top (the rest comes with the pressure on each
+seat) and the ocean's water is the submarine's rather than a field drag; the Pearl Abyss and
+Geyser Fields rocks were retinted to stay distinct from every other Descent's; the Leviathan
+is the one enemy past a 20-pixel radius and keeps its own path (out of the generic body
+sweep, held by the bot fight instead); the frost mite's radius is 6; the unknown-tile-code
+probe moved past the new cave codes; and the "rig systems go on sale once felt" tests use the
+Gravity Anchor, the first gate system still sold now the Cryo Hull is the Leviathan's.
+
+### Descent probe
+
+`descent_report` on the registry (default seed): Descent IV ends at **33.0 h** (Ocean 25.0,
+Glaciers 26.8, Geysers 28.6, Merrow City 30.6, Pearl Abyss 33.0; the task's target 31-40 h, §14
+26-36 h); the Cryo Hull is won at 31.1 h; Descent IV's longest gap between new things is 17
+minutes (13-17 per stratum), no deaths; the whole run 73.0 h.
+
+### Seams and known limits
+
+- The expedition's logs 31-40 belong to the story track: this track's story beats are its own
+  lore cards, and `set_piece_bounds` lists the set pieces the story's sites should keep off
+  (`expedition::sites::crosses_strata_set_pieces` does not read it yet: the integrator wires
+  it).
+- Merrow City's buildings use the cloister style (pale stone and blue tile) rather than a
+  coral-and-shell style of their own; its residents are drawn as merrow.
+- Pilots on foot swim as before; currents, geysers and frost act on rigs only.
+- The Leviathan moves on its own path and passes over terrain inside its arena (the arena is
+  open water); the probe still models the fight as fixed minutes.
+- Breaching a big basin's side drains it through the budgeted fluid pass (slow levelling of
+  wide bodies, see "Wave 7 fluids").
+- Weapons hit the Leviathan within its 44-pixel hit circle while its drawn body (and contact
+  box) is about 184 x 56: auto-aim and shots at its trunk land, a manual shot at the tip of
+  its head or tail passes by. A hit shape of its own would touch every hit test.
+- The Underground Ocean is many separate basins (one region stamp per 72 x 48 at most), not
+  one connected sea. (The Hollow Seals, tier 4, would hold the whole abyss, but the depth-line
+  cap keeps them locked until a rig has reached Descent V, so the Cryo Hull is what lifts it.)
+
+### Wave 9 drowned review
+
+An independent review re-ran the probe (same numbers: Descent IV ends at 33.0 h, Cryo Hull at
+31.1 h, gaps 13-17 minutes) and the screenshot scenes, and fixed: submerged rigs are drawn
+again over the water's tint and the deep's dark (a submarine all but vanished in every
+Descent IV scene); the eel-dragon is drawn half again larger, a mini-boss, its contact box
+grown to `(54, 15)` to match; the hull-frost pass skips warm rigs with no frost.
+
 ## Wave 9 hollow: Descent V, the Hollow World (`src/hollow.rs`, `src/hollow/fields.rs`, `src/world/hollow.rs`, `src/world/enemies/hollow.rs`, `src/worldgen/descent/hollow.rs`)
 
 The Hollow World (rows about 5,800-7,600 of a V11 world, §14 Descent V) stops being a
@@ -6096,6 +6096,115 @@ This branch (60 Hz, default seed, IV-VI still the Wave 7 placeholder strata):
   placeholder cap's range, the Wave 9 section), `crust::stratum_heat_units` (the climate arm),
   `workshop` (appended recipes, `CraftOutput::Supply`), `world/mod.rs` (the test module), the
   netcode protocol doc, and in the game the dialog, HUD, onboarding, sprites and scenes.
+
+## Wave 9 integration: Descents IV-VI stacked and wired
+
+The six Wave 9 tracks (drowned, hollow, strange-a, strange-b, story, progression) are stacked
+in that order on one linear branch, every commit compiling and passing clippy. What the
+stacking decided, and the seams wired on top:
+
+### Shared files and formats
+
+- **Appended enums in track order**: `EnemyKind` (drowned, hollow, distortion, far kinds; 118
+  in `ALL`), `ShotKind`, `MusicCue` / `AmbienceCue`, `LandmarkKind` / `LandmarkGenerator`,
+  `SectionKey` (`Drowned`, `Hollow`, `Distortion`, `FarStrange`, all in `SectionKey::SHARED`),
+  `StoryMomentKind`, the game's `SoundCue` / `Patch` / `SeatLoop` (audio patches appended at the
+  end of `patches!` in track order) and the sprite atlas.
+- **Tile codes**: the drowned and far tracks both appended `CaveTile`s from code 22. The far
+  Strange Layers' six now take codes 35-40 (`EchoQuartz` .. `Chronoglass`); the Drowned and
+  Frozen keep 22-34. `TileKind::Hollow` (`0x900`) and `TileKind::Warped` (`0x1600`) families do
+  not overlap any other range.
+- **Village sites**: Merrow City and the Sunfolk Kraal both took `MAX_SITE + 1`; the Sunfolk
+  Kraal is now `MAX_SITE + 2` (Parallax Station keeps `MAX_SITE + 6`). The fixed deep halls
+  (`streamed::villages::deep_halls`) are Gravel Hollow, Merrow City and the Sunfolk Kraal;
+  Parallax Station keeps its own hall code.
+- **Event codes**: drowned 520-539 (all twenty used), hollow 540-559, distortion 560-579, far
+  580-599, story 490-493 (no new codes), progression none.
+- **Sounds**: both Descent IV and the Echo Caves named a `SonarPing` cue and patch; the Echo
+  Caves' is `SoundCue::EchoPing` / `Patch::EchoPing` (`"echo_ping"`).
+- **`PROTOCOL_VERSION` 17**, one bump for the wave (the netcode doc lists every track's wire
+  change). **No save format bump** (still 14): every new world and player field has a serde
+  default, tile-keyed maps (`Distortion::twin_cooldowns`, the far track's keyed walls) save as
+  `crate::pair_list`, and an older save loads with every Wave 9 section empty (test).
+- **Generation**: only V11 changed. `GOLDEN_V11_DIGEST` is `0x4e9d_92cc_a15c_769d`; the V1-V10
+  digests are unchanged.
+- Small fits where tracks met: the far track's tempo wrapper around `advance_enemy` keeps the
+  distortion track's `start_kind` dispatch and the hollow track's held creatures; enemy damage
+  multiplies the far track's time scaling and the Leviathan's maw, then the Sun Serpent's
+  armour; the weapon lock skips the Living Dark's peaceful folk, the Hollow World's mounts and
+  the far track's unseen creatures; the far track's `FieldRegions` reading in the probe learnt
+  the distortion strata's `Authored` regions.
+
+### Seams wired
+
+- **One Sonar Suite** (`world/sonar.rs`): `sonar_medium` (the Echo Caves' dark, or water and
+  any Descent IV stratum), `sonar_reach_tiles` (further with the Leviathan's Sonar Suite in
+  both), `sonar_ping` and the scanner's one hook `sonar_scanner`, and one light,
+  `sonar_light_at` / `sonar_light_at_tile`, the brightest of both media. Each medium keeps its
+  own pings in its own section (`drowned_sonar_*`, `echo_sonar_*`); no state was added.
+- **The story in the new strata**: the Drowned and Frozen's set pieces joined
+  `sites::DEEPER_SET_PIECES` (the hollow, distortion and far tracks had added theirs to
+  `crosses_strata_set_pieces`). The Hollow World's open skies (the Inner Sky, the isles' sea,
+  the Sunforge's sky) no longer count as set pieces: log sites there stand on the story's
+  floating stone (`ExpeditionSite::footing_rows`), and placement tries more rows and columns
+  after the old tries, so all sixty sites keep off every set piece on every test seed.
+- **Settlements remember the Fathers**: Merrow City, the Sunfolk Kraal and Parallax Station are
+  registered by their built names (`memories::Settlement::place_names`), so their generated
+  people tell the Fathers' memories in conversation (in their own voice where their trade
+  speaks for one); the outposts' arrival cards are gone (Gravel Hollow keeps its card).
+- **Progression against the gates**: the Sonar Suite and Cryo Hull from the Leviathan, the
+  Gravity Anchor from the Sun Serpent and the Phase Drill from The Glitch are each granted by
+  the boss's death and never sold (`wave9_progression_tests`, the three bot fights).
+- **Deep supplies spent where they bite** (no new input; works per seat, online and by touch):
+  an **Echo Charge** gives a rig without the Sonar Suite one ping as long as the Suite's in the
+  Echo Caves; a **Frost Heater** burns the hull frost off as it reaches the warning line; a
+  **Shade Canopy** cools a rig back down as the Sunforge's light starts to scorch. The other
+  five (Ballast Tank, Flare Buoy, Beast Bait, Time-Bubble Bomb, Lamp Filter) are still sold and
+  crafted without an effect of their own (the far track's time bubbles and lamp filters are
+  its own charges and swaps).
+- **Music**: the director plays each Descent IV-VI stratum's piece and bed and the
+  Leviathan's, the Sun Serpent's and The Glitch's themes (`drowned_music`, `hollow_music`,
+  `distortion_music`, `far_strange_music`).
+- **Probe**: the Underground Ocean's basins (`drowned::submarine_share_permille`) and the
+  isles' turned gravity (`hollow::turned_gravity_share_permille`) are read beside the registry's
+  fields; the glare starts at 1300 per mille (the authored Sunforge; the Inner Sky is 1250), so
+  the probe's glare and the glare hint both see it.
+- Shared tests fitted: the Glitch bot aims through the mirrored rule (the distortion strata
+  mirror the aim with the screen), the Sun Serpent keeps the body rules in its own fight test
+  (with every Descent's kinds in the shared body arena it lands on the rig), the Geyser
+  Fields' sinter takes a paler cream (it looked like the Inner Sky and the Sunforge), and Pixel
+  Rot's block test allows for the story's sites standing in it.
+- Tests: `world::sonar_tests`, `world::wave9_seam_tests` (settlements, the story's sites,
+  shared sections, a V11 save and keyframe with all the new state), the supplies' tests in
+  `sonar_tests`, `drowned_tests` and `hollow_tests`.
+
+### The descent probe (integrated V11, default seed, 60 Hz)
+
+| Descent | Ends at (h) | Target (h) | Deaths |
+|---|---|---|---|
+| I The Crust | 6.4 | 5-8 | 0 |
+| II The Old Deep | 16.0 | 13-18 | 1 |
+| III The Living Dark | 23.0 | 22-29 | 1 |
+| IV The Drowned and Frozen | 33.6 | 31-40 | 1 |
+| V The Hollow World | 44.6 | 42-53 | 1 |
+| VI The Strange Layers | 59.9 | 53-66 | 1 |
+| (whole run, VIII) | 78.0 | 75-90 | 7 |
+
+Every Descent I-VI stratum passes the 20-40 minute novelty check; the longest waits in IV-VI
+are 9-16 minutes (Upside-Down Isles and the Sunforge 16). Gate systems: Cryo Hull at 31.6 h,
+Gravity Anchor at 42.2 h, Phase Drill at 57.5 h. Strata still over 40 minutes are all in the
+placeholder Descent VII (the Archive of Stars, Sleeping Garrison, the Seal Gate). No retune
+was needed.
+
+### Still open
+
+- Five deep supplies have no effect yet (above). The far track's time bubbles and lamp
+  filters stay its own purchases; a later wave could make the supplies those charges.
+- Carried from the track reviews: the Leviathan's hit circle is smaller than its drawn body;
+  the Underground Ocean is many basins, not one sea; currents, geysers, frost, wind and the
+  anchor act on the rig only, not a pilot on foot; the probe counts boss fights as modelled
+  minutes; Merrow City, the Sunfolk and Parallax Station borrow existing cultures' buildings;
+  far creatures are small beside the rig; no settlement quest arcs for the new settlements.
 
 ## Replication
 
