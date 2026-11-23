@@ -301,7 +301,15 @@ impl WorldState {
             } else {
                 -i32::try_from(EXPOSURE_COOL_PER_SECOND * step_seconds_milli / 1_000).unwrap_or(0)
             };
-            let new = u16::try_from((i32::from(old) + change).clamp(0, 1_400)).unwrap_or(0);
+            let mut new = u16::try_from((i32::from(old) + change).clamp(0, 1_400)).unwrap_or(0);
+            // A Shade Canopy in the kit (Wave 9 integration, the progression's supply) throws
+            // its shade as the light starts to scorch: the rig cools back to nothing.
+            if old < EXPOSURE_SCORCH_AT
+                && new >= EXPOSURE_SCORCH_AT
+                && self.take_supply(player, crate::workshop::DeepSupply::ShadeCanopy)
+            {
+                new = 0;
+            }
             if new == 0 {
                 self.hollow.exposure.remove(&player);
             } else {

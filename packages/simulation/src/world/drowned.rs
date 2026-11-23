@@ -800,11 +800,19 @@ impl WorldState {
             let now = player.water.frost_permille();
             if was < FROST_WARNING && now >= FROST_WARNING {
                 let tile = player.tile_in(frame);
-                output.push_event(drowned_event(
-                    DrownedEvent::FrostWarning,
-                    Some(player_id),
-                    tile,
-                ));
+                // A Frost Heater in the kit (Wave 9 integration, the progression's supply) burns
+                // the frost off as it bites; without one the warning sounds.
+                if self.take_supply(player_id, crate::workshop::DeepSupply::FrostHeater) {
+                    if let Some(player) = self.players.get_mut(&player_id) {
+                        player.water.frost_micro = 0;
+                    }
+                } else {
+                    output.push_event(drowned_event(
+                        DrownedEvent::FrostWarning,
+                        Some(player_id),
+                        tile,
+                    ));
+                }
             }
         }
     }

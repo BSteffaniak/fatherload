@@ -880,3 +880,33 @@ fn older_worlds_never_see_the_hollow_world() {
     assert!(world.sun_well().is_none());
     let _ = quiet;
 }
+
+#[test]
+fn a_shade_canopy_from_the_kit_shades_a_rig_as_the_light_starts_to_scorch() {
+    use crate::workshop::DeepSupply;
+    let mut world = world_at(60, false);
+    world.set_world_time_millis(INNER_DAY_MILLIS * 2 + INNER_DAWN_MILLIS + 10_000);
+    let lit = forge_spot(&world, false);
+    put_rig(&mut world, lit);
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, DeepSupply::ShadeCanopy, 1);
+    let mut shaded = false;
+    for _ in 0..60 * 30 {
+        world.teleport_rig_to(
+            PLAYER,
+            WorldPos::tile_center(i64::from(lit.x), i64::from(lit.y)),
+        );
+        let _ = step(&mut world, ControlState::default());
+        if !shaded && world.supplies_of(PLAYER, DeepSupply::ShadeCanopy) == 0 {
+            shaded = true;
+            assert!(
+                world.hollow().exposure_of(PLAYER) < EXPOSURE_SCORCH_AT / 2,
+                "the canopy cooled the rig"
+            );
+        }
+    }
+    assert!(shaded, "the canopy was thrown as the scorch began");
+    // Without another the light heats it again.
+    assert!(world.hollow().exposure_of(PLAYER) > 0, "it heats again");
+}

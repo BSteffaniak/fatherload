@@ -1074,3 +1074,34 @@ fn the_drowned_state_survives_json_saves_and_the_wire_and_is_hashed() {
     client.apply_section(key, payload);
     assert_eq!(client.drowned(), world.drowned());
 }
+
+#[test]
+fn a_frost_heater_from_the_kit_burns_the_frost_off_as_it_bites() {
+    use crate::workshop::DeepSupply;
+    let mut world = world_at(30);
+    let row = middle_row(Stratum::BrineGlaciers);
+    let centre = TilePosition { x: FAR, y: row };
+    room(&mut world, centre, (10, 4), 0);
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, DeepSupply::FrostHeater, 1);
+    let mut warned = false;
+    let mut burned = false;
+    for _ in 0..30 * 40 {
+        warned |= drowned_events(&ticks(&mut world, 1)).contains(&DrownedEvent::FrostWarning);
+        if !burned && world.supplies_of(PLAYER, DeepSupply::FrostHeater) == 0 {
+            burned = true;
+            assert!(!warned, "the heater went before any warning");
+            assert!(
+                world.rig_water(PLAYER).frost_permille() < FROST_WARNING / 2,
+                "the heater burned the frost off"
+            );
+        }
+    }
+    assert!(burned, "the heater was lit as the frost bit");
+    // With the kit empty the frost builds again.
+    assert!(
+        world.rig_water(PLAYER).frost_permille() > 0,
+        "it freezes again"
+    );
+}

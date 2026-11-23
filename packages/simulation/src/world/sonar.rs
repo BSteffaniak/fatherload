@@ -19,6 +19,7 @@ use crate::{
     event::TickOutput,
     far_strange::{SONAR_PING_TILES, SONAR_SUITE_PING_TILES},
     terrain::TilePosition,
+    workshop::DeepSupply,
 };
 
 /// Where a sonar ping travels.
@@ -76,11 +77,14 @@ impl WorldState {
     }
 
     /// The scanner's one sonar hook (an applied `UseScanner`): a ping in the Echo Caves, or in
-    /// water at most once a second.
+    /// water at most once a second. In the Echo Caves a rig without the Sonar Suite spends an
+    /// Echo Charge from its kit, if it holds one, on a ping as long as the Suite's.
     pub(super) fn sonar_scanner(&mut self, player_id: PlayerId, output: &mut TickOutput) {
         match self.sonar_medium(player_id) {
             Some(SonarMedium::EchoCaves) => {
-                let _pinged = self.echo_sonar_ping(player_id);
+                let charged = !self.has_sonar_suite(player_id)
+                    && self.take_supply(player_id, DeepSupply::EchoCharge);
+                let _pinged = self.echo_sonar_ping_reaching(player_id, charged);
             }
             Some(SonarMedium::Water) => self.drowned_scanner(player_id, output),
             None => {}

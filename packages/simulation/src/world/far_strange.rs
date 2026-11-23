@@ -220,6 +220,11 @@ impl WorldState {
     /// moment ([`SONAR_PING_TILES`], [`SONAR_SUITE_PING_TILES`] with the Sonar Suite; a third
     /// as far inside a hush moth's hush). Blind hunters hear it. Returns whether it pinged.
     pub(super) fn echo_sonar_ping(&mut self, player_id: PlayerId) -> bool {
+        self.echo_sonar_ping_reaching(player_id, false)
+    }
+
+    /// [`Self::echo_sonar_ping`], as far as the Sonar Suite's if `charged` (an Echo Charge).
+    pub(super) fn echo_sonar_ping_reaching(&mut self, player_id: PlayerId, charged: bool) -> bool {
         let Some(player) = self.players.get(&player_id) else {
             return false;
         };
@@ -227,7 +232,7 @@ impl WorldState {
         if !self.in_echo_caves(tile) {
             return false;
         }
-        let suite = player.hazard_gear.has_system(RigSystem::SonarSuite);
+        let suite = charged || player.hazard_gear.has_system(RigSystem::SonarSuite);
         let mut reach = f32::from(if suite {
             SONAR_SUITE_PING_TILES
         } else {

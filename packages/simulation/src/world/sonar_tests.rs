@@ -198,3 +198,43 @@ fn dry_rock_outside_the_echo_caves_has_no_sonar() {
     assert!(world.sonar_pings().is_empty());
     assert!(world.far_strange().pings.is_empty());
 }
+
+#[test]
+fn an_echo_charge_from_the_kit_pings_as_far_as_the_sonar_suite() {
+    use crate::workshop::DeepSupply;
+    let mut world = world();
+    let centre = TilePosition {
+        x: 260,
+        y: middle_row(Stratum::EchoCaves),
+    };
+    room(&mut world, centre, (20, 4), None);
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, DeepSupply::EchoCharge, 1);
+    let _ = scan(&mut world);
+    assert_eq!(
+        world.far_strange().pings.last().map(|ping| ping.reach),
+        Some(SONAR_SUITE_PING_TILES),
+        "the charge's long ping"
+    );
+    assert_eq!(
+        world.supplies_of(PLAYER, DeepSupply::EchoCharge),
+        0,
+        "spent"
+    );
+    // The kit is empty: the next ping is the stock one.
+    ticks(&mut world, 30 * 6);
+    let _ = scan(&mut world);
+    assert_eq!(
+        world.far_strange().pings.last().map(|ping| ping.reach),
+        Some(SONAR_PING_TILES)
+    );
+    // The Sonar Suite never spends a charge.
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, DeepSupply::EchoCharge, 1);
+    grant_suite(&mut world);
+    ticks(&mut world, 30 * 6);
+    let _ = scan(&mut world);
+    assert_eq!(world.supplies_of(PLAYER, DeepSupply::EchoCharge), 1);
+}
