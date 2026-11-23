@@ -533,6 +533,25 @@ pub const ALL: &[&SpriteDef] = &[
     &distortion::DEAD_PIXEL,
     &distortion::SHOT_MIRROR_SHARD,
     &distortion::SHOT_ROT_PULSE,
+    // The far Strange Layers (Wave 9 strange-b): without these in the atlas none of them
+    // drew.
+    &far_strange::TICK_MITE,
+    &far_strange::AMBER_SLOTH,
+    &far_strange::REWIND_NEWT,
+    &far_strange::ECHO_STALKER,
+    &far_strange::SHRIEKER,
+    &far_strange::HUSH_MOTH,
+    &far_strange::PRISM_SCARAB,
+    &far_strange::SPLITTER_SPIRE,
+    &far_strange::LENS_WRAITH,
+    &far_strange::THE_GLITCH,
+    &far_strange::GLITCH_SHARD,
+    &far_strange::SHOT_PRISM_RED,
+    &far_strange::SHOT_PRISM_GREEN,
+    &far_strange::SHOT_PRISM_BLUE,
+    &far_strange::SHOT_GLITCH_BOLT,
+    &explosives::TIME_BUBBLE,
+    &explosives::ICON_TIME_BUBBLE,
 ];
 
 #[cfg(test)]

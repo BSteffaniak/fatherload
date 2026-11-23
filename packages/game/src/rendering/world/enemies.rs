@@ -1549,6 +1549,48 @@ mod tests {
         span
     }
 
+    /// Every creature's sprite (and the Wave 9 shots') is in the atlas: a sprite left out of
+    /// `sprites::ALL` is never drawn (the far Strange Layers' creatures and The Glitch were
+    /// invisible until they were added).
+    #[test]
+    fn every_enemy_and_shot_sprite_is_in_the_atlas() {
+        let names: std::collections::BTreeSet<&str> = crate::rendering::pixel_art::sprites::ALL
+            .iter()
+            .map(|sprite| sprite.name)
+            .collect();
+        for kind in EnemyKind::ALL {
+            let sprite = enemy_sprite(kind);
+            assert!(
+                names.contains(sprite.name),
+                "{kind:?}: {} is not in the atlas",
+                sprite.name
+            );
+        }
+        for shot in [
+            ShotKind::PrismRed,
+            ShotKind::PrismGreen,
+            ShotKind::PrismBlue,
+            ShotKind::GlitchBolt,
+            ShotKind::MindSpore,
+        ] {
+            let sprite = shot_sprite(shot);
+            assert!(
+                names.contains(sprite.name),
+                "{shot:?}: {} is not in the atlas",
+                sprite.name
+            );
+        }
+        for kind in fatherload_simulation::explosive::ExplosiveKind::ALL {
+            if let Some(sprite) = super::super::explosives::charge_sprite(kind) {
+                assert!(
+                    names.contains(sprite.name),
+                    "{kind:?}: {} is not in the atlas",
+                    sprite.name
+                );
+            }
+        }
+    }
+
     /// Wave 6: the colossus' drawn body stays inside its contact box, so a pilot standing
     /// beside it (pushed to exactly touching) is never drawn inside its arms.
     #[test]
