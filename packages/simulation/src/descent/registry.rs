@@ -866,7 +866,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Cave(CaveTile::Sinter),
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(206, 198, 152),
+            Rgb(222, 200, 148),
             Rgb(128, 112, 80),
             Rgb(58, 48, 34),
             Some(Rgb(255, 250, 220)),

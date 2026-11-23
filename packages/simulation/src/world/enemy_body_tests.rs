@@ -128,6 +128,10 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // The Leviathan swims its own path in its arena (Wave 9,
         // `drowned_tests::a_bot_with_descent_iv_kit_beats_the_leviathan...`).
         && !matches!(kind, EnemyKind::Leviathan)
+        // ... and the Sun Serpent orbits its well with its coils (Wave 9 integration: with every
+        // Descent's kinds in the arena it lands by the rig;
+        // `hollow_tests::a_bot_beats_the_sun_serpent_and_the_crew_gets_the_gravity_anchor`).
+        && !matches!(kind, EnemyKind::SunSerpent | EnemyKind::SerpentCoil)
         // So do the distortion strata's (Wave 9; their twins only exist in a mirror hall):
         // `distortion_tests::the_distortion_creatures_keep_the_body_rules_in_a_fight`.
         && !kind.is_distortion()

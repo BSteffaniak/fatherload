@@ -321,7 +321,9 @@ fn pixel_rot_quantizes_its_rock_deeper() {
             }
         }
     }
-    assert!(checked > 200, "{checked} uniform blocks");
+    // (Wave 9 integration: the story's log sites and anomaly rooms now stand in the stratum too,
+    // and a few blocks under them are mixed; 200 of the sampled blocks stay uniform.)
+    assert!(checked >= 180, "{checked} uniform blocks");
     assert!(data > 3, "{data} data blocks");
     // The top tier keeps the rock above (few warped tiles).
     let (top, _) = layout.rows(Stratum::PixelRot);
