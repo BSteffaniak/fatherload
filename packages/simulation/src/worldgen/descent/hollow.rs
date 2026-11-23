@@ -843,16 +843,12 @@ pub fn crosses_set_pieces(
         let mut x = area.min.x;
         while x <= area.max.x {
             let open = match stratum_in(settings, layout, x, y) {
-                Stratum::InnerSky => super::hollow_open(settings, layout, x, y),
+                // The jungle's halls: a room there would cut a hall open.
                 Stratum::MegafaunaJungle => jungle_open(settings, layout, x, y),
-                Stratum::UpsideDownIsles => {
-                    let (ceiling, floor) = isle_sea_rows(settings, layout, x);
-                    y >= ceiling - 2 && y <= floor + 2
-                }
-                Stratum::TheSunforge => {
-                    let (ceiling, floor) = forge_rows(settings, layout, x);
-                    y >= ceiling - 2 && y <= floor + 4
-                }
+                // The open skies of the Inner Sky, the isles' sea and the forge do not count
+                // (Wave 9 integration): the story's log sites there stand on a floating stone of
+                // their own (`expedition::sites::ExpeditionSite::footing_rows`), like the isles;
+                // the isles themselves are kept off above.
                 _ => false,
             };
             if open {

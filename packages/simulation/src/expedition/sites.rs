@@ -89,11 +89,15 @@ impl ExpeditionSite {
         }
     }
 
-    /// Rows of rock stamped under the floor (Wave 9): in the Hollow World's open sky a site
+    /// Rows of rock stamped under the floor (Wave 9): in the Hollow World's open skies (the
+    /// Inner Sky, and since the Wave 9 integration the isles' sea and the Sunforge's sky) a site
     /// stands on a little floating stone of its own instead of a plank hanging in the air.
     #[must_use]
     pub const fn footing_rows(&self) -> i32 {
-        if matches!(self.stratum, Stratum::InnerSky) {
+        if matches!(
+            self.stratum,
+            Stratum::InnerSky | Stratum::UpsideDownIsles | Stratum::TheSunforge
+        ) {
             FOOTING_ROWS
         } else {
             0
@@ -196,8 +200,11 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
     };
     // The rolled distance out from the cable, or the next of a few further along the row where
     // the site would cut a pilot-only ruin, sit under a tomb entrance or cut one of the strata's
-    // set pieces (Wave 8 integration); then the same tries on two other rows of its slot (kept
-    // as rolled if every try is taken, which the placement tests rule out for their seeds).
+    // set pieces (Wave 8 integration); then the same tries on two other rows of its slot; then
+    // (Wave 9 integration: the Strange Layers' halls fill whole rows) three more rows and further
+    // out (kept as rolled if every try is taken, which the placement tests rule out for their
+    // seeds). The later tries only follow the earlier ones, so a site the first tries placed
+    // stays where it was.
     let rolled = i32::try_from((roll >> 20) % 97).unwrap_or(0);
     let first_try = at(24 + rolled, y);
     let rows = [
@@ -205,9 +212,17 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
         slot_top + (y - slot_top + slot_rows / 3) % slot_rows,
         slot_top + (y - slot_top + 2 * slot_rows / 3) % slot_rows,
     ];
+    let more_rows =
+        [1, 3, 5].map(|sixth| slot_top + (y - slot_top + sixth * slot_rows / 6) % slot_rows);
     rows.into_iter()
         .flat_map(|row| (0..8).map(move |attempt| (row, attempt)))
         .map(|(row, attempt)| at(24 + (rolled + attempt * 29) % 97, row))
+        .chain(
+            rows.into_iter()
+                .chain(more_rows)
+                .flat_map(|row| (0..12).map(move |attempt| (row, attempt)))
+                .map(|(row, attempt)| at(24 + (rolled + attempt * 37) % 180, row)),
+        )
         .find(|site| {
             let around = site.extent().expanded(3);
             !crosses_older_spaces(settings, &around)
@@ -310,7 +325,25 @@ pub type SetPieceQuery = fn(&WorldSettings, &TileRect) -> bool;
 /// arena or set piece of its own appends its query (Merrow City's bubble, the jungle tribes'
 /// village, the Sun Serpent's orbit, the Prism Relay ...); the log sites then move along their
 /// rows and the anomaly rooms are dropped, exactly as for Descents I-III.
-pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[crosses_descent_landmarks];
+pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[crosses_descent_landmarks, crosses_drowned];
+
+/// Whether `area` crosses one of the Drowned and Frozen's set pieces (Wave 9 integration):
+/// Merrow City's bubble, the eel-dragon's grotto, the drowned builder sub, Old Faithful, the
+/// Leviathan's arena, and the basins, galleries and chimneys its regions stamp.
+fn crosses_drowned(settings: &WorldSettings, area: &TileRect) -> bool {
+    use crate::worldgen::descent::drowned;
+    let near = area.expanded(2);
+    if drowned::set_piece_bounds(settings)
+        .iter()
+        .any(|bounds| bounds.intersects(&near))
+    {
+        return true;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    drowned::stamps_with(settings, &layout, &near)
+        .iter()
+        .any(|stamp| stamp.bounds.intersects(&near))
+}
 
 /// Whether `area` crosses one of the registry's Descent landmarks (in Descents IV-VIII only,
 /// so the placement of Descents I-III's logs stays as Wave 8 left it).
