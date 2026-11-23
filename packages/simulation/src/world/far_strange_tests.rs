@@ -1030,8 +1030,9 @@ fn glitch_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState
     #[allow(clippy::cast_possible_truncation, reason = "a unit vector times 127")]
     let aim = ((dx / length * 127.0) as i8, (dy / length * 127.0) as i8);
     let fields = world.fields_at(rig.x, rig.y);
-    // Mirrored controls: the bot reads the rule and steers the other way.
-    let mirrored = fields.mirror > 0.5;
+    // Mirrored controls: the bot reads the rule and steers (and, since the distortion strata
+    // mirror the aim with the screen, aims) the other way.
+    let mirrored = world.rig_controls_mirrored(PLAYER);
     // The rotation thrusters, worked by hand like a player: keep the rig's feet towards
     // whatever way gravity points now (the rules turn it), so the main thruster fights it.
     let level = fields.down_angle().unwrap_or(0.0);
@@ -1061,7 +1062,11 @@ fn glitch_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState
         .with_weapon(WeaponControl {
             fire: tick % 6 < 3,
             auto_aim: false,
-            aim_x: aim.0,
+            aim_x: if mirrored {
+                aim.0.saturating_neg()
+            } else {
+                aim.0
+            },
             aim_y: aim.1,
         })
 }
