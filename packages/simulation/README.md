@@ -5343,6 +5343,209 @@ window; re-check at integration.
 - Probe re-run on this branch: the same numbers as above (Inner Sky 32.4 h, Jungle 34.6 h,
   Isles 36.9 h, Sunforge 39.7 h, whole run 73.0 h); the probe does not model exposure.
 
+## Wave 9 strange-a: Descent VI part A, the distortion strata (`src/distortion.rs`, `src/distortion/{mirror,shear,rot,fields}.rs`, `src/world/distortion.rs`, `src/world/enemies/distortion.rs`, `src/worldgen/descent/distortion.rs`)
+
+The first three Strange Layers of a Deep Descent world (rows about 7,600-8,600 of V11, §14
+Descent VI) stop being Wave 7 placeholder region cells. Reality thins near the builders'
+machine, and each stratum bends one thing a player trusts: which way is left, which way is
+down, and how much of the world can be seen. Each rule starts gently near the stratum's top and
+is pushed by its bottom. Nothing here runs before V11 (`distortion::has_distortion` is
+`has_descents()`): the V1-V10 digests, hashes and replays are unchanged.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (gentle, then pushed) | Creatures | Landmark | Ores, layer resource | Music |
+|---|---|---|---|---|---|
+| Mirror Strata | **mirror halls** (`distortion::mirror`): halls where the screen, the stick, the rotation thrusters and the aim mirror; their rock is symmetric about the axis to the tile; framed by silvered glass in the rock and a shimmering curtain on screen. A quarter of the 64x40 cells hold a narrow hall near the top, most cells a wide, tall one near the bottom. **Mirror twins** step out of the glass and copy a rig's moves and shots, mirrored. **Mirror ore** lies in pairs at mirrored columns, one real, one reflection | mirror twin, glassback, gazer | the Looking-Glass Hall (its glass mirror on the axis, a strongbox and its reflection); **Parallax Station** (the Descent VI outpost and its research settlement) | silver, diamond, platinum; Mirror Ore | `MirrorStrata` (a palindrome) |
+| Gravity Shear | **shear halls** (`distortion::shear`): rooms whose gravity turns 90 or 270 degrees (walls) near the top, 180 (ceilings) from a third of the way down, any of them at the bottom, with plated turned floors, shelves, a prize hanging at the far end and flow-stone frames; flow lines on screen. The rig turns itself with its rotation thrusters (free rotation in the stratum); the camera follows the rig | tumbler, lodestar, shear mantis | the Shear Spire: a hollow tower where down is the nearest wall, a cache on its central plinth | platinum, mythril, uranium; Shear Stone | `GravityShear` (a turning arpeggio) |
+| Pixel Rot | **rot tiers** (`distortion::rot`): five bands of rows, each lower-resolution than the last: bigger pixels, fewer colours, glitching bands (the new `ScreenEffect::Glitch`); from the second tier the rock itself is quantized into blocks 2-5 tiles on a side (blocky voids, rotten blocks), with a scanline of rotten blocks where the resolution first drops. Whole **data ore** blocks pay a data core | glitchling, bitworm, dead pixel | the Dead Screen: a builder picture in giant pixels on its chamber's back wall (the cable from the hanging stone to a sleeping star) | uranium, mythril, diamond; Data Ore | `PixelRot` (a chiptune that bit-crushes tier by tier) |
+
+`MusicCue::{MirrorStrata, GravityShear, PixelRot}`, `AmbienceCue::{Glass, Shear, Static}`,
+`LandmarkKind::Distortion` (generator `LandmarkGenerator::Distortion`) and
+`FieldRegions::Authored(AuthoredRegions)` are appended. Seed variants: "Glass Halls" (more glass
+lining), "Twin Galleries" (more halls), "Silver Seams" (more ore pairs); "Turned Halls" /
+"Shear Lines" (more shear halls); "Low Res" (more data) / "Glitch Fields" (more rotten blocks).
+The Descent VI outpost is renamed **Parallax Station** (`logistics::sites::OUTPOST_NAMES`).
+
+### Generation (V11 only; `worldgen/descent/distortion.rs`)
+
+One pass in `streamed::assemble`, after the Living Dark's and before the Old Deep's, only over
+chunks near the three strata's rows; a pure function of the settings and the tile.
+`plan_for(chunk)` gathers the halls, regions and landmarks touching the chunk and
+`distortion_tile` answers per tile. The Descent landmarks (outposts, gate chambers, anomaly
+rooms) are left as stamped and every hall keeps clear of them; mirror halls keep 96 columns
+from the outposts' column (Parallax Station, its settlement and the cable stay plain).
+
+- New tile family `TileKind::Warped(WarpedTile)` (codes `0x1600 | code`, clear of every other
+  family): `MirrorGlass`, `MirrorOre`, `MirrorGhost`, `ShearStone`, `ShearPlate`, `DataOre`,
+  `RotBlock`, `ScreenPixel`. Hardness 2-6; items: mirror ore, flow stone and plates, data ore
+  and screen pixels yield their stratum's `ItemKind::Layer`; glass and reflections yield
+  nothing.
+- **Parallax Station's settlement** (`distortion::parallax_station`, a village filed under
+  `distortion::PARALLAX_SITE` = `MAX_SITE + 6`, so no generated village shares it): an
+  underground hall beside the outpost on the spawn side, sharing its floor, a plated deck with
+  mirror glass set in it and skylights, built and peopled by the village engine (Deepfolk, named
+  "Parallax Station"). Wired into every `worldgen::streamed::villages` lookup next to Gravel
+  Hollow, and into `village::layout::identity`.
+- The expedition's camps and anomaly rooms keep off the halls, the Spire, the Dead Screen and
+  the settlement (`expedition::sites::crosses_strata_set_pieces`).
+- **`GOLDEN_V11_DIGEST` changed** (now `0x2333_2b2f_bbba_c172`); V1-V10 digests unchanged.
+
+### Fields (`distortion::fields`, through `descent::fields::with_regions`)
+
+The registry gives each stratum `FieldRegions::Authored(..)`; the stratum field source hands
+its profile to `distortion::fields::authored`:
+
+- **Mirror halls**: `mirror_controls` and a whole-screen `Mirror` level, feathered over 3 tiles
+  at the hall's side edges only (its floor and ceiling are rock, so a rig standing in a hall is
+  fully mirrored and never sees a half-faded double image).
+- **Shear halls**: gravity turned to the hall's direction with a little heat-haze wobble,
+  feathered over 4 tiles; the Spire's gravity points at its nearest wall.
+- **Rot tiers**: pixelate 16-52 %, palette 12-48 %, glitch 4-30 % by tier, easing over 6 rows at
+  each tier boundary (no pop).
+
+Pure functions of the settings and the position (cached layout), so hosts and predicting
+clients agree.
+
+### Mechanics (`world/distortion.rs`, after the Living Dark's pass in `simulate_tick`)
+
+- **Mirrored controls and aim** (`WorldState::mirror_controls`): wherever the fields mirror (or
+  a gazer holds the rig) `simulate_tick` swaps the stick, the rotation thrusters and the weapon's
+  horizontal aim, so a mouse or stick aimed at the mirrored screen's right fires at the world's
+  left, under the cursor. (This also applies to the Wave 8 mirror anomaly room.)
+- **Mirror twins**: a rig well inside a hall (field weight 0.6, 3+ tiles from the axis) that is
+  not resting gets a twin at its reflection (`TwinAppeared`). The twin moves with the rig's
+  velocity mirrored, plus a gentle pull back onto the exact reflection (2.5/s, at most 90 px/s),
+  so rock on its side of the axis strands it while the rig flies on. It bites on contact, and
+  every `WeaponFired` of its rig this tick is copied as a `MirrorShard` from the twin along the
+  mirrored direction (`TwinFired`; bombs and charges are not copied). It fades when its rig
+  leaves the hall or goes 40 tiles away (`TwinFaded`); a broken twin's hall rests 45 s
+  (`Distortion::twin_cooldowns`, saved as pairs).
+- **Mirror ore**: real ore yields Mirror Ore and a mythril (`distortion_dig_extras`); a
+  reflection gives at once, nicks the hull (1.2 x the depth's creature scale) and pays nothing.
+  The tells are the renderer's: a reflection has no shadows and no rim shade, a cooler cast, its
+  glint on the far side, and it breathes with a slow cold sheen in the world view.
+- **Gazers**: once one notices a rig its eye opens over 0.8 s, then while it sees the rig the
+  rig's controls mirror and its screen too (`Distortion::gazed`, a 450 ms hold refreshed while
+  the gaze lasts, through `WorldState::distortion_view_fields`).
+- **Data cores**: the opened-tile journal is read each tick; the last tile of a data ore block
+  (tier 1+, a whole block on the rot grid, `rot::block_at`) pays three Data Ore and a mythril
+  however it was broken (`DataCore`).
+- **Rot pulses**: a dead pixel's `RotPulse` shot rots the struck rig's view for 2.5 s (extra
+  pixelation, palette and glitch, `Distortion::rotted`).
+- Cues: `MirrorEntered` / `MirrorLeft`, `ShearEntered`, `RotDeepened` (each deeper tier, once per
+  rig), and the crew's first find of each landmark (`DistortionLandmarkFound`, its story beat).
+
+### Creatures (`enemy.rs`, appended; `world/enemies/distortion.rs`)
+
+| Kind | Body | Behaviour | Counter |
+|---|---|---|---|
+| `MirrorTwin` | flyer, its own drive | the rig's mirror image: moves and fires as the rig does, mirrored | strand it on rock its side of the axis; shoot from where its copy hits a wall; bombs |
+| `Glassback` | walker, lunge | its mirrored face throws kinetic and piercing hits back as a shard (`glassback_reflects`) | flank it, hit it from above, blasts |
+| `Gazer` | stationary | its gaze mirrors the controls of the rig it sees | break line of sight, or shoot with the aim reversed |
+| `Tumbler` | rolls under the local gravity | rolls downhill toward its prey along whatever the floor is; a shear boundary changes its way | step off its line; lure it across a boundary |
+| `Lodestar` | flyer | drags every rig within 7 tiles (clear line) toward itself, up to 110 px/s at point blank, never into rock | thrust away, shoot it |
+| `ShearMantis` | walker, dormant | climbs to the ceiling (against the local gravity), drops along gravity on a rig passing under | look up, whichever way up is |
+| `Glitchling` | flyer, teleports | shows a ghost where it will land (on the rot grid beside its prey, `EnemyState::waypoint`) for 0.52 s, then is there and bites | move off the ghost |
+| `Bitworm` | flyer on the grid | runs straight lines along the axes, square turns toward its prey or off a wall | step off its line |
+| `DeadPixel` | slow flyer, ranged | slow rot pulses that rot the view | dodge, blasts |
+
+All follow the body rules (`step_body`, `free_from_rock`, `keep_off_bodies`, contact boxes sized
+to their sprites, `CONTACT_MARGIN` / `STANDOFF_PIXELS`, line-of-sight noticing; none digs).
+Shots `MirrorShard` and `RotPulse` are appended. Twins never roam (the director's cave habitat
+says no); the rest roam their strata's caves.
+
+### State, formats and events
+
+- `Distortion` (world field, appended shared `SectionKey::Distortion` in `SectionKey::SHARED`,
+  saved with serde defaults, hashed only once non-empty): gazes, rot pulses, hall cooldowns
+  (pairs), landmarks found, the deepest rot tier each rig has seen, rigs inside a hall / a
+  turned field. A leaving player's entries are forgotten.
+- **`PROTOCOL_VERSION` 17** (one bump for the track: the warped tiles, nine creatures, two shots,
+  `ScreenEffect::Glitch`, the section and the events); **no save format bump** (serde
+  defaults; `ScreenEffects::levels` already loads shorter lists).
+- `field::ScreenEffect::Glitch` and `descent::ScreenEffect::Glitch` appended
+  (`SCREEN_EFFECT_COUNT` 15).
+- Events: `GameplayEventKind::Distortion { what, player_id, x, y }`, netcode codes
+  `560 + DistortionEvent::code()` (560-577), and `DistortionLandmarkFound { landmark,
+  player_id }` (579).
+- Dev seam: `WorldState::mark_distortion_landmarks_found` (before play: scenes).
+
+### Game side
+
+- Tile art (`tile_art/distortion_art.rs`): diagonal glass panes; real and reflected mirror ore
+  (see the tells above); streaked flow stone and riveted shear plates; data ore in cells that
+  grow with the rot; flat rotten blocks; Pixel Rot's plain rock as flat blocks that coarsen with
+  the tier; the Dead Screen's picture on its chamber's back wall. Back walls of their own: a dim
+  hall of mirror panes, strata tipped on their side, a coarse grid of dark squares.
+- World overlays (`rendering/world/distortion.rs`): mirror halls' silver curtains with drifting
+  sparkles and a faint axis line; breathing reflections; flow lines streaming the way gravity
+  pulls in every shear hall and the Spire; the creatures' tells (a twin's shimmer, the gazer's
+  open eye, a lodestar's contracting rings, a glitchling's landing ghost, a bitworm's square
+  segments, a dead pixel's fringe). Slow (under a cycle a second) and scaled by the effects
+  setting where they are decoration.
+- Post-process: a **glitch** pass (horizontal slices slipping sideways with a small colour split,
+  new slices at most 1.5 times a second, no brightness change); Reduced lets a quarter through.
+  The **mirror** stays whole under Reduced (a half mirror is a double image, the harder thing to
+  look at); Off turns the screen mirror off while the controls stay mirrored (gameplay).
+- Nine sprites and two shots (`pixel_art/sprites/distortion.rs`); ten audio patches appended at
+  the end of `patches!` (five one-shots: a reversed glass chime, a shatter, a gravity groan, a
+  bit-crushed glitch, an eight-bit data chirp; five loops) and the director's
+  `distortion_music`, Pixel Rot's bed crossfading clean -> crushed -> ruined by tier
+  (`distortion_bed_mix`).
+- News lines per seat (`local_game::announce_distortion`) and a "A STRANGE PLACE" story card
+  (`StoryMomentKind::StrangePlace`) when the crew finds a landmark. No new actions or prompts:
+  every seat (keyboard, gamepad, touch, split-screen, online) plays it with the inputs it has.
+- Scenes: `distortion_mirror_hall`, `distortion_mirror_hall_reduced`,
+  `distortion_looking_glass_hall`, `distortion_gazer`, `distortion_shear_wall`,
+  `distortion_shear_ceiling`, `distortion_shear_spire`, `distortion_pixel_rot_shallow`,
+  `distortion_pixel_rot_deep`, `distortion_pixel_rot_deep_reduced`, `distortion_dead_screen`,
+  `distortion_parallax_station`.
+
+### Tests
+
+`world/distortion_tests.rs`: a hall flips the screen, stick and aim (and Parallax Station's
+column never mirrors); mirrored steering is the same at 20 and 60 Hz and on replay; a twin
+steps out at the reflection, moves mirrored, copies a shot and fades when its rig leaves; a
+broken twin's hall rests; a gazer mirrors a rig's controls and screen and the hold lapses; real
+mirror ore pays mythril and the layer resource, a reflection shatters and nicks the hull; shear
+halls and the Spire turn gravity as declared and a rig falls onto a hall's turned floor; Pixel
+Rot's levels rise tier by tier and ease across a boundary; a glitchling shows its landing and
+lands there on the grid; a whole data block pays a data core; each landmark is found once; the
+section replicates and older worlds stay untouched; a lodestar drags a rig; a mantis hangs and
+drops; a glassback throws frontal shots back and is hurt from behind; the creatures keep the
+body rules in a fight; Parallax Station is a peopled settlement on the outpost's floor.
+`worldgen/descent/distortion/tests.rs` (symmetric halls with paired ore, halls crowding and
+widening deeper, the Looking-Glass Hall's strongbox and reflection, plated turned floors, the
+Spire, quantized blocks with data, the Dead Screen, older worlds; an ignored ASCII dump),
+`distortion/tests.rs`, the registry/field/landmark tests updated for the authored strata,
+netcode `world_mirrored_controls_predict_and_converge` (a mirror field over the bots online, no
+hash mismatch) and the director's
+`the_distortion_strata_play_their_beds_and_pixel_rot_crushes_deeper`.
+
+### Descent probe
+
+`balance::descent::registry_markers` adds each stratum's authored rules and places
+(`distortion::novelties`) as markers, and `RegistryStrata` counts `distortion::authored_content`
+and `LandmarkKind::Distortion` in each stratum's content minutes.
+
+### Seams and known limits
+
+- The Gravity Anchor (Descent V's reward, the Hollow World track's) does nothing special in the
+  Gravity Shear yet; it could pin a rig to a turned floor.
+- A lodestar's drag moves the rig's position on the host and in the predicting client alike, but
+  a client sees the lodestar a frame late, so a dragged rig gets small corrections (like enemy
+  knockback).
+- A gazer's hold reaches clients through the replicated section, so a client predicting its own
+  rig mirrors its stick a round trip late at the gaze's start and end (corrected on reconcile).
+  Mirror halls themselves are pure fields and predicted exactly.
+- Twins copy hardpoint weapon fire only (`WeaponFired`); bombs and charges are the counter.
+- Parallax Station's people are generic Deepfolk villagers; researchers' own routines, errands
+  and the Fathers' memories there (the story track's `memories`) are open.
+- Other deep settlements of Wave 9 must file under other sites than `PARALLAX_SITE`.
+- The descent probe was not re-run in this track (the integrator re-runs it after stacking the
+  six tracks).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

@@ -1091,6 +1091,25 @@ world dug to the floor, the browser memory fixture) show it.
   `living_root_labyrinth`, `living_hive_court`, `living_hive_court_counter`,
   `living_hive_swarm`, `living_hive_matriarch`, `living_flesh_gullet`, `living_glow_sea`,
   `living_glow_sea_lamp_ii`, `living_mycelial_mind`, `living_mind_exposed`.
+- **The first Strange Layers** (Descent VI, Wave 9) are authored. In the **Mirror Strata**,
+  mirror halls flip the screen, the stick and the aim (a shimmering silver curtain marks each
+  one); your **mirror twin** steps out of the glass and moves and fires as you do, mirrored (trap
+  it behind rock on its side of the hall), and **mirror ore** lies in pairs: one real, one
+  reflection that shatters for nothing (a reflection is flat, cold and breathes). Glassbacks
+  throw frontal shots back and gazers mirror your controls while they see you. **Parallax
+  Station**, the Descent VI outpost, has a research settlement beside it. In the **Gravity
+  Shear**, shear halls turn gravity onto walls, then ceilings (flow lines show which way):
+  turn the rig with its rotation thrusters and walk them, past tumblers rolling downhill
+  whichever way that is, lodestars dragging you in and mantises dropping from above; the
+  **Shear Spire** is a tower where down is the nearest wall. In **Pixel Rot** the world loses
+  resolution tier by tier: bigger pixels, fewer colours, glitching bands, the rock itself in
+  ever bigger blocks; glitchlings teleport between pixels (watch for their ghost), bitworms run
+  the grid and dead pixels rot your view; mine a whole block of **data ore** for a data core,
+  and find the **Dead Screen**. Scenes: `distortion_mirror_hall`,
+  `distortion_mirror_hall_reduced`, `distortion_looking_glass_hall`, `distortion_gazer`,
+  `distortion_shear_wall`, `distortion_shear_ceiling`, `distortion_shear_spire`,
+  `distortion_pixel_rot_shallow`, `distortion_pixel_rot_deep`,
+  `distortion_pixel_rot_deep_reduced`, `distortion_dead_screen`, `distortion_parallax_station`.
 - The depth ruler names the Descent and stratum beside its marker, the mine map's footer names
   them too, and an **"entering <stratum>"** banner slides in at each new stratum (a new
   Descent shows its number).
