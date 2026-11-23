@@ -2371,7 +2371,7 @@ impl EnemyKind {
                 ..stats("Hangclaw", Creature, Flying, AttackStyle::Lunge)
             },
             Self::LodeMite => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 16.0,
                 speed: 150.0,
                 sight_tiles: 10.0,
@@ -2419,7 +2419,7 @@ impl EnemyKind {
                 ..stats("Shade Stalker", Creature, Flying, AttackStyle::Lunge)
             },
             Self::Flarefly => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 10.0,
                 speed: 135.0,
                 sight_tiles: 10.0,
@@ -2646,8 +2646,8 @@ impl EnemyKind {
             Self::SkyManta => (30.0, 10.0),
             Self::StoopRoc => (15.0, 10.0),
             Self::GustBladder => (11.0, 12.0),
-            Self::Crestback => (26.0, 16.0),
-            Self::Skyneck => (34.0, 44.0),
+            Self::Crestback => (40.0, 18.0),
+            Self::Skyneck => (50.0, 46.0),
             Self::Fangrunner => (16.0, 10.0),
             Self::Hangclaw => (13.0, 12.0),
             Self::LodeMite => (7.0, 6.0),
@@ -3823,7 +3823,11 @@ mod tests {
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || kind == EnemyKind::Leviathan),
                 "{kind:?}"
             );
-            assert!(stats.contact_damage > 0.0, "{kind:?}");
+            // The crestback is a gentle mount (Wave 9): it never bites.
+            assert!(
+                stats.contact_damage > 0.0 || kind == EnemyKind::Crestback,
+                "{kind:?}"
+            );
             // Every kind takes full (or better) damage from explosives or EMPs: a clear counter.
             assert!(
                 kind.resistance(DamageKind::Explosive) >= 1.0

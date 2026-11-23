@@ -1148,10 +1148,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         creatures: &[(CinderDrake, 4), (ShadeStalker, 3), (Flarefly, 5)],
         hazards: &[(Lava, 6), (MagmaVent, 3)],
         field: FieldProfile {
-            light_permille: 1_500,
+            light_permille: 1_300,
             screen: &[
-                screen(ScreenEffect::Exposure, 380),
-                screen(ScreenEffect::Bloom, 560),
+                screen(ScreenEffect::Exposure, 180),
+                screen(ScreenEffect::Bloom, 420),
             ],
             deepening: true,
             ..FieldProfile::NEUTRAL

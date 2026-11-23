@@ -138,7 +138,7 @@ fn breakthrough(stage: &mut SceneStage<'_>) {
             rig.velocity_y = 120.0;
         }
     });
-    stage.settle(26);
+    finish(stage, 26);
 }
 
 /// The Inner Sky with its creatures: sky mantas on the wind, a stoop roc, gust bladders.
@@ -148,17 +148,27 @@ fn inner_sky(stage: &mut SceneStage<'_>, day: bool) {
         let x = open_sky_column(30..60);
         let y = sky_row(x, 46);
         stage_at(world, player, (x, y), day, false);
+    });
+    // Once the rig has come down on a stone, the sky's creatures about it.
+    stage.settle(120);
+    stage.play_on(|world| {
+        let Some(player) = world.player_ids().next() else {
+            return;
+        };
+        let Some(TilePosition { x, y }) = world.actor_tile(player) else {
+            return;
+        };
         if day {
-            spawn(world, EnemyKind::SkyManta, x - 12, y - 6);
-            spawn(world, EnemyKind::SkyManta, x + 16, y + 4);
-            spawn(world, EnemyKind::StoopRoc, x + 8, y - 10);
-            spawn(world, EnemyKind::GustBladder, x - 6, y + 5);
+            spawn(world, EnemyKind::SkyManta, x - 12, y - 7);
+            spawn(world, EnemyKind::SkyManta, x + 14, y - 4);
+            spawn(world, EnemyKind::StoopRoc, x + 6, y - 9);
+            spawn(world, EnemyKind::GustBladder, x - 6, y - 5);
         } else {
-            spawn(world, EnemyKind::SkyManta, x + 10, y - 3);
-            spawn(world, EnemyKind::GustBladder, x - 9, y + 2);
+            spawn(world, EnemyKind::SkyManta, x + 10, y - 5);
+            spawn(world, EnemyKind::GustBladder, x - 9, y - 4);
         }
     });
-    stage.settle(220);
+    finish(stage, 50);
 }
 
 /// The Fathers' Breach: their winch platform hanging under the rock sky.
@@ -173,7 +183,7 @@ fn breach(stage: &mut SceneStage<'_>) {
         let centre = rect.center();
         stage_at(world, player, (centre.x, rect.max.y + 6), true, false);
     });
-    stage.settle(200);
+    finish(stage, 200);
 }
 
 /// A jungle hall: crestbacks grazing, a skyneck, a fangrunner pack (by day) or the pack hunting
@@ -189,7 +199,7 @@ fn jungle(stage: &mut SceneStage<'_>, day: bool) {
         spawn(world, EnemyKind::Fangrunner, x - 18, floor - 1);
         spawn(world, EnemyKind::Fangrunner, x - 20, floor - 1);
     });
-    stage.settle(180);
+    finish(stage, 180);
 }
 
 /// A jungle hall's floor near the scene column: `(column, floor row)` (the first solid row under
@@ -227,7 +237,7 @@ fn sunfolk_village(stage: &mut SceneStage<'_>) {
             site.top - 20..site.floor_row() + 4,
         );
     });
-    stage.settle(260);
+    finish(stage, 260);
 }
 
 /// A pilot riding a crestback across a jungle hall.
@@ -262,7 +272,7 @@ fn ride(stage: &mut SceneStage<'_>) {
             ..crate::input::PlayerInput::default()
         },
     );
-    stage.settle(4);
+    finish(stage, 4);
 }
 
 /// An isle hanging in the isle sea near the scene column.
@@ -320,7 +330,7 @@ fn isles(stage: &mut SceneStage<'_>, landed: bool) {
             isle.underside() + 7,
         );
     });
-    stage.settle(if landed { 90 } else { 18 });
+    finish(stage, if landed { 90 } else { 18 });
 }
 
 /// A clear spot of the forge sky near the scene column with a floating stone below it (shade)
@@ -360,7 +370,7 @@ fn sunforge(stage: &mut SceneStage<'_>, shaded: bool) {
         spawn(world, EnemyKind::CinderDrake, x - 10, y + 2);
         spawn(world, EnemyKind::ShadeStalker, x + 14, y + 3);
     });
-    stage.settle(120);
+    finish(stage, 120);
 }
 
 /// The Gravity Anchor: the rig turned feet to a wall, the anchor holding it there.
@@ -390,7 +400,7 @@ fn gravity_anchor(stage: &mut SceneStage<'_>) {
         };
         let _ = world.scene_engage_anchor(player);
     });
-    stage.settle(60);
+    finish(stage, 60);
 }
 
 /// The Sun Serpent's fight in the Sun Well: it orbits the inner sun, its sun scales blazing;
@@ -403,8 +413,9 @@ fn sun_serpent(stage: &mut SceneStage<'_>, flare: bool) {
         let Some(centre) = places::sun_well(&settings, &layout) else {
             return;
         };
-        let pillar = places::shade_pillars(centre)[if flare { 0 } else { 2 }];
-        stage_at(world, player, (pillar.x - 3, pillar.y - 3), true, false);
+        // On top of the lower-left shade pillar, the inner sun up and to the right.
+        let pillar = places::shade_pillars(centre)[2];
+        stage_at(world, player, (pillar.x, pillar.y - 4), true, false);
         reveal(
             world,
             player,
@@ -413,7 +424,28 @@ fn sun_serpent(stage: &mut SceneStage<'_>, flare: bool) {
         );
     });
     // It wakes on the first tick a rig is in the well, then orbits.
-    stage.settle(if flare { 470 } else { 160 });
+    finish(stage, if flare { 470 } else { 160 });
+}
+
+/// Settles `frames` frames, with everything round the seat's rig or pilot explored for the
+/// last two (the rig may have fallen or flown far from where it was placed).
+fn finish(stage: &mut SceneStage<'_>, frames: usize) {
+    stage.settle(frames.saturating_sub(2));
+    stage.play_on(|world| {
+        let Some(player) = world.player_ids().next() else {
+            return;
+        };
+        if let Some(tile) = world.actor_tile(player) {
+            world.stream_terrain_near_players();
+            reveal(
+                world,
+                player,
+                tile.x - 64..tile.x + 64,
+                tile.y - 40..tile.y + 40,
+            );
+        }
+    });
+    stage.settle(2);
 }
 
 pub const HOLLOW_SCENES: &[Scene] = &[

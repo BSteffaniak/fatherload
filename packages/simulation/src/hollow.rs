@@ -438,7 +438,7 @@ pub const MOUNT_MOVE_PCT: i16 = 85;
 /// A riding pilot's jump, percent more.
 pub const MOUNT_JUMP_PCT: i16 = 35;
 /// How high the pilot sits above the mount's feet, pixels (presentation).
-pub const MOUNT_SADDLE_PIXELS: f32 = 16.0;
+pub const MOUNT_SADDLE_PIXELS: f32 = 28.0;
 /// Tar's grip: a grounded rig's sideways speed decays at this rate a second (`exp(-k t)`:
 /// about a twelfth is left after a second of driving on tar).
 pub const TAR_GRIP_PER_SECOND: f32 = 2.5;

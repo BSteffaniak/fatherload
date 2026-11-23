@@ -124,9 +124,9 @@ fn sky_colour(stratum: Stratum, share: f32, sun: InnerSun) -> Color {
     let day = (f32::from(sun.light) - 260.0) / 740.0;
     let (day_top, day_mid, day_low, night_top, night_low) = match stratum {
         Stratum::TheSunforge => (
-            rgb(214, 112, 40),
-            rgb(246, 176, 82),
-            rgb(255, 238, 190),
+            rgb(170, 84, 40),
+            rgb(220, 140, 64),
+            rgb(246, 196, 120),
             rgb(92, 34, 22),
             rgb(176, 84, 40),
         ),

@@ -604,10 +604,13 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::HollowMatriarch
         | EnemyKind::MycelialMind
         | EnemyKind::EelDragon
-        | EnemyKind::SunSerpent => ART * 1.5,
+        | EnemyKind::SunSerpent
+        | EnemyKind::Skyneck
+        | EnemyKind::Crestback => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
-        // The Sun Serpent's coils loom large too (Wave 9).
+        // The Sun Serpent's coils loom large too (Wave 9); the jungle's giants share the
+        // bosses' scale above.
         EnemyKind::SerpentCoil => ART * 1.25,
         _ => ART,
     }

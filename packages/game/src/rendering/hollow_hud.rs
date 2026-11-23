@@ -174,7 +174,7 @@ pub(super) fn draw_breakthrough(
     let width = (rect.width as i32 - 40).min(360);
     let height = 66;
     let x = rect.x as i32 + (rect.width as i32 - width) / 2;
-    let y = rect.y as i32 + (rect.height as i32) / 2 - height - 30;
+    let y = rect.y as i32 + (rect.height as i32) / 2 + 36;
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),

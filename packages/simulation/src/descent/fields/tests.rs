@@ -76,7 +76,7 @@ fn placeholder_strata_show_their_effects_on_screen() {
         forge.screen_level(field::ScreenEffect::Exposure)
             > sky.screen_level(field::ScreenEffect::Exposure)
     );
-    assert!(forge.screen_level(field::ScreenEffect::Bloom) > 0.4);
+    assert!(forge.screen_level(field::ScreenEffect::Bloom) > 0.3);
     // The Glow Sea is dark, the Pearl Abyss desaturates, the Prism Desert splits colours.
     assert!(at(Stratum::GlowSea).light < 0.3);
     // The Pearl Abyss greys from its top, and more with the pressure on each seat (Wave 9).
