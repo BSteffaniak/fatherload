@@ -220,6 +220,32 @@ pub fn descent_story_beats(stratum: crate::descent::Stratum) -> Vec<&'static str
     }
 }
 
+/// What the Living Dark authored in `stratum` beyond its registry entry.
+///
+/// `(mechanics, set pieces)` (Wave 10 polish's balance pass: every other authored Descent's
+/// content counted in the probe's minutes, the Living Dark's never had).
+#[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "one row per stratum, with what it holds"
+)]
+pub const fn living_dark_content(stratum: crate::descent::Stratum) -> (u8, u8) {
+    use crate::descent::Stratum;
+    match stratum {
+        // Bouncing caps and the spore blur; the giant mushroom groves.
+        Stratum::FungalForest => (2, 1),
+        // Roots regrowing behind the rig (and the root axes); the labyrinth's knots.
+        Stratum::RootLabyrinth => (1, 1),
+        // The Hive's standing and its two factions; the Hive Court and the swarm's nest.
+        Stratum::TheHive => (1, 2),
+        // Walls healing back and the acid tides on the heartbeat; the gullet.
+        Stratum::FleshCaverns => (2, 1),
+        // Only living light; the Mycelial Mind's grotto is the gate (counted with the fight).
+        Stratum::GlowSea => (1, 0),
+        _ => (0, 0),
+    }
+}
+
 /// The real content markers of every stratum, top to bottom (Wave 8).
 ///
 /// Creatures met first there, its signature mechanic, fluids and field physics, its screen effects, landmarks
@@ -462,10 +488,15 @@ impl StratumRegistry for RegistryStrata {
                 );
                 // Wave 9 strange-b: the far Strange Layers' mechanics and set pieces too.
                 let (far_mechanics, far_pieces, _) = crate::far_strange::authored_content(*stratum);
-                let authored_mechanics = authored_mechanics.saturating_add(far_mechanics);
+                // Wave 10 polish: the Living Dark's, which the probe never counted.
+                let (living_mechanics, living_pieces) = living_dark_content(*stratum);
+                let authored_mechanics = authored_mechanics
+                    .saturating_add(far_mechanics)
+                    .saturating_add(living_mechanics);
                 let set_pieces = set_pieces
                     .saturating_add(authored_pieces)
-                    .saturating_add(far_pieces);
+                    .saturating_add(far_pieces)
+                    .saturating_add(living_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(
                     !def.field.is_neutral()
@@ -775,7 +806,96 @@ impl DescentRun {
         self.strata.iter().any(|run| run.stratum.descent < descents)
             && self.pacing_failures(descents).is_empty()
     }
+
+    /// The balance pass's softer reading (Wave 10 polish): Descents whose expedition (outpost
+    /// to bottom and back, no beacons) burns under [`BALANCE_MIN_EXPEDITION_FUEL_PERCENT`] of
+    /// the tank, so it is not the stressful trip the plan asks for. Reported, not failed: the
+    /// deep tanks dwarf a Descent's climb, and making expeditions bite is an economy change
+    /// (fuel burn or tank curves) for a later pass, not a tuning knob.
+    #[must_use]
+    pub fn balance_warnings(&self, descents: u8) -> Vec<String> {
+        (1..usize::from(descents).min(DESCENT_COUNT))
+            .filter_map(|index| {
+                let expedition = self.expedition_fuel_percent.get(index).copied()?;
+                (expedition > 0.0 && expedition < BALANCE_MIN_EXPEDITION_FUEL_PERCENT).then(|| {
+                    format!(
+                        "Descent {}: an expedition burns only {expedition:.0}% of the tank",
+                        crate::depth_progression::numeral(u8::try_from(index).unwrap_or(0))
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// The full balance pass over the first `descents` Descents (Wave 10 polish): every miss
+    /// against the plan, each in words. A Descent ending outside its [`TARGET_HOURS`], more
+    /// than [`BALANCE_MAX_DEATHS_PER_DESCENT`] deaths in one, everyday trips that are not calm
+    /// (over [`BALANCE_MAX_EVERYDAY_FUEL_PERCENT`] of the tank), every stratum's pacing check,
+    /// and, once all eight are counted, the whole run outside [`WHOLE_RUN_HOURS`]. Empty:
+    /// balanced. [`Self::balance_warnings`] reads the expeditions' stress.
+    #[must_use]
+    pub fn balance_misses(&self, descents: u8) -> Vec<String> {
+        let mut misses = Vec::new();
+        #[allow(clippy::needless_range_loop, reason = "the index names the Descent")]
+        for index in 0..usize::from(descents).min(DESCENT_COUNT) {
+            let runs: Vec<&StratumRun> = self
+                .strata
+                .iter()
+                .filter(|run| usize::from(run.stratum.descent) == index)
+                .collect();
+            if runs.is_empty() {
+                misses.push(format!("Descent {}: not reached", index + 1));
+                continue;
+            }
+            let name = crate::depth_progression::numeral(u8::try_from(index).unwrap_or(0));
+            let (low, high) = TARGET_HOURS[index];
+            let end = self.descent_hours.get(index).copied().unwrap_or(0.0);
+            if !(low..=high).contains(&end) {
+                misses.push(format!(
+                    "Descent {name} ends at {end:.1} h (target {low:.0}-{high:.0})"
+                ));
+            }
+            let deaths: u32 = runs.iter().map(|run| run.deaths).sum();
+            if deaths > BALANCE_MAX_DEATHS_PER_DESCENT {
+                misses.push(format!("Descent {name}: {deaths} deaths"));
+            }
+            let everyday = runs
+                .iter()
+                .map(|run| run.everyday_fuel_percent)
+                .fold(0.0, f64::max);
+            if everyday > BALANCE_MAX_EVERYDAY_FUEL_PERCENT {
+                misses.push(format!(
+                    "Descent {name}: everyday trips burn {everyday:.0}% of the tank"
+                ));
+            }
+        }
+        for (stratum, why) in self.pacing_failures(descents) {
+            misses.push(format!("{stratum}: {why}"));
+        }
+        if usize::from(descents) >= DESCENT_COUNT {
+            let (low, high) = WHOLE_RUN_HOURS;
+            let total = self.total_hours();
+            if !(low..=high).contains(&total) {
+                misses.push(format!(
+                    "the whole run is {total:.1} h (target {low:.0}-{high:.0})"
+                ));
+            }
+        }
+        misses
+    }
 }
+
+/// Most of the tank an everyday trip may burn and still be calm (the balance pass; the pacing
+/// check only calls a trip unfair past a full tank).
+pub const BALANCE_MAX_EVERYDAY_FUEL_PERCENT: f64 = 60.0;
+/// The whole run's target hours (§13).
+pub const WHOLE_RUN_HOURS: (f64, f64) = (60.0, 90.0);
+/// Most deaths a Descent's run may cost before the balance pass calls it unfair (its boss's
+/// learning try and one more).
+pub const BALANCE_MAX_DEATHS_PER_DESCENT: u32 = 2;
+/// An expedition (outpost to the Descent's bottom and back) must burn at least this share of
+/// the tank to feel like one (Descent II on; the Crust's are short by design).
+pub const BALANCE_MIN_EXPEDITION_FUEL_PERCENT: f64 = 15.0;
 
 /// Seconds the drill spends chipping out one tile of `rock` (`toughness` times its durability)
 /// at drill tier `drill`, by the chip formula (`world/commands.rs`).
@@ -1666,6 +1786,24 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
     } else {
         format!("Strata with a gap over 40 minutes: {}.", long.join(", "))
     });
+    // Wave 10 polish: the full balance pass, every miss against the plan in one place.
+    let misses = run.balance_misses(BALANCE_PASS_DESCENTS);
+    section.notes.push(if misses.is_empty() {
+        format!(
+            "Balance pass (Descents I-{}): every target met.",
+            crate::depth_progression::numeral(BALANCE_PASS_DESCENTS.saturating_sub(1))
+        )
+    } else {
+        format!("Balance pass misses: {}.", misses.join("; "))
+    });
+    let warnings = run.balance_warnings(BALANCE_PASS_DESCENTS);
+    if !warnings.is_empty() {
+        section
+            .notes
+            .push(format!("Balance pass warnings: {}.", warnings.join("; ")));
+    }
+    #[allow(clippy::cast_precision_loss, reason = "a handful of misses")]
+    section.metric("descent.balance_misses", misses.len() as f64);
     section.metric("descent.total_hours", run.total_hours());
     section.metric("descent.gaps_within_40_percent", run.gaps_within_40());
     section.metric("descent.longest_gap_minutes", run.longest_gap());
@@ -1673,6 +1811,11 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
     section.metric("descent.dig_overhead", run.dig_overhead);
     section
 }
+
+/// The Descents the balance pass holds to the plan (Wave 10 polish: I-VI on this branch; the
+/// integrator raises it to all eight once Descents VII-VIII are authored and re-runs
+/// `descent_balance_pass`).
+pub const BALANCE_PASS_DESCENTS: u8 = 6;
 
 /// The descent probe (`--only descent`).
 pub struct DescentProbe;
@@ -2001,6 +2144,29 @@ mod tests {
             measured >= formula * 0.9 && measured < formula + 1.0,
             "{measured} vs {formula}"
         );
+    }
+
+    /// The full balance pass (Wave 10 polish): `cargo test --release -p fatherload_simulation
+    /// descent_balance_pass -- --ignored --nocapture`. Fails on any miss against the plan in
+    /// the first [`BALANCE_PASS_DESCENTS`] Descents (hours, deaths, calm everyday trips, the
+    /// 20-40 minute check, the whole run once all eight count); prints the misses and warnings.
+    #[test]
+    #[ignore = "plays the whole descent probe (release build)"]
+    fn descent_balance_pass() {
+        let run = run_descent(&RegistryStrata::default_world(), &DescentConfig::default());
+        let misses = run.balance_misses(BALANCE_PASS_DESCENTS);
+        for (index, hours) in run.descent_hours.iter().enumerate() {
+            println!("Descent {}: ends at {hours:.1} h", index + 1);
+        }
+        println!(
+            "Whole run: {:.1} h, {} deaths",
+            run.total_hours(),
+            run.deaths
+        );
+        for warning in run.balance_warnings(BALANCE_PASS_DESCENTS) {
+            println!("warning: {warning}");
+        }
+        assert!(misses.is_empty(), "balance pass misses: {misses:#?}");
     }
 
     /// `cargo test --release -p fatherload_simulation descent_report -- --ignored --nocapture`

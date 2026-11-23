@@ -6206,6 +6206,193 @@ was needed.
   minutes; Merrow City, the Sunfolk and Parallax Station borrow existing cultures' buildings;
   far creatures are small beside the rig; no settlement quest arcs for the new settlements.
 
+## Wave 10 polish: the open items of Waves 8-9 and the 60-90 h balance pass
+
+The polish track of Wave 10 (`src/world/supplies.rs`, `src/world/pilot_weather.rs`,
+`workshop::SupplyEffects`, `combat::HitArea`, `crust::heat_danger_units`,
+`balance::descent::{mechanics::BOT_FIGHTS, balance_misses}`; tests in
+`world/wave10_polish_tests.rs`, the bot fight tests and the game's
+`rendering::world::enemies` tests). Every item of "Still open" above is closed but the
+settlements' quest arcs (a content track's).
+
+### 1. Every deep supply has an effect (`world/supplies.rs`)
+
+Spent automatically from the kit where its stratum bites (no new input: every seat, online,
+browser and touch), each with a `GameplayEventKind::Supply` event (codes 720-724) for the
+seat's news line and a sound:
+
+| Supply | Spent when | Effect |
+|---|---|---|
+| Ballast Tank | a submerged rig falls to 30 % hull or the abyss's pressure cracks it | an emergency blow: 6 s of full lift (+260 px/s² over a full trim) that no current, maelstrom or lure holds (`apply_submarine` reads `ballast_blowing`) |
+| Flare Buoy | a lure angler's light catches a rig | a buoy lit where the rig is for 45 s: its warm light (drawn over the dark) reaches 10 tiles and every lure angler in it is dazzled (drags nobody, notices nobody: `supply_notice`) |
+| Beast Bait | a hunting predator of the Hollow World (fangrunner, stoop roc, hangclaw, shade stalker, cinder drake) chases a rig | thrown 6 tiles past the beast: every hunting predator within 14 tiles gives up its prey and makes the bait its home for 25 s |
+| Time-Bubble Bomb | (thrown like any charge) | **one item with the far track's time bubble**: bought or crafted it becomes an `ExplosiveKind::TimeBubble` charge (`supplies_of` reads the charges; an older save's kit bubbles fold into charges) |
+| Lamp Filter | the lamp is first tinted, and as a set wears out | **one item with the far track's lamp filters**: a tinted lamp needs a set of coloured glass (`FarStrangeRefusal::NoFilterGlass` without one); a set lasts 10 minutes, the next is fitted from the kit, and with none left the lamp goes white |
+
+The Frost Heater, Shade Canopy and Echo Charge keep Wave 9's effects. State:
+`Logistics::supply_effects` (blowing ballast, flares and bait in the world as absolute tiles,
+fitted filter glass; serde default, so older saves load; part of the logistics section, so it
+replicates and hashes). Game: `rendering/world/supplies.rs` draws the buoy and its light pool
+(breathing slowly with the effects setting, never a strobe) and the bait with its scent; scenes
+`polish_flare_buoy`, `polish_beast_bait`.
+
+Tests: `a_ballast_tank_blows_when_the_sea_crushes_a_sub_and_it_surges_up` (one tank of two
+blows, the sub rises 16+ px past a bare one; a healthy sub keeps its tanks),
+`a_flare_buoy_dazzles_the_lure_anglers_so_they_drag_nobody`,
+`beast_bait_draws_a_hunting_predator_off_the_rig` (less hull lost than without),
+`time_bubble_bombs_are_the_rigs_time_bubble_charges`,
+`a_tinted_lamp_needs_lamp_filter_glass_and_a_set_wears_out`,
+`supplies_at_work_save_replicate_and_hash`.
+
+### 2. The HEAT warning reads real danger
+
+`crust::heat_danger_units(terrain, tile, radiator, shield)`: the heat past the rig's cooling
+(capped as the tick caps placeholder strata). The tick's band heat damage and the HUD's HEAT
+badge both read it, so the badge shows only where the heat cracks this rig's hull, on every
+world. Tests: `the_heat_warning_reads_the_heat_past_the_rigs_cooling_not_the_strata_heat`
+(every Descent IV-VI stratum is hot, covered by its cap and two shields, dangerous to a stock
+rig) and `a_covered_rig_loses_no_hull_where_the_heat_warning_stays_off`.
+
+### 3. Hit areas match the drawn bodies
+
+- `combat::HitArea` (`EntityState::hit_area`, `EnemyKind::hit_area`): shots, rays, point-blank
+  hits, the pilot's arms and flak hit a creature's terrain circle **or** the ellipse of its drawn
+  body (`HIT_OVER_CONTACT` 1.15 times its contact box; a walker's rises over its centre as the
+  game stands it on its feet). The Leviathan's 104 x 34 px body is now hit along its whole
+  length (its circle was 44 px). `MAX_HIT_RADIUS` is 3.5 tiles (a test keeps every kind in it).
+- Contact boxes fixed to their art where they were off by more than the body rules allow: the
+  Hollow Matriarch (28 x 31), The Glitch (38 x 37), the Sun Serpent (33 x 22), the cinder drake,
+  the piston warden, the spectre, the Crust's creatures (burrow mole, mud leech, potter wasp,
+  mine bat, timber beetle, slate skink, shelf crab, tube crawler, cinder moth), glow grub, frost
+  mite, maw worm, leechling and lure fish.
+- The far Strange Layers' ten creatures are drawn half again as large (`sprite_scale`), their
+  contact boxes grown with them (a tick mite 12 x 8, an echo stalker 24 x 16: the size of the
+  rig).
+- Test (game): `every_contact_box_and_hit_area_matches_the_drawn_body`: every kind's contact
+  box is 72-115 % of its painted half extents (a moth swarm is a cloud), its hit ellipse covers
+  80 % or more of them, and its reach fits `MAX_HIT_RADIUS`. The Leviathan's bot fight is
+  re-measured below (64 s, 67 % hull: fair and winnable).
+
+### 4. The deep's forces on a pilot on foot (`world/pilot_weather.rs`)
+
+Scaled to a body on foot (the pilot stays upright; positions only move where the pilot's box
+fits; per-second rates, every tick rate agrees): **currents** carry a swimming pilot (70 % of the
+rig's drift), **geysers** throw a pilot in an erupting jet up (80 % of the lift) and scald one at
+the throat, the **glaciers' cold** slows a pilot's walk by up to 45 % deeper in the ice (none by
+a vent, in an outpost or the city, or with the Cryo Hull), the Inner Sky's **wind** carries an
+airborne pilot (60 %). The **Gravity Anchor engages on foot** (keyboard, pad and a touch ANCHOR
+button in the on-foot cluster, `FAR_OUTER`): it plants the pilot's boots for its hold (plain
+downward gravity under turned fields, no current, wind or sideways field moves it). Tests:
+`a_basins_current_carries_a_swimming_pilot_unless_the_anchor_plants_its_boots`,
+`the_inner_skys_wind_carries_an_airborne_pilot`, `an_erupting_geyser_throws_a_pilot_up_its_shaft`,
+`the_glaciers_cold_slows_a_pilots_walk_but_not_with_the_cryo_hull`.
+
+### 5. The Underground Ocean is one sea (V11 generation)
+
+Basins roll in nearly every ocean cell (900-1000 per mille), 50-72 tiles wide and 22-42 deep,
+and neighbouring basins are joined by `DrownedStampKind::Channel` (appended): a 5-row flooded
+channel sideways under both surfaces, or a 5-wide shaft from a basin down into the one below,
+walled with seabed and coral; the channel's water runs through the rims it joins
+(`drowned_tile` lays channel water first). Channels keep off the fixed set pieces, Merrow City
+and the outposts' column (the lift's column stays dry between the sea's two halves). Test:
+`the_underground_oceans_basins_are_joined_into_one_sea` (three seeds: flooding the generated
+water from one basin reaches 90 %+ of the basins on a 600-column side). **`GOLDEN_V11_DIGEST`
+updated** to `0x07a0_13a3_417e_3097` (a channel's chunk is pinned too); V1-V10 digests
+unchanged.
+
+### 6. The deep settlements build their own
+
+`BuildingStyle::{Coral, Jungle, Machine}` (appended; `BuildingStyle::for_village`): Merrow City
+(culture Merrow) builds coral walls with shell bands and sea fans under scallop-shell domes;
+the Sunfolk Kraal reed walls in a basket weave on stilts under straw thatch with crossed ridge
+poles; Parallax Station riveted alloy plates, a conduit and slowly breathing instrument
+panels under flat vented roofs with an antenna. Their discovery cards read "coral-and-shell",
+"stilt-and-thatch" and "machine-plated" settlements; interiors use the stone, timber and scrap
+sets. Test: `merrow_city_the_sunfolk_kraal_and_parallax_station_build_in_their_own_styles`
+(Gravel Hollow stays rock-cut). Scenes: `drowned_merrow_city`, `hollow_sunfolk_village`,
+`distortion_parallax_station`.
+
+### 7. Boss fights modelled from the bot fights
+
+`mechanics::bot_fight` holds each gate boss's measured bot win (world seconds, hull kept);
+`record_bot_fight` in the five bot tests holds them to it (a rework that moves a fight by more
+than -40 %/+50 %, or the hull kept by 25 points, fails until re-measured). The probe's fight
+is `FIGHT_SETUP_MINUTES` (6) plus the bot's time at `PLAYER_FIGHT_PACE` (4x), a third longer
+for a tight fight (the bot kept under 40 %), one learning try, one more per armour tier short:
+
+| Boss | Bot win (30 Hz) | Hull kept | Probe fight (ready rig) |
+|---|---|---|---|
+| Star Core | 95 s | 100 % | 12 min + a try |
+| Mycelial Mind | 122 s | 35 % | 17 min + a try |
+| Leviathan | 64 s | 67 % | 10 min + a try |
+| Sun Serpent | 469 s | 69 % | 37 min + a try |
+| The Glitch | 96 s | 43 % | 12 min + a try |
+
+The Sinkhole (an escape, not a fight) and Descents VII-VIII's bosses keep modelled minutes
+until their tracks add bot fights (add a `bot_fight` row and call `record_bot_fight`).
+
+### 8. The Glow Sea reads
+
+The Living Dark's darkest scenes were the Glow Sea's (`living_glow_sea`, `living_mycelial_mind`):
+its overlay lifted from 0.95 to 0.8 and tinted a deep-sea blue-black (`GLOW_SEA_INK`), so the
+rock's silhouettes read faintly while the living lights still own the scene. The other Living
+Dark scenes were already readable.
+
+### 9. The balance pass (`balance::descent`)
+
+- **Tooling**: `DescentRun::balance_misses(descents)` lists every miss against the plan (a
+  Descent outside `TARGET_HOURS`, more than `BALANCE_MAX_DEATHS_PER_DESCENT` 2 deaths in one,
+  everyday trips over `BALANCE_MAX_EVERYDAY_FUEL_PERCENT` 60 % of the tank, every stratum's
+  20-40 minute pacing check, the whole run outside 60-90 h once all eight count);
+  `balance_warnings` reads expedition stress (under 15 % of the tank). The report prints both;
+  `descent_balance_pass` (ignored, release) fails on any miss in the first
+  `BALANCE_PASS_DESCENTS` Descents. **Integrator: set it to 8 once VII-VIII land and run
+  `cargo test --release -p fatherload_simulation descent_balance_pass -- --ignored --nocapture`.**
+- **Tuning**: the probe never counted the Living Dark's authored content
+  (`living_dark_content`: bouncing caps and spores, regrowth, the Hive's factions, healing walls
+  and tides, the dark; its groves, knots, court, nest and gullet); counted, Descent III sits in
+  its window (24.1 h, not 22.9 h on its floor) and every later Descent moves 1.2 h toward its
+  window's middle. The boss model above shortened the Leviathan's and the Glitch's fights.
+
+The probe (default seed, 60 Hz, this branch; VII-VIII still placeholders):
+
+| Descent | Ends at (h) | Target (h) | Everyday fuel (max %) | Expedition fuel (%) | Deaths |
+|---|---|---|---|---|---|
+| I The Crust | 6.4 | 5-8 | 49 | 28 | 0 |
+| II The Old Deep | 15.9 | 13-18 | 15 | 10 | 1 |
+| III The Living Dark | 24.1 | 22-29 | 17 | 4 | 1 |
+| IV The Drowned and Frozen | 34.4 | 31-40 | 14 | 4 | 1 |
+| V The Hollow World | 45.7 | 42-53 | 14 | 4 | 1 |
+| VI The Strange Layers | 60.6 | 53-66 | 13 | 2 | 1 |
+| VII The Ancients (placeholder) | 70.3 | 66-82 | 13 | 2 | 0 |
+| VIII The Heart (placeholder) | 78.7 | 75-90 | 12 | 2 | 2 |
+
+Whole run 78.7 h (60-90), 7 deaths. Every Descent I-VI stratum passes the 20-40 minute check
+(longest waits 4-16 minutes; the Upside-Down Isles and the Sunforge 16); the balance pass meets
+every target for I-VI. Gate systems: Pressure Hull 14.4 h, Bio-Filter 22.7 h, Cryo Hull 32.4 h,
+Gravity Anchor 43.3 h, Phase Drill 58.2 h. Placeholder strata over 40 minutes: the Archive of
+Stars, Sleeping Garrison and the Seal Gate (the Ancients track fills them).
+
+### Formats, seams and still open
+
+- **`PROTOCOL_VERSION` 18** (one bump for the track: `Logistics::supply_effects`, the supply
+  events, `BuildingStyle`'s appended variants; the integrator collapses Wave 10's). **No save
+  format bump**: the new field has a serde default (an older kit's time bubbles fold into
+  charges on the first tick).
+- Shared-file edits, all additive: `event.rs` (appended `Supply`), `netcode/world.rs` (codes
+  720-739), `logistics.rs` (the field), `workshop.rs` (state, constants, `SupplyEvent`; the
+  supplies' counter text), `far_strange.rs` (appended refusal), `world/far_strange.rs` (the glass
+  check), `world/drowned.rs` (the blow, the flare hook; `near_vent` visible), `world/enemies.rs`
+  (the notice hook first), `world/pilot.rs` (chill, weather, anchored view), `world/hollow.rs`
+  (the anchor on foot), `world/logistics.rs` (the anchor on foot; `supplies_of`/`take_supply`
+  moved to `world/supplies.rs`), `enemy.rs` (contact boxes, `hit_area`), `entity.rs`,
+  `combat.rs`, the weapons' hit tests, `village/layout.rs`, `worldgen/descent/drowned.rs`, the
+  balance probe; in the game the villages' art, the Glow Sea, enemy scales, the HUD heat badge,
+  touch, audio cues, news and scenes.
+- **Still open**: expeditions are not yet stressful past Descent I (2-10 % of the tank: the
+  deep tanks dwarf a Descent's climb; making them bite is a fuel economy change, reported by
+  `balance_warnings`); the new settlements' quest arcs (a content track's).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
