@@ -202,6 +202,8 @@ mod wave8_seam_tests;
 #[cfg(test)]
 mod wave9_progression_tests;
 #[cfg(test)]
+mod wave9_seam_tests;
+#[cfg(test)]
 mod weapon_tests;
 mod weapons;
 
