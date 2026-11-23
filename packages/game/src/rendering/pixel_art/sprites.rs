@@ -4,6 +4,7 @@
 
 pub mod crypt;
 pub mod deep_gear;
+pub mod deep_supplies;
 pub mod distortion;
 pub mod drowned;
 pub mod enemies;
@@ -552,6 +553,15 @@ pub const ALL: &[&SpriteDef] = &[
     &far_strange::SHOT_GLITCH_BOLT,
     &explosives::TIME_BUBBLE,
     &explosives::ICON_TIME_BUBBLE,
+    // The deep supplies of Descents IV-VI (Wave 9 progression).
+    &deep_supplies::BALLAST_TANK,
+    &deep_supplies::FROST_HEATER,
+    &deep_supplies::FLARE_BUOY,
+    &deep_supplies::BEAST_BAIT,
+    &deep_supplies::SHADE_CANOPY,
+    &deep_supplies::TIME_BUBBLE_BOMB,
+    &deep_supplies::ECHO_CHARGE,
+    &deep_supplies::LAMP_FILTER,
 ];
 
 #[cfg(test)]

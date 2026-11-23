@@ -520,6 +520,10 @@ pub fn stratum_heat_units(stratum: Stratum) -> u8 {
     match stratum {
         Stratum::Topsoil | Stratum::ClayBeds | Stratum::GreyStone | Stratum::SlateShelves => 0,
         Stratum::BasaltColumns => crate::protection::HEAT_UNITS_PER_LEVEL,
+        // Wave 9: Descents IV-VI have an authored climate.
+        _ if crate::depth_progression::deep_climate(stratum).is_some() => {
+            crate::depth_progression::deep_climate(stratum).map_or(0, |climate| climate.heat_units)
+        }
         _ => {
             let descent = stratum.descent();
             let index = u8::try_from(descent.index()).unwrap_or(7);

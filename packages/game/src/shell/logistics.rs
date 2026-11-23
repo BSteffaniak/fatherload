@@ -37,6 +37,8 @@ pub enum LogisticsGroup {
     Shop,
     /// An outpost's workshop (Wave 8: layer resources into consumables and parts).
     Workshop,
+    /// An outpost's deep supplies counter (Wave 9: the tools Descents IV-VI ask for).
+    Supplies,
 }
 
 /// One row of the logistics dialog.
@@ -171,7 +173,9 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             );
         }
         // Wave 8: the deep shop and the workshop.
-        for (label, detail, command, group, about) in outpost_trade_rows(world, rig, outpost) {
+        for (label, detail, command, group, about) in
+            outpost_trade_rows(world, player, rig, outpost)
+        {
             row(group, label, detail, command);
             abouts.push((command, about));
         }
@@ -378,6 +382,7 @@ type TradeRow = (String, String, LogisticsCommand, LogisticsGroup, String);
 /// then the recipes its workshop knows.
 fn outpost_trade_rows(
     world: &WorldState,
+    player: PlayerId,
     rig: &fatherload_simulation::Player,
     outpost: &fatherload_simulation::logistics::Outpost,
 ) -> Vec<TradeRow> {
@@ -441,6 +446,8 @@ fn outpost_trade_rows(
             about,
         ));
     }
+    // Wave 9: the deep supplies this counter stocks.
+    rows.extend(supply_rows(world, player, outpost));
     for (index, recipe) in RECIPES.iter().enumerate() {
         if !outpost_crafts(outpost.descent, recipe) {
             continue;
@@ -462,6 +469,7 @@ fn outpost_trade_rows(
             CraftOutput::Refuel { percent } => format!("fills {percent}% of the tank"),
             CraftOutput::DiveCharges(count) => format!("{count} dive charges"),
             CraftOutput::Bombs(count) => format!("{count} blasting charges"),
+            CraftOutput::Supply(supply, count) => format!("{count} {}", supply.name()),
         };
         rows.push((
             recipe.name.to_owned(),
@@ -475,6 +483,36 @@ fn outpost_trade_rows(
         ));
     }
     rows
+}
+
+/// The deep supplies outpost `outpost`'s counter sells (Wave 9), with what `player`'s kit holds.
+fn supply_rows(
+    world: &WorldState,
+    player: PlayerId,
+    outpost: &fatherload_simulation::logistics::Outpost,
+) -> Vec<TradeRow> {
+    use fatherload_simulation::workshop::{DeepSupply, outpost_sells_supply};
+    DeepSupply::ALL
+        .iter()
+        .copied()
+        .filter(|supply| outpost_sells_supply(outpost.descent, *supply))
+        .map(|supply| {
+            (
+                supply.name().to_owned(),
+                format!(
+                    "For the {} ({} in the kit)",
+                    supply.stratum().name(),
+                    world.supplies_of(player, supply)
+                ),
+                LogisticsCommand::BuySupply {
+                    outpost: outpost.id,
+                    supply,
+                },
+                LogisticsGroup::Supplies,
+                format!("{}.", supply.about()),
+            )
+        })
+        .collect()
 }
 
 /// The Amber Court's mood toward the crew, in its steward's words.
@@ -603,6 +641,9 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
                     || "The outpost's mechanic gets to work.".to_owned(),
                     |kind| format!("The outpost's mechanic fits the new {}.", kind.name()),
                 )
+        }
+        LogisticsCommand::BuySupply { supply, .. } => {
+            format!("{} packed into the supply kit.", supply.name())
         }
         LogisticsCommand::Craft { recipe, .. } => fatherload_simulation::workshop::recipe(recipe)
             .map_or_else(

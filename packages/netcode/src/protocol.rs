@@ -214,6 +214,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// Story (Wave 9): the four deeper `AnomalyKind`s (`Sideways`, `Sunlit`, `Weightless`,
 /// `Lensing`) in `AnomalyEntered` events, and NPC entities of Cathedral Station's and the Amber
 /// Court's residents (their `CharacterId`s name the fixed `people::deep_folk` settlement ids).
+///
+/// Progression (Wave 9):
+/// * `LogisticsCommand::BuySupply` (the deep supplies counter), `CraftOutput::Supply` recipes
+///   (no wire change: recipes are ids), and `Logistics::supplies` (each player's supply kit of
+///   `workshop::DeepSupply`) in the logistics section. No new events.
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

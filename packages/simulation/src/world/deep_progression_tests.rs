@@ -6,10 +6,10 @@
 use crate::{
     PlayerCommand, PlayerId, SimulationParams, TickInputs, WorldState,
     depth_progression::{
-        DEPTH_LINE_MAX_LEVEL, DescentLayout, GATE_DAMAGE_PER_SECOND, OUTPOST_SHOP_PERCENT,
-        ProgressionRules, RigSystem, core_tier_cap, deep_ore_value, depth_line_cost,
-        descent_value_percent, gate_damage_per_second, headlamp_light_scale, outpost_stocks,
-        placeholder_heat_cap_units, pressure_fuel_percent,
+        DEPTH_LINE_MAX_LEVEL, DescentLayout, GATE_DAMAGE_PER_SECOND, ProgressionRules, RigSystem,
+        core_tier_cap, deep_ore_value, depth_line_cost, descent_value_percent,
+        gate_damage_per_second, headlamp_light_scale, outpost_stocks, placeholder_heat_cap_units,
+        pressure_fuel_percent,
     },
     descent::Stratum,
     economy::{UpgradeKind, UpgradeLock, shop_line_count, upgrade_offers_for},
@@ -126,13 +126,14 @@ fn the_wave_8_curves_climb_monotonically() {
 }
 
 #[test]
-fn placeholder_strata_below_descent_three_never_cook_a_rig_that_came_through_the_gates() {
+fn placeholder_strata_below_descent_six_never_cook_a_rig_that_came_through_the_gates() {
     let world = deep_world(0x0FA1_4001);
     let layout = world.descent_layout();
-    for (index, stratum) in Stratum::ALL.iter().enumerate().skip(17) {
+    // Wave 9: Descents IV-VI have their own climate; VII-VIII stay capped placeholders.
+    for (index, stratum) in Stratum::ALL.iter().enumerate().skip(32) {
         let span = layout.strata()[index];
         let descent = span.descent;
-        let cap = placeholder_heat_cap_units(descent).expect("Descents IV-VIII are capped");
+        let cap = placeholder_heat_cap_units(descent).expect("Descents VII-VIII are capped");
         // The radiator on sale before this Descent opened covers it with no shielding.
         let radiator = core_tier_cap(descent - 1);
         assert!(radiator_cooling(radiator) >= cap, "{stratum:?}");
@@ -196,10 +197,10 @@ fn a_geared_rig_holds_its_hull_in_the_heart() {
 fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
     let mut world = deep_world(0x0FA1_4003);
     let layout = world.descent_layout();
-    // The Gravity Anchor (the bosses' rewards above it are never sold: Wave 8, and the
-    // Leviathan's Cryo Hull since Wave 9): the crew holds the gates above the Strange Layers.
-    let hollow = layout.descent(5).expect("Descent VI");
-    let index = offer_index(UpgradeKind::GravityAnchor);
+    // The Heart Key (the bosses' rewards above it are never sold, Waves 8-9): the crew holds
+    // the gates above the Heart.
+    let hollow = layout.descent(7).expect("Descent VIII");
+    let index = offer_index(UpgradeKind::HeartKey);
     world.progression.deepest_tile_reached = hollow.top + 30;
     let offer = upgrade_offers_for(
         world.player(PLAYER).expect("rig"),
@@ -214,15 +215,15 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
             world.logistics().felt_systems,
         )
     };
-    assert_eq!(
-        lock(&world),
-        Some(UpgradeLock::Unfelt(RigSystem::GravityAnchor))
-    );
+    assert_eq!(lock(&world), Some(UpgradeLock::Unfelt(RigSystem::HeartKey)));
     // A dip past the gate: the crush starts gently and the need is felt.
     {
         let rig = world.player_mut(PLAYER).expect("rig");
-        rig.hazard_gear.rig_systems =
-            RigSystem::PressureHull.bit() | RigSystem::BioFilter.bit() | RigSystem::CryoHull.bit();
+        rig.hazard_gear.rig_systems = RigSystem::PressureHull.bit()
+            | RigSystem::BioFilter.bit()
+            | RigSystem::CryoHull.bit()
+            | RigSystem::GravityAnchor.bit()
+            | RigSystem::PhaseDrill.bit();
         rig.hazard_gear.pressure_rating = DEPTH_LINE_MAX_LEVEL;
         rig.hull_level = 12;
         rig.radiator_level = 12;
@@ -247,7 +248,7 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
         "a dip is gentle: {shallow_loss}"
     );
     assert_ne!(
-        world.logistics().felt_systems & RigSystem::GravityAnchor.bit(),
+        world.logistics().felt_systems & RigSystem::HeartKey.bit(),
         0
     );
     assert_eq!(lock(&world), None);
@@ -328,8 +329,16 @@ fn every_outpost_stocks_the_tiers_its_descent_needs() {
         )[usize::from(offer_index(UpgradeKind::Drill))];
         assert_eq!(
             quote.credits,
-            u32::try_from(u64::from(offer.cost) * u64::from(OUTPOST_SHOP_PERCENT[0]) / 100)
-                .expect("price")
+            u32::try_from(
+                u64::from(offer.cost)
+                    * u64::from(crate::depth_progression::outpost_price_percent(
+                        descent,
+                        false,
+                        UpgradeKind::Drill
+                    ))
+                    / 100
+            )
+            .expect("price")
         );
         // The ladders for pressure and the lamp stock the tier rated for the next Descent.
         assert!(outpost_stocks(

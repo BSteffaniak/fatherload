@@ -72,6 +72,10 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
             fatherload_simulation::far_strange::FarStrangeAction::BuyTimeBubbles => &icons::BOMB,
             _ => &icons::HEADLAMP,
         },
+        // Wave 9: the deep supplies.
+        LogisticsCommand::BuySupply { supply, .. } => {
+            super::pixel_art::sprites::deep_supplies::supply_icon(supply)
+        }
         // The Living Dark (Wave 8): root axes and the Amber Court's counter.
         LogisticsCommand::LivingDark(action) => match action {
             LivingDarkAction::BuyRootAxes | LivingDarkAction::FireRootAxe => &menu_icons::HAMMER,
@@ -128,9 +132,12 @@ pub(super) fn draw_logistics(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
             },
         ));
     }
+    // Wave 9: the supply kit, once the counter sells deep supplies or the kit holds any.
+    sections.extend(supply_kit_section(ui));
     for (group, title, color) in [
         (LogisticsGroup::Here, "Here", MINT),
         (LogisticsGroup::Shop, "Deep shop", GOLD),
+        (LogisticsGroup::Supplies, "Deep supplies", SKY),
         (LogisticsGroup::Workshop, "Workshop", ORANGE),
         (LogisticsGroup::Travel, "Travel network", SKY_LIGHT),
         (LogisticsGroup::FieldKit, "Field kit", LIME),
@@ -205,10 +212,58 @@ pub(super) fn inventory_section(ui: &UiFrame<'_, '_>, row: usize) -> Section {
     ];
     // Wave 8: layer resources aboard, for the outposts' workshops.
     items.extend(layer_resource_items(ui.player));
+    // Wave 9: the deep supplies in the kit.
+    items.extend(supply_kit_items(logistics, player));
     Section::new("Depth Logistics", SKY_LIGHT, items)
 }
 
 /// One stat per layer resource `player` carries (Wave 8), with its material's icon.
+/// The dialog's supply kit section (Wave 9): when the counter sells deep supplies or the kit
+/// holds any.
+fn supply_kit_section(ui: &UiFrame<'_, '_>) -> Option<Section> {
+    let kit = supply_kit_items(ui.snapshot.logistics, ui.view.player_id);
+    let selling = ui
+        .seat
+        .logistics
+        .rows
+        .iter()
+        .any(|row| row.group == LogisticsGroup::Supplies);
+    (selling || !kit.is_empty()).then(|| {
+        Section::new(
+            "Supply kit",
+            SKY,
+            if kit.is_empty() {
+                vec![SectionItem::text(
+                    "Empty: the deep counters sell the tools each stratum asks for.",
+                )]
+            } else {
+                kit
+            },
+        )
+    })
+}
+
+/// The deep supplies `player`'s kit holds (Wave 9), one stat each.
+fn supply_kit_items(
+    logistics: &fatherload_simulation::logistics::Logistics,
+    player: fatherload_simulation::PlayerId,
+) -> Vec<SectionItem> {
+    fatherload_simulation::workshop::DeepSupply::ALL
+        .iter()
+        .filter_map(|supply| {
+            let count = logistics.supplies_of(player, *supply);
+            (count > 0).then(|| {
+                SectionItem::icon_stat(
+                    super::pixel_art::sprites::deep_supplies::supply_icon(*supply),
+                    supply.name(),
+                    format!("x{count}"),
+                    SKY_LIGHT,
+                )
+            })
+        })
+        .collect()
+}
+
 fn layer_resource_items(player: &fatherload_simulation::Player) -> Vec<SectionItem> {
     player
         .cargo_bay

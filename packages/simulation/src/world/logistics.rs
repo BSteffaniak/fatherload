@@ -98,6 +98,10 @@ pub enum LogisticsRefusal {
     Hollow(crate::hollow::HollowRefusal),
     /// A far Strange Layers command's own refusal (Wave 9).
     FarStrange(crate::far_strange::FarStrangeRefusal),
+    /// The kit already holds as many of that supply as it can (Wave 9).
+    SupplyFull,
+    /// This counter does not sell that supply: a deeper outpost does (Wave 9).
+    SupplyNotSoldHere,
 }
 
 impl LogisticsRefusal {
@@ -151,6 +155,10 @@ impl LogisticsRefusal {
             Self::LivingDark(refusal) => refusal.message(),
             Self::Hollow(refusal) => refusal.message(),
             Self::FarStrange(refusal) => refusal.message(),
+            Self::SupplyFull => "The supply kit holds no more of those.".to_owned(),
+            Self::SupplyNotSoldHere => {
+                "This counter does not stock that supply: a deeper outpost does.".to_owned()
+            }
         }
     }
 }
@@ -637,7 +645,52 @@ impl WorldState {
                 let found = self.outpost_for(player_id, outpost)?;
                 self.check_craft(player_id, found, recipe)
             }
+            LogisticsCommand::BuySupply { outpost, supply } => {
+                let found = self.outpost_for(player_id, outpost)?;
+                let price = self.supply_offer(player_id, found, supply)?;
+                self.afford(player_id, price)?;
+                Ok(LogisticsQuote::credits(price))
+            }
         }
+    }
+
+    /// What outpost `outpost`'s counter charges `player_id` for one `supply` now (Wave 9).
+    ///
+    /// # Errors
+    ///
+    /// Returns why the counter will not sell it: a shallower outpost or a full kit.
+    pub fn supply_offer(
+        &self,
+        player_id: PlayerId,
+        outpost: &Outpost,
+        supply: crate::workshop::DeepSupply,
+    ) -> Result<u32, LogisticsRefusal> {
+        if !crate::workshop::outpost_sells_supply(outpost.descent, supply) {
+            return Err(LogisticsRefusal::SupplyNotSoldHere);
+        }
+        if self.logistics.supplies_of(player_id, supply) >= crate::workshop::MAX_SUPPLY_STACK {
+            return Err(LogisticsRefusal::SupplyFull);
+        }
+        let price = crate::workshop::supply_price(supply, outpost.descent);
+        let percent = crate::depth_progression::OUTPOST_SHOP_PERCENT[outpost.tier()];
+        Ok(u32::try_from(u64::from(price) * u64::from(percent) / 100).unwrap_or(u32::MAX))
+    }
+
+    /// How many of `supply` `player_id`'s kit holds (Wave 9).
+    #[must_use]
+    pub fn supplies_of(&self, player_id: PlayerId, supply: crate::workshop::DeepSupply) -> u8 {
+        self.logistics.supplies_of(player_id, supply)
+    }
+
+    /// Spends one `supply` from `player_id`'s kit, if it holds one (Wave 9: the seam the
+    /// Descent mechanics call when a ballast tank is blown, a heater lit, a bomb thrown...).
+    /// Call it from inside the tick only.
+    pub fn take_supply(
+        &mut self,
+        player_id: PlayerId,
+        supply: crate::workshop::DeepSupply,
+    ) -> bool {
+        self.logistics.take_supply(player_id, supply)
     }
 
     /// The upgrade line `index` as outpost `outpost`'s counter sells it to `player_id` now: the
@@ -683,7 +736,12 @@ impl WorldState {
         ) {
             return Err(LogisticsRefusal::Locked(UpgradeLock::NotStockedHere));
         }
-        let percent = crate::depth_progression::OUTPOST_SHOP_PERCENT[outpost.tier()];
+        // Wave 9: a deep settlement sells its specialty lines cheaper.
+        let percent = crate::depth_progression::outpost_price_percent(
+            outpost.descent,
+            outpost.claimed(),
+            offer.kind,
+        );
         let price =
             u32::try_from(u64::from(offer.cost) * u64::from(percent) / 100).unwrap_or(u32::MAX);
         Ok((offer, price))
@@ -733,6 +791,14 @@ impl WorldState {
                 Ok(LogisticsQuote::default())
             }
             CraftOutput::Bombs(_) => Ok(LogisticsQuote::default()),
+            CraftOutput::Supply(supply, _) => {
+                if self.logistics.supplies_of(player_id, supply)
+                    >= crate::workshop::MAX_SUPPLY_STACK
+                {
+                    return Err(LogisticsRefusal::SupplyFull);
+                }
+                Ok(LogisticsQuote::default())
+            }
             CraftOutput::Part(kind) => {
                 let index = crate::economy::UpgradeKind::ALL
                     .iter()
@@ -782,6 +848,9 @@ impl WorldState {
             CraftOutput::DiveCharges(count) => {
                 let charges = self.logistics.dive_charges.entry(player_id).or_insert(0);
                 *charges = charges.saturating_add(count).min(MAX_DIVE_CHARGES);
+            }
+            CraftOutput::Supply(supply, count) => {
+                let _ = self.logistics.add_supplies(player_id, supply, count);
             }
         }
     }
@@ -1143,6 +1212,9 @@ impl WorldState {
                 }
             }
             LogisticsCommand::Craft { recipe, .. } => self.apply_craft(player_id, recipe),
+            LogisticsCommand::BuySupply { supply, .. } => {
+                let _ = self.logistics.add_supplies(player_id, supply, 1);
+            }
         }
         PlayerScopedCommandOutcome::Applied
     }

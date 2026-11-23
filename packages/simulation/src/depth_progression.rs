@@ -462,18 +462,18 @@ impl RigSystem {
     }
 
     /// The boss that hands this system out, if it is a gate's reward and never sold (Wave 8:
-    /// the Mycelial Mind's Bio-Filter and Lamp II).
+    /// the Star Core and the Mycelial Mind; Wave 9: the Leviathan, the Sun Serpent and the
+    /// Glitch; the Heart Key stays on sale until Wave 10 authors the Ancients).
     #[must_use]
     pub const fn boss_reward(self) -> Option<crate::descent::DescentBoss> {
         match self {
             // The Star Core's Pressure Hull (Wave 8 integration: the Old Deep's gate).
             Self::PressureHull => Some(crate::descent::DescentBoss::StarCore),
             Self::BioFilter | Self::LampII => Some(crate::descent::DescentBoss::MycelialMind),
-            // Wave 9: the Leviathan's Sonar Suite and Cryo Hull (Descent IV's gate).
+            // Wave 9: the Leviathan's Sonar Suite and Cryo Hull, the Sun Serpent's Gravity
+            // Anchor and the Glitch's Phase Drill (expansion plan §14; never sold).
             Self::SonarSuite | Self::CryoHull => Some(crate::descent::DescentBoss::Leviathan),
-            // The Sun Serpent's Gravity Anchor (Wave 9: the Hollow World's gate).
             Self::GravityAnchor => Some(crate::descent::DescentBoss::SunSerpent),
-            // The Glitch's Phase Drill (Wave 9 strange-b: Descent VI's gate).
             Self::PhaseDrill => Some(crate::descent::DescentBoss::TheGlitch),
             Self::HeartKey => None,
         }
@@ -771,14 +771,15 @@ pub fn descent_index_at_row(settings: &WorldSettings, row: i32) -> u8 {
     }
 }
 
-/// Heat units the placeholder strata below Descent III run at most in Descent `descent`.
+/// Heat units the placeholder strata below Descent VI run at most in Descent `descent`.
 ///
-/// `None`: Descents I-III, whose heat is authored. The radiator tier on sale before a
+/// `None`: Descents I-VI, whose heat is authored (Wave 9: IV-VI by [`deep_climate`]). The radiator tier on sale before a
 /// Descent opens covers it with no heat shielding, so a rig that came through the gates is
 /// never cooked (Waves 9-10 author these strata's own heat).
 #[must_use]
 pub const fn placeholder_heat_cap_units(descent: u8) -> Option<u8> {
-    if descent < 3 {
+    // Wave 9: Descents IV-VI have their own climate (`deep_climate`).
+    if descent < 6 {
         return None;
     }
     Some(crate::protection::radiator_cooling(core_tier_cap(
@@ -889,6 +890,122 @@ pub const fn deep_ore_value(descent: u8, rank: u8) -> u32 {
     }
 }
 
+// --- Wave 9: the climate of Descents IV-VI ---------------------------------------------------
+
+/// The authored climate of a stratum of Descents IV-VI (Wave 9 progression): its heat and its
+/// deep cold, in heat units ([`crate::protection::HEAT_UNITS_PER_LEVEL`] a level).
+///
+/// **Fair by construction** (tests): the heat of every stratum is covered by the radiator tier
+/// on sale in its Descent ([`core_tier_cap`]) plus at most [`CLIMATE_MAX_SHIELD_TIERS`] Heat
+/// Shielding tiers (stocked at every outpost), and a rig arriving with the previous Descent's
+/// cap feels it (the arrival is warm, never deadly: at most [`CLIMATE_ARRIVAL_EXCESS_UNITS`]
+/// over its cooling). The cold is the Descent tracks' hull frost: a Frost Heater
+/// ([`crate::workshop::DeepSupply::FrostHeater`], sold from the Hive Gate on) covers
+/// [`FROST_HEATER_COVER_UNITS`] of it while it burns and the Leviathan's Cryo Hull covers
+/// [`CRYO_HULL_COVER_UNITS`] for good ([`cold_excess`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StratumClimate {
+    /// Band heat in heat units (what the radiator and shielding must cover).
+    pub heat_units: u8,
+    /// Deep cold in heat units (what a heater or the Cryo Hull must cover; 0 = none).
+    pub cold_units: u8,
+}
+
+/// Most Heat Shielding tiers a stratum's heat may ask for on top of its Descent's radiator.
+pub const CLIMATE_MAX_SHIELD_TIERS: u8 = 2;
+/// Most heat units a stratum may run over the cooling of a rig that arrives with the previous
+/// Descent's radiator cap and no shielding (about 3 hull a second: a warning, not a wreck).
+pub const CLIMATE_ARRIVAL_EXCESS_UNITS: u8 = 3;
+/// Cold units a burning Frost Heater covers.
+pub const FROST_HEATER_COVER_UNITS: u8 = 12;
+/// Cold units the Cryo Hull covers.
+pub const CRYO_HULL_COVER_UNITS: u8 = 15;
+/// Hull per second for each cold unit a rig is not covered for (hull frost; half the heat's
+/// rate, so a frozen stretch is a squeeze, never an ambush).
+pub const COLD_DAMAGE_PER_EXCESS_UNIT: f32 = 0.5;
+
+/// The authored climate of `stratum` (Descents IV-VI; `None` for the others, whose heat comes
+/// from [`crate::crust::stratum_heat_units`] and, below Descent VI, the placeholder cap).
+#[must_use]
+pub const fn deep_climate(stratum: crate::descent::Stratum) -> Option<StratumClimate> {
+    use crate::descent::Stratum as S;
+    let (heat_units, cold_units) = match stratum {
+        // Descent IV: water cools, steam scalds, ice bites. Arrive at 20 units (radiator 13),
+        // the cap's radiator 15 covers 22.
+        S::UndergroundOcean => (16, 0),
+        S::BrineGlaciers => (8, 12),
+        S::GeyserFields => (23, 0),
+        S::MerrowCity => (17, 0),
+        S::PearlAbyss => (19, 8),
+        // Descent V: the inner sun. Arrive at 22 units (radiator 15), the cap's 17 covers 24.
+        S::InnerSky => (21, 0),
+        S::MegafaunaJungle => (25, 0),
+        S::UpsideDownIsles => (22, 0),
+        S::TheSunforge => (29, 0),
+        // Descent VI: the Strange Layers run warm and even, the Echo Caves cold and still.
+        // Arrive at 24 units (radiator 17), the cap's 19 covers 26.
+        S::MirrorStrata => (24, 0),
+        S::GravityShear => (26, 0),
+        S::PixelRot => (27, 0),
+        S::TimeSludge => (28, 0),
+        S::EchoCaves => (18, 10),
+        S::PrismDesert => (30, 0),
+        _ => return None,
+    };
+    Some(StratumClimate {
+        heat_units,
+        cold_units,
+    })
+}
+
+/// Cold units a rig is not covered for in `cold_units` of deep cold: a burning Frost Heater
+/// and the Cryo Hull each cover their share.
+#[must_use]
+pub const fn cold_excess(cold_units: u8, heater_burning: bool, cryo_hull: bool) -> u8 {
+    let mut cover = 0_u8;
+    if heater_burning {
+        cover = cover.saturating_add(FROST_HEATER_COVER_UNITS);
+    }
+    if cryo_hull {
+        cover = cover.saturating_add(CRYO_HULL_COVER_UNITS);
+    }
+    cold_units.saturating_sub(cover)
+}
+
+/// Percent of the town price a deep settlement's counter asks for its specialty lines.
+///
+/// Wave 9: Merrow City's seals and engines, the Sunward Camp's radiators and shielding, the
+/// Prism Relay's lamps and drills.
+pub const OUTPOST_SPECIALTY_PERCENT: u32 = 85;
+
+/// Whether the counter of Descent `outpost_descent`'s outpost sells `kind` as its specialty
+/// (at [`OUTPOST_SPECIALTY_PERCENT`] instead of the counter's usual percent).
+#[must_use]
+pub const fn outpost_specialty(outpost_descent: u8, kind: crate::economy::UpgradeKind) -> bool {
+    use crate::economy::UpgradeKind as K;
+    matches!(
+        (outpost_descent, kind),
+        (3, K::PressureRating | K::Engine)
+            | (4, K::Radiator | K::HeatShield)
+            | (5, K::Headlamp | K::Drill)
+    )
+}
+
+/// Percent of the town price outpost counter of Descent `outpost_descent` (claimed or not)
+/// asks for `kind` (Wave 9: its specialty, or [`OUTPOST_SHOP_PERCENT`]).
+#[must_use]
+pub const fn outpost_price_percent(
+    outpost_descent: u8,
+    claimed: bool,
+    kind: crate::economy::UpgradeKind,
+) -> u32 {
+    if outpost_specialty(outpost_descent, kind) {
+        OUTPOST_SPECIALTY_PERCENT
+    } else {
+        OUTPOST_SHOP_PERCENT[claimed as usize]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -983,6 +1100,94 @@ mod tests {
         assert_eq!(
             prices, sorted,
             "gate systems cost more the deeper they open"
+        );
+    }
+
+    #[test]
+    fn the_climate_of_descents_four_to_six_is_authored_and_fair() {
+        use crate::descent::{Descent, Stratum};
+        use crate::protection::{HEAT_UNITS_PER_LEVEL, heat_cooling, radiator_cooling};
+        for descent in [
+            Descent::DrownedAndFrozen,
+            Descent::HollowWorld,
+            Descent::StrangeLayers,
+        ] {
+            let index = u8::try_from(descent.index()).expect("eight");
+            let arriving = radiator_cooling(core_tier_cap(index - 1));
+            let geared = heat_cooling(core_tier_cap(index), CLIMATE_MAX_SHIELD_TIERS);
+            let mut hottest = 0;
+            for (slot, stratum) in descent.strata().enumerate() {
+                let climate = deep_climate(stratum).expect("authored");
+                assert_eq!(
+                    crate::crust::stratum_heat_units(stratum),
+                    climate.heat_units,
+                    "{stratum:?}"
+                );
+                assert!(climate.heat_units <= geared, "{stratum:?} cannot be cooled");
+                if slot == 0 {
+                    assert!(
+                        climate.heat_units <= arriving + CLIMATE_ARRIVAL_EXCESS_UNITS,
+                        "{stratum:?} burns a rig that just came through the gate"
+                    );
+                }
+                hottest = hottest.max(climate.heat_units);
+                // A heater (from the Hive Gate on) or the Cryo Hull covers every cold.
+                assert_eq!(
+                    cold_excess(climate.cold_units, true, false),
+                    0,
+                    "{stratum:?}"
+                );
+                assert_eq!(
+                    cold_excess(climate.cold_units, false, true),
+                    0,
+                    "{stratum:?}"
+                );
+                // Bare hull frost is a squeeze: at most a few hull a second.
+                assert!(
+                    f32::from(climate.cold_units) * COLD_DAMAGE_PER_EXCESS_UNIT <= 6.0,
+                    "{stratum:?}"
+                );
+            }
+            // Each Descent's hottest stratum asks for more than its arrival covers: the
+            // radiator tiers are worth buying.
+            assert!(hottest > arriving + HEAT_UNITS_PER_LEVEL / 3, "{descent:?}");
+        }
+        for stratum in Stratum::ALL {
+            let authored = matches!(stratum.descent().index(), 3..=5);
+            assert_eq!(deep_climate(stratum).is_some(), authored, "{stratum:?}");
+        }
+        // The placeholders below keep their fair cap; the authored Descents have none.
+        assert!(placeholder_heat_cap_units(5).is_none());
+        assert!(placeholder_heat_cap_units(6).is_some());
+        // The Hollow World's way in is the frost the Cryo Hull is named for.
+        assert!(
+            deep_climate(Stratum::BrineGlaciers)
+                .expect("cold")
+                .cold_units
+                > 0
+        );
+    }
+
+    #[test]
+    fn deep_settlements_sell_their_specialties_cheaper() {
+        for descent in 3..6 {
+            let specialties: Vec<UpgradeKind> = UpgradeKind::ALL
+                .iter()
+                .copied()
+                .filter(|kind| outpost_specialty(descent, *kind))
+                .collect();
+            assert_eq!(specialties.len(), 2, "Descent {descent}");
+            for kind in specialties {
+                assert!(outpost_stocks(descent, kind, 1), "{kind:?}");
+                assert!(
+                    outpost_price_percent(descent, true, kind) < OUTPOST_SHOP_PERCENT[1],
+                    "{kind:?}"
+                );
+            }
+        }
+        assert_eq!(
+            outpost_price_percent(1, false, UpgradeKind::Drill),
+            OUTPOST_SHOP_PERCENT[0]
         );
     }
 

@@ -348,6 +348,13 @@ pub enum LogisticsCommand {
     /// A far Strange Layers command (Wave 9 strange-b): lamp filters and time bubbles, served
     /// by the same dialog and the use button.
     FarStrange(crate::far_strange::FarStrangeAction),
+    /// Buy one `supply` ([`crate::workshop::DeepSupply`]) at the counter of outpost `outpost`
+    /// (Wave 9: the deep counters sell their Descent's supplies and every shallower one's,
+    /// [`crate::workshop::outpost_sells_supply`]).
+    BuySupply {
+        outpost: u32,
+        supply: crate::workshop::DeepSupply,
+    },
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.
@@ -394,6 +401,13 @@ pub struct Logistics {
     /// The next id for a lift, outpost or beacon.
     #[serde(default)]
     pub next_id: u32,
+    /// Each player's deep supply kit (Wave 9 progression): how many of each
+    /// [`crate::workshop::DeepSupply`] the rig carries, by [`crate::workshop::DeepSupply::index`]
+    /// (up to [`crate::workshop::MAX_SUPPLY_STACK`] each). Bought at the deep counters
+    /// ([`LogisticsCommand::BuySupply`]) or crafted; the Descent mechanics spend them
+    /// ([`crate::WorldState::take_supply`]). An emptied kit is dropped.
+    #[serde(default)]
+    pub supplies: BTreeMap<PlayerId, Vec<u8>>,
 }
 
 impl Logistics {
@@ -472,6 +486,50 @@ impl Logistics {
         self.beacons
             .values()
             .filter(move |beacon| beacon.owner == player)
+    }
+
+    /// How many of `supply` `player`'s kit holds (Wave 9).
+    #[must_use]
+    pub fn supplies_of(&self, player: PlayerId, supply: crate::workshop::DeepSupply) -> u8 {
+        self.supplies
+            .get(&player)
+            .and_then(|kit| kit.get(supply.index()))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Adds `count` of `supply` to `player`'s kit (up to the stack limit); returns how many
+    /// went in.
+    pub fn add_supplies(
+        &mut self,
+        player: PlayerId,
+        supply: crate::workshop::DeepSupply,
+        count: u8,
+    ) -> u8 {
+        let kit = self.supplies.entry(player).or_default();
+        if kit.len() <= supply.index() {
+            kit.resize(supply.index() + 1, 0);
+        }
+        let slot = &mut kit[supply.index()];
+        let added = count.min(crate::workshop::MAX_SUPPLY_STACK.saturating_sub(*slot));
+        *slot += added;
+        added
+    }
+
+    /// Takes one `supply` out of `player`'s kit; whether there was one. An emptied kit is
+    /// dropped, so the section stays as it was before the player ever bought one.
+    pub fn take_supply(&mut self, player: PlayerId, supply: crate::workshop::DeepSupply) -> bool {
+        let Some(kit) = self.supplies.get_mut(&player) else {
+            return false;
+        };
+        let Some(slot) = kit.get_mut(supply.index()).filter(|slot| **slot > 0) else {
+            return false;
+        };
+        *slot -= 1;
+        if kit.iter().all(|count| *count == 0) {
+            self.supplies.remove(&player);
+        }
+        true
     }
 
     /// Dive charges `player` carries.

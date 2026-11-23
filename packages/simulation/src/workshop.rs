@@ -71,6 +71,160 @@ pub enum CraftOutput {
     /// The next tier of an upgrade line, for [`PART_PRICE_PERCENT`] of its price on top of the
     /// resources (the tier must be on sale and stocked at the outpost).
     Part(UpgradeKind),
+    /// Deep supplies into the rig's supply kit (Wave 9: up to [`MAX_SUPPLY_STACK`] of a kind,
+    /// [`crate::logistics::Logistics::supplies`]).
+    Supply(DeepSupply, u8),
+}
+
+// --- Wave 9: deep supplies (Descents IV-VI) ----------------------------------------------------
+
+/// Most of one deep supply a rig's kit holds.
+pub const MAX_SUPPLY_STACK: u8 = 9;
+
+/// The deep supplies of Descents IV-VI (Wave 9 progression): consumables crafted from the
+/// layer resources and sold at the deep settlements' counters, one for each mechanic that asks
+/// for a tool.
+///
+/// **The economy is the progression track's; the effect is the Descent track's.** A kit holds
+/// them ([`crate::logistics::Logistics::supplies`]); the Descent tracks spend one with
+/// [`crate::WorldState::take_supply`] when their mechanic uses it (the integrator wires the
+/// use action). Append only: a supply's index is its wire and save id.
+#[derive(
+    Clone, Copy, Debug, serde::Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize,
+)]
+pub enum DeepSupply {
+    /// The Underground Ocean: a ballast tank to blow or flood, so the submarine sinks or
+    /// surfaces at once.
+    BallastTank,
+    /// The Brine Glaciers: burns off hull frost and keeps the deep cold off for a while.
+    FrostHeater,
+    /// The Pearl Abyss: a floating flare that lights the black water around it.
+    FlareBuoy,
+    /// The Megafauna Jungle: a scent lure that draws the predators off (and calms the
+    /// herbivores you ride).
+    BeastBait,
+    /// The Sunforge: a reflective canopy that throws a moving patch of shade (glare and heat).
+    ShadeCanopy,
+    /// The Time Sludge: a charge that blows a bubble of slow time.
+    TimeBubbleBomb,
+    /// The Echo Caves: one sonar ping without the Sonar Suite.
+    EchoCharge,
+    /// The Prism Desert: a lamp filter set that tints the headlamp to open colour-keyed walls.
+    LampFilter,
+}
+
+impl DeepSupply {
+    /// Every deep supply, in kit order.
+    pub const ALL: [Self; 8] = [
+        Self::BallastTank,
+        Self::FrostHeater,
+        Self::FlareBuoy,
+        Self::BeastBait,
+        Self::ShadeCanopy,
+        Self::TimeBubbleBomb,
+        Self::EchoCharge,
+        Self::LampFilter,
+    ];
+
+    /// Display name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::BallastTank => "Ballast Tank",
+            Self::FrostHeater => "Frost Heater",
+            Self::FlareBuoy => "Flare Buoy",
+            Self::BeastBait => "Beast Bait",
+            Self::ShadeCanopy => "Shade Canopy",
+            Self::TimeBubbleBomb => "Time-Bubble Bomb",
+            Self::EchoCharge => "Echo Charge",
+            Self::LampFilter => "Lamp Filter",
+        }
+    }
+
+    /// What it does, in the counter's words.
+    #[must_use]
+    pub const fn about(self) -> &'static str {
+        match self {
+            Self::BallastTank => "Blow or flood it: the submarine sinks or surfaces at once",
+            Self::FrostHeater => "Burns off hull frost and keeps the deep cold off for a while",
+            Self::FlareBuoy => "A floating flare that lights the black water around it",
+            Self::BeastBait => "A scent lure: predators chase it, herbivores calm down",
+            Self::ShadeCanopy => "Throws a patch of shade against the inner sun's glare and heat",
+            Self::TimeBubbleBomb => "Blows a bubble of slow time where it lands",
+            Self::EchoCharge => "One sonar ping: the dark cave shows for a moment",
+            Self::LampFilter => "Tints the headlamp to open the matching colour-keyed wall",
+        }
+    }
+
+    /// The stratum whose mechanic it answers (its recipe's resource).
+    #[must_use]
+    pub const fn stratum(self) -> Stratum {
+        match self {
+            Self::BallastTank => Stratum::UndergroundOcean,
+            Self::FrostHeater => Stratum::BrineGlaciers,
+            Self::FlareBuoy => Stratum::PearlAbyss,
+            Self::BeastBait => Stratum::MegafaunaJungle,
+            Self::ShadeCanopy => Stratum::TheSunforge,
+            Self::TimeBubbleBomb => Stratum::TimeSludge,
+            Self::EchoCharge => Stratum::EchoCaves,
+            Self::LampFilter => Stratum::PrismDesert,
+        }
+    }
+
+    /// The Descent (0 = I) whose outposts first sell and craft it: its stratum's.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, reason = "8 Descents")]
+    pub const fn descent(self) -> u8 {
+        self.stratum().descent().index() as u8
+    }
+
+    /// The Descent (0 = I) whose outpost counters first sell it: its own, except the two the
+    /// Drowned and Frozen asks for before Merrow City's counter (its outpost is the Descent's
+    /// fourth stratum): ballast and heaters are stocked from the Hive Gate on.
+    #[must_use]
+    pub const fn sold_from_descent(self) -> u8 {
+        match self {
+            Self::BallastTank | Self::FrostHeater => 2,
+            _ => self.descent(),
+        }
+    }
+
+    /// Credits one costs at a Descent I counter before the depth scale
+    /// ([`supply_price`]): about what its recipe's resources are worth, so crafting saves a
+    /// little and buying saves the digging.
+    #[must_use]
+    pub const fn base_price(self) -> u32 {
+        match self {
+            Self::BallastTank => 320,
+            Self::FrostHeater => 330,
+            Self::FlareBuoy => 200,
+            Self::BeastBait => 260,
+            Self::ShadeCanopy => 410,
+            Self::TimeBubbleBomb => 450,
+            Self::EchoCharge => 250,
+            Self::LampFilter => 480,
+        }
+    }
+
+    /// The supply's index in [`Self::ALL`].
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// Credits one `supply` costs at an outpost of Descent `outpost_descent` (deeper counters
+/// charge more, like every outpost service: [`crate::logistics::scaled_price`]).
+#[must_use]
+pub const fn supply_price(supply: DeepSupply, outpost_descent: u8) -> u32 {
+    crate::logistics::scaled_price(supply.base_price(), outpost_descent)
+}
+
+/// Whether an outpost in Descent `outpost_descent` sells `supply` over its counter: from
+/// [`DeepSupply::sold_from_descent`] down.
+#[must_use]
+pub const fn outpost_sells_supply(outpost_descent: u8, supply: DeepSupply) -> bool {
+    supply.sold_from_descent() <= outpost_descent
 }
 
 /// One workshop recipe.
@@ -123,7 +277,7 @@ impl Recipe {
 
 /// Every workshop recipe, in workshop order (a recipe's index is its id in
 /// [`crate::logistics::LogisticsCommand::Craft`]; append only).
-pub const RECIPES: [Recipe; 17] = [
+pub const RECIPES: [Recipe; 34] = [
     // Descent I: The Crust.
     Recipe {
         name: "Root-rope Splice",
@@ -232,6 +386,114 @@ pub const RECIPES: [Recipe; 17] = [
         inputs: &[(Stratum::GlowSea, 6), (Stratum::CrystalFaults, 2)],
         output: CraftOutput::Part(UpgradeKind::Headlamp),
     },
+    // Descent IV: The Drowned and Frozen (Wave 9).
+    Recipe {
+        name: "Pearl-weighted Ballast Tanks",
+        about: "Deep pearls sewn into flood bladders: two ballast tanks for the submarine",
+        inputs: &[(Stratum::UndergroundOcean, 5)],
+        output: CraftOutput::Supply(DeepSupply::BallastTank, 2),
+    },
+    Recipe {
+        name: "Brine-salt Frost Heaters",
+        about: "Brine ice cracked for its salt and lit: two frost heaters",
+        inputs: &[(Stratum::BrineGlaciers, 5)],
+        output: CraftOutput::Supply(DeepSupply::FrostHeater, 2),
+    },
+    Recipe {
+        name: "Sinter Steam Turbine",
+        about: "Geyser sinter lines a turbine that drinks steam: the next Engine tier",
+        inputs: &[(Stratum::GeyserFields, 6)],
+        output: CraftOutput::Part(UpgradeKind::Engine),
+    },
+    Recipe {
+        name: "Merrow Coral Seals",
+        about: "The merrows' coral glass over cathedral pearls: the next Pressure Rating tier",
+        inputs: &[(Stratum::MerrowCity, 6), (Stratum::PressureCathedrals, 2)],
+        output: CraftOutput::Part(UpgradeKind::PressureRating),
+    },
+    Recipe {
+        name: "Pearl-oil Flare Buoys",
+        about: "Abyss pearls pressed for their glowing oil: three flare buoys",
+        inputs: &[(Stratum::PearlAbyss, 4)],
+        output: CraftOutput::Supply(DeepSupply::FlareBuoy, 3),
+    },
+    // Descent V: The Hollow World (Wave 9).
+    Recipe {
+        name: "Sky-amber Tank Liner",
+        about: "Inner-sky amber that sets light and tight: the next Fuel Tank tier",
+        inputs: &[(Stratum::InnerSky, 6)],
+        output: CraftOutput::Part(UpgradeKind::FuelTank),
+    },
+    Recipe {
+        name: "Giant-hide Bait Sacks",
+        about: "A beast's hide stuffed with jungle musk: three beast baits",
+        inputs: &[(Stratum::MegafaunaJungle, 5)],
+        output: CraftOutput::Supply(DeepSupply::BeastBait, 3),
+    },
+    Recipe {
+        name: "Lodestone Keel Plates",
+        about: "Plates that remember which way is down: the next Hull tier",
+        inputs: &[(Stratum::UpsideDownIsles, 6)],
+        output: CraftOutput::Part(UpgradeKind::Hull),
+    },
+    Recipe {
+        name: "Sun-glass Shade Canopy",
+        about: "Mirrored sun glass on a folding frame: two shade canopies",
+        inputs: &[(Stratum::TheSunforge, 5)],
+        output: CraftOutput::Supply(DeepSupply::ShadeCanopy, 2),
+    },
+    Recipe {
+        name: "Sunforged Radiator Core",
+        about: "Sun glass fins cooled in geyser sinter: the next Radiator tier",
+        inputs: &[(Stratum::TheSunforge, 6), (Stratum::GeyserFields, 2)],
+        output: CraftOutput::Part(UpgradeKind::Radiator),
+    },
+    // Descent VI: The Strange Layers (Wave 9).
+    Recipe {
+        name: "Mirror-ore Cargo Racks",
+        about: "Racks that hold twice what they look like: the next Cargo Bay tier",
+        inputs: &[(Stratum::MirrorStrata, 6)],
+        output: CraftOutput::Part(UpgradeKind::CargoBay),
+    },
+    Recipe {
+        name: "Shear-stone Drill Crown",
+        about: "Shear stone set in builder relics, biting from any side: the next Drill tier",
+        inputs: &[
+            (Stratum::GravityShear, 6),
+            (Stratum::AncientMachineLayer, 2),
+        ],
+        output: CraftOutput::Part(UpgradeKind::Drill),
+    },
+    Recipe {
+        name: "Data-ore Scanner Core",
+        about: "Data ore that still remembers the rock: the next Scanner tier",
+        inputs: &[(Stratum::PixelRot, 6)],
+        output: CraftOutput::Part(UpgradeKind::Scanner),
+    },
+    Recipe {
+        name: "Chrono-amber Time-Bubble Bombs",
+        about: "Slow time trapped in amber, cracked on impact: two time-bubble bombs",
+        inputs: &[(Stratum::TimeSludge, 5)],
+        output: CraftOutput::Supply(DeepSupply::TimeBubbleBomb, 2),
+    },
+    Recipe {
+        name: "Echo-quartz Charges",
+        about: "Quartz that rings when struck: three echo charges",
+        inputs: &[(Stratum::EchoCaves, 4)],
+        output: CraftOutput::Supply(DeepSupply::EchoCharge, 3),
+    },
+    Recipe {
+        name: "Prism Lamp Filters",
+        about: "Prism sand fused into coloured glass: two lamp filter sets",
+        inputs: &[(Stratum::PrismDesert, 5)],
+        output: CraftOutput::Supply(DeepSupply::LampFilter, 2),
+    },
+    Recipe {
+        name: "Prism-ground Beam Lens",
+        about: "Prism sand ground over a fault crystal: the next Headlamp tier",
+        inputs: &[(Stratum::PrismDesert, 6), (Stratum::CrystalFaults, 2)],
+        output: CraftOutput::Part(UpgradeKind::Headlamp),
+    },
 ];
 
 /// The recipe with id `index`.
@@ -265,8 +527,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_stratum_of_descents_one_to_three_has_a_recipe() {
-        for stratum in Stratum::ALL.iter().take(17) {
+    fn every_stratum_of_descents_one_to_six_has_a_recipe() {
+        // Wave 9: Descents IV-VI joined I-III (32 strata).
+        for stratum in Stratum::ALL.iter().take(32) {
             assert!(
                 RECIPES.iter().any(|recipe| recipe.stratum() == *stratum),
                 "{stratum:?} has no recipe"
@@ -275,10 +538,74 @@ mod tests {
         for recipe in &RECIPES {
             assert!(!recipe.inputs.is_empty() && recipe.inputs.len() <= 2);
             assert!(recipe.inputs.iter().all(|(_, count)| *count > 0));
-            assert!(recipe.descent() <= 2, "{}", recipe.name);
+            assert!(recipe.descent() <= 5, "{}", recipe.name);
             assert!(outpost_crafts(recipe.descent(), recipe));
             if recipe.descent() > 0 {
                 assert!(!outpost_crafts(recipe.descent() - 1, recipe));
+            }
+        }
+    }
+
+    #[test]
+    fn every_deep_supply_is_crafted_sold_and_priced_near_its_resources() {
+        for supply in DeepSupply::ALL {
+            assert_eq!(DeepSupply::ALL[supply.index()], supply);
+            let recipes: Vec<&Recipe> = RECIPES
+                .iter()
+                .filter(|recipe| matches!(recipe.output, CraftOutput::Supply(made, _) if made == supply))
+                .collect();
+            assert_eq!(recipes.len(), 1, "{supply:?} has one recipe");
+            let recipe = recipes[0];
+            assert_eq!(recipe.stratum(), supply.stratum(), "{supply:?}");
+            assert!((3..=5).contains(&supply.descent()), "{supply:?}");
+            // Sold no later than its stratum's Descent, and from there down.
+            assert!(supply.sold_from_descent() <= supply.descent());
+            assert!(outpost_sells_supply(supply.sold_from_descent(), supply));
+            assert!(outpost_sells_supply(7, supply));
+            if supply.sold_from_descent() > 0 {
+                assert!(!outpost_sells_supply(
+                    supply.sold_from_descent() - 1,
+                    supply
+                ));
+            }
+            // Crafting saves a little over buying at its own Descent's counter, never more
+            // than half.
+            let CraftOutput::Supply(_, count) = recipe.output else {
+                unreachable!()
+            };
+            let bought = supply_price(supply, supply.descent()) * u32::from(count);
+            let worth = recipe.resource_worth();
+            assert!(
+                worth * 2 >= bought && worth <= bought * 3 / 2,
+                "{supply:?}: resources worth {worth}, buying {count} costs {bought}"
+            );
+            // Deeper counters charge more.
+            assert!(supply_price(supply, 5) > supply_price(supply, 3));
+        }
+    }
+
+    #[test]
+    fn the_deep_recipes_make_valid_parts_and_supplies() {
+        let mut parts = std::collections::BTreeSet::new();
+        for recipe in RECIPES.iter().skip(17) {
+            assert!((3..=5).contains(&recipe.descent()), "{}", recipe.name);
+            assert!(!recipe.name.is_empty() && !recipe.about.is_empty());
+            match recipe.output {
+                CraftOutput::Part(kind) => {
+                    // A tiered line the deep counters stock (never a boss's rig system).
+                    assert!(kind.rig_system().is_none(), "{}", recipe.name);
+                    assert!(
+                        crate::depth_progression::outpost_stocks(recipe.descent(), kind, 1),
+                        "{}",
+                        recipe.name
+                    );
+                    // One part recipe per line per Descent.
+                    assert!(parts.insert((recipe.descent(), kind)), "{}", recipe.name);
+                }
+                CraftOutput::Supply(_, count) => {
+                    assert!(count > 0 && count <= MAX_SUPPLY_STACK);
+                }
+                _ => {}
             }
         }
     }
