@@ -284,6 +284,16 @@ enum SeatLoop {
     MerrowMusic,
     AbyssMusic,
     LeviathanMusic,
+    // The Hollow World's music and beds (Wave 9): one piece per stratum, the Sun Serpent's
+    // theme, and the jungle's, the winds' and the forge's ambience.
+    InnerSkyMusic,
+    JungleMusic,
+    IslesMusic,
+    SunforgeMusic,
+    SerpentMusic,
+    JungleAmbience,
+    UpdraftAmbience,
+    ForgeAmbience,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -911,6 +921,7 @@ impl Director {
         self.old_deep_music(live, listener, terrain, snapshot);
         self.living_dark_music(live, listener, snapshot);
         self.drowned_music(live, listener, snapshot);
+        self.hollow_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1523,6 +1534,92 @@ impl Director {
             Patch::LeviathanLoop,
             (if fighting { 0.58 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
         );
+    }
+
+    /// The Hollow World's music (Wave 9): each stratum's own piece while the seat is in it,
+    /// the Sun Serpent's theme in place of the Sunforge's while it is awake near, and a bed
+    /// under each (the jungle's life, the winds of the sky and the isles, the forge's roar).
+    fn hollow_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::{descent::MusicCue, enemy::EnemyKind, entity::EntityState};
+        let terrain = snapshot.terrain;
+        let cue = terrain.settings().generator.has_descents().then(|| {
+            let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+            terrain.stratum_at(tile).def().music
+        });
+        let reach = 34.0 * fatherload_simulation::terrain::TILE_SIZE;
+        let fighting = snapshot.enemies.iter().any(|entity| {
+            matches!(entity.state, EntityState::Enemy(state) if state.kind == EnemyKind::SunSerpent)
+                && (entity.body.x - listener.x).hypot(entity.body.y - listener.y) < reach
+        });
+        let pieces = [
+            (
+                MusicCue::InnerSky,
+                SeatLoop::InnerSkyMusic,
+                Patch::InnerSkyLoop,
+                0.38,
+            ),
+            (
+                MusicCue::MegafaunaJungle,
+                SeatLoop::JungleMusic,
+                Patch::JungleLoop,
+                0.4,
+            ),
+            (
+                MusicCue::UpsideDownIsles,
+                SeatLoop::IslesMusic,
+                Patch::IslesLoop,
+                0.38,
+            ),
+            (
+                MusicCue::Sunforge,
+                SeatLoop::SunforgeMusic,
+                Patch::SunforgeLoop,
+                0.4,
+            ),
+        ];
+        for (piece, slot, patch, gain) in pieces {
+            let playing = cue == Some(piece) && !(fighting && piece == MusicCue::Sunforge);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::SerpentMusic,
+            Patch::SerpentLoop,
+            (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        let beds = [
+            (
+                SeatLoop::JungleAmbience,
+                Patch::JungleAmbienceLoop,
+                cue == Some(MusicCue::MegafaunaJungle),
+            ),
+            (
+                SeatLoop::UpdraftAmbience,
+                Patch::UpdraftLoop,
+                matches!(cue, Some(MusicCue::InnerSky | MusicCue::UpsideDownIsles)),
+            ),
+            (
+                SeatLoop::ForgeAmbience,
+                Patch::ForgeAmbienceLoop,
+                cue == Some(MusicCue::Sunforge),
+            ),
+        ];
+        for (slot, patch, on) in beds {
+            let gain = if on { 0.3 } else { 0.0 };
+            self.loop_command(live, listener, slot, patch, (gain, 0.0, 1.0, OPEN_CUTOFF));
+        }
     }
 
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
@@ -2189,8 +2286,69 @@ mod tests {
     }
 
     #[test]
+    fn every_stratum_of_the_hollow_world_plays_its_own_piece_and_bed() {
+        use fatherload_simulation::{
+            SimulationParams,
+            descent::Descent,
+            position::WorldPos,
+            worldgen::{GeneratorVersion, WorldSettings},
+        };
+        // Wave 9: one piece per Descent V stratum, each with a bed under it.
+        const PIECES: [Patch; 4] = [
+            Patch::InnerSkyLoop,
+            Patch::JungleLoop,
+            Patch::IslesLoop,
+            Patch::SunforgeLoop,
+        ];
+        const BEDS: [Patch; 3] = [
+            Patch::JungleAmbienceLoop,
+            Patch::UpdraftLoop,
+            Patch::ForgeAmbienceLoop,
+        ];
+        let one = PlayerId::new(1);
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..WorldSettings::new(7)
+        };
+        let base = WorldState::new_game_with_settings(one, &settings, SimulationParams::default());
+        let layout = fatherload_simulation::descent::fields::cached_layout(&settings);
+        let mut heard = BTreeSet::new();
+        for stratum in Descent::HollowWorld.strata() {
+            let (top, bottom) = layout.rows(stratum);
+            let mut world = base.clone();
+            world.teleport_rig_to(
+                one,
+                WorldPos::tile_center(-300, i64::from(top + (bottom - top) / 2)),
+            );
+            let seats = [seat(0, one)];
+            let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+            let mut director = Director::new(1);
+            let audio = [SeatAudio::default()];
+            let (mut pieces, mut beds) = (BTreeSet::new(), BTreeSet::new());
+            for _ in 0..30 {
+                for command in director.update(&frame(&snapshot, &[], &audio)) {
+                    if let MixerCommand::Loop(request) = command
+                        && request.gain > 0.0
+                    {
+                        if PIECES.contains(&request.patch) {
+                            pieces.insert(request.patch);
+                        }
+                        if BEDS.contains(&request.patch) {
+                            beds.insert(request.patch);
+                        }
+                    }
+                }
+            }
+            assert_eq!(pieces.len(), 1, "{stratum:?}: {pieces:?}");
+            assert_eq!(beds.len(), 1, "{stratum:?}: {beds:?}");
+            heard.extend(pieces);
+        }
+        assert_eq!(heard.len(), PIECES.len(), "{heard:?}");
+    }
+
+    #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
-        assert!((SeatLoop::LeviathanMusic as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::ForgeAmbience as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]
