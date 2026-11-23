@@ -210,6 +210,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   pings, amber, landmarks found, The Glitch's fight), `LogisticsCommand::FarStrange` (lamp
 ///   filters, time bubbles) and the far Strange Layers events 580-599
 ///   (`GameplayEventKind::FarStrange`).
+///
+/// Story (Wave 9): the four deeper `AnomalyKind`s (`Sideways`, `Sunlit`, `Weightless`,
+/// `Lensing`) in `AnomalyEntered` events, and NPC entities of Cathedral Station's and the Amber
+/// Court's residents (their `CharacterId`s name the fixed `people::deep_folk` settlement ids).
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

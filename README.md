@@ -1140,13 +1140,37 @@ came back up. In a Deep Descent world their trail is the story's backbone:
   cache placed where the rule makes it a small puzzle. Screen effects follow the effects
   intensity setting and never flash.
 - **The settlements remember them**: Gravel Hollow's people tell of the Fathers when asked for
-  news, and arriving at Gravel Hollow, Cathedral Station or the Amber Court puts up a card
-  with what they remember (more as the crew reads further). The Old Deep's Fathers' camps
-  hold the journal's own logs.
+  news, and arriving at Gravel Hollow puts up a card with what they remember (more as the crew
+  reads further). The Old Deep's Fathers' camps hold the journal's own logs.
 - Seven story milestones (each unlocks a paint). Review scenes: `expedition_camp`,
   `expedition_log_read`, `expedition_cairn`, `expedition_journal`, `expedition_radio_echo`,
   `expedition_ghost_recording`, `anomaly_gravity_flip`, `anomaly_pixel_rot`,
-  `anomaly_time_frozen`, `anomaly_mirror`, `settlement_memory_cathedral`.
+  `anomaly_time_frozen`, `anomaly_mirror`.
+
+### The Fathers below the Living Dark (wave 9 story)
+
+- **Logs 31 to 60** carry the trail through Descents IV to VI in three more chapters: whole
+  peoples live below (a sea under the rock, builder figures laid to rest in the ice, the merrow
+  city where Sefa stays), the planet is hollow (an inner sun hung on the cable, the jungle
+  tribes where Bran stays, Dov Halloran's grave in the sun's light), and the world wears thin
+  near the builders' machine (twins, turned gravity, rotting pixels, loose time, coloured
+  doors). The deeper camps look the part: a raft camp with frost on the canvas, a jungle camp
+  under leaves, a camp whose mirror twin stands beside it. Camps in the open Inner Sky stand on
+  a floating stone of their own.
+- **Builder echoes**: below Dov's grave his tapes stop and the builders' own voices begin,
+  with Ines's translations on the card (and once, out of time, Dov again).
+- **Residents**: Cathedral Station's prospectors and the Amber Court's insects live in their
+  halls now. Talk to them (the use key, by a resident) and each tells their own memories of the
+  Fathers; the Court's people stay in while the Court is angry with the crew.
+- **The codex**: after the journal in the map's pages, the hired hand's strongbox diary from
+  the Crust and the builders' tablets and room inscriptions, kept once read.
+- **Deeper anomaly rooms**: from Descent IV down a room may also be sideways (gravity to the
+  right wall), sunlit, weightless or bent, each with a builder inscription for the codex.
+- Review scenes: `residents_cathedral_station`, `residents_amber_court`,
+  `residents_amber_court_hall`, `expedition_raft_camp`, `expedition_sky_camp`,
+  `expedition_jungle_camp`, `expedition_dov_grave`, `expedition_thin_camp`, `expedition_codex`,
+  `expedition_builder_echo`, `anomaly_sideways`, `anomaly_sunlit`, `anomaly_weightless`,
+  `anomaly_lensing`.
 
 ### Fluids (wave 7, Part III F9)
 

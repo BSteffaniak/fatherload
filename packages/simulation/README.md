@@ -5750,6 +5750,166 @@ Still weak:
 - The Glitch sleeps if a rig waits in a doorway (the doors are outside the hall's inside), so
   its shards vanish too.
 
+## Wave 9 story: the Fathers in Descents IV-VI, residents and the codex (`src/expedition/{logs,memories,sites,anomaly,codex}.rs`, `src/people/deep_folk.rs`)
+
+Expansion plan §13 (the revelations of Descents IV-VI) and §14's cross-Descent systems, on
+the Wave 8 story's tables and passes. Everything is V11-only, deterministic and read from
+state the world already saves and shares.
+
+### The trail through Descents IV-VI (`expedition::logs`)
+
+- **Logs 31-60** follow the throughline table above row by row (strata, sites, authors and
+  beats), in three chapters: **IV "The People Below"** (the raft, the drowned builder sub and
+  the eel-dragon, Dov's fingers, the builder figures laid out in the ice, the geyser ride, the
+  merrow city, Sefa stays, the merrow song "the Tall Ones came down from the stars on a
+  thread", Dov's failing heart, the Leviathan breaking the sea floor), **V "The Hollow World"**
+  (a sun inside the world, Dov's last full tape, the chief's child, the rig crushed and the
+  grazer Survey Two, Bran stays, the cable through the inner sun, Dov's last recording, his
+  grave, the sun as a builder lamp, the Serpent's locker and its wall-walking anchor) and **VI
+  "Where the World Wears Thin"** (the other Ines, two of every canister and why the cipher,
+  the only up, low resolution, the plans of the world, a day in an hour, the Glitch and the
+  drill through builder metal; below, their city). `CHAPTERS` grows to six; logs stay under
+  340 characters and titles are unique.
+- **Echoes 13-26**: Dov's ghost tapes run on to the Upside-Down Isles (log 47, his last).
+  Below his grave the builders' own voices take over: `EchoKind::Builder` ("A BUILDER ECHO",
+  `Echo::voice` is "Builder voices", the text is Ines's margin translation), five of them from
+  the Sunforge to the Prism Desert. Once, out of time in the Time Sludge, Dov's voice comes
+  back ("Amos buried me three canisters back").
+- **Sites**: `SiteKind::Grave` (log 48, Dov's grave in the Sunforge, 10x6, the canister at its
+  foot). A site in the Inner Sky stands on a tapering stone of the stratum's hard rock
+  (`ExpeditionSite::{footing_rows, in_footing, extent}`; the chunk query uses the extent).
+  `sites::DEEPER_SET_PIECES` is the seam the Descent IV-VI tracks append their set-piece
+  queries to (`SetPieceQuery`); it starts with the registry's Descent IV-VIII landmarks, so
+  logs 1-30 keep their Wave 8 places. The story pass, the journal and the probe read the tables
+  only, so placement needed no other change.
+- **Game**: the deeper camps are dressed for their Descent (`CampDress`: a raft camp with frost
+  on the canvas, fuel drums under the sled and a paddle; a jungle camp under giant leaves with
+  a hammock, a tusk and flowers; a thin camp whose mirror twin tent and ghost sled stand faintly
+  beside it, its corners rotted to blocks), the grave is drawn (a pale outlined headstone cut
+  "D.H." with his radio's wave, his headset hung on it, a mound and sun-flowers, a warm glow
+  after the darkness pass), the builder echo has its own card (`StoryMomentKind::BuilderEcho`:
+  the ball-on-a-cable glyph and slow rings of sound) and the journal counts builder echoes and
+  colours chapters IV-VI.
+
+### The codex (`expedition::codex`, `ModalScreen::ExpeditionCodex`)
+
+The Wave 8 open item: the Crust's strongbox diary and the Old Deep's builder tablets were not
+in the journal. They are a page of their own after the numbered journal (the page cycle runs
+tomb codex, journal, **codex**, map): **A Hired Hand's Diary** (`crust::CRUST_LOGS`, read
+from `CrustState::logs`, with where each strongbox lies) and **Builder Tablets** (the four
+tablets and the Star Core's revelation from `OldDeep::logs_read`, then the deeper anomaly
+rooms' inscriptions from `ExpeditionState::anomaly_kinds`). Found entries are rows (keys, pad,
+mouse, touch), the rest a count; the selected entry's words are pinned under the list. The
+tablet texts moved into the simulation (`codex::{BUILDER_TABLETS, CORE_REVELATION}`); the
+game's `old_deep_news::deep_log` reads them. The codex has no state of its own: the `Crust`,
+`OldDeep` and `Expedition` sections are all in `SectionKey::SHARED`, so partners and reloaded
+saves show the same pages (`world::expedition_tests::the_codex_saves_loads_and_reaches_co_op_partners`).
+`WorldState::expedition_codex(page)`; `set_codex_finds_for_tests` for tests and scenes.
+
+### Deeper anomaly rooms (`expedition::anomaly`)
+
+`AnomalyKind` gains four kinds found only from Descent IV down (`AnomalyKind::DEEP`,
+`DEEP_FROM`; rooms above keep `SHALLOW`, Wave 8's four, so shallow rooms are unchanged):
+
+| Kind | Rule (field) | Lining | Caches | Way in |
+|---|---|---|---|---|
+| `Sideways` "The Sideways Room" | gravity to the right (`GravityShear` + free rotation, warm grade), hard edge | builder pillars | on the right wall | one doorway, in the left wall at the floor |
+| `Sunlit` "The Sunlit Room" | exposure, bloom, a warm grade and a little haze | builder brick | on the floor | both side doorways |
+| `Weightless` "The Floating Room" | next to no gravity, free rotation, violet grade | volcanic glass | two, under the ceiling | both side doorways |
+| `Lensing` "The Bent Room" | lensing and a cold grade (`Lens`) | crystal | on the floor | both side doorways |
+
+Each carries `AnomalyKind::inscription`, a builder line the room's card quotes and the codex
+keeps. The game draws their tells (rubble on the right wall and dust streaming to it, light
+shafts and a brass sun-disc, drifting stones, rings of bent light round a dark knot), all slow
+and steady. `Milestone::EveryAnomaly` stays "all four kinds" (`SHALLOW`), so it is not pushed
+past Descent IV. Bots: `a_rig_drives_into_the_sideways_room_and_falls_to_its_right_wall` plays
+the way in; `entering_the_deeper_rooms_feels_their_rules_and_fills_the_codex` checks every
+rule and the codex.
+
+### Residents of Cathedral Station and the Amber Court (`people::deep_folk`)
+
+The other Wave 8 open item: both places told their memories only on a card. Each is now a
+settlement like the Moon colony: fixed ids `CATHEDRAL_STATION` / `AMBER_COURT` (never a village,
+camp, sky town or city), an authored cast of five (`DeepSettlement::cast`: name, trade,
+greeting and the memory **speaker key** they speak for), a population from the seed with the
+cast's names and trades, and a routine view `Settlement::deep_hall` (underground: shown once
+explored; they work and sleep in the hall). `routine::settlement` and the world's
+`settlements_near_actors` know them, so they spawn, walk, talk, trade, take gifts, remember
+players and join stories like any resident, single-player, split-screen and online alike.
+
+- **Cathedral Station**: Hesper Quill (quartermaster), Oskar Danner (prospector), Lida Marr
+  (medic), Corwin Vale (surveyor) and Mags Pell (cook), in the half of the outpost hall away
+  from the lift's door, so a rig off the lift meets the counter first.
+- **The Amber Court**: Thrum of the Comb (worker elder), Wrench-Thrice of the Nursery (pump
+  tender), Hum-Softly of the Brood (nurse), Mandible of the Guard and the Voice of the Queen,
+  across the Court's hall. They are insects: the game draws them as hive workers half again a
+  person's size (banded abdomen, six legs, compound eyes, feelers, mandibles that click as they
+  talk, each holding their trade) with portraits of their own, and they keep to their own words
+  (no village small talk). Nobody comes out while the Court is hostile. The Court's comb pillars
+  are worn through at the floor (`worldgen::descent::living::court`) so they walk bay to bay.
+- **Conversations**: a resident's Chat is their greeting, then (station folk) the day's word,
+  then **their own** memory of the Fathers in their own voice, newest first
+  (`memories::line_by_for_visit`). In the hall a resident in reach takes the use key and the
+  prompt before the counter (`shell::deep_resident_in_reach`). The Wave 8 arrival cards for
+  these two places are gone; Gravel Hollow keeps its card, and the outposts of Descents IV-VI
+  show one until their settlements' people are wired.
+
+### Memories for the deeper settlements (`expedition::memories`)
+
+- Ids are `settlement.speaker.topic`; `SettlementMemory::speaker_key` is the middle part.
+  Nine new Cathedral Station and Hive lines open with Descents IV-VI's logs (the quartermaster
+  sold Dov the drums, the medic on his fingers, the cook asks you to sing at his grave, the Hive
+  elder on the Wet-Singers, the queen's voice on the little sun ...).
+- **Merrow City** (Sefa, 6 lines: archivist, singer, dock keeper, child), **the jungle tribes**
+  (Bran, 5 lines: chief Ruth-Little, healer, hunter, child) and **the Prism Relay** (Ines and
+  Amos passing through, 5 lines: relay keeper, glass cutter, drifter) are appended
+  `Settlement`s, each with lines open from the first visit and more as the trail is read.
+- **Registration seam** (for the Descent tracks' settlements, the integrator wires):
+  `Settlement::place_names` / `of_place_name` find a settlement by its population's name
+  ("Merrow City", "Merrow Air Dock", "the Jungle Tribes", "Sunward Camp", "Prism Relay" ...),
+  and `Settlement::speaker_for_role` casts their generated people by trade. The world's talk
+  (`world/people.rs`) already uses both: any settlement whose name registers remembers the
+  Fathers, every other Chat turning to them, in the speaker's own voice where their trade
+  speaks for a memory, otherwise passed on with the speaker named.
+
+### Formats, tests and scenes
+
+- `PROTOCOL_VERSION` 17 (the deeper `AnomalyKind`s in events, the residents' NPC entities); no
+  save format change (no new fields; `ExpeditionState` keeps anomaly kinds as bits).
+  **`GOLDEN_V11_DIGEST` updated** to `0x3927_e260_5846_588a` (the last pinned log site is log
+  60's now); V1-V10 digests unchanged. The Court's worn pillars and the deeper rooms lie in no
+  pinned chunk.
+- Tests: `expedition::tests` (logs and echoes in depth order through Descent VI, the members
+  stay behind in order and write no more after, chapters end in their Descent's last stratum,
+  rooms of every kind with the deeper ones only from Descent IV, their fields, doors and caches,
+  the deeper settlements' lines and registration), `people::deep_folk::tests` (casts, routines
+  that keep to the hall day and night, every resident speaks), `world::deep_folk_tests`
+  (residents come out at both halls and each tells their own memory in conversation, the hostile
+  Court stays shut, partners meet the same people across a save), `world::expedition_tests`
+  (the deeper rooms and the codex, the sideways room played, the codex saved, loaded and
+  replicated) and the game's `expedition_tests` (the codex page by touch and tabs, residents in
+  place of the Cathedral Station card).
+- Scenes: `residents_cathedral_station`, `residents_amber_court`, `residents_amber_court_hall`,
+  `expedition_raft_camp`, `expedition_sky_camp`, `expedition_jungle_camp`,
+  `expedition_dov_grave`, `expedition_thin_camp`, `expedition_codex`,
+  `expedition_builder_echo`, `anomaly_sideways`, `anomaly_sunlit`, `anomaly_weightless`,
+  `anomaly_lensing` (the Wave 8 `settlement_memory_cathedral` card scene is replaced by the
+  residents' scenes).
+
+### Seams and still open
+
+- **Merrow City, the jungle tribes and the Prism Relay**: when the Descent tracks build them,
+  name their populations one of `place_names` (or add their names there) and, if their trades
+  differ, rows to `speaker_for_role`; then drop that outpost's arrival card in
+  `LocalGame::announce_settlement_memories`. Their set pieces go into `DEEPER_SET_PIECES`.
+- **The Inner Sky's logs** (41, 42) stand on their own floating stone wherever the slot puts
+  them; once the Hollow World track places its floating stones, `placements_for` can move them
+  onto one.
+- **Per-settlement story arcs** (2-3 quests per new settlement on the people/story engine) are
+  not written: the arc engine seeds templates from character traits and binds places classic
+  bands describe, so settlement-bound arcs need a place trigger and the deeper settlements in
+  the arc tests' binding worlds. The residents already take part in the existing arcs.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
