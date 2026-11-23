@@ -173,6 +173,9 @@ mod sky_tests;
 mod sky_weapons;
 #[cfg(test)]
 mod soak_tests;
+mod sonar;
+#[cfg(test)]
+mod sonar_tests;
 mod state_hash;
 #[cfg(test)]
 mod streaming_tests;
@@ -237,6 +240,7 @@ pub use services::{
 };
 pub use sky_temples::{GATE_REACH, LEVER_REACH, relic_loot};
 pub use sky_weapons::{HOLD_RADIUS, HOLD_REACH, MIN_TETHER, REEL_SPEED, RIP_MILLIS};
+pub use sonar::SonarMedium;
 pub use timing::TickTiming;
 pub use tombs::{
     PARTY_REACH, PICK_TIMEOUT_MILLIS, REVIVE_MILLIS, REVIVE_REACH, cache_value, guardian_hoard,

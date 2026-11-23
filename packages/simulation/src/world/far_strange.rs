@@ -93,7 +93,8 @@ impl WorldState {
         self.far_strange.is_ambered(player_id, self.simulation_tick)
     }
 
-    /// How lit `tile` is by the sonar pings now (`0..=1`; presentation, tests).
+    /// How lit `tile` is by the Echo Caves' sonar waves now (`0..=1`);
+    /// [`WorldState::sonar_light_at`] adds the water's pings.
     #[must_use]
     pub fn echo_sonar_light_at(&self, tile: TilePosition) -> f32 {
         let now = self.millis_at(self.simulation_tick);
@@ -214,7 +215,8 @@ impl WorldState {
                 .is_some_and(|player| player.hazard_gear.has_system(RigSystem::PhaseDrill))
     }
 
-    /// A scanner press in the Echo Caves is also a sonar ping: its wave lights the cave for a
+    /// A scanner press in the Echo Caves is the sonar's ping (through
+    /// [`WorldState::sonar_scanner`], `world/sonar.rs`): its wave lights the cave for a
     /// moment ([`SONAR_PING_TILES`], [`SONAR_SUITE_PING_TILES`] with the Sonar Suite; a third
     /// as far inside a hush moth's hush). Blind hunters hear it. Returns whether it pinged.
     pub(super) fn echo_sonar_ping(&mut self, player_id: PlayerId) -> bool {

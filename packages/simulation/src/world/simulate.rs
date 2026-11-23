@@ -256,9 +256,10 @@ impl WorldState {
                     if let Some(event) = self.uplink_event(player_id, &action.command) {
                         output.push_event(event);
                     }
-                    // Under water the scanner is a sonar (Wave 9, the Drowned and Frozen).
+                    // Under water and in the Echo Caves the scanner is the sonar (Wave 9: the
+                    // Sonar Suite, `world/sonar.rs`).
                     if matches!(action.command, crate::PlayerCommand::UseScanner) {
-                        self.drowned_scanner(player_id, &mut output);
+                        self.sonar_scanner(player_id, &mut output);
                     }
                 }
             }

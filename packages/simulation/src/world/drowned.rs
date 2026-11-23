@@ -192,10 +192,10 @@ impl WorldState {
         &self.drowned.pings
     }
 
-    /// How brightly the sonar lights local pixel `(x, y)` now (`0..=1`, the brightest ping):
-    /// the seam the Echo Caves' total darkness reads, and what the renderer draws.
+    /// How brightly the water's sonar pings light local pixel `(x, y)` now (`0..=1`, the
+    /// brightest ping); [`WorldState::sonar_light_at`] adds the Echo Caves' waves.
     #[must_use]
-    pub fn sonar_light_at(&self, x: f32, y: f32) -> f32 {
+    pub fn drowned_sonar_light_at(&self, x: f32, y: f32) -> f32 {
         let frame = self.frame();
         let now = self.millis_at(self.simulation_tick);
         self.drowned
@@ -213,10 +213,13 @@ impl WorldState {
             .fold(0.0, f32::max)
     }
 
-    /// Sends a sonar ping from `player_id`'s rig (the scanner does it under water, and the
-    /// Echo Caves may call it): it lights the water round the rig for
-    /// [`SONAR_PING_MILLIS`] and maps the tiles in its reach.
-    pub fn sonar_ping(&mut self, player_id: PlayerId, output: &mut TickOutput) -> bool {
+    /// Sends a water sonar ping from `player_id`'s rig (through [`WorldState::sonar_ping`]): it
+    /// lights the water round the rig for [`SONAR_PING_MILLIS`] and maps the tiles in its reach.
+    pub(super) fn drowned_sonar_ping(
+        &mut self,
+        player_id: PlayerId,
+        output: &mut TickOutput,
+    ) -> bool {
         let Some(center) = self
             .players
             .get(&player_id)
@@ -244,14 +247,29 @@ impl WorldState {
         true
     }
 
-    /// The scanner's hook (Deep Descent worlds): a rig under water pings its sonar too.
-    pub(super) fn drowned_scanner(&mut self, player_id: PlayerId, output: &mut TickOutput) {
+    /// Whether `player_id`'s rig is where the water's sonar works (Deep Descent worlds): under
+    /// water, or anywhere in the Drowned and Frozen.
+    pub(super) fn drowned_sonar_here(&self, player_id: PlayerId) -> bool {
         if !self.drowned_world() {
-            return;
+            return false;
         }
         let Some((x, y)) = self.players.get(&player_id).map(|p| (p.x, p.y)) else {
-            return;
+            return false;
         };
+        self.submersion(x, y, AUTHORITATIVE_PLAYER_RADIUS)
+            .kind
+            .is_some()
+            || self
+                .deep_stratum_at(self.frame().tile_at(x, y))
+                .is_some_and(is_drowned)
+    }
+
+    /// The scanner's water hook (through [`WorldState::sonar_scanner`]): a rig under water
+    /// pings its sonar too.
+    pub(super) fn drowned_scanner(&mut self, player_id: PlayerId, output: &mut TickOutput) {
+        if !self.drowned_sonar_here(player_id) {
+            return;
+        }
         // One ping a second at most (the scanner may be pressed on consecutive ticks).
         let now = self.simulation_tick.get();
         let gap = self.timing.ticks_for_millis(1_000);
@@ -263,16 +281,7 @@ impl WorldState {
         {
             return;
         }
-        if self
-            .submersion(x, y, AUTHORITATIVE_PLAYER_RADIUS)
-            .kind
-            .is_some()
-            || self
-                .deep_stratum_at(self.frame().tile_at(x, y))
-                .is_some_and(is_drowned)
-        {
-            let _pinged = self.sonar_ping(player_id, output);
-        }
+        let _pinged = self.drowned_sonar_ping(player_id, output);
     }
 
     /// Whether the clam at `tile` gapes now.

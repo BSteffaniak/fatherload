@@ -348,8 +348,6 @@ impl WorldState {
                 let reach = 4 + self.sonar_bonus(player_id);
                 let _revealed = self.reveal_scanner_area(player_id, center, reach);
                 let _contacts = self.ping_pois(player_id, center);
-                // In the Echo Caves the press is also a sonar ping (Wave 9).
-                let _pinged = self.echo_sonar_ping(player_id);
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::PlaceBomb => {
