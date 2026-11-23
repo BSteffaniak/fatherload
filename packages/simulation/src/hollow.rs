@@ -836,6 +836,16 @@ pub const fn authored_content(stratum: Stratum) -> (u8, u8) {
     }
 }
 
+/// Share of `stratum` whose gravity the isles turn, per mille (Wave 9 integration: the descent
+/// probe's turned-gravity share, which the registry's fields leave to `hollow::fields`).
+#[must_use]
+pub const fn turned_gravity_share_permille(stratum: Stratum) -> u16 {
+    match stratum {
+        Stratum::UpsideDownIsles => 350,
+        _ => 0,
+    }
+}
+
 /// The named new things of a Hollow World stratum (the descent probe's novelty markers beyond
 /// the registry's).
 #[must_use]

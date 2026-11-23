@@ -776,6 +776,18 @@ pub const fn authored_content(stratum: Stratum) -> (u8, u8) {
     }
 }
 
+/// Share of a route through `stratum` crossed by submarine in its authored basins, per mille
+/// (Wave 9 integration: the descent probe's water share beyond the registry's pockets).
+///
+/// The Underground Ocean's basins and currents carry most of a crossing.
+#[must_use]
+pub const fn submarine_share_permille(stratum: Stratum) -> u16 {
+    match stratum {
+        Stratum::UndergroundOcean => 700,
+        _ => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

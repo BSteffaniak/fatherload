@@ -38,7 +38,9 @@ pub const DARK_SLOWDOWN_SONAR: f64 = 0.08;
 pub const DARK_LIGHT_PERMILLE: u16 = 200;
 /// Light (per mille of daylight) at or above which the inner sun's glare sends a rig the long
 /// way round, shadow to shadow (a shade canopy along).
-pub const GLARE_LIGHT_PERMILLE: u16 = 1_500;
+///
+/// The authored Sunforge shines at 1300 (Wave 9 integration), the Inner Sky at 1250.
+pub const GLARE_LIGHT_PERMILLE: u16 = 1_300;
 /// How much longer moving and digging take in the glare.
 pub const GLARE_MOVE_SLOWDOWN: f64 = 0.25;
 pub const GLARE_DIG_SLOWDOWN: f64 = 0.1;
@@ -119,6 +121,12 @@ impl StratumMechanics {
             FieldRegions::None
             | FieldRegions::Authored(crate::descent::AuthoredRegions::RotTiers) => (0.0, 0.0),
         };
+        // Authored rules the registry's fields leave out (Wave 9 integration): the Underground
+        // Ocean's basins and the isles' turned gravity.
+        let water_share =
+            water_share.max(f64::from(crate::drowned::submarine_share_permille(stratum)) / 1_000.0);
+        let gravity_share = gravity_share
+            .max(f64::from(crate::hollow::turned_gravity_share_permille(stratum)) / 1_000.0);
         let mirror_share = if field.mirror_controls {
             1.0
         } else {
