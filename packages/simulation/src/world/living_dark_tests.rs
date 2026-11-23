@@ -861,7 +861,9 @@ fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() 
     let mut possessed = false;
     let mut exposed = false;
     let mut defeated = false;
+    let mut fight_ticks = 0_u64;
     for count in 0..u64::from(hz) * 900 {
+        fight_ticks = count + 1;
         // The nearest node, then the Mind once they are down.
         let (rx, ry) = {
             let rig = world.player(PLAYER).expect("rig");
@@ -921,6 +923,13 @@ fn a_bot_beats_the_mycelial_mind_and_the_crew_gets_the_bio_filter_and_lamp_ii() 
         left > 0.2,
         "with a margin: {:.0} % of the hull left",
         left * 100.0
+    );
+    // The probe models the fight from this measured win (Wave 10 polish).
+    #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+    crate::balance::descent::mechanics::record_bot_fight(
+        crate::descent::DescentBoss::MycelialMind,
+        fight_ticks as f64 / f64::from(hz),
+        f64::from(left),
     );
     assert!(possessed, "the Mind possessed a creature");
     assert!(exposed, "its nodes fell and it was exposed");

@@ -81,10 +81,12 @@ pub struct ParkedPilot {
 
 /// The world as a pilot's body sees it: terrain (vent grates open), ladder and rope fixtures,
 /// cave water and parked rigs' roofs.
-struct PilotView<'a> {
+pub(super) struct PilotView<'a> {
     world: &'a WorldState,
     /// Rig roofs: `(centre x, roof y)`.
     roofs: Vec<(f32, f32)>,
+    /// The Gravity Anchor holds the pilot's boots: plain downward gravity (Wave 10 polish).
+    anchored: bool,
 }
 
 impl PilotTerrain for PilotView<'_> {
@@ -151,7 +153,7 @@ impl PilotTerrain for PilotView<'_> {
         )
         .body_gravity(crate::pilot::GRAVITY);
         let field = self.world.fields_at(x, y);
-        if field.is_neutral_physics() {
+        if field.is_neutral_physics() || self.anchored {
             pull
         } else {
             pull * field.gravity_y
@@ -331,13 +333,19 @@ impl WorldState {
     /// The world as `owner`'s pilot sees it. Only its own rig is solid to it (a roof to stand
     /// on): other players' rigs move under their own (unpredicted) controls, so treating them
     /// as solid would make every client mispredict its pilot near a crewmate's rig.
-    fn pilot_view(&self, owner: Option<PlayerId>) -> PilotView<'_> {
+    pub(super) fn pilot_view(&self, owner: Option<PlayerId>) -> PilotView<'_> {
         let roofs = owner
             .and_then(|owner| self.players.get(&owner))
             .filter(|player| player.hull > 0.0)
             .map(|player| vec![(player.x, player.y - RIG_ROOF_ABOVE_CENTRE)])
             .unwrap_or_default();
-        PilotView { world: self, roofs }
+        // The Gravity Anchor engaged on foot plants the pilot's boots (Wave 10 polish).
+        let anchored = owner.is_some_and(|owner| self.pilot_anchored(owner));
+        PilotView {
+            world: self,
+            roofs,
+            anchored,
+        }
     }
 
     /// [`crate::PlayerCommand::TogglePilot`]: exit the rig, or board it.
@@ -678,7 +686,8 @@ impl WorldState {
                 controls
             };
             let foot = PilotControls {
-                horizontal: controls.horizontal(),
+                // The glaciers' cold stiffens the suit (Wave 10 polish).
+                horizontal: controls.horizontal() * (1.0 - self.pilot_chill(owner, body.x, body.y)),
                 up: controls.thrust,
                 down: controls.drill_down,
                 jump: controls.jump,
@@ -688,7 +697,10 @@ impl WorldState {
                 let view = self.pilot_view(Some(owner));
                 step_pilot(&mut body, &mut state, &view, foot, dt * field.time_scale)
             };
-            if field.gravity_x != 0.0 && !state.grounded {
+            // Currents, geysers and wind on foot (Wave 10 polish).
+            let weather_damage =
+                self.pilot_weather(&mut body, &state, owner, dt * field.time_scale);
+            if field.gravity_x != 0.0 && !state.grounded && !self.pilot_anchored(owner) {
                 body.velocity_x = crate::quantize::quantize_simulation_scalar(
                     (field.gravity_x * crate::pilot::GRAVITY)
                         .mul_add(dt * field.time_scale, body.velocity_x),
@@ -736,7 +748,7 @@ impl WorldState {
                     y: px(body.y),
                 });
             }
-            let mut damage = 0.0;
+            let mut damage = weather_damage;
             if report.landed && report.landing_speed > 300.0 {
                 // Featherfall (WP-TOMBS relics): no fall hurts.
                 let hurt = if state.boons.featherfall {

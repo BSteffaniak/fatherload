@@ -349,6 +349,8 @@ const FAR_SIDE: Slot = (3.25, 0.5, 0.36);
 const FAR_UPPER: Slot = (0.5, 3.2, 0.36);
 const FAR_DIAGONAL: Slot = (3.1, 1.6, 0.36);
 const OUTER: Slot = (1.75, 3.0, 0.36);
+/// Beyond the diagonal on foot: the Gravity Anchor (Wave 10 polish).
+const FAR_OUTER: Slot = (2.95, 2.8, 0.34);
 const MENU_BACK: Slot = (0.55, 0.5, 0.42);
 const MENU_NEXT: Slot = (1.45, 0.42, 0.34);
 const MENU_PREVIOUS: Slot = (2.2, 0.42, 0.34);
@@ -529,6 +531,10 @@ impl TouchLayout {
         }
         if context.pilot_armed {
             push(TouchControl::CycleWeapon, OUTER);
+        }
+        if context.anchor {
+            // The Gravity Anchor on foot plants the pilot's boots (Wave 10 polish).
+            push(TouchControl::Anchor, FAR_OUTER);
         }
     }
 

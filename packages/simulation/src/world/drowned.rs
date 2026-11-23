@@ -826,7 +826,7 @@ impl WorldState {
     }
 
     /// Whether a thermal vent warms `tile`.
-    fn near_vent(&self, tile: TilePosition) -> bool {
+    pub(super) fn near_vent(&self, tile: TilePosition) -> bool {
         let reach = VENT_WARMTH_TILES;
         (-reach..=reach).any(|dy| {
             (-reach..=reach).any(|dx| {

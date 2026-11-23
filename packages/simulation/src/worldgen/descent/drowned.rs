@@ -80,6 +80,10 @@ pub enum DrownedStampKind {
     ReefTerrace,
     PearlBed,
     LeviathanArena,
+    /// A flooded channel joining two neighbouring Underground Ocean basins (Wave 10 polish:
+    /// the basins are one sea): sideways under both basins' surfaces, or a shaft down from one
+    /// basin into the one below.
+    Channel,
 }
 
 /// One drowned set piece.
@@ -462,12 +466,14 @@ fn region_stamp(
     let pick = variant(settings, stratum);
     // (kind, chance per mille at the top, extra by the bottom, width and height ranges)
     let (kind, base, extra, w, h) = match stratum {
+        // Wave 10 polish: a basin in nearly every cell, wide and deep, so that with the
+        // channels between neighbours the Underground Ocean is one sea.
         Stratum::UndergroundOcean => (
             DrownedStampKind::Basin,
-            420,
-            380,
-            (34 + along / 40, 50 + along / 40),
-            (16 + along / 100, 24 + along / 80),
+            900,
+            100,
+            (50 + along / 60, 60 + along / 80),
+            (22 + along / 100, 30 + along / 80),
         ),
         Stratum::BrineGlaciers => {
             // Vent grottos are common at the top (the frost is introduced gently) and rare at
@@ -578,7 +584,131 @@ pub fn stamps_with(
             }
         }
     }
+    // The channels joining neighbouring basins (after every region stamp: a channel's
+    // walls never cut into a basin, its water runs through their rims).
+    let basin_at = |rx: i32, ry: i32| {
+        region_stamp(settings, layout, &fixed, city.as_ref(), rx, ry)
+            .filter(|stamp| stamp.kind == DrownedStampKind::Basin)
+    };
+    for ry in area.min.y.div_euclid(height) - 1..=area.max.y.div_euclid(height) {
+        for rx in area.min.x.div_euclid(width) - 1..=area.max.x.div_euclid(width) {
+            let Some(here) = basin_at(rx, ry) else {
+                continue;
+            };
+            let joins = [
+                basin_at(rx + 1, ry).and_then(|east| side_channel(&here, &east)),
+                basin_at(rx, ry + 1).and_then(|below| shaft_channel(&here, &below)),
+            ];
+            for channel in joins.into_iter().flatten() {
+                let clear = channel.bounds.intersects(area)
+                    && !fixed
+                        .iter()
+                        .any(|stamp| stamp.bounds.expanded(3).intersects(&channel.bounds))
+                    && !city
+                        .is_some_and(|site| site.bounds().expanded(3).intersects(&channel.bounds));
+                let column = landmarks::outpost_column(settings);
+                let crosses_column =
+                    channel.bounds.max.x >= column - 24 && channel.bounds.min.x <= column + 24;
+                if clear && !crosses_column {
+                    found.push(channel);
+                }
+            }
+        }
+    }
     found
+}
+
+/// Rows of a channel's water (its walls are one more row or column each side).
+const CHANNEL_WATER: i32 = 5;
+
+/// `(water surface row, floor row)` of a basin (as [`basin`] carves it).
+fn basin_water_rows(stamp: &DrownedStamp) -> (i32, i32) {
+    let (_, cy, _, ry) = ellipse(&stamp.bounds);
+    let surface = stamp.bounds.min.y + (cy - stamp.bounds.min.y) / 4 + AIR_ROWS;
+    (surface, cy + ry * 6 / 10)
+}
+
+/// A sideways channel from basin `west` to basin `east` under both their surfaces, or `None`
+/// when their water rows do not overlap enough.
+fn side_channel(west: &DrownedStamp, east: &DrownedStamp) -> Option<DrownedStamp> {
+    let (west_surface, west_floor) = basin_water_rows(west);
+    let (east_surface, east_floor) = basin_water_rows(east);
+    let low = west_surface.max(east_surface) + 2;
+    let high = west_floor.min(east_floor) - 2;
+    if high - low < CHANNEL_WATER {
+        return None;
+    }
+    let top = i32::midpoint(low, high) - CHANNEL_WATER / 2;
+    let (west_x, _, _, _) = ellipse(&west.bounds);
+    let (east_x, _, _, _) = ellipse(&east.bounds);
+    Some(DrownedStamp {
+        kind: DrownedStampKind::Channel,
+        bounds: TileRect {
+            min: TilePosition {
+                x: west_x,
+                y: top - 1,
+            },
+            max: TilePosition {
+                x: east_x,
+                y: top + CHANNEL_WATER,
+            },
+        },
+        seed: west.seed ^ east.seed.rotate_left(17),
+        along: west.along,
+    })
+}
+
+/// A shaft from basin `upper`'s water down into basin `lower`'s, or `None` when they do not
+/// overlap enough sideways.
+fn shaft_channel(upper: &DrownedStamp, lower: &DrownedStamp) -> Option<DrownedStamp> {
+    let left = upper.bounds.min.x.max(lower.bounds.min.x) + 6;
+    let right = upper.bounds.max.x.min(lower.bounds.max.x) - 6;
+    if right - left < CHANNEL_WATER {
+        return None;
+    }
+    let x = i32::midpoint(left, right) - CHANNEL_WATER / 2;
+    let (_, upper_y, _, _) = ellipse(&upper.bounds);
+    let (lower_surface, _) = basin_water_rows(lower);
+    if lower_surface <= upper_y {
+        return None;
+    }
+    Some(DrownedStamp {
+        kind: DrownedStampKind::Channel,
+        bounds: TileRect {
+            min: TilePosition {
+                x: x - 1,
+                y: upper_y,
+            },
+            max: TilePosition {
+                x: x + CHANNEL_WATER,
+                y: lower_surface + 1,
+            },
+        },
+        seed: upper.seed ^ lower.seed.rotate_left(29),
+        along: upper.along,
+    })
+}
+
+/// Whether `(x, y)` is in a channel's water (rather than its walls).
+const fn channel_water(stamp: &DrownedStamp, x: i32, y: i32) -> bool {
+    let bounds = stamp.bounds;
+    if bounds.max.x - bounds.min.x > bounds.max.y - bounds.min.y {
+        y > bounds.min.y && y < bounds.max.y
+    } else {
+        x > bounds.min.x && x < bounds.max.x
+    }
+}
+
+/// A channel's tile: water inside, seabed (now and then coral) walls.
+const fn channel(stamp: &DrownedStamp, x: i32, y: i32) -> TileKind {
+    if channel_water(stamp, x, y) {
+        return WATER;
+    }
+    if hash2(stamp.seed, SALT_CORAL, x, y).is_multiple_of(6) {
+        cave(CaveTile::Coral)
+    } else {
+        cave(CaveTile::Seabed)
+    }
 }
 
 /// Every fixed set piece's bounds (the story's sites keep off them).
@@ -641,6 +771,7 @@ pub fn stamp_tile(stamp: &DrownedStamp, x: i32, y: i32, base: TileKind) -> Optio
         DrownedStampKind::ReefTerrace => reef_terrace(stamp, x, y),
         DrownedStampKind::PearlBed => pearl_bed(stamp, x, y),
         DrownedStampKind::LeviathanArena => arena(stamp, x, y),
+        DrownedStampKind::Channel => Some(channel(stamp, x, y)),
     }
 }
 
@@ -1051,6 +1182,17 @@ pub fn drowned_tile(
         && let Some(kind) = city_tile(site, x, y, base)
     {
         return Some(kind);
+    }
+    // A channel's water runs through the basins' rims and floors it joins (Wave 10 polish).
+    let at = TilePosition { x, y };
+    if carvable(base)
+        && stamps.iter().any(|stamp| {
+            stamp.kind == DrownedStampKind::Channel
+                && stamp.bounds.contains(at)
+                && channel_water(stamp, x, y)
+        })
+    {
+        return Some(WATER);
     }
     for stamp in stamps {
         if let Some(kind) = stamp_tile(stamp, x, y, base) {

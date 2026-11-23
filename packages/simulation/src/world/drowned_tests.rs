@@ -932,7 +932,9 @@ fn a_bot_with_descent_iv_kit_beats_the_leviathan_and_wins_the_sonar_suite_and_cr
     let mut maw = false;
     let mut fired = 0_usize;
     let mut defeated = false;
+    let mut fight_ticks = 0_u64;
     for count in 0..u64::from(hz) * 900 {
+        fight_ticks = count + 1;
         let Some(((x, y), action)) = world.leviathan_pose() else {
             break;
         };
@@ -969,6 +971,13 @@ fn a_bot_with_descent_iv_kit_beats_the_leviathan_and_wins_the_sonar_suite_and_cr
     let rig = world.player(PLAYER).expect("rig");
     let left = rig.hull / rig.max_hull();
     assert!(left > 0.2, "with a margin: {:.0} %", left * 100.0);
+    // The probe models the fight from this measured win (Wave 10 polish).
+    #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+    crate::balance::descent::mechanics::record_bot_fight(
+        crate::descent::DescentBoss::Leviathan,
+        fight_ticks as f64 / f64::from(hz),
+        f64::from(left),
+    );
     assert!(rig.hazard_gear.has_system(RigSystem::SonarSuite));
     assert!(rig.hazard_gear.has_system(RigSystem::CryoHull));
     assert!(world.drowned().leviathan.beaten);

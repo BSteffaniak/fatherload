@@ -550,6 +550,13 @@ fn golden_chunks(settings: &WorldSettings) -> Vec<ChunkPosition> {
     if let Some(room) = crate::expedition::anomaly::rooms_with(settings, &layout, &area).first() {
         chunks.push(ChunkPosition::of(room.interior().center()));
     }
+    // Wave 10 polish: the Underground Ocean's sea, one of the channels joining its basins.
+    if let Some(channel) = super::drowned::stamps_with(settings, &layout, &area)
+        .into_iter()
+        .find(|stamp| stamp.kind == super::drowned::DrownedStampKind::Channel)
+    {
+        chunks.push(ChunkPosition::of(channel.bounds.center()));
+    }
     chunks
 }
 
@@ -579,8 +586,9 @@ fn v11_generation_is_pinned() {
 /// the Hollow World's inner sky, jungle, isles, Sunforge, Sunfolk Kraal and Sun Well, the
 /// distortion strata's mirror and shear halls, rot grid and Parallax Station, the far Strange
 /// Layers' time pockets, echo hollows, keyed vaults, the Rewrite Hall and the alloy seal, and the
-/// story's logs 31-60 and deeper anomaly rooms kept off them).
-const GOLDEN_V11_DIGEST: u64 = 0x4e9d_92cc_a15c_769d;
+/// story's logs 31-60 and deeper anomaly rooms kept off them; Wave 10 polish: the Underground
+/// Ocean's basins joined by channels into one sea, a channel's chunk pinned too).
+const GOLDEN_V11_DIGEST: u64 = 0x07a0_13a3_417e_3097;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]

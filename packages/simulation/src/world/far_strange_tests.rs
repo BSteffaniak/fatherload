@@ -1111,7 +1111,9 @@ fn a_bot_with_descent_vi_kit_beats_the_glitch_through_every_rule_and_wins_the_ph
     let mut felt_warp = false;
     let mut blinked = false;
     let mut defeated = false;
+    let mut fight_ticks = 0_u64;
     for count in 0..u64::from(hz) * 900 {
+        fight_ticks = count + 1;
         let Some(target) = world
             .far_strange()
             .glitch
@@ -1161,6 +1163,16 @@ fn a_bot_with_descent_vi_kit_beats_the_glitch_through_every_rule_and_wins_the_ph
         );
     }
     assert!(defeated, "the bot beat The Glitch (rules seen {rules:?})");
+    // The probe models the fight from this measured win (Wave 10 polish).
+    {
+        let rig = world.player(PLAYER).expect("rig");
+        #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+        crate::balance::descent::mechanics::record_bot_fight(
+            crate::descent::DescentBoss::TheGlitch,
+            fight_ticks as f64 / f64::from(hz),
+            f64::from(rig.hull / rig.max_hull()),
+        );
+    }
     assert_eq!(rules, GlitchRule::PHASES.to_vec(), "every rule in order");
     assert!(ignored_mid_rewrite, "rewrites shrug off hits");
     // Every rewrite was telegraphed for the full warning.

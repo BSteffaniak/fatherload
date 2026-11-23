@@ -535,3 +535,272 @@ fn supplies_at_work_save_replicate_and_hash() {
     let bare = deep_world(30);
     assert_ne!(bare.simulation_state_hash(), world.simulation_state_hash());
 }
+
+// --- 5. The Underground Ocean is one sea -------------------------------------------------------
+
+#[test]
+fn the_underground_oceans_basins_are_joined_into_one_sea() {
+    use crate::worldgen::descent::{
+        drowned::{DrownedStamp, DrownedStampKind, drowned_tile, stamps_with},
+        landmarks::outpost_column,
+    };
+    for seed in [SEED, 0, 7] {
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..WorldSettings::new(seed)
+        };
+        let layout = layout(&settings);
+        let (top, bottom) = layout.rows(Stratum::UndergroundOcean);
+        let column = outpost_column(&settings);
+        // One side of the outposts' column (the lift's column stays dry between the halves).
+        let area = TileRect {
+            min: TilePosition {
+                x: column + 40,
+                y: top,
+            },
+            max: TilePosition {
+                x: column + 640,
+                y: bottom,
+            },
+        };
+        let stamps = stamps_with(&settings, &layout, &area);
+        let basins: Vec<&DrownedStamp> = stamps
+            .iter()
+            .filter(|stamp| {
+                stamp.kind == DrownedStampKind::Basin && area.contains(stamp.bounds.center())
+            })
+            .collect();
+        assert!(
+            basins.len() >= 8,
+            "seed {seed}: a sea of basins ({})",
+            basins.len()
+        );
+        // Flood the generated water from the first basin's heart: every basin is reached.
+        let water = |at: TilePosition| {
+            drowned_tile(
+                &settings,
+                &layout,
+                None,
+                &stamps,
+                at.x,
+                at.y,
+                TileKind::Stone,
+            )
+            .is_some_and(|kind| kind == TileKind::Fluid(FluidKind::Water))
+        };
+        let start = basins
+            .iter()
+            .map(|basin| basin.bounds.center())
+            .find(|centre| water(*centre))
+            .expect("a basin's heart is water");
+        let mut seen = std::collections::BTreeSet::from([start]);
+        let mut queue = vec![start];
+        while let Some(at) = queue.pop() {
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = TilePosition {
+                    x: at.x + dx,
+                    y: at.y + dy,
+                };
+                if area.expanded(40).contains(next) && !seen.contains(&next) && water(next) {
+                    seen.insert(next);
+                    queue.push(next);
+                }
+            }
+        }
+        let reached = basins
+            .iter()
+            .filter(|basin| seen.iter().any(|at| basin.bounds.contains(*at)))
+            .count();
+        assert!(
+            reached * 10 >= basins.len() * 9,
+            "seed {seed}: one sea joins {reached} of {} basins",
+            basins.len()
+        );
+    }
+}
+
+// --- 4. The deep's forces on a pilot on foot ---------------------------------------------------
+
+/// The pilot's position.
+fn pilot_xy(world: &WorldState) -> (f32, f32) {
+    let (_, body, _) = world.pilot_of(PLAYER).expect("on foot");
+    (body.x, body.y)
+}
+
+/// Puts the pilot out on foot at the centre of `tile` with the rig parked beside it (the
+/// rig's teleport may move the frame, so the pixel is read after it).
+fn pilot_at(world: &mut WorldState, tile: TilePosition) -> (f32, f32) {
+    put_rig(
+        world,
+        TilePosition {
+            x: tile.x - 3,
+            ..tile
+        },
+    );
+    let (x, y) = world.frame().tile_center(tile);
+    let _ = world.place_pilot(PLAYER, x, y);
+    (x, y)
+}
+
+/// A tile of the Underground Ocean where a basin's gyre runs mostly sideways.
+fn gyre_tile(world: &WorldState) -> TilePosition {
+    let (top, bottom) = layout(&settings()).rows(Stratum::UndergroundOcean);
+    for y in (top + 20..bottom - 20).step_by(3) {
+        for x in (-900..900).step_by(5) {
+            let tile = TilePosition { x, y };
+            let (px, py) = world.frame().tile_center(tile);
+            let (cx, cy) = world.current_at(px, py);
+            if cx.abs() > 30.0 && cx.abs() > cy.abs() * 3.0 {
+                return tile;
+            }
+        }
+    }
+    panic!("no gyre in the ocean");
+}
+
+#[test]
+fn a_basins_current_carries_a_swimming_pilot_unless_the_anchor_plants_its_boots() {
+    let mut world = deep_world(30);
+    let tile = gyre_tile(&world);
+    let (x, y) = pilot_at(&mut world, tile);
+    let (cx, _) = world.current_at(x, y);
+    fill(
+        &mut world,
+        TileRect::around(tile, 4, 4),
+        TileKind::Fluid(FluidKind::Water),
+    );
+    let start = pilot_xy(&world).0;
+    let _ = ticks(&mut world, 30);
+    let moved = pilot_xy(&world).0 - start;
+    assert!(
+        moved * cx.signum() > 4.0,
+        "the gyre ({cx} px/s) carried the swimmer ({moved} px)"
+    );
+    // The anchor, engaged on foot, plants the pilot's boots.
+    let anchor = LogisticsCommand::Hollow(crate::hollow::HollowAction::ToggleAnchor);
+    assert_eq!(act(&mut world, anchor), PlayerScopedCommandOutcome::Applied);
+    assert!(world.pilot_anchored(PLAYER));
+    let start = pilot_xy(&world).0;
+    let _ = ticks(&mut world, 30);
+    assert!(
+        (pilot_xy(&world).0 - start).abs() < 1.0,
+        "anchored, the current does not move it"
+    );
+}
+
+#[test]
+fn the_inner_skys_wind_carries_an_airborne_pilot() {
+    let mut world = deep_world(30);
+    let (top, bottom) = layout(&settings()).rows(Stratum::InnerSky);
+    let windy = |world: &WorldState, tile: TilePosition| {
+        (-2..=2).all(|dy| {
+            let (px, py) = world.frame().tile_center(TilePosition {
+                x: tile.x,
+                y: tile.y + dy,
+            });
+            world
+                .hollow_wind_at(px, py)
+                .is_some_and(|wind| wind.abs() > 40.0)
+        })
+    };
+    let tile = (top + 10..bottom - 10)
+        .step_by(2)
+        .find_map(|y| {
+            (-600..600)
+                .step_by(7)
+                .map(|x| TilePosition { x, y })
+                .find(|tile| windy(&world, *tile))
+        })
+        .expect("a windy stretch of the Inner Sky");
+    let (x, y) = pilot_at(&mut world, tile);
+    let wind = world.hollow_wind_at(x, y).expect("wind");
+    let start = pilot_xy(&world).0;
+    let _ = ticks(&mut world, 10);
+    let moved = pilot_xy(&world).0 - start;
+    assert!(
+        moved * wind.signum() > 3.0,
+        "the wind ({wind} px/s) carried the falling pilot ({moved} px)"
+    );
+}
+
+#[test]
+fn an_erupting_geyser_throws_a_pilot_up_its_shaft() {
+    use crate::{
+        drowned::{GeyserPhase, geyser_phase},
+        worldgen::descent::drowned::{DrownedStampKind, stamps_with},
+    };
+    let settings = settings();
+    let layout = layout(&settings);
+    let (top, bottom) = layout.rows(Stratum::GeyserFields);
+    let area = TileRect {
+        min: TilePosition { x: -900, y: top },
+        max: TilePosition { x: 900, y: bottom },
+    };
+    let chimney = stamps_with(&settings, &layout, &area)
+        .into_iter()
+        .find(|stamp| stamp.kind == DrownedStampKind::Chimney)
+        .expect("a chimney");
+    let (vent_row, left, right) = chimney.vents().expect("its vents");
+    let column = i32::midpoint(left, right);
+    let mut world = deep_world(30);
+    let _ = pilot_at(
+        &mut world,
+        TilePosition {
+            x: column,
+            y: vent_row - 4,
+        },
+    );
+    // Wait for the vent to blow.
+    let mut thrown = false;
+    for _ in 0..30 * 20 {
+        let _ = ticks(&mut world, 1);
+        let now = world.millis_at(world.simulation_tick());
+        if geyser_phase(settings.seed, column, false, now) == GeyserPhase::Erupting {
+            let (_, body, _) = world.pilot_of(PLAYER).expect("on foot");
+            if body.velocity_y < -200.0 {
+                thrown = true;
+                break;
+            }
+        }
+    }
+    assert!(thrown, "the jet threw the pilot up");
+}
+
+#[test]
+fn the_glaciers_cold_slows_a_pilots_walk_but_not_with_the_cryo_hull() {
+    let mut world = deep_world(30);
+    let centre = TilePosition {
+        x: FAR,
+        y: middle_row(Stratum::BrineGlaciers),
+    };
+    room(&mut world, centre, (14, 3), false);
+    let floor = world.frame().tile_center(TilePosition {
+        x: centre.x - 10,
+        y: centre.y + 3,
+    });
+    let walk = |world: &mut WorldState| {
+        let _ = world.place_pilot(PLAYER, floor.0, floor.1);
+        let _ = ticks(world, 10);
+        let start = pilot_xy(world).0;
+        let inputs = TickInputs::held(PLAYER, ControlState::new(1.0, false, false));
+        for _ in 0..45 {
+            let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+        }
+        pilot_xy(world).0 - start
+    };
+    // With the Cryo Hull the suit is warm.
+    assert!(world.pilot_chill(PLAYER, floor.0, floor.1).abs() < f32::EPSILON);
+    let warm = walk(&mut world);
+    world
+        .player_mut(PLAYER)
+        .expect("rig")
+        .hazard_gear
+        .rig_systems &= !RigSystem::CryoHull.bit();
+    let chill = world.pilot_chill(PLAYER, floor.0, floor.1);
+    assert!(chill > 0.1, "the cold bites ({chill})");
+    let cold = walk(&mut world);
+    assert!(
+        cold < warm * 0.95,
+        "the cold pilot walked {cold} px, the warm one {warm} px"
+    );
+}

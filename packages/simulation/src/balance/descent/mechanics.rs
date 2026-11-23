@@ -256,20 +256,89 @@ pub struct BossFight {
     pub deaths: u32,
 }
 
+/// One gate boss's fight as its scripted bot test wins it (Wave 10 polish: measured, not
+/// guessed; `world::*_tests`' bot fights hold their rows with `record_bot_fight`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BotFight {
+    /// World seconds from the boss waking to its fall.
+    pub seconds: f64,
+    /// The share of its hull the bot's rig kept (a tight fight costs a player more tries).
+    pub hull_left: f64,
+}
+
+/// The measured bot fights.
+///
+/// The rigs are fitted as the probe's rig arrives: Descent kit, the hull tier the probe reaches
+/// each gate with. `None`: no bot fight yet (the Sinkhole is an escape, not a fight; Descents
+/// VII-VIII's bosses are measured when their tracks land).
+#[must_use]
+pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
+    match boss {
+        // Measured on this branch (30 Hz bot fights, Wave 10 polish).
+        DescentBoss::StarCore => Some(BotFight {
+            seconds: 95.0,
+            hull_left: 1.0,
+        }),
+        DescentBoss::MycelialMind => Some(BotFight {
+            seconds: 122.0,
+            hull_left: 0.35,
+        }),
+        DescentBoss::Leviathan => Some(BotFight {
+            seconds: 64.0,
+            hull_left: 0.67,
+        }),
+        // The serpent's orbit is long: most of the fight is waiting for the scales' passes.
+        DescentBoss::SunSerpent => Some(BotFight {
+            seconds: 469.0,
+            hull_left: 0.69,
+        }),
+        DescentBoss::TheGlitch => Some(BotFight {
+            seconds: 96.0,
+            hull_left: 0.43,
+        }),
+        DescentBoss::TheSinkhole | DescentBoss::GatekeeperColossus | DescentBoss::TheHeart => None,
+    }
+}
+
+/// How many times longer a player takes than the scripted bot over the same fight.
+///
+/// The bot knows every tell, never misses its line and never stops to look (players watched on
+/// the Wave 8-9 bosses take three to five times as long).
+pub const PLAYER_FIGHT_PACE: f64 = 4.0;
+/// Minutes around a fight the bot does not count: finding the arena, reading it, the walk out
+/// with the reward.
+pub const FIGHT_SETUP_MINUTES: f64 = 6.0;
+/// A bot that kept less than this share of its hull won a tight fight: a player fights it
+/// [`TIGHT_FIGHT_CARE`] times as long.
+pub const TIGHT_FIGHT_HULL: f64 = 0.4;
+/// How much longer a tight fight's attempts run.
+pub const TIGHT_FIGHT_CARE: f64 = 1.35;
+
 /// Minutes of `boss`'s winning attempt, and the attempts a player learning its patterns
 /// spends before it (every gate boss is fair and has no countdown; the deep ones take a try or
 /// two to read).
+///
+/// Wave 10 polish: a boss with a bot fight is modelled from it (its measured seconds at
+/// [`PLAYER_FIGHT_PACE`] plus [`FIGHT_SETUP_MINUTES`], a tight fight's at
+/// [`TIGHT_FIGHT_CARE`]; one learning try); the rest keep Wave 9's modelled minutes.
 #[must_use]
-pub const fn boss_pattern(boss: DescentBoss) -> (f64, u32) {
+pub fn boss_pattern(boss: DescentBoss) -> (f64, u32) {
+    if let Some(fight) = bot_fight(boss) {
+        // A tight fight is fought more carefully: its attempts run a third longer.
+        let care = if fight.hull_left < TIGHT_FIGHT_HULL {
+            TIGHT_FIGHT_CARE
+        } else {
+            1.0
+        };
+        let minutes = (fight.seconds / 60.0 * care).mul_add(PLAYER_FIGHT_PACE, FIGHT_SETUP_MINUTES);
+        return (minutes, 1);
+    }
     match boss {
         DescentBoss::TheSinkhole => (14.0, 0),
         DescentBoss::StarCore => (16.0, 1),
         DescentBoss::MycelialMind => (18.0, 1),
-        // The Leviathan is fought from the submarine: ram, dive, ping its weak scales.
         DescentBoss::Leviathan => (22.0, 1),
-        // The Sun Serpent circles the inner sun: shade to shade between its passes.
         DescentBoss::SunSerpent => (24.0, 1),
-        // The Glitch rewrites the arena's rules each phase: three fights in one.
         DescentBoss::TheGlitch => (30.0, 1),
         DescentBoss::GatekeeperColossus => (32.0, 1),
         DescentBoss::TheHeart => (34.0, 1),
@@ -307,6 +376,31 @@ pub fn boss_fight(boss: DescentBoss, hull: u8) -> BossFight {
         minutes: f64::from(deaths).mul_add(minutes.mul_add(0.4, 2.0), minutes),
         deaths,
     }
+}
+
+/// A bot fight test's measured win (Wave 10 polish): prints it and holds it to the probe's
+/// [`BOT_FIGHTS`] row, so the probe's fight minutes follow the real fight. A boss rework that
+/// moves its fight by more than the tolerance fails here until the row is re-measured.
+#[cfg(test)]
+pub(crate) fn record_bot_fight(boss: DescentBoss, seconds: f64, hull_left: f64) {
+    println!(
+        "BOT FIGHT {boss:?}: won in {seconds:.0} s with {:.0} % hull left",
+        hull_left * 100.0
+    );
+    let Some(row) = bot_fight(boss) else {
+        panic!("{boss:?} has no measured bot fight row");
+    };
+    assert!(
+        seconds >= row.seconds * 0.6 && seconds <= row.seconds * 1.5,
+        "{boss:?}: the bot won in {seconds:.0} s, the probe models {:.0} s: re-measure BOT_FIGHTS",
+        row.seconds
+    );
+    assert!(
+        (hull_left - row.hull_left).abs() <= 0.25,
+        "{boss:?}: the bot kept {:.0} % hull, the probe models {:.0} %: re-measure BOT_FIGHTS",
+        hull_left * 100.0,
+        row.hull_left * 100.0
+    );
 }
 
 #[cfg(test)]
@@ -358,7 +452,16 @@ mod tests {
             let short = boss_fight(gate.boss, 0);
             assert!(ready.deaths <= 1, "{:?}", gate.boss);
             assert!(short.deaths <= 3 && short.minutes > ready.minutes);
-            assert!(ready.minutes >= 14.0 && short.minutes < 90.0);
+            assert!(ready.minutes >= FIGHT_SETUP_MINUTES && short.minutes < 90.0);
+            // Wave 10 polish: a boss with a bot fight is modelled from its measured win.
+            if let Some(fight) = bot_fight(gate.boss) {
+                let (minutes, _) = boss_pattern(gate.boss);
+                assert!(
+                    minutes >= (fight.seconds / 60.0).mul_add(PLAYER_FIGHT_PACE, 0.0),
+                    "{:?}",
+                    gate.boss
+                );
+            }
         }
     }
 }

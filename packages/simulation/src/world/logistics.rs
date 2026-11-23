@@ -416,6 +416,15 @@ impl WorldState {
     /// Returns why the command cannot go through.
     #[allow(clippy::too_many_lines, reason = "one arm per logistics command")]
     pub fn check_logistics(&self, player_id: PlayerId, command: &LogisticsCommand) -> Verdict {
+        // The Gravity Anchor works on foot too (Wave 10 polish: it plants the pilot's boots).
+        if let LogisticsCommand::Hollow(action) = *command
+            && self.is_on_foot(player_id)
+        {
+            return self
+                .check_hollow(player_id, action)
+                .map_err(LogisticsRefusal::Hollow)
+                .map(|()| LogisticsQuote::credits(0));
+        }
         let tile = self.logistics_rig_tile(player_id)?;
         let descent_here = self.descent_of_row(tile.y);
         match *command {

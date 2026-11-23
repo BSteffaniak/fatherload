@@ -358,9 +358,9 @@ pub fn touch_context(
         crypt: view.pilot.as_ref().is_some_and(|pilot| {
             pilot.state.view == fatherload_simulation::pilot::PilotView::TopDown
         }),
-        anchor: view.pilot.is_none()
-            && player
-                .hazard_gear
-                .has_system(fatherload_simulation::depth_progression::RigSystem::GravityAnchor),
+        // On foot too (Wave 10 polish): the anchor plants the pilot's boots.
+        anchor: player
+            .hazard_gear
+            .has_system(fatherload_simulation::depth_progression::RigSystem::GravityAnchor),
     }
 }

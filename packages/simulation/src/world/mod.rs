@@ -145,6 +145,7 @@ mod pilot_content_tests;
 mod pilot_gear;
 #[cfg(test)]
 mod pilot_tests;
+mod pilot_weather;
 mod player_sections;
 #[cfg(test)]
 mod poi_tests;

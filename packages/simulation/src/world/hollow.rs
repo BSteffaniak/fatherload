@@ -559,9 +559,7 @@ impl WorldState {
                 if !fitted {
                     return Err(HollowRefusal::NoAnchor);
                 }
-                if self.is_on_foot(player_id) {
-                    return Err(HollowRefusal::OnFoot);
-                }
+                // Wave 10 polish: on foot the anchor plants the pilot's boots instead.
                 if anchor.until.is_some_and(|until| now < until) || now < anchor.ready {
                     return Err(HollowRefusal::Recharging);
                 }
@@ -605,8 +603,14 @@ impl WorldState {
         match action {
             HollowAction::EngageAnchor | HollowAction::ToggleAnchor => {
                 let until = self.after_millis(now, ANCHOR_MILLIS);
+                // On foot it holds the pilot (and the parked rig) to plain down.
+                let quarter = if self.is_on_foot(player_id) {
+                    0
+                } else {
+                    anchor_quarter(orientation)
+                };
                 let anchor = self.hollow.anchors.entry(player_id).or_default();
-                anchor.quarter = anchor_quarter(orientation);
+                anchor.quarter = quarter;
                 anchor.until = Some(until);
                 output.push_event(hollow_event(
                     HollowEvent::AnchorEngaged,

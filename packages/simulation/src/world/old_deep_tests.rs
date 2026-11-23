@@ -753,6 +753,15 @@ fn a_bot_with_descent_two_kit_beats_the_star_core_and_wins_the_pressure_hull() {
         "the bot beat the core within 10 minutes: phases {phases:?}, rig at {:?}",
         world.player(PLAYER).expect("rig").tile_in(world.frame())
     );
+    // The probe models the fight from this measured win (Wave 10 polish).
+    {
+        let rig = world.player(PLAYER).expect("rig");
+        crate::balance::descent::mechanics::record_bot_fight(
+            crate::descent::DescentBoss::StarCore,
+            f64::from(ticks) / f64::from(hz),
+            f64::from(rig.hull / rig.max_hull()),
+        );
+    }
     assert!(phases.contains(&CorePhase::Exposed));
     assert_eq!(world.old_deep().core.phase, CorePhase::Beaten);
     assert_eq!(

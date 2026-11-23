@@ -755,7 +755,9 @@ fn a_bot_beats_the_sun_serpent_and_the_crew_gets_the_gravity_anchor() {
     let mut seen = std::collections::BTreeSet::new();
     let mut defeated = false;
     let (mut exposed_ticks, mut near_sum, mut head_hits, mut shots) = (0_u32, 0.0_f32, 0, 0);
+    let mut fight_ticks = 0_u64;
     for count in 0..u64::from(hz) * 900 {
+        fight_ticks = count + 1;
         let controls = serpent_bot(&world, count);
         let events = step(&mut world, controls);
         if world.hollow().serpent.phase == SerpentPhase::Exposed {
@@ -825,6 +827,13 @@ fn a_bot_beats_the_sun_serpent_and_the_crew_gets_the_gravity_anchor() {
             .and_then(|id| world.entities().get(EntityId(id)))
             .and_then(|entity| entity.state.health())
             .map(|health| health.current)
+    );
+    // The probe models the fight from this measured win (Wave 10 polish).
+    #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+    crate::balance::descent::mechanics::record_bot_fight(
+        crate::descent::DescentBoss::SunSerpent,
+        fight_ticks as f64 / f64::from(hz),
+        f64::from(left),
     );
     assert!(
         left > 0.2,
