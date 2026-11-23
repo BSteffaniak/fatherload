@@ -80,13 +80,52 @@ impl ExpeditionSite {
             SiteKind::Camp => interior.max.x - 2,
             SiteKind::Rig => interior.min.x + 2,
             SiteKind::Marker => i32::midpoint(interior.min.x, interior.max.x),
+            // At the grave's foot, beside the headstone.
+            SiteKind::Grave => interior.max.x - 1,
         };
         TilePosition {
             x,
             y: interior.max.y,
         }
     }
+
+    /// Rows of rock stamped under the floor (Wave 9): in the Hollow World's open sky a site
+    /// stands on a little floating stone of its own instead of a plank hanging in the air.
+    #[must_use]
+    pub const fn footing_rows(&self) -> i32 {
+        if matches!(self.stratum, Stratum::InnerSky) {
+            FOOTING_ROWS
+        } else {
+            0
+        }
+    }
+
+    /// Everything the site stamps: its bounds and any footing under them.
+    #[must_use]
+    pub const fn extent(&self) -> TileRect {
+        TileRect {
+            min: self.bounds.min,
+            max: TilePosition {
+                x: self.bounds.max.x,
+                y: self.bounds.max.y + self.footing_rows(),
+            },
+        }
+    }
+
+    /// Whether `tile` is part of the floating stone under the floor: each row down is a
+    /// tile narrower at both ends, so the stone tapers like a keel.
+    #[must_use]
+    pub const fn in_footing(&self, tile: TilePosition) -> bool {
+        let below = tile.y - self.bounds.max.y;
+        below >= 1
+            && below <= self.footing_rows()
+            && tile.x >= self.bounds.min.x + below
+            && tile.x <= self.bounds.max.x - below
+    }
 }
+
+/// Rows of floating stone under a site in the open sky ([`ExpeditionSite::footing_rows`]).
+pub const FOOTING_ROWS: i32 = 3;
 
 /// `(width, height)` of a site of `kind`, walls and floor included.
 #[must_use]
@@ -95,6 +134,7 @@ pub const fn site_size(kind: SiteKind) -> (i32, i32) {
         SiteKind::Camp => (15, 7),
         SiteKind::Rig => (12, 6),
         SiteKind::Marker => (8, 6),
+        SiteKind::Grave => (10, 6),
     }
 }
 
@@ -169,7 +209,7 @@ pub fn site(settings: &WorldSettings, layout: &DescentLayout, log: u8) -> Option
         .flat_map(|row| (0..8).map(move |attempt| (row, attempt)))
         .map(|(row, attempt)| at(24 + (rolled + attempt * 29) % 97, row))
         .find(|site| {
-            let around = site.bounds.expanded(3);
+            let around = site.extent().expanded(3);
             !crosses_older_spaces(settings, &around)
                 && !crosses_strata_set_pieces(settings, &around)
         })
@@ -255,6 +295,31 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
         // ... and the alloy seal over Descent VII: a room carved through it would be a way
         // past The Glitch without the Phase Drill.
         || crate::worldgen::descent::far_strange::crosses_alloy_seal(settings, &layout, area)
+        || DEEPER_SET_PIECES
+            .iter()
+            .any(|crosses| crosses(settings, area))
+}
+
+/// A set-piece query of a deeper Descent's track: whether `area` crosses one of its stamps.
+pub type SetPieceQuery = fn(&WorldSettings, &TileRect) -> bool;
+
+/// The deeper Descents' set pieces the story's rooms keep off (Wave 9 seam).
+///
+/// Every Descent's own landmarks (outposts, gate chambers, the Descent IV-VIII settlements
+/// the registry places) are here from the start. A Descent track that stamps a settlement,
+/// arena or set piece of its own appends its query (Merrow City's bubble, the jungle tribes'
+/// village, the Sun Serpent's orbit, the Prism Relay ...); the log sites then move along their
+/// rows and the anomaly rooms are dropped, exactly as for Descents I-III.
+pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[crosses_descent_landmarks];
+
+/// Whether `area` crosses one of the registry's Descent landmarks (in Descents IV-VIII only,
+/// so the placement of Descents I-III's logs stays as Wave 8 left it).
+fn crosses_descent_landmarks(settings: &WorldSettings, area: &TileRect) -> bool {
+    use crate::{descent::Descent, worldgen::descent::landmarks};
+    let layout = crate::descent::fields::cached_layout(settings);
+    landmarks::landmarks_with(settings, &layout, area)
+        .iter()
+        .any(|landmark| landmark.descent >= Descent::DrownedAndFrozen)
 }
 
 /// Whether `area` crosses a pilot-only space (V9+, stamped before the story pass) or a tomb
@@ -301,11 +366,11 @@ pub fn sites(settings: &WorldSettings) -> Vec<ExpeditionSite> {
     })
 }
 
-/// The sites whose bounds overlap `area`.
+/// The sites whose stamps ([`ExpeditionSite::extent`]) overlap `area`.
 #[must_use]
 pub fn sites_in(settings: &WorldSettings, area: &TileRect) -> Vec<ExpeditionSite> {
     let mut found = sites(settings);
-    found.retain(|site| site.bounds.intersects(area));
+    found.retain(|site| site.extent().intersects(area));
     found
 }
 
@@ -318,10 +383,14 @@ pub fn site_holding(settings: &WorldSettings, tile: TilePosition) -> Option<Expe
 /// The tile `site` carves at `(x, y)`, or `None` to leave the generated tile.
 ///
 /// The room is open air on a plank floor (the crew always laid boards); its walls stay the
-/// stratum's own rock. A wreck rests on a floor of its own scrap plating.
+/// stratum's own rock. A wreck rests on a floor of its own scrap plating. In the open sky the
+/// floor rests on a tapering stone of the stratum's hard rock ([`ExpeditionSite::in_footing`]).
 #[must_use]
 pub const fn site_tile(site: &ExpeditionSite, x: i32, y: i32) -> Option<TileKind> {
     let position = TilePosition { x, y };
+    if site.in_footing(position) {
+        return Some(site.stratum.def().hard);
+    }
     if !site.bounds.contains(position) {
         return None;
     }
@@ -331,7 +400,9 @@ pub const fn site_tile(site: &ExpeditionSite, x: i32, y: i32) -> Option<TileKind
     if y == site.bounds.max.y {
         return Some(match site.kind {
             SiteKind::Rig => TileKind::Built(BuiltTile::Plating),
-            SiteKind::Camp | SiteKind::Marker => TileKind::Built(BuiltTile::Plank),
+            SiteKind::Camp | SiteKind::Marker | SiteKind::Grave => {
+                TileKind::Built(BuiltTile::Plank)
+            }
         });
     }
     None
@@ -364,7 +435,10 @@ impl StoryStamps {
     #[must_use]
     pub fn covers(&self, position: TilePosition) -> bool {
         self.rooms.iter().any(|room| room.bounds.contains(position))
-            || self.sites.iter().any(|site| site.bounds.contains(position))
+            || self
+                .sites
+                .iter()
+                .any(|site| site.extent().contains(position))
     }
 }
 

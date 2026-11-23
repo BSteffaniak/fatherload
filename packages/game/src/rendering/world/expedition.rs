@@ -110,11 +110,205 @@ pub(super) fn draw_expedition(draw: &mut impl RaylibDraw, scene: &ExpeditionScen
     for site in sites_in(scene.settings, &area) {
         let canister = scene.canister_state(&site);
         match site.kind {
-            SiteKind::Camp => draw_camp(draw, scene, &site),
+            SiteKind::Camp => {
+                draw_camp(draw, scene, &site);
+                dress_camp(draw, scene, &site);
+            }
             SiteKind::Rig => draw_wreck(draw, &site),
             SiteKind::Marker => draw_cairn(draw, &site),
+            SiteKind::Grave => draw_grave(draw, scene, &site),
         }
         draw_canister(draw, scene, site.canister(), canister);
+    }
+}
+
+/// How the camps of the deeper Descents look (Wave 9): what the crew had left by then, and
+/// what the place did to their things.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CampDress {
+    /// Descents I-III: the camp as they set out.
+    Plain,
+    /// Descent IV: the sled lashed on fuel drums as a raft, frost on the canvas, a paddle.
+    Raft,
+    /// Descent V: a thatch of giant leaves over the tent, a hammock, a beast's tusk.
+    Jungle,
+    /// Descent VI: the camp's mirror twin standing faintly beside it, corners rotted to blocks.
+    Thin,
+}
+
+const fn camp_dress(site: &ExpeditionSite) -> CampDress {
+    use fatherload_simulation::descent::Descent;
+    match site.stratum.descent() {
+        Descent::DrownedAndFrozen => CampDress::Raft,
+        Descent::HollowWorld => CampDress::Jungle,
+        Descent::StrangeLayers | Descent::Ancients | Descent::Heart => CampDress::Thin,
+        Descent::Crust | Descent::OldDeep | Descent::LivingDark => CampDress::Plain,
+    }
+}
+
+/// The deeper Descents' dressing over a camp ([`CampDress`]).
+fn dress_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &ExpeditionSite) {
+    let inner = site.interior();
+    let pen = pen_at(inner.min);
+    let floor = floor_y(site);
+    let width = (inner.max.x - inner.min.x + 1) * T;
+    // The tent's place and the sled's, as `draw_camp` lays them out.
+    let (tent_x, tent_w, tent_h) = (8, 52, 40);
+    let sled_x = tent_x + tent_w + 4 + 46;
+    match camp_dress(site) {
+        CampDress::Plain => {}
+        CampDress::Raft => {
+            // Frost along the canvas's ridge and slopes.
+            for row in (0..tent_h).step_by(3) {
+                let half = row * tent_w / (2 * tent_h);
+                let cx = tent_x + tent_w / 2;
+                pen.px(draw, cx - half, floor - tent_h + row, ICE);
+                pen.px(draw, cx + half - 1, floor - tent_h + row, MIST);
+            }
+            pen.rect(draw, tent_x + tent_w / 2 - 3, floor - tent_h, 6, 1, ICE);
+            // Two fuel drums lashed under the sled, rope wound round them.
+            for drum in 0..2 {
+                let x = sled_x + 2 + drum * 24;
+                pen.boxed(draw, x, floor - 9, 18, 9, OCEAN);
+                pen.rect(draw, x + 1, floor - 8, 16, 2, SKY);
+                pen.rect(draw, x + 1, floor - 4, 16, 1, DEEP_BLUE);
+                pen.rect(draw, x + 8, floor - 9, 2, 9, SAND);
+            }
+            // A paddle against the far prop instead of the pick, and a puddle of sea water.
+            pen.rect(draw, width - 26, floor - 28, 2, 24, LOAM);
+            pen.rect(draw, width - 28, floor - 8, 6, 8, CLAY);
+            pen.rect(draw, width - 27, floor - 7, 4, 6, LOAM);
+            let shine = ((scene.seconds * 0.8).sin() * 3.0) as i32;
+            pen.rect(draw, 20, floor - 1, 36, 1, with_alpha(SKY, 150));
+            pen.rect(draw, 30 + shine, floor - 1, 6, 1, with_alpha(ICE, 200));
+        }
+        CampDress::Jungle => {
+            // Broad leaves laid over the ridge, each with a midrib.
+            for (index, lean) in [-1, 1, -1, 1, 0].into_iter().enumerate() {
+                let x = tent_x + 4 + index as i32 * 10;
+                let y = floor - tent_h - 4 + (index as i32 % 2) * 3;
+                pen.rect(draw, x, y, 16, 5, MOSS);
+                pen.rect(draw, x + 1, y + 1, 14, 3, LEAF);
+                pen.rect(draw, x + 2, y + 2 + lean.min(0), 12, 1, PINE);
+            }
+            // A hammock slung between the near prop and the tent pole.
+            for x in 0..30 {
+                let sag = (x - 15) * (x - 15) / 40;
+                pen.px(draw, 4 + x, floor - 34 + 6 - sag.min(6), CREAM);
+                pen.px(draw, 4 + x, floor - 33 + 6 - sag.min(6), SAND);
+            }
+            // A beast's tusk propped by the stove, and a ring of bright flowers.
+            let tusk_x = width - 40;
+            for step in 0..18 {
+                pen.rect(
+                    draw,
+                    tusk_x + step,
+                    floor - 4 - step * step / 18,
+                    3,
+                    3,
+                    BONE,
+                );
+            }
+            for (index, colour) in [ROSE, GOLD, PINK, ORANGE].into_iter().enumerate() {
+                let x = sled_x - 30 + index as i32 * 5;
+                pen.rect(draw, x, floor - 3, 1, 3, LEAF);
+                pen.rect(draw, x - 1, floor - 5, 3, 2, colour);
+            }
+        }
+        CampDress::Thin => {
+            // The camp's mirror twin: the tent drawn again, flipped, faint and a little off.
+            let twin_x = width - tent_x - tent_w - 6;
+            for row in (0..tent_h).step_by(2) {
+                let half = row * tent_w / (2 * tent_h);
+                let cx = twin_x + tent_w / 2;
+                let y = floor - tent_h + row;
+                pen.rect(draw, cx - half, y, half, 1, with_alpha(LAVENDER, 40));
+                pen.rect(draw, cx, y, half, 1, with_alpha(VIOLET, 50));
+            }
+            // Corners rotted to blocks of the wrong colour (dim and still: no flashing).
+            let colours = [LIME, PINK, SKY, GOLD];
+            for index in 0..10 {
+                let x = (index * 37 + i32::from(site.log) * 11) % (width - 8) / 4 * 4;
+                let y = (index * 23 + 5) % (floor - 8) / 4 * 4;
+                pen.rect(
+                    draw,
+                    x,
+                    y,
+                    4,
+                    4,
+                    with_alpha(colours[index as usize % 4], 70),
+                );
+            }
+        }
+    }
+}
+
+/// A grave (Wave 9): Dov Halloran's, under the inner sun. A long mound of sun-baked earth, a
+/// headstone of sunstone cut with his initials, his radio headset hung over it, and a ring of
+/// flowers that grow in the light.
+fn draw_grave(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &ExpeditionSite) {
+    let inner = site.interior();
+    let pen = pen_at(inner.min);
+    let floor = floor_y(site);
+    let width = (inner.max.x - inner.min.x + 1) * T;
+    // The mound: a long low dome of earth with a lit crest.
+    let (mound_x, mound_w) = (18, 70);
+    for column in 0..mound_w {
+        let t = column as f32 / (mound_w - 1) as f32 * 2.0 - 1.0;
+        let height = ((1.0 - t * t).max(0.0).sqrt() * 10.0) as i32 + 1;
+        pen.rect(draw, mound_x + column, floor - height, 1, height, SOIL);
+        pen.px(draw, mound_x + column, floor - height, CLAY);
+        if column % 9 == 4 {
+            pen.px(draw, mound_x + column, floor - height + 3, LOAM);
+        }
+    }
+    // The headstone at the head of the mound: rounded top, carved initials.
+    let stone_x = 6;
+    pen.rect(draw, stone_x, floor - 30, 16, 30, AMBER);
+    pen.rect(draw, stone_x + 2, floor - 32, 12, 2, AMBER);
+    pen.rect(draw, stone_x + 1, floor - 29, 3, 28, GOLD);
+    pen.rect(draw, stone_x + 13, floor - 29, 2, 28, COPPER);
+    pen.text(draw, "D.H.", stone_x + 1, floor - 24, RUST);
+    // A wave line under the initials: Dov's radio, cut in the stone.
+    for step in 0..12 {
+        let y = floor - 12 + ((step as f32 * 1.2).sin() * 2.0) as i32;
+        pen.px(draw, stone_x + 2 + step, y, RUST);
+    }
+    // His headset hung over the stone: the band and two ear cups, the cord trailing down.
+    pen.rect(draw, stone_x + 2, floor - 35, 12, 2, SLATE_DARK);
+    pen.rect(draw, stone_x, floor - 34, 4, 6, SLATE);
+    pen.rect(draw, stone_x + 12, floor - 34, 4, 6, SLATE);
+    pen.px(draw, stone_x + 1, floor - 33, STEEL_LIGHT);
+    for step in 0..14 {
+        pen.px(
+            draw,
+            stone_x + 16 + step / 4,
+            floor - 28 + step * 2,
+            SLATE_DARK,
+        );
+    }
+    // Flowers that grow in the sun's light, nodding slowly (no flashing).
+    let nod = ((scene.seconds * 0.9).sin() * 1.2) as i32;
+    for (index, colour) in [GOLD, ROSE, CREAM, ORANGE, GOLD, PINK, CREAM]
+        .into_iter()
+        .enumerate()
+    {
+        let x = mound_x + 4 + index as i32 * 10;
+        let stem = 5 + (index as i32 % 3);
+        pen.rect(draw, x, floor - stem, 1, stem, LEAF);
+        pen.rect(
+            draw,
+            x - 1 + nod * (index as i32 % 2),
+            floor - stem - 2,
+            3,
+            2,
+            colour,
+        );
+    }
+    // Two stones at the foot, where the canister rests between them.
+    for x in [width - 24, width - 8] {
+        pen.boxed(draw, x, floor - 5, 6, 5, STONE);
+        pen.px(draw, x + 1, floor - 5, STONE_LIGHT);
     }
 }
 
@@ -538,6 +732,13 @@ pub(super) fn draw_expedition_lights(draw: &mut impl RaylibDraw, scene: &Expedit
             pen.rect(draw, -2, -3, 4, 5, GOLD);
             pen.rect(draw, -1, -2, 2, 3, CREAM);
             pen.rect(draw, -2, -4, 4, 1, STEEL_DARK);
+        }
+        if site.kind == SiteKind::Grave {
+            // The headstone holds the sun's warmth and gives it back softly.
+            let x = col_px(inner.min.x) + 14.0 * ART;
+            let y = row_px(inner.max.y) + (T as f32 - 16.0) * ART;
+            disc(draw, x, y, (40.0 * breathe) as i32, with_alpha(GOLD, 16));
+            disc(draw, x, y, (18.0 * breathe) as i32, with_alpha(AMBER, 24));
         }
         if scene.canister_state(&site) == Canister::Waiting {
             let tile = site.canister();

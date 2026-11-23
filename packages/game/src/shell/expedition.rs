@@ -123,11 +123,12 @@ pub fn echo_words(echo: u8) -> Option<(StoryMomentKind, String, String)> {
     let kind = match entry.kind {
         EchoKind::Radio => StoryMomentKind::RadioEcho,
         EchoKind::Ghost => StoryMomentKind::GhostRecording,
+        EchoKind::Builder => StoryMomentKind::BuilderEcho,
     };
     Some((
         kind,
         entry.title.to_owned(),
-        format!("{}: {}", entry.speaker.name(), entry.text),
+        format!("{}: {}", entry.voice(), entry.text),
     ))
 }
 

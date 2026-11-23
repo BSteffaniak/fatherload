@@ -26,7 +26,10 @@ fn chapter_color(numeral: &str) -> Color {
     match numeral {
         "I" => AMBER,
         "II" => COPPER,
-        _ => MINT,
+        "III" => MINT,
+        "IV" => SKY_LIGHT,
+        "V" => GOLD,
+        _ => LAVENDER,
     }
 }
 
@@ -36,11 +39,18 @@ pub(super) fn draw_expedition_journal(draw: &mut RaylibDrawHandle<'_>, ui: &UiFr
     let state = ui.snapshot.expedition;
     let rows = expedition_rows(state);
     let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
-    let ghosts = ECHOES
-        .iter()
-        .take(usize::from(state.echoes))
-        .filter(|echo| echo.kind == EchoKind::Ghost)
-        .count();
+    let heard = |kind: EchoKind| {
+        ECHOES
+            .iter()
+            .take(usize::from(state.echoes))
+            .filter(|echo| echo.kind == kind)
+            .count()
+    };
+    let (radio, ghosts, builders) = (
+        heard(EchoKind::Radio),
+        heard(EchoKind::Ghost),
+        heard(EchoKind::Builder),
+    );
     let mut sections = vec![Section::new(
         "The trail",
         GOLD,
@@ -52,10 +62,11 @@ pub(super) fn draw_expedition_journal(draw: &mut RaylibDrawHandle<'_>, ui: &UiFr
             ),
             SectionItem::stat(
                 "Echoes heard",
-                format!(
-                    "{} radio, {ghosts} ghost",
-                    usize::from(state.echoes) - ghosts
-                ),
+                if builders > 0 {
+                    format!("{radio} radio, {ghosts} ghost, {builders} builder")
+                } else {
+                    format!("{radio} radio, {ghosts} ghost")
+                },
                 SKY_LIGHT,
             ),
             SectionItem::stat(

@@ -45,6 +45,8 @@ pub enum StoryMomentKind {
     /// A place of the Strange Layers found (Wave 9: the Looking-Glass Hall, Parallax Station,
     /// the Shear Spire, the Dead Screen).
     StrangePlace,
+    /// The builders' own voices, below the inner sun (Wave 9 story).
+    BuilderEcho,
 }
 
 /// A card across the seat's view telling a moment of a story.

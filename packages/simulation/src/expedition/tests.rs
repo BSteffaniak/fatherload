@@ -27,7 +27,7 @@ fn v11(seed: u64) -> WorldSettings {
 const SEEDS: [u64; 4] = [0, 0x5EED, 0x00FA_7E45, 0x0DD_BA11];
 
 #[test]
-fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_three() {
+fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_six() {
     let mut previous = 0;
     for log in &LOGS {
         let index = log.stratum.index();
@@ -37,16 +37,27 @@ fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_three() {
             log.title
         );
         previous = index;
-        assert!(log.descent() <= Descent::LivingDark);
+        assert!(log.descent() <= Descent::StrangeLayers);
         assert!(
             !log.text.is_empty() && log.text.len() < 340,
-            "{}",
-            log.title
+            "{}: {} characters",
+            log.title,
+            log.text.len()
         );
     }
     assert!(LOGS.windows(2).all(|pair| pair[0].day < pair[1].day));
-    // Every stratum of Descents I-III holds at least one log.
-    for descent in [Descent::Crust, Descent::OldDeep, Descent::LivingDark] {
+    // Titles are unique (the journal lists them by title).
+    let titles: BTreeSet<&str> = LOGS.iter().map(|log| log.title).collect();
+    assert_eq!(titles.len(), LOGS.len());
+    // Every stratum of Descents I-VI holds at least one log, and each chapter is written.
+    for descent in [
+        Descent::Crust,
+        Descent::OldDeep,
+        Descent::LivingDark,
+        Descent::DrownedAndFrozen,
+        Descent::HollowWorld,
+        Descent::StrangeLayers,
+    ] {
         for stratum in descent.strata() {
             assert!(
                 LOGS.iter().any(|log| log.stratum == stratum),
@@ -62,8 +73,48 @@ fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_three() {
     assert!(LOGS.iter().any(|log| log.author == Member::Dov));
 }
 
+/// The throughline's beats land where the README's design table puts them (Wave 9): each
+/// member stays behind with their settlement, in order, and nobody writes after they stayed.
 #[test]
-fn echoes_run_down_the_strata_radio_first_then_ghosts() {
+fn the_fathers_stay_behind_one_by_one_and_write_no_more() {
+    let number = |title: &str| {
+        LOGS.iter()
+            .position(|log| log.title == title)
+            .unwrap_or_else(|| panic!("no log {title}"))
+            + 1
+    };
+    assert_eq!(number("Teo Stays"), 27);
+    assert_eq!(number("Sefa Stays"), 37);
+    assert_eq!(number("Bran Stays"), 45);
+    assert_eq!(number("Dov's Grave"), 48);
+    assert_eq!(LOGS[47].site, super::SiteKind::Grave);
+    assert_eq!(LOGS[47].stratum, Stratum::TheSunforge);
+    let last_by = |member: Member| {
+        LOGS.iter()
+            .rposition(|log| log.author == member)
+            .map_or(0, |index| index + 1)
+    };
+    assert!(last_by(Member::Teo) <= 27);
+    assert!(last_by(Member::Sefa) <= 37);
+    assert!(last_by(Member::Bran) <= 45);
+    assert!(last_by(Member::Dov) < 48);
+    // The chapters end with their Descent's last log, which is a rig or a grave-side cairn
+    // in the Descent's last stratum.
+    for descent in [
+        Descent::DrownedAndFrozen,
+        Descent::HollowWorld,
+        Descent::StrangeLayers,
+    ] {
+        let last = LOGS
+            .iter()
+            .rfind(|log| log.descent() == descent)
+            .expect("a log");
+        assert_eq!(last.stratum, descent.last_stratum(), "{descent:?}");
+    }
+}
+
+#[test]
+fn echoes_run_down_the_strata_radio_then_ghosts_then_builders() {
     let order: Vec<(usize, u16)> = ECHOES
         .iter()
         .map(|echo| (echo.stratum.index(), echo.along))
@@ -73,16 +124,39 @@ fn echoes_run_down_the_strata_radio_first_then_ghosts() {
         .iter()
         .position(|echo| echo.kind == EchoKind::Ghost)
         .expect("a ghost recording");
+    let first_builder = ECHOES
+        .iter()
+        .position(|echo| echo.kind == EchoKind::Builder)
+        .expect("a builder echo");
     assert!(
         ECHOES[..first_ghost]
             .iter()
             .all(|e| e.kind == EchoKind::Radio)
     );
     assert!(
-        ECHOES[first_ghost..]
+        ECHOES[first_ghost..first_builder]
             .iter()
             .all(|e| e.kind == EchoKind::Ghost)
     );
+    // Dov's tapes stop at his grave; below it the builders speak, and only once, out of time
+    // in the Time Sludge, does his voice come back.
+    assert_eq!(ECHOES[first_builder].stratum, Stratum::TheSunforge);
+    for echo in &ECHOES[first_builder..] {
+        assert!(
+            echo.kind == EchoKind::Builder
+                || (echo.kind == EchoKind::Ghost && echo.stratum == Stratum::TimeSludge),
+            "{}",
+            echo.title
+        );
+    }
+    for echo in &ECHOES {
+        assert!(echo.text.len() < 260, "{}", echo.title);
+        if echo.kind == EchoKind::Builder {
+            assert_eq!(echo.voice(), "Builder voices");
+        } else {
+            assert_eq!(echo.voice(), echo.speaker.name());
+        }
+    }
 }
 
 #[test]

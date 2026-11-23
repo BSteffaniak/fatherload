@@ -108,6 +108,9 @@ pub enum SiteKind {
     Rig,
     /// A cairn with a flag and a chalk arrow pointing down.
     Marker,
+    /// A grave (Wave 9): a mound under a cut headstone, the canister left at its foot. Dov
+    /// Halloran's, in the inner sun's light.
+    Grave,
 }
 
 impl SiteKind {
@@ -117,6 +120,7 @@ impl SiteKind {
             Self::Camp => "camp",
             Self::Rig => "abandoned rig",
             Self::Marker => "cairn",
+            Self::Grave => "grave",
         }
     }
 }
