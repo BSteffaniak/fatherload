@@ -369,6 +369,31 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The far Strange Layers (V11, Wave 9 strange-b): time pockets, the Stopped Clock,
+        // echo hollows and the Choir, keyed curtains and spectrum vaults, the Rewrite Hall over
+        // Descent VI's gate chamber, and the alloy seal over Descent VII.
+        use crate::worldgen::descent::far_strange;
+        let (top, bottom) = far_strange::carve_rows(layout);
+        if rect.max.y >= top && rect.min.y <= bottom {
+            let stamps = far_strange::stamps_with(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = far_strange::far_tile(
+                    &ctx.settings,
+                    layout,
+                    &stamps,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     // The Fathers' expedition (V11, Wave 8 story): its log sites and the anomaly rooms, a pass
     // of their own after the landmarks and under the builders' cable.
     let story = crate::expedition::sites::story_stamps(&ctx.settings, &rect);

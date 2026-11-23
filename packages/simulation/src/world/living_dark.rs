@@ -179,7 +179,12 @@ impl WorldState {
         let lamp_two = self.progression_rules()
             == crate::depth_progression::ProgressionRules::Descent
             && player.hazard_gear.has_system(RigSystem::LampII);
-        let glow_sea = self.deep_stratum_at(player.tile_in(self.frame())) == Some(Stratum::GlowSea);
+        let stratum = self.deep_stratum_at(player.tile_in(self.frame()));
+        // The Echo Caves swallow every lamp (Wave 9): only sonar shows the cave.
+        if stratum == Some(Stratum::EchoCaves) {
+            return crate::far_strange::ECHO_LAMP_SCALE;
+        }
+        let glow_sea = stratum == Some(Stratum::GlowSea);
         let beam = match (glow_sea, lamp_two) {
             (true, false) => GLOW_SEA_LAMP_SCALE,
             (_, true) => crate::depth_progression::LAMP_II_LIGHT_SCALE,
@@ -793,7 +798,7 @@ impl WorldState {
     }
 
     /// Whether any body (a rig, a pilot, a creature) overlaps `tile`.
-    fn tile_occupied(&self, tile: TilePosition) -> bool {
+    pub(super) fn tile_occupied(&self, tile: TilePosition) -> bool {
         let frame = self.frame();
         let left = frame.col_px(tile.x);
         let top = frame.row_px(tile.y);

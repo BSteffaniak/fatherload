@@ -224,6 +224,8 @@ impl WorldState {
             drowned: crate::drowned::DrownedState::default(),
             hollow: crate::hollow::Hollow::default(),
             distortion: crate::distortion::Distortion::default(),
+            far_strange: crate::far_strange::FarStrange::default(),
+            far_schedule: crate::far_strange::FarSchedule::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

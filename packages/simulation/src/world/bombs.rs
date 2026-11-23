@@ -285,6 +285,7 @@ impl WorldState {
 
     /// Runs out one charge's fuse: blasts, bursts, burns or pulses. Returns the charge again if
     /// it keeps going (a fire spreading, a flare burning).
+    #[allow(clippy::too_many_lines, reason = "one arm per lingering charge kind")]
     fn expire_bomb(
         &mut self,
         mut bomb: PlacedBomb,
@@ -328,6 +329,16 @@ impl WorldState {
                     }
                     bomb.stage += 1;
                     bomb.detonation_tick = schedule(self, SMOKE_PULSE_MILLIS);
+                    return Some(bomb);
+                }
+                // A time bubble (Wave 9) swells, holds and thins like a smoke screen.
+                ExplosiveKind::TimeBubble => {
+                    if bomb.stage >= crate::far_strange::TIME_BUBBLE_PULSES {
+                        return None;
+                    }
+                    bomb.stage += 1;
+                    bomb.detonation_tick =
+                        schedule(self, crate::far_strange::TIME_BUBBLE_PULSE_MILLIS);
                     return Some(bomb);
                 }
                 _ => return None,
@@ -379,6 +390,12 @@ impl WorldState {
                 bomb.stage = 1;
                 bomb.chain_triggered = false;
                 bomb.detonation_tick = schedule(self, SMOKE_PULSE_MILLIS);
+                Some(bomb)
+            }
+            ExplosiveKind::TimeBubble => {
+                bomb.stage = 1;
+                bomb.chain_triggered = false;
+                bomb.detonation_tick = schedule(self, crate::far_strange::TIME_BUBBLE_PULSE_MILLIS);
                 Some(bomb)
             }
             _ => None,
@@ -683,6 +700,28 @@ impl WorldState {
             .collect()
     }
 
+    /// Every live time bubble (Wave 9, the Time Sludge) as `(x, y, radius)` in local pixels,
+    /// oldest first: creatures inside crawl ([`crate::far_strange::TIME_BUBBLE_TEMPO`]).
+    #[must_use]
+    pub fn time_bubbles(&self) -> Vec<(f32, f32, f32)> {
+        let mut bubbles: Vec<(u64, f32, f32, f32)> = self
+            .entities
+            .of_kind(EntityKind::Charge)
+            .filter_map(|entity| match entity.state {
+                EntityState::Charge(state) if state.kind == ExplosiveKind::TimeBubble => {
+                    let radius = crate::far_strange::time_bubble_radius(state.stage);
+                    (radius > 0.0).then_some((state.serial, entity.body.x, entity.body.y, radius))
+                }
+                _ => None,
+            })
+            .collect();
+        bubbles.sort_by_key(|bubble| bubble.0);
+        bubbles
+            .into_iter()
+            .map(|(_, x, y, radius)| (x, y, radius))
+            .collect()
+    }
+
     /// Whether world point `(x, y)` is hidden inside a smoke screen (creature senses, line of
     /// sight and auto-aim check this).
     #[must_use]
@@ -820,7 +859,8 @@ const fn blast_proof(kind: TileKind) -> bool {
         TileKind::Sky(sky) => sky.is_indestructible() || sky.is_cache(),
         TileKind::Poi(poi) => poi.after_blast().is_none(),
         // Cave caches shrug off blasts (`Terrain::blast_radius` skips them), so lanes stop too.
-        TileKind::Cave(cave) => cave.is_cache(),
+        // Builder alloy and the Prism Desert's keyed walls too (Wave 9).
+        TileKind::Cave(cave) => cave.is_cache() || cave.blast_proof(),
         _ => false,
     }
 }

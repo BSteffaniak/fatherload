@@ -8,6 +8,7 @@ pub mod distortion;
 pub mod drowned;
 pub mod enemies;
 pub mod explosives;
+pub mod far_strange;
 pub mod hollow;
 pub mod icons;
 pub mod interior;

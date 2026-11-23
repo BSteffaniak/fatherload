@@ -131,6 +131,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // So do the distortion strata's (Wave 9; their twins only exist in a mirror hall):
         // `distortion_tests::the_distortion_creatures_keep_the_body_rules_in_a_fight`.
         && !kind.is_distortion()
+        // So do the far Strange Layers' (Wave 9,
+        // `far_strange_tests::the_far_strange_creatures_keep_the_body_rules`).
+        && !kind.is_far_strange()
 }
 
 /// One of every cave kind at an open spot in the arena.

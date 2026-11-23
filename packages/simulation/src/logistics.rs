@@ -345,6 +345,9 @@ pub enum LogisticsCommand {
     LivingDark(crate::living_dark::LivingDarkAction),
     /// A Hollow World command (Wave 9): the Gravity Anchor.
     Hollow(crate::hollow::HollowAction),
+    /// A far Strange Layers command (Wave 9 strange-b): lamp filters and time bubbles, served
+    /// by the same dialog and the use button.
+    FarStrange(crate::far_strange::FarStrangeAction),
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.

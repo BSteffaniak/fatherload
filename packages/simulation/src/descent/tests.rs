@@ -257,6 +257,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::LivingDark
                     | LandmarkGenerator::Drowned
                     | LandmarkGenerator::HollowWorld
+                    | LandmarkGenerator::FarStrange
             ));
         }
         let field = def.field;

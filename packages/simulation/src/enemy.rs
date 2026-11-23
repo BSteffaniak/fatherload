@@ -135,6 +135,23 @@
 //! | [`EnemyKind::Glitchling`] | creature (teleporter) | Pixel Rot voids | a ghost of it flickers where it will land, then it is there | move off the ghost; shoot where it lands |
 //! | [`EnemyKind::Bitworm`] | creature (grid runner) | Pixel Rot voids | runs straight lines on the grid, turning square corners | step off its line |
 //! | [`EnemyKind::DeadPixel`] | creature (ranged) | Pixel Rot voids | a black square that pulses rot: a hit rots the view | dodge the slow pulse, blasts |
+//!
+//! The far Strange Layers' creatures (Wave 9 strange-b, Descent VI, [`crate::far_strange`]);
+//! `world/enemies/far_strange.rs` gives them their tempos, hearing, colours and The Glitch:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::TickMite`] | creature (swarmer, fast-lived) | Time Sludge | a blur of legs; it lives at twice the world's speed and crumbles in seconds | time bubbles, wait it out |
+//! | [`EnemyKind::AmberSloth`] | creature (armoured, slow-lived) | Time Sludge floors | a slow, dripping reach | keep out of reach; its touch holds a rig in amber |
+//! | [`EnemyKind::RewindNewt`] | creature (rewinder) | Time Sludge | a ghostly trail; hurt, it rewinds three seconds | burst it down, or bubble it so it cannot rewind |
+//! | [`EnemyKind::EchoStalker`] | creature (blind hunter) | Echo Caves | it hears thrust, drilling and pings, never sees | coast, stop drilling, ping sparingly |
+//! | [`EnemyKind::Shrieker`] | creature (alarm) | Echo Caves ceilings | it screams on finding prey: a free ping, and every stalker near comes | kill it quietly first |
+//! | [`EnemyKind::HushMoth`] | creature (drifter) | Echo Caves | a soft grey cloud that drinks sound | its hush hides your noise but swallows your pings |
+//! | [`EnemyKind::PrismScarab`] | creature (armoured) | Prism Desert floors | its shell turns red, green, blue | hit it in the light of its shell's colour |
+//! | [`EnemyKind::SplitterSpire`] | creature (ranged, rooted) | Prism Desert | glows before a fan of red, green and blue bolts | bolts of your filter's colour pass through you |
+//! | [`EnemyKind::LensWraith`] | creature (ambusher) | Prism Desert | unseen except in its own colour of light | swap filters to find it |
+//! | [`EnemyKind::TheGlitch`] | machine (boss) | the Rewrite Hall | flickers before every rule rewrite and blink | learn each rule; hit it between rewrites |
+//! | [`EnemyKind::GlitchShard`] | machine (swarmer) | shed by The Glitch | a jittering square | anything, EMP |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -361,6 +378,29 @@ pub enum EnemyKind {
     Bitworm,
     /// Pixel Rot: a black square that pulses rot (a hit rots the view).
     DeadPixel,
+    // --- The far Strange Layers (Wave 9 strange-b, Descent VI, `crate::far_strange`), appended
+    /// Time Sludge: a mite that lives at twice the world's speed and crumbles to dust in seconds.
+    TickMite,
+    /// Time Sludge: a slow-living armoured sloth; its dripping touch holds a rig in amber.
+    AmberSloth,
+    /// Time Sludge: a newt that rewinds itself three seconds when badly hurt.
+    RewindNewt,
+    /// Echo Caves: a blind hunter that hears thrust, drilling and pings.
+    EchoStalker,
+    /// Echo Caves: a ceiling shrieker whose scream pings the cave and calls the stalkers.
+    Shrieker,
+    /// Echo Caves: a moth cloud that drinks sound (it hushes rigs and swallows pings).
+    HushMoth,
+    /// Prism Desert: a scarab whose shell turns colour; only the matching light cracks it.
+    PrismScarab,
+    /// Prism Desert: a rooted crystal spire that fans red, green and blue bolts.
+    SplitterSpire,
+    /// Prism Desert: a wraith seen only in its own colour of light.
+    LensWraith,
+    /// The Descent VI gate boss: The Glitch, which rewrites its arena's rules every phase.
+    TheGlitch,
+    /// A shard The Glitch sheds: a jittering square that rams.
+    GlitchShard,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -456,11 +496,24 @@ pub enum ShotKind {
     MirrorShard,
     /// A dead pixel's slow pulse of rot: a hit rots the rig's view for a while.
     RotPulse,
+    // --- The far Strange Layers (Wave 9 strange-b), appended -----------------------------
+    /// A splitter spire's red bolt: it passes through a rig under a red lamp.
+    PrismRed,
+    /// A splitter spire's green bolt.
+    PrismGreen,
+    /// A splitter spire's blue bolt.
+    PrismBlue,
+    /// The Glitch's bolt: a corrupted square that flies straight.
+    GlitchBolt,
 }
 
 impl ShotKind {
     /// Launch speed, pixels per second.
     #[must_use]
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Wave 9 shots keep rows of their own"
+    )]
     pub const fn speed(self) -> f32 {
         match self {
             Self::Acid => 230.0,
@@ -478,6 +531,8 @@ impl ShotKind {
             Self::PressureBubble => 110.0,
             Self::MirrorShard => 320.0,
             Self::RotPulse => 105.0,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 230.0,
+            Self::GlitchBolt => 200.0,
         }
     }
 
@@ -502,7 +557,11 @@ impl ShotKind {
             | Self::Hex
             | Self::CryptHex
             | Self::CryptArrow
-            | Self::Boulder => 0.0,
+            | Self::Boulder
+            | Self::PrismRed
+            | Self::PrismGreen
+            | Self::PrismBlue
+            | Self::GlitchBolt => 0.0,
         }
     }
 
@@ -525,6 +584,8 @@ impl ShotKind {
             Self::PressureBubble => 9.0,
             Self::MirrorShard => 4.0,
             Self::RotPulse => 8.0,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 4.0,
+            Self::GlitchBolt => 6.0,
         }
     }
 
@@ -550,6 +611,8 @@ impl ShotKind {
             Self::PressureBubble => 5.0,
             Self::MirrorShard => 6.0,
             Self::RotPulse => 3.5,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 5.0,
+            Self::GlitchBolt => 5.5,
         }
     }
 
@@ -569,6 +632,8 @@ impl ShotKind {
             Self::MindSpore => 5_000,
             Self::PressureBubble => 4_500,
             Self::RotPulse => 4_800,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 2_800,
+            Self::GlitchBolt => 4_200,
         }
     }
 
@@ -583,6 +648,17 @@ impl ShotKind {
     #[must_use]
     pub const fn bursts_into_spores(self) -> bool {
         matches!(self, Self::Spore | Self::MindSpore)
+    }
+
+    /// The lamp filter a prism bolt passes through (Wave 9, the Prism Desert), if it is one.
+    #[must_use]
+    pub const fn prism_colour(self) -> Option<crate::far_strange::LampFilter> {
+        match self {
+            Self::PrismRed => Some(crate::far_strange::LampFilter::Red),
+            Self::PrismGreen => Some(crate::far_strange::LampFilter::Green),
+            Self::PrismBlue => Some(crate::far_strange::LampFilter::Blue),
+            _ => None,
+        }
     }
 }
 
@@ -734,7 +810,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 107] = [
+    pub const ALL: [Self; 118] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -842,6 +918,17 @@ impl EnemyKind {
         Self::Glitchling,
         Self::Bitworm,
         Self::DeadPixel,
+        Self::TickMite,
+        Self::AmberSloth,
+        Self::RewindNewt,
+        Self::EchoStalker,
+        Self::Shrieker,
+        Self::HushMoth,
+        Self::PrismScarab,
+        Self::SplitterSpire,
+        Self::LensWraith,
+        Self::TheGlitch,
+        Self::GlitchShard,
     ];
 
     /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
@@ -879,6 +966,25 @@ impl EnemyKind {
                 | Self::Glitchling
                 | Self::Bitworm
                 | Self::DeadPixel
+        )
+    }
+
+    /// Whether this is one of the far Strange Layers' creatures (Wave 9 strange-b, Descent VI).
+    #[must_use]
+    pub const fn is_far_strange(self) -> bool {
+        matches!(
+            self,
+            Self::TickMite
+                | Self::AmberSloth
+                | Self::RewindNewt
+                | Self::EchoStalker
+                | Self::Shrieker
+                | Self::HushMoth
+                | Self::PrismScarab
+                | Self::SplitterSpire
+                | Self::LensWraith
+                | Self::TheGlitch
+                | Self::GlitchShard
         )
     }
 
@@ -952,6 +1058,7 @@ impl EnemyKind {
     /// Light the creature gives off, in tiles (presentation: in the Glow Sea it is the only
     /// light there is; 0 for none).
     #[must_use]
+    #[allow(clippy::match_same_arms, reason = "one row per glowing kind")]
     pub const fn light_tiles(self) -> f32 {
         match self {
             Self::LureFish => 2.6,
@@ -971,6 +1078,9 @@ impl EnemyKind {
             Self::SunSerpent => 5.0,
             Self::SerpentCoil => 1.6,
             Self::CinderDrake => 1.0,
+            Self::SplitterSpire => 1.8,
+            Self::TheGlitch => 4.0,
+            Self::PrismScarab | Self::GlitchShard => 1.0,
             _ => 0.0,
         }
     }
@@ -2679,6 +2789,178 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::RotPulse, 1),
                 )
             },
+            // The far Strange Layers (Wave 9 strange-b).
+            Self::TickMite => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 120.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 22.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 80.0,
+                ..stats("Tick Mite", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::AmberSloth => EnemyStats {
+                radius: 12.0,
+                health: 150.0,
+                speed: 34.0,
+                dash_speed: 120.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 14.0,
+                contact_damage: 12.0,
+                windup_millis: 900,
+                cooldown_millis: 3_600,
+                attack_range_tiles: 2.2,
+                knockback: 120.0,
+                ..stats("Amber Sloth", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::RewindNewt => EnemyStats {
+                radius: 8.0,
+                health: 46.0,
+                speed: 80.0,
+                dash_speed: 230.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 24.0,
+                contact_damage: 9.0,
+                windup_millis: 500,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 3.0,
+                knockback: 160.0,
+                ..stats("Rewind Newt", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::EchoStalker => EnemyStats {
+                radius: 11.0,
+                health: 90.0,
+                speed: 92.0,
+                dash_speed: 290.0,
+                // Blind: it never sees (`far_notice` hears instead).
+                sight_tiles: 0.0,
+                hearing_tiles: 26.0,
+                leash_tiles: 34.0,
+                contact_damage: 16.0,
+                windup_millis: 600,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 3.5,
+                knockback: 210.0,
+                ..stats("Echo Stalker", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Shrieker => EnemyStats {
+                radius: 8.0,
+                health: 26.0,
+                speed: 70.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 9.0,
+                leash_tiles: 16.0,
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 0.6,
+                knockback: 40.0,
+                ..stats("Shrieker", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::HushMoth => EnemyStats {
+                radius: 9.0,
+                health: 30.0,
+                speed: 38.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 18.0,
+                leash_tiles: 20.0,
+                // It feeds on sound, not rigs: a soft brush at most.
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 2_500,
+                attack_range_tiles: 0.6,
+                knockback: 30.0,
+                ..stats("Hush Moth", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::PrismScarab => EnemyStats {
+                radius: 10.0,
+                health: 80.0,
+                speed: 64.0,
+                dash_speed: 220.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 12.0,
+                windup_millis: 600,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 3.0,
+                knockback: 190.0,
+                ..stats("Prism Scarab", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::SplitterSpire => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 0.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 4.0,
+                windup_millis: 900,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 12.0,
+                ..stats(
+                    "Splitter Spire",
+                    Creature,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::PrismRed, 3),
+                )
+            },
+            Self::LensWraith => EnemyStats {
+                radius: 9.0,
+                health: 44.0,
+                speed: 88.0,
+                dash_speed: 280.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 11.0,
+                windup_millis: 450,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 3.0,
+                knockback: 170.0,
+                ..stats("Lens Wraith", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::TheGlitch => EnemyStats {
+                radius: 20.0,
+                health: 520.0,
+                speed: 70.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 0.0,
+                contact_damage: 16.0,
+                windup_millis: 800,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 22.0,
+                knockback: 240.0,
+                elite: true,
+                ..stats(
+                    "The Glitch",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::GlitchBolt, 3),
+                )
+            },
+            Self::GlitchShard => EnemyStats {
+                radius: 6.0,
+                health: 18.0,
+                speed: 115.0,
+                sight_tiles: 24.0,
+                hearing_tiles: 24.0,
+                leash_tiles: 0.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Glitch Shard", Machine, Flying, AttackStyle::Contact)
+            },
         }
     }
 
@@ -2880,6 +3162,18 @@ impl EnemyKind {
             Self::Glitchling => (9.0, 9.0),
             Self::Bitworm => (10.0, 10.0),
             Self::DeadPixel => (11.0, 11.0),
+            // The far Strange Layers (Wave 9 strange-b), sized to their art.
+            Self::TickMite => (8.0, 5.0),
+            Self::AmberSloth => (17.0, 12.0),
+            Self::RewindNewt => (13.0, 6.0),
+            Self::EchoStalker => (16.0, 11.0),
+            Self::Shrieker => (10.0, 8.0),
+            Self::HushMoth => (13.0, 10.0),
+            Self::PrismScarab => (14.0, 9.0),
+            Self::SplitterSpire => (8.0, 15.0),
+            Self::LensWraith => (11.0, 12.0),
+            Self::TheGlitch => (34.0, 34.0),
+            Self::GlitchShard => (7.0, 7.0),
         }
     }
 
@@ -3019,6 +3313,14 @@ impl EnemyKind {
             (Self::Glassback | Self::Gazer, DamageKind::Fire) => 0.5,
             (Self::Tumbler, DamageKind::Kinetic) => 0.5,
             (Self::Tumbler | Self::DeadPixel, DamageKind::Explosive) => 1.4,
+            // The far Strange Layers (Wave 9): amber and crystal shells turn bullets, moths and
+            // newts burn; The Glitch is a machine (EMP stuns it).
+            (Self::AmberSloth | Self::SplitterSpire, DamageKind::Kinetic) => 0.5,
+            (Self::AmberSloth | Self::SplitterSpire | Self::PrismScarab, DamageKind::Explosive) => {
+                1.5
+            }
+            (Self::HushMoth | Self::RewindNewt | Self::TickMite, DamageKind::Fire) => 1.6,
+            (Self::TheGlitch, DamageKind::Kinetic) => 0.8,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -4026,6 +4328,41 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         EnemyKind::Bitworm | EnemyKind::DeadPixel => {
             add(richer, 1 + extra);
             add(ItemKind::Layer(crate::descent::Stratum::PixelRot), 2);
+        }
+        // The far Strange Layers (Wave 9 strange-b): each pays in its stratum's resource.
+        EnemyKind::TickMite => {
+            if rare < 35 {
+                add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+            } else {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::AmberSloth | EnemyKind::RewindNewt => {
+            add(richer, 1 + extra);
+            add(ItemKind::Material(StrategicResourceKind::RadiantFossil), 1);
+        }
+        EnemyKind::EchoStalker => {
+            add(richer, 2 + extra);
+            if rare < 40 {
+                add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+            }
+        }
+        EnemyKind::Shrieker | EnemyKind::HushMoth | EnemyKind::LensWraith => {
+            if rare < 50 {
+                add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+            } else {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::PrismScarab | EnemyKind::SplitterSpire => {
+            add(richer, 1 + extra);
+            add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
+        }
+        EnemyKind::GlitchShard => add(mineral, 1),
+        EnemyKind::TheGlitch => {
+            add(richer, 12 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 4);
+            add(ItemKind::Artifact(ArtifactKind::OldCircuit), 1);
         }
     }
     drops

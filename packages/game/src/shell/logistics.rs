@@ -13,6 +13,7 @@
 
 use fatherload_simulation::{
     PlayerCommand, PlayerId, WorldState,
+    far_strange::{FarStrangeAction, LampFilter, TIME_BUBBLE_PACK},
     living_dark::{CourtService, LivingDark, LivingDarkAction, ROOT_AXE_PACK, SwarmState},
     logistics::{
         DIVE_CHARGE_PACK, LiftOrigin, LogisticsCommand, MAX_DIVE_CHARGES, OUTPOST_SALE_PERCENT,
@@ -331,6 +332,32 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
             LogisticsCommand::LivingDark(LivingDarkAction::BuyRootAxes),
         );
     }
+    // The far Strange Layers (Wave 9): lamp filters from Descent VI on, time bubbles to buy.
+    if world.descent_strata_layout().is_some() && descent >= 5 {
+        let filter = world.lamp_filter_of(player);
+        for choice in LampFilter::ALL {
+            let label = if choice == filter {
+                format!("Lamp filter: {} (fitted)", choice.name())
+            } else {
+                format!("Lamp filter: {}", choice.name())
+            };
+            row(
+                LogisticsGroup::FieldKit,
+                label,
+                "Keyed walls open only to light of their colour".to_owned(),
+                LogisticsCommand::FarStrange(FarStrangeAction::SetFilter(choice)),
+            );
+        }
+        row(
+            LogisticsGroup::FieldKit,
+            "Buy time bubbles".to_owned(),
+            format!(
+                "{} bubbles of slow time for creatures, at outposts and in town",
+                TIME_BUBBLE_PACK.0
+            ),
+            LogisticsCommand::FarStrange(FarStrangeAction::BuyTimeBubbles),
+        );
+    }
     for (command, about) in abouts {
         if let Some(found) = rows.iter_mut().find(|row| row.command == command) {
             found.about = Some(about);
@@ -512,6 +539,11 @@ pub fn stop_prompt(world: &WorldState, player: PlayerId) -> Option<String> {
     if world.at_court(player) {
         return Some("Visit the Amber Court".to_owned());
     }
+    // Beside a keyed wall in the Prism Desert, the use button swaps the lamp filter (Wave 9).
+    if world.filter_swap_here(player) && !at_logistics_stop(world, player) {
+        let next = world.lamp_filter_of(player).next();
+        return Some(format!("Swap the lamp to {}", next.name()));
+    }
     let tile = world.player(player)?.tile_in(world.frame());
     let logistics = world.logistics();
     if let Some(outpost) = logistics.outpost_at(tile) {
@@ -588,6 +620,11 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
                 "Gravity Anchor.".to_owned()
             }
         },
+        LogisticsCommand::FarStrange(action) => match action {
+            FarStrangeAction::CycleFilter => "The lamp's filter turns.".to_owned(),
+            FarStrangeAction::SetFilter(filter) => format!("Lamp filter: {}.", filter.name()),
+            FarStrangeAction::BuyTimeBubbles => "Time bubbles racked.".to_owned(),
+        },
         LogisticsCommand::LivingDark(action) => match action {
             LivingDarkAction::BuyRootAxes => "Root axes racked.".to_owned(),
             LivingDarkAction::FireRootAxe => {
@@ -640,6 +677,32 @@ impl SeatUi {
             return false;
         }
         self.open_logistics(ctx, cues);
+        true
+    }
+
+    /// Beside a keyed wall in the Prism Desert, the use button swaps the rig's lamp filter
+    /// (Wave 9). Returns whether it did.
+    pub(super) fn try_swap_filter(
+        &mut self,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) -> bool {
+        let Some(player) = ctx.player else {
+            return false;
+        };
+        if !ctx.world.filter_swap_here(player) {
+            return false;
+        }
+        let next = ctx.world.lamp_filter_of(player).next();
+        requests.push(ShellRequest::Action {
+            seat: ctx.seat,
+            command: PlayerCommand::Logistics(LogisticsCommand::FarStrange(
+                FarStrangeAction::CycleFilter,
+            )),
+        });
+        self.message = format!("Lamp filter: {}.", next.name());
+        cues.push(SoundCue::Ui);
         true
     }
 
@@ -709,6 +772,21 @@ impl SeatUi {
             self.modal = None;
         }
     }
+}
+
+/// Whether `player`'s rig stands at a stop the use button opens the dialog at (an outpost, a
+/// lift station, one of its own beacons).
+fn at_logistics_stop(world: &WorldState, player: PlayerId) -> bool {
+    let Some(rig) = world.player(player) else {
+        return false;
+    };
+    let tile = rig.tile_in(world.frame());
+    let logistics = world.logistics();
+    logistics.outpost_at(tile).is_some()
+        || logistics.station_at(tile).is_some()
+        || logistics
+            .beacon_near(tile)
+            .is_some_and(|beacon| beacon.owner == player)
 }
 
 #[cfg(test)]

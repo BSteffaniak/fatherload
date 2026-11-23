@@ -248,6 +248,10 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
             .any(|stamp| stamp.bounds.intersects(area))
         // The Hollow World's caverns and set pieces (Wave 9): a room would float in the air.
         || crate::worldgen::descent::hollow::crosses_set_pieces(settings, &layout, area)
+        // The far Strange Layers' set pieces (Wave 9 strange-b), with a margin round them.
+        || crate::worldgen::descent::far_strange::stamps_with(settings, &layout, &area.expanded(2))
+            .iter()
+            .any(|stamp| stamp.bounds.expanded(2).intersects(area))
 }
 
 /// Whether `area` crosses a pilot-only space (V9+, stamped before the story pass) or a tomb

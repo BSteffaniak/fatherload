@@ -69,6 +69,7 @@ use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 mod crypt;
 mod distortion;
 mod drowned;
+mod far_strange;
 pub(super) mod hollow;
 mod living;
 mod sky;
@@ -76,6 +77,8 @@ mod tomb;
 
 pub use crypt::SLAM_REACH;
 pub(super) use distortion::distortion_event;
+#[cfg(test)]
+pub use far_strange::prism_shot;
 pub use sky::{JOLT_MILLIS, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES, TURRET_MOUNTS};
 pub use tomb::{GuardianMove, MAX_BATS, MAX_RAISED, guardian_move, is_tomb_guardian};
 
@@ -682,6 +685,7 @@ impl WorldState {
         if !self.living_spawn_allowed(kind)
             || !Self::drowned_spawn_allowed(kind)
             || !Self::hollow_spawn_allowed(kind)
+            || !Self::far_spawn_allowed(kind)
         {
             return false;
         }
@@ -1142,8 +1146,30 @@ impl WorldState {
         }
     }
 
-    /// One enemy's tick (see the module docs).
+    /// One enemy's tick (see the module docs), at the creature's own tempo: a far Strange
+    /// Layers creature that lives fast or slow, or any creature in a time bubble (Wave 9),
+    /// integrates its motion with its own seconds and keeps its timers on its own clock.
     pub(super) fn advance_enemy(
+        &mut self,
+        id: EntityId,
+        now: SimulationTick,
+        output: &mut TickOutput,
+    ) {
+        let tempo = self
+            .enemy_parts(id)
+            .map_or(1.0, |(body, state)| self.far_tempo(&body, &state));
+        if (tempo - 1.0).abs() <= f32::EPSILON {
+            self.advance_enemy_at_tempo(id, now, output);
+            return;
+        }
+        let dt = self.timing.delta_seconds;
+        self.timing.delta_seconds = dt * tempo;
+        self.advance_enemy_at_tempo(id, now, output);
+        self.timing.delta_seconds = dt;
+        self.shift_enemy_timers(id, now, tempo);
+    }
+
+    fn advance_enemy_at_tempo(
         &mut self,
         id: EntityId,
         now: SimulationTick,
@@ -1264,11 +1290,13 @@ impl WorldState {
         }
         let spec = state.kind.stats();
         // The Living Dark (Wave 8): factions, harmless kinds and the Mind's thralls.
+        // The far Strange Layers (Wave 9): blind hunters hear, The Glitch knows its hall.
         let noticed = self
             .living_notice(body, state)
             // The Drowned and Frozen (Wave 9): the Leviathan knows its arena.
             .or_else(|| self.drowned_notice(body, state))
             .or_else(|| self.hollow_notice(body, state, || self.perceive(body, state)))
+            .or_else(|| self.far_notice(body, state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -2232,6 +2260,10 @@ impl WorldState {
             }
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
         }
+        if kind == EnemyKind::AmberSloth {
+            // An amber sloth's touch holds the rig in amber (Wave 9, the Time Sludge).
+            self.amber_rig(player_id, output);
+        }
         if kind == EnemyKind::MudLeech
             && let Some(player) = self.players.get_mut(&player_id)
         {
@@ -2313,7 +2345,13 @@ impl WorldState {
             &VOLLEY_TURNS[1..2]
         };
         let muzzle = state.kind.stats().radius + shot.radius() + 1.0;
-        for (cos, sin) in turns {
+        for (index, (cos, sin)) in turns.iter().enumerate() {
+            // A splitter spire's fan is one bolt of each colour (Wave 9, the Prism Desert).
+            let shot = if state.kind == EnemyKind::SplitterSpire {
+                far_strange::prism_shot(index)
+            } else {
+                shot
+            };
             let dx = nx.mul_add(*cos, -ny * sin);
             let dy = nx.mul_add(*sin, ny * cos);
             let mut vx = dx * speed;
@@ -2416,8 +2454,15 @@ impl WorldState {
                 self.entities.despawn(id);
                 return;
             }
+            // A prism bolt passes through a rig whose lamp shines its colour (Wave 9).
+            let passes = |player_id: PlayerId| {
+                shot.kind
+                    .prism_colour()
+                    .is_some_and(|colour| self.lamp_filter_of(player_id) == colour)
+            };
             let victim = self.players.iter().find_map(|(player_id, player)| {
-                ((player.x - body.x).hypot(player.y - body.y) <= reach).then_some(*player_id)
+                ((player.x - body.x).hypot(player.y - body.y) <= reach && !passes(*player_id))
+                    .then_some(*player_id)
             });
             if let Some(player_id) = victim {
                 let landed = self.strike_rig(
@@ -2477,8 +2522,9 @@ impl WorldState {
         let Some((mut body, mut state)) = self.enemy_parts(id) else {
             return DamageOutcome::Ignored;
         };
-        // The Mycelial Mind cannot be hurt while its nerve nodes live (Wave 8).
-        if self.mind_shields(state.kind) {
+        // The Mycelial Mind cannot be hurt while its nerve nodes live (Wave 8), nor The Glitch
+        // while it rewrites its arena (Wave 9).
+        if self.mind_shields(state.kind) || self.far_ignores_damage(&state) {
             return DamageOutcome::Ignored;
         }
         // A glassback's mirrored face throws a frontal shot back at its shooter (Wave 9).
@@ -2491,7 +2537,10 @@ impl WorldState {
         }
         let now = self.simulation_tick.next();
         let spec = state.kind.stats();
-        let mut amount = (damage.amount * state.kind.resistance(damage.kind)).max(0.0)
+        let mut amount = (damage.amount
+            * state.kind.resistance(damage.kind)
+            * self.far_damage_scale(id, &state, damage.kind, damage.source))
+        .max(0.0)
             // The Leviathan's open maw takes double (Wave 9).
             * self.drowned_damage_factor(state.kind);
         // The Sun Serpent's armour and scales (Wave 9).
@@ -2551,6 +2600,8 @@ impl WorldState {
             self.kill_enemy(id, body, state, output);
             return DamageOutcome::Killed { dealt: amount };
         }
+        // A rewind newt badly hurt rewinds three seconds (Wave 9, the Time Sludge).
+        let _rewound = self.try_rewind(id, &mut body, &mut state, output);
         let skittish = matches!(
             state.kind,
             EnemyKind::CaveBat
@@ -2622,6 +2673,11 @@ impl WorldState {
             // A twin's hall rests (Wave 9).
             let tile = self.frame().tile_at(body.x, body.y);
             self.distortion_kill(state.kind, state.home, tile, state.last_attacker, output);
+        }
+        if state.kind.is_far_strange() {
+            // The Glitch's fight and its shards, the newts' memories (Wave 9).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.far_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2715,7 +2771,11 @@ pub const fn blast_damage(kind: ExplosiveKind) -> Option<f32> {
         ExplosiveKind::Shaped | ExplosiveKind::Rocket => 45.0,
         ExplosiveKind::Mining => 50.0,
         ExplosiveKind::Incendiary => 28.0,
-        ExplosiveKind::Emp | ExplosiveKind::Flare | ExplosiveKind::Smoke | ExplosiveKind::Scare => {
+        ExplosiveKind::Emp
+        | ExplosiveKind::Flare
+        | ExplosiveKind::Smoke
+        | ExplosiveKind::Scare
+        | ExplosiveKind::TimeBubble => {
             return None;
         }
     })
@@ -2749,6 +2809,7 @@ fn enemy_event(id: EntityId, kind: EnemyKind, body: &Body, shape: EventShape) ->
 /// guard built places.
 #[allow(
     clippy::match_same_arms,
+    clippy::too_many_lines,
     reason = "each family's habitat reads by itself"
 )]
 const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) -> bool {
@@ -2861,5 +2922,14 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
             tags.nests
         }
         EnemyKind::MirrorTwin => false,
+        // The far Strange Layers (Wave 9): fliers roost in caves, walkers nest on floors, the
+        // spire roots where nests do; The Glitch and its shards live only in its arena.
+        EnemyKind::Shrieker | EnemyKind::HushMoth | EnemyKind::LensWraith => tags.swarmers,
+        EnemyKind::TickMite | EnemyKind::RewindNewt => tags.swarmers || tags.nests,
+        EnemyKind::AmberSloth
+        | EnemyKind::EchoStalker
+        | EnemyKind::PrismScarab
+        | EnemyKind::SplitterSpire => tags.nests,
+        EnemyKind::TheGlitch | EnemyKind::GlitchShard => false,
     }
 }

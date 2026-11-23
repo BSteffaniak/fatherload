@@ -85,6 +85,9 @@ pub mod expedition;
 mod expedition_tests;
 #[cfg(test)]
 mod explosive_tests;
+mod far_strange;
+#[cfg(test)]
+mod far_strange_tests;
 #[cfg(test)]
 mod field_tests;
 mod fields;
@@ -502,6 +505,15 @@ pub struct WorldState {
     /// the landmarks found.
     #[serde(default)]
     distortion: crate::distortion::Distortion,
+    /// The far Strange Layers' shared state (Wave 9 strange-b, Descent VI, see
+    /// [`crate::far_strange`]): lamp filters, sonar pings, amber, landmarks found and The
+    /// Glitch's fight.
+    #[serde(default)]
+    far_strange: crate::far_strange::FarStrange,
+    /// The far Strange Layers' host bookkeeping (open keyed walls, rewind newts' histories,
+    /// pings and quartz rings). Saved with the world, never hashed or replicated.
+    #[serde(default)]
+    far_schedule: crate::far_strange::FarSchedule,
 }
 
 impl WorldState {

@@ -201,6 +201,8 @@ impl WorldState {
                     self.tar_under(player.x, player.y),
                 )
             });
+        // Wave 9: an amber sloth's touch holds the rig in amber (slow motion, slow burn).
+        let ambered = self.far_strange.is_ambered(player_id, self.simulation_tick);
         let player = self.players.get_mut(&player_id)?;
         // Field effects (F9): neutral everywhere without zones or stratum profiles.
         let mut field = crate::field::sample_in(
@@ -217,6 +219,9 @@ impl WorldState {
             field.gravity_x = gx * strength;
             field.gravity_y = gy * strength;
             field.free_rotation = 1.0;
+        }
+        if ambered {
+            field.time_scale *= crate::far_strange::AMBER_TEMPO;
         }
         let attitude_before = player.attitude;
         let level = field.down_angle();

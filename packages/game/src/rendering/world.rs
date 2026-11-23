@@ -44,12 +44,15 @@ mod drowned;
 mod enemies;
 mod expedition;
 mod explosives;
+mod far_strange;
 mod fluids;
 mod fx;
 mod hollow;
 mod homes;
 mod lighting;
 mod living_dark;
+
+pub(super) use far_strange::rule_color as far_rule_color;
 mod logistics;
 mod lunar;
 mod night;
@@ -218,6 +221,10 @@ pub(super) struct WorldScene<'a> {
     pub expedition: &'a fatherload_simulation::expedition::ExpeditionState,
     /// The Hollow World's shared state (Wave 9): the Sun Serpent's fight and the flares.
     pub hollow: &'a fatherload_simulation::hollow::Hollow,
+    /// The far Strange Layers (Wave 9): lamp filters, pings, amber, The Glitch's fight.
+    pub far_strange: &'a fatherload_simulation::far_strange::FarStrange,
+    /// The Rewrite Hall (The Glitch's arena), on Deep Descent worlds.
+    pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
 }
 
 impl WorldScene<'_> {
@@ -500,6 +507,27 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         seconds,
     };
     expedition::draw_expedition(draw, &expedition_scene);
+    // The far Strange Layers (Wave 9): time pockets, keyed glass and lamp pools, the Rewrite
+    // Hall's glyphs, The Glitch's torn channels.
+    let far_scene = far_strange::FarScene {
+        terrain: scene.terrain,
+        visible: scene.visible,
+        far: scene.far_strange,
+        players: scene.players,
+        bombs: scene.bombs,
+        explosions: scene.explosions,
+        enemies: scene.enemies,
+        arena: scene.glitch_arena,
+        world_millis: scene.world_millis,
+        tick_rate_hz: scene.tick_rate_hz,
+        world_tick: scene.world_tick,
+        seconds,
+        effects: scene.effects_strength,
+    };
+    far_strange::draw_time_air(draw, &far_scene);
+    far_strange::draw_prism_light(draw, &far_scene);
+    far_strange::draw_rewrite_hall(draw, &far_scene);
+    far_strange::draw_glitch_channels(draw, &far_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
@@ -514,6 +542,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             alpha: scene.bomb_alpha,
             world_tick: scene.world_tick,
             ticks: scene.ticks,
+            lamp_filter: scene.local.map_or_else(Default::default, |local| {
+                scene.far_strange.filter_of(local.player_id)
+            }),
+            world_millis: scene.world_millis,
         },
     );
     // The Sinkhole's collapse front (Wave 8): dust boiling up the zone.
@@ -565,6 +597,9 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         fx::draw_gas_cloud(draw, cloud, seconds);
     }
     explosives::draw_smoke_screens(draw, scene.bombs, seconds, scene.bomb_alpha);
+    // Time bubbles and amber (Wave 9, the Time Sludge).
+    far_strange::draw_time_bubbles(draw, &far_scene);
+    far_strange::draw_amber(draw, &far_scene);
     fx::draw_sparks(draw, scene.sparks);
     drops::draw_pickup_flights(draw, scene);
     for explosion in scene.explosions {
@@ -626,6 +661,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             alpha: scene.bomb_alpha,
             world_tick: scene.world_tick,
             ticks: scene.ticks,
+            lamp_filter: scene.local.map_or_else(Default::default, |local| {
+                scene.far_strange.filter_of(local.player_id)
+            }),
+            world_millis: scene.world_millis,
         },
         look.darkness,
     );
@@ -671,6 +710,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             seconds,
         },
     );
+    // The Echo Caves' dark: only sonar shows the cave (Wave 9).
+    far_strange::draw_echo_darkness(draw, &far_scene);
     // The Mycelial Mind's nerves: wired to its nodes while they shield it, a raw core when
     // exposed (Wave 8).
     living_dark::draw_mind_nerves(draw, scene.enemies, seconds, scene.effects_strength);
@@ -696,6 +737,10 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
                 alpha: scene.bomb_alpha,
                 world_tick: scene.world_tick,
                 ticks: scene.ticks,
+                lamp_filter: scene.local.map_or_else(Default::default, |local| {
+                    scene.far_strange.filter_of(local.player_id)
+                }),
+                world_millis: scene.world_millis,
             },
         );
     }

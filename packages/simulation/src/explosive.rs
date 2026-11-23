@@ -29,6 +29,10 @@
 //!   `WorldState::smoke_at(x, y)` answers whether a point is hidden (creature senses and line of
 //!   sight should check it; auto-aim already does), and `WorldState::smoke_screens()` lists the
 //!   live screens with their radius for presentation.
+//! * [`ExplosiveKind::TimeBubble`] (Wave 9, the Time Sludge) bursts into a bubble of slow time
+//!   that lingers where it landed: every creature inside lives at a fraction of its speed
+//!   (`WorldState::time_bubbles()` lists them, [`crate::far_strange::time_bubble_radius`] sizes
+//!   them). Rigs and pilots keep their own time. Sold at outposts and in town (not the shack).
 
 use serde::{Deserialize, Serialize};
 
@@ -70,6 +74,9 @@ pub enum ExplosiveKind {
     Scare,
     /// A rocket launcher's warhead going off on impact (never sold or carried).
     Rocket,
+    /// Thrown; bursts into a bubble of slow time where creatures crawl (Wave 9, the Time
+    /// Sludge; sold at outposts and in town).
+    TimeBubble,
 }
 
 /// How a rig deploys an explosive.
@@ -390,7 +397,7 @@ pub fn smoke_radius(stage: u8) -> f32 {
 
 impl ExplosiveKind {
     /// Every kind a rig can carry and select, in the selection cycle's order.
-    pub const SELECTABLE: [Self; 11] = [
+    pub const SELECTABLE: [Self; 12] = [
         Self::Bomb,
         Self::Sticky,
         Self::Cluster,
@@ -402,10 +409,11 @@ impl ExplosiveKind {
         Self::Flare,
         Self::Smoke,
         Self::Scare,
+        Self::TimeBubble,
     ];
 
     /// Every kind, bomblets included.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Bomb,
         Self::Sticky,
         Self::Cluster,
@@ -419,6 +427,7 @@ impl ExplosiveKind {
         Self::Smoke,
         Self::Scare,
         Self::Rocket,
+        Self::TimeBubble,
     ];
 
     #[must_use]
@@ -437,6 +446,7 @@ impl ExplosiveKind {
             Self::Smoke => "Smoke charge",
             Self::Scare => "Scare charge",
             Self::Rocket => "Rocket",
+            Self::TimeBubble => "Time bubble",
         }
     }
 
@@ -466,6 +476,7 @@ impl ExplosiveKind {
             Self::Flare => 8,
             Self::Smoke => 9,
             Self::Scare => 10,
+            Self::TimeBubble => 11,
         };
         Some(crate::item::ExplosiveId(id))
     }
@@ -484,6 +495,7 @@ impl ExplosiveKind {
             8 => Self::Flare,
             9 => Self::Smoke,
             10 => Self::Scare,
+            11 => Self::TimeBubble,
             _ => return None,
         })
     }
@@ -505,6 +517,7 @@ impl ExplosiveKind {
             Self::Smoke => "smoke charges",
             Self::Scare => "scare charges",
             Self::Rocket => "rockets",
+            Self::TimeBubble => "time bubbles",
         }
     }
 
@@ -537,6 +550,9 @@ impl ExplosiveKind {
                 "Thrown. A deafening bang that breaks nothing but sends critters running."
             }
             Self::Rocket => "A rocket launcher's warhead.",
+            Self::TimeBubble => {
+                "Thrown. Bursts into a bubble of slow time: creatures inside crawl for ten seconds."
+            }
         }
     }
 
@@ -551,7 +567,8 @@ impl ExplosiveKind {
             | Self::Emp
             | Self::Flare
             | Self::Smoke
-            | Self::Scare => Deployment::Throw,
+            | Self::Scare
+            | Self::TimeBubble => Deployment::Throw,
             Self::C4 | Self::Shaped => Deployment::Place,
         }
     }
@@ -580,7 +597,7 @@ impl ExplosiveKind {
             Self::Mining => 3_000,
             Self::Incendiary | Self::Emp => 1_500,
             Self::Flare => 350,
-            Self::Smoke => 900,
+            Self::Smoke | Self::TimeBubble => 900,
             Self::Scare => 1_200,
         }
     }
@@ -609,7 +626,9 @@ impl ExplosiveKind {
                 half_width: 1,
             },
             Self::Mining => BlastShape::LootSafe(4),
-            Self::Emp | Self::Flare | Self::Smoke | Self::Scare => BlastShape::None,
+            Self::Emp | Self::Flare | Self::Smoke | Self::Scare | Self::TimeBubble => {
+                BlastShape::None
+            }
         }
     }
 
@@ -624,7 +643,7 @@ impl ExplosiveKind {
             Self::Bomblet => TILE_SIZE * 2.0,
             Self::C4 => TILE_SIZE * 5.0,
             Self::Mining => TILE_SIZE * 6.0,
-            Self::Emp | Self::Flare | Self::Smoke => 0.0,
+            Self::Emp | Self::Flare | Self::Smoke | Self::TimeBubble => 0.0,
         }
     }
 
@@ -638,7 +657,7 @@ impl ExplosiveKind {
             Self::C4 => 540.0,
             Self::Mining => 420.0,
             Self::Scare => 200.0,
-            Self::Emp | Self::Flare | Self::Smoke => 0.0,
+            Self::Emp | Self::Flare | Self::Smoke | Self::TimeBubble => 0.0,
         }
     }
 
@@ -651,7 +670,7 @@ impl ExplosiveKind {
             }
             Self::Bomblet | Self::Rocket => TILE_SIZE * 1.5,
             Self::C4 | Self::Mining => TILE_SIZE * 3.0,
-            Self::Emp | Self::Flare | Self::Smoke | Self::Scare => 0.0,
+            Self::Emp | Self::Flare | Self::Smoke | Self::Scare | Self::TimeBubble => 0.0,
         }
     }
 
@@ -659,20 +678,20 @@ impl ExplosiveKind {
     /// knocked about).
     #[must_use]
     pub const fn chains(self) -> bool {
-        !matches!(self, Self::Flare | Self::Smoke)
+        !matches!(self, Self::Flare | Self::Smoke | Self::TimeBubble)
     }
 
     /// Whether it ticks audibly while its fuse burns (flares and smoke do not; a remote charge
     /// only once its detonator has fired, see [`crate::PlacedBomb::awaiting_remote`]).
     #[must_use]
     pub const fn has_audible_fuse(self) -> bool {
-        !matches!(self, Self::Flare | Self::Smoke)
+        !matches!(self, Self::Flare | Self::Smoke | Self::TimeBubble)
     }
 
     /// Whether it is a weapon of destruction for "no bombs" jobs (flares and smoke are utility).
     #[must_use]
     pub const fn counts_as_bomb(self) -> bool {
-        !matches!(self, Self::Flare | Self::Smoke)
+        !matches!(self, Self::Flare | Self::Smoke | Self::TimeBubble)
     }
 }
 
@@ -740,7 +759,11 @@ mod tests {
     #[test]
     fn every_selectable_kind_but_the_bomb_is_sold_and_prices_scale_with_power() {
         for kind in ExplosiveKind::SELECTABLE {
-            assert_eq!(explosive_offer(kind).is_some(), kind != ExplosiveKind::Bomb);
+            // Time bubbles (Wave 9) sell at deep outposts and in town, not at the shack.
+            assert_eq!(
+                explosive_offer(kind).is_some(),
+                kind != ExplosiveKind::Bomb && kind != ExplosiveKind::TimeBubble
+            );
         }
         assert!(explosive_offer(ExplosiveKind::Bomblet).is_none());
         let per_charge = |kind| {

@@ -159,7 +159,7 @@ pub const fn explosive_damage(kind: ExplosiveKind, machine: bool) -> f32 {
                 0.0
             }
         }
-        ExplosiveKind::Flare | ExplosiveKind::Smoke => 0.0,
+        ExplosiveKind::Flare | ExplosiveKind::Smoke | ExplosiveKind::TimeBubble => 0.0,
     }
 }
 

@@ -54,6 +54,8 @@ pub enum LandmarkGenerator {
     /// The distortion strata's halls, the rot grid and their landmarks
     /// ([`super::distortion`], Wave 9).
     Distortion,
+    /// The far Strange Layers' stamps, rock and alloy seal ([`super::far_strange`], Wave 9).
+    FarStrange,
 }
 
 /// The generator behind `kind`.
@@ -72,6 +74,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::Drowned => LandmarkGenerator::Drowned,
         LandmarkKind::HollowWorld => LandmarkGenerator::HollowWorld,
         LandmarkKind::Distortion => LandmarkGenerator::Distortion,
+        LandmarkKind::FarStrange => LandmarkGenerator::FarStrange,
     }
 }
 
@@ -416,6 +419,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::LivingDark
         | LandmarkKind::Drowned
         | LandmarkKind::HollowWorld
-        | LandmarkKind::Distortion => return None,
+        | LandmarkKind::Distortion
+        | LandmarkKind::FarStrange => return None,
     })
 }

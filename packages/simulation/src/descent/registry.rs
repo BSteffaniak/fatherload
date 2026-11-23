@@ -118,8 +118,12 @@ const WITH_GATE: &[LandmarkKind] = &[
     LandmarkKind::Prefabs,
     LandmarkKind::CaveEcosystems,
 ];
-/// Landmarks of a Strange Layers stratum (anomaly rooms).
-const STRANGE: &[LandmarkKind] = &[LandmarkKind::AnomalyRoom, LandmarkKind::Prefabs];
+/// The far Strange Layers' strata (Wave 9 strange-b): their own set pieces besides.
+const FAR_STRANGE: &[LandmarkKind] = &[
+    LandmarkKind::AnomalyRoom,
+    LandmarkKind::Prefabs,
+    LandmarkKind::FarStrange,
+];
 
 /// The Crust's creature tables (Wave 8): each stratum's own natives, with a classic kind or two
 /// staying on from the stratum above or below.
@@ -1312,16 +1316,21 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Platinum, 500, 800, 40), ore(Uranium, 500, 600, 40)],
         layer_resource: resource("Chrono Amber", StrategicResourceKind::RadiantFossil),
-        creatures: &[(Burrower, 3), (AcidSpitter, 3), (Shellback, 3)],
+        // Wave 9 strange-b: creatures that live at their own speeds.
+        creatures: &[
+            (EnemyKind::TickMite, 5),
+            (EnemyKind::AmberSloth, 3),
+            (EnemyKind::RewindNewt, 3),
+        ],
         hazards: &[(MagmaVent, 5), (Gas, 3)],
         field: FieldProfile {
-            time_scale_permille: 800,
-            screen: &[screen(ScreenEffect::ColourGrade, 350)],
+            time_scale_permille: 850,
+            screen: &[screen(ScreenEffect::ColourGrade, 300)],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Strange,
-        landmarks: STRANGE,
+        music: MusicCue::TimeSludge,
+        ambience: AmbienceCue::Clockwork,
+        landmarks: FAR_STRANGE,
         variants: &["Slow Pools", "Fast Lanes"],
         fluids: &[FluidPocketRule::cave_pools(Acid, 80)],
         ..TEMPLATE
@@ -1341,15 +1350,21 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Mythril, 500, 800, 50), ore(Diamond, 500, 600, 30)],
         layer_resource: resource("Echo Quartz", StrategicResourceKind::CrystalLens),
-        creatures: &[(RockMimic, 4), (CaveBat, 4)],
+        // Wave 9 strange-b: blind hunters, their alarms and the moths that drink sound.
+        creatures: &[
+            (EnemyKind::EchoStalker, 4),
+            (EnemyKind::Shrieker, 3),
+            (EnemyKind::HushMoth, 2),
+        ],
         hazards: &[(Pressure, 5), (Gas, 2)],
         field: FieldProfile {
-            light_permille: 100,
+            light_permille: 20,
+            screen: &[screen(ScreenEffect::Vignette, 300)],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Silence,
-        landmarks: STRANGE,
+        music: MusicCue::EchoCaves,
+        ambience: AmbienceCue::Echoes,
+        landmarks: FAR_STRANGE,
         variants: &["Whisper Halls", "Dead Air"],
         ..TEMPLATE
     },
@@ -1368,18 +1383,26 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Diamond, 600, 800, 60), ore(Emerald, 400, 600, 30)],
         layer_resource: resource("Prism Sand", StrategicResourceKind::CrystalLens),
-        creatures: &[(RockMimic, 3), (MiningDrone, 3), (SentryTurret, 2)],
+        // Wave 9 strange-b: creatures of colour.
+        creatures: &[
+            (EnemyKind::PrismScarab, 4),
+            (EnemyKind::SplitterSpire, 3),
+            (EnemyKind::LensWraith, 2),
+        ],
         hazards: &[(Explosive, 5), (Pressure, 3)],
         field: FieldProfile {
-            screen: &[screen(ScreenEffect::ChromaticAberration, 500)],
+            // Colours split, more the deeper (Wave 9: introduced gently, then pushed).
+            screen: &[screen(ScreenEffect::ChromaticAberration, 800)],
+            deepening: true,
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::StrangeLayers,
-        ambience: AmbienceCue::Strange,
+        music: MusicCue::PrismDesert,
+        ambience: AmbienceCue::Prism,
         landmarks: &[
             LandmarkKind::GateChamber,
             LandmarkKind::AnomalyRoom,
             LandmarkKind::Prefabs,
+            LandmarkKind::FarStrange,
         ],
         variants: &["Spectrum Dunes", "Keyed Walls"],
         gate: Some(GateDef {

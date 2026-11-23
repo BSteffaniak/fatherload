@@ -27,8 +27,8 @@ use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
         crypt as crypt_art, distortion as warp_art, drowned as drowned_art, enemies as art,
-        hollow as hollow_art, living as living_art, moon as moon_art, old_deep as deep_art,
-        tomb as tomb_art,
+        far_strange as far_art, hollow as hollow_art, living as living_art, moon as moon_art,
+        old_deep as deep_art, tomb as tomb_art,
     },
 };
 
@@ -152,6 +152,29 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Glitchling => &warp_art::GLITCHLING,
         EnemyKind::Bitworm => &warp_art::BITWORM,
         EnemyKind::DeadPixel => &warp_art::DEAD_PIXEL,
+        // The far Strange Layers (Wave 9).
+        EnemyKind::TickMite => &far_art::TICK_MITE,
+        EnemyKind::AmberSloth => &far_art::AMBER_SLOTH,
+        EnemyKind::RewindNewt => &far_art::REWIND_NEWT,
+        EnemyKind::EchoStalker => &far_art::ECHO_STALKER,
+        EnemyKind::Shrieker => &far_art::SHRIEKER,
+        EnemyKind::HushMoth => &far_art::HUSH_MOTH,
+        EnemyKind::PrismScarab => &far_art::PRISM_SCARAB,
+        EnemyKind::SplitterSpire => &far_art::SPLITTER_SPIRE,
+        EnemyKind::LensWraith => &far_art::LENS_WRAITH,
+        EnemyKind::TheGlitch => &far_art::THE_GLITCH,
+        EnemyKind::GlitchShard => &far_art::GLITCH_SHARD,
+    }
+}
+
+/// The tint of a lamp filter's colour on a creature (Wave 9).
+const fn prism_color(filter: fatherload_simulation::far_strange::LampFilter) -> Color {
+    use fatherload_simulation::far_strange::LampFilter;
+    match filter {
+        LampFilter::White => Color::WHITE,
+        LampFilter::Red => Color::new(255, 150, 140, 255),
+        LampFilter::Green => Color::new(150, 255, 160, 255),
+        LampFilter::Blue => Color::new(150, 190, 255, 255),
     }
 }
 
@@ -176,6 +199,10 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::PressureBubble => &drowned_art::SHOT_PRESSURE_BUBBLE,
         ShotKind::MirrorShard => &warp_art::SHOT_MIRROR_SHARD,
         ShotKind::RotPulse => &warp_art::SHOT_ROT_PULSE,
+        ShotKind::PrismRed => &far_art::SHOT_PRISM_RED,
+        ShotKind::PrismGreen => &far_art::SHOT_PRISM_GREEN,
+        ShotKind::PrismBlue => &far_art::SHOT_PRISM_BLUE,
+        ShotKind::GlitchBolt => &far_art::SHOT_GLITCH_BOLT,
     }
 }
 
@@ -191,6 +218,10 @@ pub(super) struct EnemyScene<'a> {
     pub world_tick: u64,
     /// Shell ticks (60 per second) for animation.
     pub ticks: u64,
+    /// The view's lamp filter (Wave 9: a lens wraith shows only in its own colour of light).
+    pub lamp_filter: fatherload_simulation::far_strange::LampFilter,
+    /// World milliseconds of the drawn moment (a prism scarab's shell turns with world time).
+    pub world_millis: u64,
 }
 
 impl EnemyScene<'_> {
@@ -287,6 +318,13 @@ pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
             continue;
         }
         match &entity.state {
+            // A lens wraith shows only in its own colour of light (Wave 9).
+            EntityState::Enemy(state)
+                if state.kind == EnemyKind::LensWraith
+                    && scene.lamp_filter
+                        != fatherload_simulation::WorldState::lens_wraith_colour(
+                            entity.id.get(),
+                        ) => {}
             EntityState::Enemy(state) => draw_enemy(draw, scene, entity, state, (x, y)),
             EntityState::EnemyShot(shot) => {
                 draw_shot(draw, scene, *shot, (x, y), entity.body.velocity_x < 0.0);
@@ -654,11 +692,45 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         }
         EnemyKind::DeadPixel => usize::from(state.mode == EnemyMode::Windup),
         EnemyKind::Lodestar | EnemyKind::Bitworm => sprite.frame_at(phase),
+        // The far Strange Layers (Wave 9): strides, wind-ups and The Glitch's rewrite face.
+        EnemyKind::AmberSloth
+        | EnemyKind::RewindNewt
+        | EnemyKind::EchoStalker
+        | EnemyKind::PrismScarab
+        | EnemyKind::LensWraith => {
+            if attacking {
+                2
+            } else if moving {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::SplitterSpire => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else {
+                sprite.frame_at(phase * 0.5) % 2
+            }
+        }
+        EnemyKind::TheGlitch => match state.mode {
+            EnemyMode::Stunned => 3,
+            EnemyMode::Windup => 2,
+            _ => ((phase * 1.2) as usize) % 2,
+        },
+        EnemyKind::TickMite
+        | EnemyKind::Shrieker
+        | EnemyKind::HushMoth
+        | EnemyKind::GlitchShard => sprite.frame_at(phase),
     }
 }
 
 /// World pixels per art pixel of a kind's sprite: the side-view tomb guardians (T28) are drawn
 /// half as large again, towering over a pilot on foot.
+#[allow(
+    clippy::match_same_arms,
+    reason = "the Wave 9 boss keeps a row of its own"
+)]
 const fn sprite_scale(kind: EnemyKind) -> f32 {
     match kind {
         // The eel-dragon is a mini-boss, drawn half again larger too (Wave 9 review).
@@ -668,7 +740,9 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::EelDragon
         | EnemyKind::SunSerpent
         | EnemyKind::Skyneck
-        | EnemyKind::Crestback => ART * 1.5,
+        | EnemyKind::Crestback
+        // The Glitch (Wave 9) towers over a rig: a big, readable boss.
+        | EnemyKind::TheGlitch => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
         // The Sun Serpent's coils loom large too (Wave 9); the jungle's giants share the
@@ -742,6 +816,13 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::MirrorTwin
             | EnemyKind::Glassback
             | EnemyKind::ShearMantis
+            // The far Strange Layers' (Wave 9) asymmetric kinds.
+            | EnemyKind::TickMite
+            | EnemyKind::AmberSloth
+            | EnemyKind::RewindNewt
+            | EnemyKind::EchoStalker
+            | EnemyKind::PrismScarab
+            | EnemyKind::LensWraith
     )
 }
 
@@ -809,10 +890,23 @@ fn draw_enemy(
     let hurt = state.hurt_until.get() > world_tick;
     let tint = if hurt {
         PINK
-    } else if stunned && (seconds * 10.0) as i32 % 2 == 0 {
+    } else if stunned && state.kind != EnemyKind::TheGlitch && (seconds * 10.0) as i32 % 2 == 0 {
         SKY_LIGHT
     } else {
-        Color::WHITE
+        // The far Strange Layers' creatures of colour (Wave 9): a scarab's shell and a lens
+        // wraith take their colour.
+        match state.kind {
+            EnemyKind::PrismScarab => {
+                prism_color(fatherload_simulation::far_strange::scarab_shell(
+                    entity.id.get(),
+                    scene.world_millis,
+                ))
+            }
+            EnemyKind::LensWraith => prism_color(
+                fatherload_simulation::WorldState::lens_wraith_colour(entity.id.get()),
+            ),
+            _ => Color::WHITE,
+        }
     };
     let shake = if state.mode == EnemyMode::Windup && (seconds * 30.0) as i32 % 2 == 0 {
         ART
@@ -947,6 +1041,42 @@ fn draw_enemy(
         | EnemyKind::Bitworm
         | EnemyKind::DeadPixel => {
             super::distortion::draw_creature_tell(draw, entity, state, (x, y), seconds);
+        }
+        // The far Strange Layers (Wave 9): the spire's heart, the Glitch's halo, the newt's
+        // ghost trail, the scarab's shell light.
+        EnemyKind::SplitterSpire => {
+            let pulse = ((seconds * 2.0).sin() * 2.0) as i32;
+            disc(draw, x, y - ART * 4.0, 10 + pulse, with_alpha(ICE, 34));
+        }
+        EnemyKind::TheGlitch => {
+            let pulse = ((seconds * 1.4).sin() * 4.0) as i32;
+            disc(draw, x, y, 44 + pulse, with_alpha(TEAL_DARK, 70));
+            disc(draw, x, y, 26, with_alpha(MINT, 40));
+        }
+        EnemyKind::RewindNewt => {
+            let side = -f32::from(state.facing.signum());
+            for ghost in 1..=3 {
+                disc(
+                    draw,
+                    side.mul_add(ghost as f32 * 7.0, x),
+                    y,
+                    5,
+                    with_alpha(SLATE_LIGHT, 50 - ghost as u8 * 12),
+                );
+            }
+        }
+        EnemyKind::PrismScarab => {
+            let shell = fatherload_simulation::far_strange::scarab_shell(
+                entity.id.get(),
+                scene.world_millis,
+            );
+            disc(
+                draw,
+                x,
+                y - ART * 2.0,
+                12,
+                with_alpha(prism_color(shell), 40),
+            );
         }
         EnemyKind::ShadowHound => {
             for puff in 0..3 {
@@ -1338,6 +1468,10 @@ fn draw_shot(
 ) {
     let sprite = shot_sprite(shot.kind);
     let (width, height) = (sprite.width() as f32 * ART, sprite.height() as f32 * ART);
+    #[allow(
+        clippy::match_same_arms,
+        reason = "the Wave 9 shots keep rows of their own"
+    )]
     let glow = match shot.kind {
         ShotKind::Acid | ShotKind::Spore | ShotKind::MindSpore => LIME,
         ShotKind::Fireball | ShotKind::Cannonball => ORANGE,
@@ -1350,6 +1484,11 @@ fn draw_shot(
         ShotKind::CryptArrow | ShotKind::Boulder => STONE_LIGHT,
         ShotKind::PressureBubble | ShotKind::MirrorShard => SKY_LIGHT,
         ShotKind::RotPulse => PINK,
+        // The far Strange Layers (Wave 9): each prism bolt glows its colour.
+        ShotKind::PrismRed => RED,
+        ShotKind::PrismGreen => LIME,
+        ShotKind::PrismBlue => SKY,
+        ShotKind::GlitchBolt => PINK,
     };
     disc(
         draw,

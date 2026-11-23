@@ -200,6 +200,16 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// world field and `SectionKey::Distortion` section (gazers' holds, rot pulses, the mirror halls'
 /// twin cooldowns, landmarks found) and the distortion events 560-579
 /// (`GameplayEventKind::Distortion`, `DistortionLandmarkFound`).
+///
+/// The far Strange Layers (strange-b, Descent VI strata 4-6 and its gate):
+/// * six appended `CaveTile`s (echo quartz, the red, green and blue keyed walls, builder alloy,
+///   chronoglass) in terrain ops and keyframes, eleven appended `EnemyKind`s (`TickMite` ..
+///   `GlitchShard`) and four `ShotKind`s (`PrismRed`, `PrismGreen`, `PrismBlue`, `GlitchBolt`)
+///   in entity records, `ExplosiveKind::TimeBubble` (item id 11) in charges, bays and commands,
+///   the `FarStrange` world field and `SectionKey::FarStrange` section (lamp filters, sonar
+///   pings, amber, landmarks found, The Glitch's fight), `LogisticsCommand::FarStrange` (lamp
+///   filters, time bubbles) and the far Strange Layers events 580-599
+///   (`GameplayEventKind::FarStrange`).
 pub const PROTOCOL_VERSION: u8 = 17;
 
 /// One client input frame: the controls and actions for exactly one tick.

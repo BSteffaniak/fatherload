@@ -364,10 +364,27 @@ pub enum CaveTile {
     PearlClam,
     /// Carved reef stone of Merrow City's streets and walls.
     MerrowStone,
+    // --- The far Strange Layers (Wave 9 strange-b, Descent VI), appended ---------------------
+    /// Echo quartz of the Echo Caves: a pillar of it rings (a sonar ping round it) when a rig
+    /// strikes it ([`crate::far_strange`]).
+    EchoQuartz,
+    /// A red colour-keyed wall of the Prism Desert: only red light opens it (no drill or blast
+    /// breaks it).
+    PrismRed,
+    /// A green colour-keyed wall.
+    PrismGreen,
+    /// A blue colour-keyed wall.
+    PrismBlue,
+    /// Builder alloy: only the Phase Drill cuts it, and no blast does. It seals Descent VII and
+    /// walls The Glitch's arena.
+    BuilderAlloy,
+    /// Chronoglass of the Time Sludge: amber-gold glass with a moment frozen in it (soft,
+    /// glowing).
+    Chronoglass,
 }
 
 impl CaveTile {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 41] = [
         Self::Crystal,
         Self::MushroomStem,
         Self::MushroomCap,
@@ -403,6 +420,12 @@ impl CaveTile {
         Self::PillowBasalt,
         Self::PearlClam,
         Self::MerrowStone,
+        Self::EchoQuartz,
+        Self::PrismRed,
+        Self::PrismGreen,
+        Self::PrismBlue,
+        Self::BuilderAlloy,
+        Self::Chronoglass,
     ];
 
     #[must_use]
@@ -443,6 +466,12 @@ impl CaveTile {
             Self::PillowBasalt => "pillow basalt",
             Self::PearlClam => "pearl clam",
             Self::MerrowStone => "merrow stone",
+            Self::EchoQuartz => "echo quartz",
+            Self::PrismRed => "red prism wall",
+            Self::PrismGreen => "green prism wall",
+            Self::PrismBlue => "blue prism wall",
+            Self::BuilderAlloy => "builder alloy",
+            Self::Chronoglass => "chronoglass",
         }
     }
 
@@ -485,6 +514,12 @@ impl CaveTile {
             Self::PillowBasalt => 32,
             Self::PearlClam => 33,
             Self::MerrowStone => 34,
+            Self::EchoQuartz => 35,
+            Self::PrismRed => 36,
+            Self::PrismGreen => 37,
+            Self::PrismBlue => 38,
+            Self::BuilderAlloy => 39,
+            Self::Chronoglass => 40,
         }
     }
 
@@ -517,8 +552,16 @@ impl CaveTile {
             | Self::Silt
             | Self::JellyCell
             | Self::SporePod
-            | Self::CharredRoot => 1,
+            | Self::CharredRoot
+            | Self::Chronoglass => 1,
             Self::Stalactite | Self::TreasureCache | Self::Comb => 2,
+            // Builder alloy wants the Phase Drill (checked by the drill), not a drill tier; the
+            // keyed walls never yield to a drill at all (`terrain::is_unbreakable`).
+            Self::BuilderAlloy => 1,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => {
+                crate::terrain::UNBREAKABLE_HARDNESS
+            }
+            Self::EchoQuartz => 3,
             Self::Root | Self::Flesh => 3,
             Self::AcidGland => 4,
             Self::Crystal
@@ -555,7 +598,10 @@ impl CaveTile {
         match self {
             Self::MushroomCap | Self::GlowCap | Self::GlowAlgae | Self::Silt => 2,
             Self::SporePod | Self::CharredRoot => 1,
-            Self::JellyCell => 2,
+            Self::JellyCell | Self::Chronoglass => 2,
+            Self::EchoQuartz => 6,
+            Self::BuilderAlloy => 14,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 20,
             Self::MushroomStem | Self::Mycelium | Self::Stalactite => 3,
             Self::TreasureCache | Self::Comb | Self::Flesh => 4,
             Self::Root => 6,
@@ -595,7 +641,11 @@ impl CaveTile {
             | Self::Silt
             | Self::SporePod
             | Self::CharredRoot
-            | Self::JellyCell => 0.08,
+            | Self::JellyCell
+            | Self::Chronoglass => 0.08,
+            Self::EchoQuartz => 0.17,
+            Self::BuilderAlloy => 0.24,
+            Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 0.3,
             Self::MushroomStem | Self::Mycelium | Self::Stalactite | Self::Comb => 0.1,
             Self::Flesh => 0.14,
             Self::Root => 0.18,
@@ -631,7 +681,14 @@ impl CaveTile {
         match self {
             Self::Crystal | Self::GlowCap => 3,
             Self::RuinGlyph | Self::GlowAlgae | Self::JellyCell => 2,
-            Self::TreasureCache | Self::RelicCache | Self::SporePod | Self::AcidGland => 1,
+            Self::TreasureCache
+            | Self::RelicCache
+            | Self::SporePod
+            | Self::AcidGland
+            | Self::Chronoglass
+            | Self::PrismRed
+            | Self::PrismGreen
+            | Self::PrismBlue => 1,
             // The Drowned and Frozen (Wave 9): glowing coral, warm vents, steam throats, the
             // pearls' sheen and the figures' cold light.
             Self::ThermalVent => 2,
@@ -644,6 +701,21 @@ impl CaveTile {
     #[must_use]
     pub const fn is_cache(self) -> bool {
         matches!(self, Self::TreasureCache | Self::RelicCache)
+    }
+
+    /// Whether no blast breaks it (builder alloy and the colour-keyed walls; Wave 9).
+    #[must_use]
+    pub const fn blast_proof(self) -> bool {
+        matches!(
+            self,
+            Self::BuilderAlloy | Self::PrismRed | Self::PrismGreen | Self::PrismBlue
+        )
+    }
+
+    /// Whether it is one of the Prism Desert's colour-keyed walls (opened only by light).
+    #[must_use]
+    pub const fn is_keyed_wall(self) -> bool {
+        matches!(self, Self::PrismRed | Self::PrismGreen | Self::PrismBlue)
     }
 }
 

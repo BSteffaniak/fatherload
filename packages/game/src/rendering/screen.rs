@@ -200,6 +200,8 @@ pub(super) fn draw_view_hud(
         )
         .unwrap_or_else(|| "ANCHOR".to_owned()),
     );
+    // The far Strange Layers (Wave 9): time, noise, the lamp filter, The Glitch's rule.
+    super::far_strange_hud::draw_far_strange_hud(draw, snapshot, view, rect, top + 124);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.

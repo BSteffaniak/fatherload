@@ -661,6 +661,15 @@ pub enum MusicCue {
     GravityShear,
     /// Pixel Rot: a chiptune that bit-crushes coarser the deeper the rig is.
     PixelRot,
+    // --- The far Strange Layers' own pieces (Wave 9 strange-b), appended -------------------
+    /// Time Sludge: a clockwork music box that drags and lurches, slow tick against fast tock.
+    TimeSludge,
+    /// Echo Caves: near silence, every note answered by its echo a beat later.
+    EchoCaves,
+    /// Prism Desert: shimmering detuned arpeggios split three ways, red, green and blue.
+    PrismDesert,
+    /// The Glitch's fight: stuttering, bit-crushed drums that rewrite their own pattern.
+    TheGlitch,
 }
 
 /// A stratum's ambience bed.
@@ -729,6 +738,13 @@ pub enum AmbienceCue {
     Shear,
     /// Digital hiss: static, stray bits, a dropping sample rate.
     Static,
+    // --- The far Strange Layers (Wave 9 strange-b), appended ------------------------------
+    /// Ticking, slowing and racing clockwork; drips that hang.
+    Clockwork,
+    /// Dead air, a far drip and its echoes.
+    Echoes,
+    /// Glassy hiss of prism sand, singing edges.
+    Prism,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -769,10 +785,14 @@ pub enum LandmarkKind {
     /// shear halls and the Shear Spire, the rot grid and the Dead Screen
     /// ([`crate::worldgen::descent::distortion`]).
     Distortion,
+    /// The far Strange Layers' set pieces (Wave 9 strange-b): time pockets and the Stopped
+    /// Clock, echo hollows and the Choir, keyed curtains and spectrum vaults, the Rewrite Hall
+    /// ([`crate::worldgen::descent::far_strange`]).
+    FarStrange,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -785,6 +805,7 @@ impl LandmarkKind {
         Self::Drowned,
         Self::HollowWorld,
         Self::Distortion,
+        Self::FarStrange,
     ];
 }
 

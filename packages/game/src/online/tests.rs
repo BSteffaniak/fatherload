@@ -328,6 +328,10 @@ fn excavate(world: &mut WorldState) {
 }
 
 #[test]
+#[allow(
+    clippy::large_stack_arrays,
+    reason = "a test peer handed to the session-end helper by value"
+)]
 fn clients_join_and_rejoin_a_heavily_dug_world_over_real_quic() {
     let mut world = headless_world();
     excavate(&mut world);

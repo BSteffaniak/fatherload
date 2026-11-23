@@ -814,6 +814,10 @@ pub struct RenderSnapshot<'w> {
     pub drowned: &'w fatherload_simulation::drowned::DrownedState,
     /// Where Descent IV's set pieces stand in this world.
     pub drowned_sites: DrownedSites,
+    /// The far Strange Layers (Wave 9): lamp filters, pings, amber, The Glitch's fight.
+    pub far_strange: &'w fatherload_simulation::far_strange::FarStrange,
+    /// The Rewrite Hall (The Glitch's arena), on Deep Descent worlds.
+    pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
 }
 
 /// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
@@ -955,6 +959,8 @@ impl<'w> RenderSnapshot<'w> {
                 grotto: world.eel_grotto(),
             },
             expedition: world.expedition(),
+            far_strange: world.far_strange(),
+            glitch_arena: world.glitch_arena(),
             expedition_lead: crate::shell::expedition::next_lead(world),
             people_day: world.people_clock().day,
             powered_modules: world
@@ -1175,7 +1181,9 @@ fn view_snapshot(
     fields = crate::rendering::drowned_hud::drowned_screen(world, player_id, fields);
     // A gazer's gaze mirrors the seat's screen; a dead pixel's pulse rots it (Wave 9).
     fields = world.distortion_view_fields(player_id, fields);
-    if world.glow_light_at(focus_x, focus_y).is_some() {
+    if world.glow_light_at(focus_x, focus_y).is_some()
+        || world.in_echo_caves(crate::view_frame::frame().tile_at(focus_x, focus_y))
+    {
         // The Glow Sea's dark is drawn in the world, cut back by its living lights (Wave 8):
         // the post-process does not darken the screen again round a lamp of its own.
         fields.light = 1.0;

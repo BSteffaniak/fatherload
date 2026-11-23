@@ -473,7 +473,9 @@ impl RigSystem {
             Self::SonarSuite | Self::CryoHull => Some(crate::descent::DescentBoss::Leviathan),
             // The Sun Serpent's Gravity Anchor (Wave 9: the Hollow World's gate).
             Self::GravityAnchor => Some(crate::descent::DescentBoss::SunSerpent),
-            _ => None,
+            // The Glitch's Phase Drill (Wave 9 strange-b: Descent VI's gate).
+            Self::PhaseDrill => Some(crate::descent::DescentBoss::TheGlitch),
+            Self::HeartKey => None,
         }
     }
 

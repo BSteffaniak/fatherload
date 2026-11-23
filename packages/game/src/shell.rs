@@ -791,6 +791,23 @@ pub enum SoundCue {
     GlitchBlip,
     /// A data core recovered: an eight-bit chime.
     DataChirp,
+    // The far Strange Layers (Wave 9 strange-b).
+    /// A sonar ping and its echoes.
+    EchoPing,
+    /// A time bubble bursting (time slowing).
+    TimeBubbleBurst,
+    /// A rewind newt rewinding.
+    RewindWarp,
+    /// A shrieker's scream.
+    Shriek,
+    /// Echo quartz ringing.
+    QuartzRing,
+    /// Keyed glass opening to its light (or a lamp filter swapped).
+    KeyedGlass,
+    /// The Glitch rewriting its arena's rule.
+    GlitchRewrite,
+    /// The Glitch blinking across its hall.
+    GlitchBlink,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1425,6 +1442,10 @@ impl SeatUi {
             // A deep outpost's counter, a lift station or one's own depth beacon (Part III
             // F10).
             if !ctx.on_foot() && self.open_logistics_here(ctx, cues) {
+                return false;
+            }
+            // Beside a keyed wall: swap the lamp filter (Wave 9, the Prism Desert).
+            if !ctx.on_foot() && self.try_swap_filter(ctx, cues, requests) {
                 return false;
             }
             if let Some(zone) = ctx.current_zone() {

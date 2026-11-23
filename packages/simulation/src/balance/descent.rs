@@ -307,6 +307,10 @@ pub fn registry_markers() -> Vec<Vec<Novelty>> {
                     markers.push(Novelty::new(NoveltyKind::StoryLog, log));
                 }
             }
+            // Wave 9 strange-b: the far Strange Layers' own mechanics and set pieces.
+            for name in crate::far_strange::authored_content(*stratum).2 {
+                markers.push(Novelty::new(NoveltyKind::Mechanic, *name));
+            }
             for recipe in crate::workshop::RECIPES
                 .iter()
                 .filter(|recipe| recipe.stratum() == *stratum)
@@ -375,6 +379,10 @@ impl RegistryStrata {
 }
 
 impl StratumRegistry for RegistryStrata {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one tally per authored Descent's content"
+    )]
     fn strata(&self) -> Vec<DescentStratum> {
         use crate::descent::{LandmarkKind, Stratum};
         let layout = crate::descent::fields::cached_layout(&self.settings);
@@ -419,6 +427,7 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::Drowned
                                     | LandmarkKind::HollowWorld
                                     | LandmarkKind::Distortion
+                                    | LandmarkKind::FarStrange
                             )
                         })
                         .count(),
@@ -444,7 +453,12 @@ impl StratumRegistry for RegistryStrata {
                         .saturating_add(hollow_pieces)
                         .saturating_add(warped_pieces),
                 );
-                let set_pieces = set_pieces.saturating_add(authored_pieces);
+                // Wave 9 strange-b: the far Strange Layers' mechanics and set pieces too.
+                let (far_mechanics, far_pieces, _) = crate::far_strange::authored_content(*stratum);
+                let authored_mechanics = authored_mechanics.saturating_add(far_mechanics);
+                let set_pieces = set_pieces
+                    .saturating_add(authored_pieces)
+                    .saturating_add(far_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(
                     !def.field.is_neutral()

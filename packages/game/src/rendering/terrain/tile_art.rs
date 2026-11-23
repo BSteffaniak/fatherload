@@ -44,6 +44,7 @@ mod crust_art;
 mod deep_art;
 mod distortion_art;
 mod drowned_art;
+mod far_art;
 mod hollow_art;
 mod living_art;
 mod lunar_art;
@@ -828,12 +829,15 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             // whatever cave biome the base layer put there.
             distortion_art::paint_back(&mut canvas, terrain, position, stratum, (up, left, right));
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
-            // The Living Dark's open ground shows its stratum's own wall (Wave 8).
+            // The Living Dark's open ground shows its stratum's own wall (Wave 8), and so does
+            // the far Strange Layers' (Wave 9).
             if let Some(stratum) = living_art::living_stratum(terrain, position) {
                 living_art::paint_back(&mut canvas, stratum, up, left, right);
             } else if let Some(stratum) = drowned_art::drowned_stratum(terrain, position) {
                 // So does the Drowned and Frozen's (Wave 9).
                 drowned_art::paint_back(&mut canvas, stratum, up, left, right);
+            } else if let Some(stratum) = far_art::far_stratum(terrain, position) {
+                far_art::paint_back(&mut canvas, terrain, position, stratum, up, left, right);
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }

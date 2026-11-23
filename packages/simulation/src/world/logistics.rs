@@ -96,6 +96,8 @@ pub enum LogisticsRefusal {
     LivingDark(crate::living_dark::LivingDarkRefusal),
     /// A Hollow World command's own refusal (Wave 9).
     Hollow(crate::hollow::HollowRefusal),
+    /// A far Strange Layers command's own refusal (Wave 9).
+    FarStrange(crate::far_strange::FarStrangeRefusal),
 }
 
 impl LogisticsRefusal {
@@ -148,6 +150,7 @@ impl LogisticsRefusal {
             ),
             Self::LivingDark(refusal) => refusal.message(),
             Self::Hollow(refusal) => refusal.message(),
+            Self::FarStrange(refusal) => refusal.message(),
         }
     }
 }
@@ -604,6 +607,13 @@ impl WorldState {
             LogisticsCommand::LivingDark(action) => self
                 .check_living_dark(player_id, tile, action)
                 .map_err(LogisticsRefusal::LivingDark)
+                .and_then(|credits| {
+                    self.afford(player_id, credits)?;
+                    Ok(LogisticsQuote::credits(credits))
+                }),
+            LogisticsCommand::FarStrange(action) => self
+                .check_far_strange(player_id, tile, action)
+                .map_err(LogisticsRefusal::FarStrange)
                 .and_then(|credits| {
                     self.afford(player_id, credits)?;
                     Ok(LogisticsQuote::credits(credits))
@@ -1085,6 +1095,9 @@ impl WorldState {
             }
             LogisticsCommand::Hollow(action) => {
                 self.apply_hollow(player_id, action, output);
+            }
+            LogisticsCommand::FarStrange(action) => {
+                self.apply_far_strange(player_id, tile, action, output);
             }
             LogisticsCommand::FireDiveCharge => {
                 let cut = self.dive_cut(tile);

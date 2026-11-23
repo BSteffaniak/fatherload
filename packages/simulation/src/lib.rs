@@ -33,6 +33,7 @@ pub mod environment;
 pub mod event;
 pub mod expedition;
 pub mod explosive;
+pub mod far_strange;
 pub mod field;
 pub mod fluid;
 pub mod hash;

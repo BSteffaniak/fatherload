@@ -24,6 +24,7 @@ mod descent_hud;
 pub mod drowned_hud;
 mod expedition_card;
 mod expedition_hud;
+pub mod far_strange_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
@@ -788,6 +789,8 @@ impl GameRenderer {
             },
             expedition: snapshot.expedition,
             hollow: snapshot.hollow,
+            far_strange: snapshot.far_strange,
+            glitch_arena: snapshot.glitch_arena,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

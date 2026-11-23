@@ -1264,6 +1264,15 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The far Strange Layers (Wave 9 strange-b, Descent VI; netcode codes 580-599).
+    /// Something of the far Strange Layers happened at tile `(x, y)`; `player_id` is whose
+    /// deed or whom it concerns, if anyone's.
+    FarStrange {
+        what: crate::far_strange::FarStrangeEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -369,6 +369,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
             what, player_id, ..
         } => (560 + what.code() as u32, player_id),
         GameplayEventKind::DistortionLandmarkFound { player_id, .. } => (579, Some(player_id)),
+        // The far Strange Layers (wave 9 strange-b, Descent VI): 580-599.
+        GameplayEventKind::FarStrange {
+            what, player_id, ..
+        } => (580 + what.code() as u32, player_id),
     }
 }
 

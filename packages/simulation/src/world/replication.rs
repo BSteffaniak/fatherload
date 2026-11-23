@@ -240,6 +240,9 @@ pub enum SectionKey {
     /// The distortion strata (Wave 9, Descent VI part A): gazers' holds, rot pulses, the
     /// mirror halls' twin cooldowns and the landmarks found.
     Distortion,
+    /// The far Strange Layers: lamp filters, sonar pings, amber, landmarks found and The
+    /// Glitch's fight (Wave 9 strange-b; keyed walls travel as terrain ops).
+    FarStrange,
 }
 
 impl SectionKey {
@@ -259,7 +262,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 27] = [
+    pub const SHARED: [Self; 28] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -288,6 +291,8 @@ impl SectionKey {
         Self::Drowned,
         Self::Hollow,
         Self::Distortion,
+        // The far Strange Layers (Wave 9 strange-b).
+        Self::FarStrange,
     ];
 }
 
@@ -323,6 +328,7 @@ pub enum SectionPayload {
     Expedition(Box<crate::expedition::ExpeditionState>),
     Hollow(Box<crate::hollow::Hollow>),
     Distortion(Box<crate::distortion::Distortion>),
+    FarStrange(Box<crate::far_strange::FarStrange>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -523,6 +529,8 @@ impl WorldState {
             drowned,
             hollow,
             distortion,
+            far_strange,
+            far_schedule: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -628,6 +636,7 @@ impl WorldState {
             SectionKey::Drowned => SectionPayload::Drowned(Box::new(drowned.clone())),
             SectionKey::Hollow => SectionPayload::Hollow(Box::new(hollow.clone())),
             SectionKey::Distortion => SectionPayload::Distortion(Box::new(distortion.clone())),
+            SectionKey::FarStrange => SectionPayload::FarStrange(Box::new(far_strange.clone())),
         })
     }
 
@@ -811,6 +820,9 @@ impl WorldState {
             }
             (SectionKey::Distortion, SectionPayload::Distortion(distortion)) => {
                 self.distortion = *distortion;
+            }
+            (SectionKey::FarStrange, SectionPayload::FarStrange(far_strange)) => {
+                self.far_strange = *far_strange;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

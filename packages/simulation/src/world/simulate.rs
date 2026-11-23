@@ -553,6 +553,8 @@ impl WorldState {
         self.advance_drowned(next_tick, &mut output);
         // The distortion strata (Wave 9): mirror halls and their twins, gazes, rot, landmarks.
         self.advance_distortion(next_tick, &mut output);
+        // The far Strange Layers (Wave 9): amber, pings, keyed walls, landmarks, The Glitch.
+        self.advance_far_strange(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

@@ -179,8 +179,12 @@ impl WorldState {
             hollow,
             // Distortion state is ticks and tile keys (Wave 9).
             distortion: _,
+            // Pings and keyed walls are tiles and ticks (Wave 9); newts remember local points.
+            far_strange: _,
+            far_schedule,
         } = self;
         hollow.serpent.reframe_mark(shift);
+        far_schedule.newts.reframe(shift);
         player_template.reframe(shift);
         players.reframe(shift);
         lost_cargo_sites.reframe(shift);

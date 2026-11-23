@@ -67,6 +67,11 @@ const fn row_icon(row: &LogisticsRow) -> &'static SpriteDef {
         }
         // The Hollow World (Wave 9): the Gravity Anchor.
         LogisticsCommand::Hollow(_) => &menu_icons::SIGNAL,
+        // The far Strange Layers (Wave 9): lamp filters and time bubbles.
+        LogisticsCommand::FarStrange(action) => match action {
+            fatherload_simulation::far_strange::FarStrangeAction::BuyTimeBubbles => &icons::BOMB,
+            _ => &icons::HEADLAMP,
+        },
         // The Living Dark (Wave 8): root axes and the Amber Court's counter.
         LogisticsCommand::LivingDark(action) => match action {
             LivingDarkAction::BuyRootAxes | LivingDarkAction::FireRootAxe => &menu_icons::HAMMER,

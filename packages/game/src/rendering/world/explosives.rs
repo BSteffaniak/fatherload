@@ -35,6 +35,7 @@ pub const fn charge_sprite(kind: ExplosiveKind) -> Option<&'static SpriteDef> {
         ExplosiveKind::Flare => &art::FLARE,
         ExplosiveKind::Smoke => &art::SMOKE,
         ExplosiveKind::Scare => &art::SCARE,
+        ExplosiveKind::TimeBubble => &art::TIME_BUBBLE,
     })
 }
 
@@ -370,6 +371,18 @@ fn draw_pulse(draw: &mut impl RaylibDraw, explosion: &Explosion, t: f32) -> bool
             if t < 0.2 {
                 disc(draw, x, y, 10, with_alpha(ICE, 160));
             }
+            true
+        }
+        ExplosiveKind::TimeBubble => {
+            // A golden ring swelling out (the bubble itself is the burning charge, Wave 9).
+            let radius = (t * 2.0).min(1.0) * TILE_SIZE * 2.5;
+            disc(
+                draw,
+                x,
+                y,
+                radius as i32,
+                with_alpha(GOLD, (120.0 * (1.0 - t)) as u8),
+            );
             true
         }
         ExplosiveKind::Smoke => {

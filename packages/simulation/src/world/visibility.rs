@@ -50,6 +50,8 @@ impl WorldState {
         // So is the Living Dark's regrowth schedule (Wave 8): its writes reach clients as
         // terrain ops.
         world.living_schedule = crate::living_dark::LivingSchedule::default();
+        // And the far Strange Layers' (Wave 9): keyed walls reach clients as terrain ops.
+        world.far_schedule = crate::far_strange::FarSchedule::default();
         world
     }
 
@@ -101,6 +103,8 @@ impl WorldState {
             expedition: _,
             drowned: _,
             hollow: _,
+            far_strange: _,
+            far_schedule: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

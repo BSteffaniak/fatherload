@@ -157,6 +157,7 @@ impl WorldState {
     /// The stock rig only drills while resting on solid ground: down into the tile below, or
     /// sideways. The drill mount upgrade adds sideways drilling in flight (gimbal) and drilling
     /// up into a ceiling the rig thrusts against (crown bore).
+    #[allow(clippy::too_many_lines, reason = "the drill's checks in order")]
     pub(crate) fn apply_drill_intent(
         &mut self,
         player_id: PlayerId,
@@ -227,6 +228,11 @@ impl WorldState {
                     .hardness_at(target)
                     .is_some_and(|hardness| hardness > effective_drill_strength)
             {
+                self.set_active_drill(player_id, None);
+                return PlayerScopedCommandOutcome::Applied;
+            }
+            // Builder alloy yields only to the Phase Drill (Wave 9, Descent VI's reward).
+            if !unrestricted && self.alloy_refuses(player_id, tile.kind) {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
@@ -342,6 +348,8 @@ impl WorldState {
                 let reach = 4 + self.sonar_bonus(player_id);
                 let _revealed = self.reveal_scanner_area(player_id, center, reach);
                 let _contacts = self.ping_pois(player_id, center);
+                // In the Echo Caves the press is also a sonar ping (Wave 9).
+                let _pinged = self.echo_sonar_ping(player_id);
                 PlayerScopedCommandOutcome::Applied
             }
             PlayerCommand::PlaceBomb => {

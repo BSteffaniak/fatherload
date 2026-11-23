@@ -124,6 +124,10 @@ impl WorldState {
             hollow,
             // A leaving rig's gaze and rot go with it; halls and landmarks stay (Wave 9).
             distortion,
+            // A leaving rig's lamp filter and amber go with it (Wave 9); the rest is the
+            // world's.
+            far_strange,
+            far_schedule: _,
         } = self;
         hollow.forget(player_id);
         distortion.forget(player_id);
@@ -132,6 +136,7 @@ impl WorldState {
         old_deep.forget(player_id);
         living_dark.forget(player_id);
         drowned.forget(player_id);
+        far_strange.forget(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

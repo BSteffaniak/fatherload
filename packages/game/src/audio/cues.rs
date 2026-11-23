@@ -302,6 +302,14 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::GravityGroan => Patch::GravityGroan,
         SoundCue::GlitchBlip => Patch::GlitchBlip,
         SoundCue::DataChirp => Patch::DataChirp,
+        SoundCue::EchoPing => Patch::EchoPing,
+        SoundCue::TimeBubbleBurst => Patch::TimeBubbleBurst,
+        SoundCue::RewindWarp => Patch::RewindWarp,
+        SoundCue::Shriek => Patch::Shriek,
+        SoundCue::QuartzRing => Patch::QuartzRing,
+        SoundCue::KeyedGlass => Patch::KeyedGlass,
+        SoundCue::GlitchRewrite => Patch::GlitchRewrite,
+        SoundCue::GlitchBlink => Patch::GlitchBlink,
     }
 }
 
@@ -375,6 +383,8 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::PressureBubble => SoundCue::FluidRush,
         ShotKind::MirrorShard => SoundCue::GlassChime,
         ShotKind::RotPulse => SoundCue::GlitchBlip,
+        ShotKind::PrismRed | ShotKind::PrismGreen | ShotKind::PrismBlue => SoundCue::KeyedGlass,
+        ShotKind::GlitchBolt => SoundCue::GlitchBlink,
     }
 }
 
@@ -480,6 +490,30 @@ pub const fn hollow_cue(what: fatherload_simulation::hollow::HollowEvent) -> Sou
     }
 }
 
+/// The sound of a far Strange Layers event (Wave 9; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn far_strange_cue(
+    what: fatherload_simulation::far_strange::FarStrangeEvent,
+) -> SoundCue {
+    use fatherload_simulation::far_strange::FarStrangeEvent as E;
+    match what {
+        E::TimeShift | E::TimeBubble => SoundCue::TimeBubbleBurst,
+        E::Ambered => SoundCue::FleshSquelch,
+        E::Rewound => SoundCue::RewindWarp,
+        E::MiteCrumbled => SoundCue::BoneCrumble,
+        E::SonarPing => SoundCue::EchoPing,
+        E::QuartzRang => SoundCue::QuartzRing,
+        E::Shriek => SoundCue::Shriek,
+        E::FilterSwapped | E::KeyedOpened => SoundCue::KeyedGlass,
+        E::LandmarkFound => SoundCue::AnomalyHum,
+        E::GlitchAwoke | E::GlitchRewriting => SoundCue::GlitchRewrite,
+        E::GlitchRewrote | E::GlitchBlinked => SoundCue::GlitchBlink,
+        E::GlitchDefeated => SoundCue::CreatureDeath,
+        E::GateRewards => SoundCue::MilestoneFanfare,
+        E::Bought => SoundCue::Upgrade,
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -495,6 +529,7 @@ pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
         ExplosiveKind::Flare => SoundCue::FlareIgnite,
         ExplosiveKind::Smoke => SoundCue::SmokeBurst,
         ExplosiveKind::Scare => SoundCue::ScareBang,
+        ExplosiveKind::TimeBubble => SoundCue::TimeBubbleBurst,
     }
 }
 
@@ -955,6 +990,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // The distortion strata (Wave 9).
         GameplayEventKind::Distortion { what, .. } => Some(distortion_cue(*what)),
         GameplayEventKind::DistortionLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
+        // The far Strange Layers (Wave 9).
+        GameplayEventKind::FarStrange { what, .. } => Some(far_strange_cue(*what)),
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
@@ -1319,7 +1356,8 @@ mod tests {
             | GameplayEventKind::Drowned { .. }
             | GameplayEventKind::Hollow { .. }
             | GameplayEventKind::Distortion { .. }
-            | GameplayEventKind::DistortionLandmarkFound { .. } => {}
+            | GameplayEventKind::DistortionLandmarkFound { .. }
+            | GameplayEventKind::FarStrange { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2394,6 +2432,14 @@ mod tests {
             SoundCue::GravityGroan,
             SoundCue::GlitchBlip,
             SoundCue::DataChirp,
+            SoundCue::EchoPing,
+            SoundCue::TimeBubbleBurst,
+            SoundCue::RewindWarp,
+            SoundCue::Shriek,
+            SoundCue::QuartzRing,
+            SoundCue::KeyedGlass,
+            SoundCue::GlitchRewrite,
+            SoundCue::GlitchBlink,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

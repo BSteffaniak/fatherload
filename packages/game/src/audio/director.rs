@@ -311,10 +311,19 @@ enum SeatLoop {
     RotMusic,
     RotMusicCrushed,
     RotMusicRuined,
+    // The far Strange Layers' music and beds (Wave 9): one piece and one bed per stratum, The
+    // Glitch's fight.
+    TimeSludgeMusic,
+    EchoCavesMusic,
+    PrismDesertMusic,
+    GlitchMusic,
+    ClockworkBed,
+    EchoesBed,
+    PrismBed,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
-const SEAT_LOOP_SLOTS: u32 = 48;
+const SEAT_LOOP_SLOTS: u32 = 64;
 
 /// Seconds for an environment's ambience to crossfade in or out (Wave 6), so walking into a
 /// town, a tomb or the colony blends the beds instead of cutting them.
@@ -940,6 +949,7 @@ impl Director {
         self.drowned_music(live, listener, snapshot);
         self.hollow_music(live, listener, snapshot);
         self.distortion_music(live, listener, snapshot);
+        self.far_strange_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1702,6 +1712,95 @@ impl Director {
         for (slot, patch, gain) in beds {
             self.loop_command(live, listener, slot, patch, (gain, 0.0, 1.0, OPEN_CUTOFF));
         }
+    }
+
+    /// The far Strange Layers' music (Wave 9): the bed and ambience of the stratum the seat is
+    /// in; The Glitch's theme instead while it fights in the hall the seat is in.
+    fn far_strange_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::descent::MusicCue;
+        let terrain = snapshot.terrain;
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let cue = terrain
+            .settings()
+            .generator
+            .has_descents()
+            .then(|| terrain.stratum_at(tile).def().music);
+        let fighting = snapshot.far_strange.glitch.awake()
+            && snapshot
+                .glitch_arena
+                .is_some_and(|arena| arena.expanded(4).contains(tile));
+        let pieces = [
+            (
+                MusicCue::TimeSludge,
+                SeatLoop::TimeSludgeMusic,
+                Patch::TimeSludgeLoop,
+                0.4,
+            ),
+            (
+                MusicCue::EchoCaves,
+                SeatLoop::EchoCavesMusic,
+                Patch::EchoCavesLoop,
+                0.45,
+            ),
+            (
+                MusicCue::PrismDesert,
+                SeatLoop::PrismDesertMusic,
+                Patch::PrismDesertLoop,
+                0.36,
+            ),
+        ];
+        let beds = [
+            (
+                MusicCue::TimeSludge,
+                SeatLoop::ClockworkBed,
+                Patch::ClockworkLoop,
+                0.3,
+            ),
+            (
+                MusicCue::EchoCaves,
+                SeatLoop::EchoesBed,
+                Patch::EchoesLoop,
+                0.35,
+            ),
+            (
+                MusicCue::PrismDesert,
+                SeatLoop::PrismBed,
+                Patch::PrismLoop,
+                0.3,
+            ),
+        ];
+        for (piece, slot, patch, gain) in pieces {
+            let playing = cue == Some(piece) && !fighting;
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        for (piece, slot, patch, gain) in beds {
+            let playing = cue == Some(piece);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::GlitchMusic,
+            Patch::GlitchLoop,
+            (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
     }
 
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
@@ -2519,7 +2618,7 @@ mod tests {
 
     #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
-        assert!((SeatLoop::ForgeAmbience as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::PrismBed as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

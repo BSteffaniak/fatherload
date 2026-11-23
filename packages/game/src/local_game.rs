@@ -545,6 +545,7 @@ impl LocalGame {
         self.announce_living_dark(&players);
         self.announce_drowned(&players);
         self.announce_distortion(&players);
+        self.announce_far_strange(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1180,6 +1181,82 @@ impl LocalGame {
             self.shell.seat_mut(seat).remembered = Some((settlement, day));
             self.shell
                 .story_moment(seat, crate::shell::StoryMomentKind::Remembered, place, text);
+        }
+    }
+
+    /// The far Strange Layers' news (Wave 9): a landmark's story beat as a card on every local
+    /// seat; The Glitch's waking, rewrites (with the coming rule) and fall; amber, a shriek
+    /// and a crossing into a time pocket for the seat they concern.
+    fn announce_far_strange(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::far_strange::FarStrangeEvent as E;
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(String, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::FarStrange {
+                what,
+                player_id,
+                x,
+                y,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let glitch = &world.far_strange().glitch;
+            let text = match what {
+                E::LandmarkFound => {
+                    if let Some(landmark) =
+                        world.far_landmark_at(fatherload_simulation::terrain::TilePosition { x, y })
+                    {
+                        cards.push((landmark.name().to_owned(), landmark.beat().to_owned()));
+                    }
+                    continue;
+                }
+                E::GlitchAwoke => {
+                    "The Glitch wakes. Every wound makes it rewrite this hall's rules.".to_owned()
+                }
+                E::GlitchRewriting => glitch.rewriting.map_or_else(
+                    || "The Glitch is rewriting the hall...".to_owned(),
+                    |(next, _)| format!("REWRITING: {} (brace yourself)", next.label()),
+                ),
+                E::GlitchRewrote => format!("Rule rewritten: {}", glitch.rule.label()),
+                E::GateRewards => "The Glitch is erased. Phase Drill fitted: builder alloy yields                                    to it, and Descent VII lies beyond."
+                    .to_owned(),
+                E::Ambered => "Held in amber! The rig crawls until it wears off.".to_owned(),
+                E::Shriek => "A shrieker screams: every stalker near knows where you are.".to_owned(),
+                E::TimeShift => {
+                    let slow = player_id
+                        .and_then(|player| world.player(player))
+                        .is_some_and(|rig| world.fields_at(rig.x, rig.y).time_scale < 1.0);
+                    if slow {
+                        "Time thickens: a slow pool.".to_owned()
+                    } else {
+                        "Time races: a fast lane.".to_owned()
+                    }
+                }
+                _ => continue,
+            };
+            for (seat, player) in players.iter().enumerate() {
+                if player_id.is_none_or(|owner| owner == *player) {
+                    messages.push((seat, text.clone()));
+                }
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (title, text) in cards {
+            for seat in 0..players.len() {
+                self.shell.story_moment(
+                    seat,
+                    crate::shell::StoryMomentKind::Anomaly,
+                    title.clone(),
+                    text.clone(),
+                );
+            }
         }
     }
 

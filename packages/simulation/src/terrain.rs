@@ -1581,7 +1581,8 @@ impl Terrain {
                         Some(left) => left,
                     },
                     // Cave caches shrug off blasts like POI loot: a bomb has no owner to pay.
-                    TileKind::Cave(cave) if cave.is_cache() => continue,
+                    // Builder alloy and the keyed walls shrug them off too (Wave 9).
+                    TileKind::Cave(cave) if cave.is_cache() || cave.blast_proof() => continue,
                     // So do sky caches and nests (WP-SKY): drill them, or bring their island down.
                     TileKind::Sky(sky) if sky.is_cache() => continue,
                     // The Old Deep's fixtures and the Star Core itself (only a drill strikes
@@ -1874,6 +1875,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         // The Star Core arena, the shielded core and the Cathedral Lift's fixtures (Wave 8).
         TileKind::Deep(tile) => tile.indestructible(),
         TileKind::Hollow(tile) => tile.indestructible(),
+        // The Prism Desert's colour-keyed walls open only to light (Wave 9).
+        TileKind::Cave(tile) => tile.is_keyed_wall(),
         _ => false,
     }
 }

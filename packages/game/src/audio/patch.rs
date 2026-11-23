@@ -16,6 +16,7 @@ use std::f32::consts::TAU;
 
 mod distortion;
 mod drowned;
+mod far_strange;
 mod hollow;
 mod old_deep;
 
@@ -450,6 +451,23 @@ patches! {
     RotLoop => "loop_pixel_rot",
     RotLoopCrushed => "loop_pixel_rot_crushed",
     RotLoopRuined => "loop_pixel_rot_ruined",
+    // The far Strange Layers (wave 9 strange-b), appended at the end so every earlier patch
+    // keeps its seeds.
+    EchoPing => "echo_ping",
+    TimeBubbleBurst => "time_bubble",
+    RewindWarp => "rewind_warp",
+    Shriek => "shriek",
+    QuartzRing => "quartz_ring",
+    KeyedGlass => "keyed_glass",
+    GlitchRewrite => "glitch_rewrite",
+    GlitchBlink => "glitch_blink",
+    TimeSludgeLoop => "loop_time_sludge",
+    EchoCavesLoop => "loop_echo_caves",
+    PrismDesertLoop => "loop_prism_desert",
+    GlitchLoop => "loop_glitch",
+    ClockworkLoop => "loop_clockwork",
+    EchoesLoop => "loop_echoes",
+    PrismLoop => "loop_prism",
 }
 
 /// Playback metadata of a patch.
@@ -889,6 +907,34 @@ impl Patch {
                 .instances(3)
                 .send(0.1)
                 .jitter(0.0, 0.5),
+            // The far Strange Layers (Wave 9): music and beds loop; the one-shots are heard from
+            // where they happen, The Glitch's rewrite is big.
+            Self::TimeSludgeLoop
+            | Self::EchoCavesLoop
+            | Self::PrismDesertLoop
+            | Self::GlitchLoop
+            | Self::ClockworkLoop
+            | Self::EchoesLoop
+            | Self::PrismLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.55)
+                .jitter(0.02, 0.5),
+            Self::TimeBubbleBurst | Self::RewindWarp | Self::GlitchBlink => {
+                PatchInfo::new(Feedback)
+                    .instances(2)
+                    .send(0.35)
+                    .jitter(0.04, 0.8)
+            }
+            Self::Shriek => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.05, 1.0),
+            Self::GlitchRewrite => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.4)
+                .jitter(0.0, 0.3)
+                .priority(8),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1485,6 +1531,21 @@ impl Patch {
             Self::RotLoop => distortion::rot_loop(rng),
             Self::RotLoopCrushed => distortion::rot_loop_crushed(rng),
             Self::RotLoopRuined => distortion::rot_loop_ruined(rng),
+            Self::EchoPing => far_strange::sonar_ping(rng),
+            Self::TimeBubbleBurst => far_strange::time_bubble(rng),
+            Self::RewindWarp => far_strange::rewind(rng),
+            Self::Shriek => far_strange::shriek(rng),
+            Self::QuartzRing => far_strange::quartz_ring(rng),
+            Self::KeyedGlass => far_strange::keyed_glass(rng),
+            Self::GlitchRewrite => far_strange::glitch_rewrite(rng),
+            Self::GlitchBlink => far_strange::glitch_blink(rng),
+            Self::TimeSludgeLoop => far_strange::time_sludge_loop(rng),
+            Self::EchoCavesLoop => far_strange::echo_caves_loop(rng),
+            Self::PrismDesertLoop => far_strange::prism_desert_loop(rng),
+            Self::GlitchLoop => far_strange::glitch_loop(rng),
+            Self::ClockworkLoop => far_strange::clockwork_bed(rng),
+            Self::EchoesLoop => far_strange::echoes_bed(rng),
+            Self::PrismLoop => far_strange::prism_bed(rng),
         }
     }
 }

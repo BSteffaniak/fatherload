@@ -248,6 +248,54 @@ pub const FLARE: SpriteDef = SpriteDef {
 };
 
 /// A smoke canister: a squat grey can with vent holes and a pull ring.
+/// A time bubble (Wave 9): an hourglass of amber glass in a brass frame.
+pub const TIME_BUBBLE: SpriteDef = SpriteDef {
+    name: "world_time_bubble",
+    legend: &[
+        ('o', INK),
+        ('c', COPPER),
+        ('a', AMBER),
+        ('g', GOLD),
+        ('w', CREAM),
+    ],
+    frames: &[&[
+        "oooooooo", //
+        "ocwaagco", //
+        ".ogaago.", //
+        "..oggo..", //
+        "...go...", //
+        "..ogwo..", //
+        ".oagago.", //
+        "ocgaaaco", //
+        "oooooooo", //
+    ]],
+    frame_seconds: 0.0,
+};
+
+/// The HUD icon of a time bubble (Wave 9): an hourglass in a golden ring.
+pub const ICON_TIME_BUBBLE: SpriteDef = SpriteDef {
+    name: "icon_time_bubble",
+    legend: &[
+        ('o', INK),
+        ('c', COPPER),
+        ('a', AMBER),
+        ('g', GOLD),
+        ('w', CREAM),
+    ],
+    frames: &[&[
+        "..ggggg..", //
+        ".g.ooo.g.", //
+        "g.owaao.g", //
+        "g..oao..g", //
+        "g...g...g", //
+        "g..owo..g", //
+        "g.oaaao.g", //
+        ".g.ooo.g.", //
+        "..ggggg..", //
+    ]],
+    frame_seconds: 0.0,
+};
+
 pub const SMOKE: SpriteDef = SpriteDef {
     name: "world_smoke",
     legend: &[
@@ -545,5 +593,6 @@ pub const fn icon(kind: fatherload_simulation::ExplosiveKind) -> &'static Sprite
         ExplosiveKind::Flare => &ICON_FLARE,
         ExplosiveKind::Smoke => &ICON_SMOKE,
         ExplosiveKind::Scare => &ICON_SCARE,
+        ExplosiveKind::TimeBubble => &ICON_TIME_BUBBLE,
     }
 }

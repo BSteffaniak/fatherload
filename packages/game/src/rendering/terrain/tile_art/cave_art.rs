@@ -61,6 +61,10 @@ const fn crystal_ramp(band: Band) -> Ramp {
 
 /// The glow colour of a lit cave tile in `band` (halos, the light overlay's tint).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "the far Strange Layers' tiles keep rows of their own"
+)]
 pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
     match tile {
         CaveTile::Crystal => Some(match band {
@@ -75,6 +79,11 @@ pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
         CaveTile::GlowAlgae | CaveTile::SporePod | CaveTile::AcidGland => Some(LIME),
         CaveTile::TreasureCache | CaveTile::RelicCache => Some(GOLD),
         CaveTile::JellyCell => Some(CREAM),
+        // The far Strange Layers (Wave 9): coloured glass and chronoglass glow.
+        CaveTile::PrismRed => Some(RED),
+        CaveTile::PrismGreen => Some(LIME),
+        CaveTile::PrismBlue => Some(SKY),
+        CaveTile::Chronoglass => Some(GOLD),
         _ => super::drowned_art::drowned_glow(tile),
     }
 }
@@ -111,6 +120,13 @@ pub const fn cave_color(tile: CaveTile, band: Band) -> Color {
         CaveTile::JellyCell => CREAM,
         CaveTile::SporePod => VIOLET,
         CaveTile::AcidGland => MAROON,
+        // The far Strange Layers (Wave 9).
+        CaveTile::EchoQuartz => SKY_LIGHT,
+        CaveTile::PrismRed => RED,
+        CaveTile::PrismGreen => LIME,
+        CaveTile::PrismBlue => SKY,
+        CaveTile::BuilderAlloy => STEEL_DARK,
+        CaveTile::Chronoglass => AMBER,
         // The Drowned and Frozen (Wave 9).
         _ => match super::drowned_art::drowned_color(tile) {
             Some(color) => color,
@@ -306,6 +322,7 @@ fn paint_back(
 }
 
 /// Paints the cave tile `tile` at `position`.
+#[allow(clippy::too_many_lines, reason = "one arm per cave tile family")]
 pub(super) fn paint(
     canvas: &mut TileCanvas,
     terrain: &Terrain,
@@ -363,6 +380,26 @@ pub(super) fn paint(
             return;
         }
         _ => {}
+    }
+    // The far Strange Layers' tiles (Wave 9): quartz, keyed glass, alloy, chronoglass.
+    if let Some(material) = super::far_art::far_ramp(tile) {
+        for py in 0..TILE_ART {
+            for px in 0..TILE_ART {
+                let (x, y) = (canvas.origin_x + px, canvas.origin_y + py);
+                if let Some(index) = super::far_art::far_pixel(tile, x, y) {
+                    canvas.set(px, py, index);
+                }
+            }
+        }
+        paint_edges(
+            canvas,
+            strata,
+            edges,
+            material[3],
+            material[0],
+            tile.is_keyed_wall(),
+        );
+        return;
     }
     let crystal = crystal_ramp(band);
     for py in 0..TILE_ART {
