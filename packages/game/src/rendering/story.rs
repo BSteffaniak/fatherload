@@ -245,6 +245,7 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::StrangePlace => ("A STRANGE PLACE", ICE, PanelStyle::Accent),
         StoryMomentKind::BuilderEcho => ("A BUILDER ECHO", TEAL, PanelStyle::Accent),
         StoryMomentKind::HeartPlace => ("THE HEART", GOLD, PanelStyle::Accent),
+        StoryMomentKind::DescentReached => ("A NEW DESCENT", GOLD, PanelStyle::Accent),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
     lines.truncate(match moment.kind {
@@ -252,6 +253,7 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         | StoryMomentKind::RadioEcho
         | StoryMomentKind::GhostRecording
         | StoryMomentKind::BuilderEcho
+        | StoryMomentKind::DescentReached
         | StoryMomentKind::Remembered
         | StoryMomentKind::DeepLore
         | StoryMomentKind::StrangePlace

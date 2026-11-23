@@ -161,7 +161,137 @@ pub const EXPEDITION_SCENES: &[Scene] = &[
         summary: "A mirror anomaly room: the screen and controls mirrored, glass walls and twin caches",
         setup: |stage| anomaly_scene(stage, AnomalyKind::Mirror),
     },
+    // --- Wave 10 story: the finale. ----------------------------------------------------------
+    Scene {
+        name: "story_megacity_camp",
+        summary: "Wave 10: the Fathers' camp on a builder street in the Buried Megacity, under a street lamp that came on for them",
+        setup: |stage| camp_scene(stage, 61, Shot::Waiting),
+    },
+    Scene {
+        name: "story_letter_home",
+        summary: "Wave 10: Amos's letter home at the Seal Gate, read on its card",
+        setup: |stage| camp_scene(stage, 71, Shot::Read),
+    },
+    Scene {
+        name: "story_heart_camp",
+        summary: "Wave 10: Amos alone at the Heart: the sled's name board and his rail crutch at the tent, the Star Drive's log on its card",
+        setup: |stage| camp_scene(stage, 79, Shot::Read),
+    },
+    Scene {
+        name: "story_last_log",
+        summary: "Wave 10: the trail's end: Amos's chair of board and crutch by the cable root, Dov's recorder on it, the last log on its card",
+        setup: |stage| camp_scene(stage, 80, Shot::Read),
+    },
+    Scene {
+        name: "story_last_site",
+        summary: "Wave 10: the trail's last site in the Heart without its card: the cable root's gold light over the empty chair",
+        setup: |stage| camp_scene(stage, 80, Shot::Waiting),
+    },
+    Scene {
+        name: "story_descent_card",
+        summary: "Wave 10: the card when the crew first reaches a Descent (VII, the Ancients)",
+        setup: descent_card_scene,
+    },
+    Scene {
+        name: "story_descent_progress",
+        summary: "Wave 10: the journal's Descent progress page: Descents reached, gates won, logs found per Descent",
+        setup: progress_scene,
+    },
+    Scene {
+        name: "story_ending",
+        summary: "Wave 10: the ending: the cable lights from the Heart to the Moon, the page where Wren Varga looks up",
+        setup: |stage| ending_scene(stage, 7),
+    },
+    Scene {
+        name: "story_ending_last",
+        summary: "Wave 10: the ending's last page: the dock wakes and the sky past the Moon is open",
+        setup: |stage| ending_scene(stage, 8),
+    },
 ];
+
+/// A crew deep in Descent VI with a rig parked just inside Descent VII: its first tick there
+/// raises the new Descent's card.
+fn descent_card_scene(stage: &mut SceneStage<'_>) {
+    let room = site(61);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(60, u8::try_from(ECHOES.len()).unwrap_or(u8::MAX));
+        journal.descents = 0b0011_1111;
+        world.set_expedition(journal);
+        let floor = room.floor_row();
+        let x = room.bounds.min.x - 24;
+        carve(world, x - 8..x + 8, floor - 3..floor);
+        place_rig(world, player, x, floor - 1);
+        reveal(world, player, x - 30..x + 30, floor - 16..floor + 14);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(30);
+}
+
+/// The progress page of a crew partway through the Descent: six Descents reached, five gates
+/// won, the trail read to log 52.
+fn progress_scene(stage: &mut SceneStage<'_>) {
+    use fatherload_simulation::{descent::DescentBoss, expedition::progress::boss_bit};
+    let room = site(52);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(52, u8::try_from(ECHOES.len()).unwrap_or(u8::MAX));
+        journal.descents = 0b0011_1111;
+        journal.bosses = [
+            DescentBoss::TheSinkhole,
+            DescentBoss::StarCore,
+            DescentBoss::MycelialMind,
+            DescentBoss::Leviathan,
+            DescentBoss::SunSerpent,
+        ]
+        .into_iter()
+        .map(boss_bit)
+        .fold(0, |bits, bit| bits | bit);
+        world.set_expedition(journal);
+        let floor = room.floor_row();
+        let x = room.bounds.min.x - 20;
+        carve(world, x - 6..x + 6, floor - 3..floor);
+        place_rig(world, player, x, floor - 1);
+        reveal(world, player, x - 30..x + 30, floor - 16..floor + 14);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::DescentProgress);
+    // The Hollow World: its chapter's revelation pinned under the list.
+    seat.selected_menu_item = 4;
+    seat.message.clear();
+    stage.settle(3);
+}
+
+/// The ending on page `page`, the crew at the Heart with the whole trail read and the cable lit.
+fn ending_scene(stage: &mut SceneStage<'_>, page: usize) {
+    let room = site(80);
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        let mut journal = read_up_to(80, u8::try_from(ECHOES.len()).unwrap_or(u8::MAX));
+        journal.descents = 0xFF;
+        journal.bosses = 0x00FF;
+        journal.cable_lit = true;
+        world.set_expedition(journal);
+        let floor = room.floor_row();
+        let x = room.bounds.min.x - 20;
+        carve(world, x - 6..x + 6, floor - 3..floor);
+        place_rig(world, player, x, floor - 1);
+        reveal(world, player, x - 30..x + 30, floor - 16..floor + 14);
+        world.stream_terrain_near_players();
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::Ending);
+    seat.selected_menu_item = page;
+    seat.message.clear();
+    // Long enough for the cable's light to climb to the page's station.
+    stage.settle(150);
+}
 
 /// Swaps the staged world's terrain for the scene world, with its depth logistics and rules,
 /// and fits the rig for the deep.
@@ -187,11 +317,13 @@ fn site(number: u8) -> ExpeditionSite {
     sites::sites(&settings())[usize::from(number - 1)]
 }
 
-/// The journal of a crew that has read logs `1..=found` and heard `echoes` echoes.
+/// The journal of a crew that has read logs `1..=found` and heard `echoes` echoes (every
+/// Descent counts as reached, so no new Descent's card covers a scene; Wave 10).
 fn read_up_to(found: u8, echoes: u8) -> ExpeditionState {
     ExpeditionState {
         found,
         echoes,
+        descents: 0xFF,
         ..ExpeditionState::default()
     }
 }

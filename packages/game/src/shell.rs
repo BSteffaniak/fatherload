@@ -175,6 +175,13 @@ pub enum ModalScreen {
     /// charted in the Archive of Stars, with a picture of the charted sky. After the codex in
     /// the page cycle.
     StarCharts,
+    /// The Descent progress page (Wave 10 story, `shell/expedition.rs`): the Descents reached,
+    /// gates won, logs found per Descent and bosses beaten. After the codex in the page cycle.
+    DescentProgress,
+    /// The ending (Wave 10 story): the cable lights from the Heart to the Moon, one beat a page
+    /// ([`SeatUi::selected_menu_item`] is the beat). Opens on every local seat when the Heart
+    /// wakes; confirm (or a tap) turns the page, back closes it.
+    Ending,
 }
 
 impl ModalScreen {
@@ -1733,6 +1740,14 @@ impl SeatUi {
             self.handle_star_charts(input, ctx.world, cues);
             return true;
         }
+        if modal == ModalScreen::DescentProgress {
+            self.handle_descent_progress(input, ctx.world, cues);
+            return true;
+        }
+        if modal == ModalScreen::Ending {
+            self.handle_ending(input, cues);
+            return true;
+        }
         if modal == ModalScreen::Logistics {
             self.handle_logistics(input, ctx, cues, requests);
             return true;
@@ -1956,7 +1971,9 @@ impl SeatUi {
             | ModalScreen::Logistics
             | ModalScreen::ExpeditionLog
             | ModalScreen::ExpeditionCodex
-            | ModalScreen::StarCharts => None,
+            | ModalScreen::StarCharts
+            | ModalScreen::DescentProgress
+            | ModalScreen::Ending => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1

@@ -19,8 +19,9 @@
 use raylib::prelude::*;
 
 use fatherload_simulation::{
+    descent::Descent,
     expedition::{
-        ExpeditionState, SiteKind,
+        ExpeditionState, LOGS, SiteKind,
         anomaly::{AnomalyKind, AnomalyRoom, rooms_in},
         sites::{ExpeditionSite, sites_in},
     },
@@ -114,6 +115,10 @@ pub(super) fn draw_expedition(draw: &mut impl RaylibDraw, scene: &ExpeditionScen
                 draw_camp(draw, scene, &site);
                 dress_camp(draw, scene, &site);
             }
+            // The trail's last site (Wave 10): Amos's chair by the cable root at the Heart.
+            SiteKind::Rig if usize::from(site.log) + 1 == LOGS.len() => {
+                draw_last_chair(draw, scene, &site);
+            }
             SiteKind::Rig => draw_wreck(draw, &site),
             SiteKind::Marker => draw_cairn(draw, &site),
             SiteKind::Grave => draw_grave(draw, scene, &site),
@@ -128,6 +133,12 @@ pub(super) fn draw_expedition(draw: &mut impl RaylibDraw, scene: &ExpeditionScen
 enum CampDress {
     /// Descents I-III: the camp as they set out.
     Plain,
+    /// Descent VII (Wave 10): a camp pitched on a builder street, under a street lamp that came
+    /// on for them, on tram rails, Amos's rail crutch at the tent once his leg is broken.
+    City,
+    /// Descent VIII (Wave 10): Amos alone. The sled's name board leans on the tent, his crutch
+    /// beside it, gold motes drifting from the drive below.
+    Alone,
     /// Descent IV: the sled lashed on fuel drums as a raft, frost on the canvas, a paddle.
     Raft,
     /// Descent V: a thatch of giant leaves over the tent, a hammock, a beast's tusk.
@@ -141,9 +152,30 @@ const fn camp_dress(site: &ExpeditionSite) -> CampDress {
     match site.stratum.descent() {
         Descent::DrownedAndFrozen => CampDress::Raft,
         Descent::HollowWorld => CampDress::Jungle,
-        Descent::StrangeLayers | Descent::Ancients | Descent::Heart => CampDress::Thin,
+        Descent::StrangeLayers => CampDress::Thin,
+        Descent::Ancients => CampDress::City,
+        Descent::Heart => CampDress::Alone,
         Descent::Crust | Descent::OldDeep | Descent::LivingDark => CampDress::Plain,
     }
+}
+
+/// A crutch of tram rail leaning at `x` (Amos's, from the Engine Halls on; Wave 10).
+fn crutch(draw: &mut impl RaylibDraw, pen: Pen, x: i32, floor: i32) {
+    for step in 0..30 {
+        pen.px(draw, x + step / 6, floor - 1 - step, STEEL_LIGHT);
+        pen.px(draw, x + 1 + step / 6, floor - 1 - step, STEEL_DARK);
+    }
+    pen.rect(draw, x + 3, floor - 31, 7, 2, STEEL);
+    pen.rect(draw, x + 3, floor - 31, 7, 1, STEEL_LIGHT);
+    pen.rect(draw, x + 2, floor - 16, 4, 2, MAROON);
+}
+
+/// The sled's board with its painted name, leaning at `x` (Wave 10).
+fn name_board(draw: &mut impl RaylibDraw, pen: Pen, x: i32, floor: i32) {
+    pen.boxed(draw, x, floor - 15, 58, 13, SOIL);
+    pen.rect(draw, x + 1, floor - 14, 56, 2, CLAY);
+    pen.text(draw, "FATHERS'", x + 4, floor - 12, RED);
+    pen.rect(draw, x + 2, floor - 3, 54, 1, LOAM);
 }
 
 /// The deeper Descents' dressing over a camp ([`CampDress`]).
@@ -158,6 +190,41 @@ fn dress_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Ex
     let sled_x = tent_x + tent_w + 4 + 46;
     match camp_dress(site) {
         CampDress::Plain => {}
+        CampDress::City => {
+            // Tram rails along the floor: two steel lines on sleepers.
+            for x in (0..width).step_by(10) {
+                pen.rect(draw, x, floor - 2, 6, 2, SLATE_DARK);
+            }
+            pen.rect(draw, 0, floor - 3, width, 1, STEEL_LIGHT);
+            // A builder street lamp, taller than a person, its head a pale blue glass.
+            let lamp_x = width - 30;
+            pen.rect(draw, lamp_x, floor - 64, 3, 64, STEEL_DARK);
+            pen.rect(draw, lamp_x + 1, floor - 64, 1, 64, STEEL);
+            pen.rect(draw, lamp_x - 6, floor - 68, 15, 4, STEEL_DARK);
+            pen.boxed(draw, lamp_x - 4, floor - 66, 11, 6, SKY);
+            pen.rect(draw, lamp_x - 3, floor - 65, 9, 2, ICE);
+            // The ball-on-a-cable glyph cut in the lamp's foot.
+            pen.rect(draw, lamp_x + 1, floor - 14, 1, 5, SKY_LIGHT);
+            pen.rect(draw, lamp_x, floor - 9, 3, 3, SKY_LIGHT);
+            if site.log >= 63 {
+                crutch(draw, pen, tent_x + tent_w + 1, floor);
+            }
+        }
+        CampDress::Alone => {
+            name_board(draw, pen, tent_x + 4, floor);
+            crutch(draw, pen, tent_x + tent_w - 2, floor);
+            // Gold motes rising slowly from the floor (the drive's breath; never a flash).
+            for index in 0..10 {
+                let rise = ((scene.seconds * 6.0) as i32 + index * 13) % 60;
+                let x = (index * 29 + i32::from(site.log) * 7) % (width - 6) + 3;
+                pen.px(
+                    draw,
+                    x,
+                    floor - 2 - rise,
+                    with_alpha(GOLD, 200 - (rise * 3) as u8),
+                );
+            }
+        }
         CampDress::Raft => {
             // Frost along the canvas's ridge and slopes.
             for row in (0..tent_h).step_by(3) {
@@ -417,11 +484,14 @@ fn draw_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Exp
     pen.rect(draw, roll_x + 14, floor - 7, 2, 7, BONE);
     pen.rect(draw, roll_x + 19, floor - 6, 3, 5, PLUM);
     let sled_x = roll_x + 46;
-    pen.rect(draw, sled_x, floor - 12, 44, 9, SOIL);
-    pen.rect(draw, sled_x, floor - 12, 44, 2, CLAY);
-    pen.rect(draw, sled_x - 3, floor - 3, 50, 2, STEEL_DARK);
-    pen.rect(draw, sled_x - 5, floor - 6, 3, 4, STEEL_DARK);
-    pen.text(draw, "F.L.", sled_x + 10, floor - 11, BONE);
+    // At the Heart the sled is gone (folded in a gravity well; Wave 10): only its board is left.
+    if camp_dress(site) != CampDress::Alone {
+        pen.rect(draw, sled_x, floor - 12, 44, 9, SOIL);
+        pen.rect(draw, sled_x, floor - 12, 44, 2, CLAY);
+        pen.rect(draw, sled_x - 3, floor - 3, 50, 2, STEEL_DARK);
+        pen.rect(draw, sled_x - 5, floor - 6, 3, 4, STEEL_DARK);
+        pen.text(draw, "F.L.", sled_x + 10, floor - 11, BONE);
+    }
     // A cold stove with its pipe and the last embers.
     let stove_x = roll_x + 28;
     pen.boxed(draw, stove_x, floor - 12, 12, 12, SLATE_DARK);
@@ -444,6 +514,83 @@ fn draw_camp(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &Exp
     pen.rect(draw, width - 12, floor - 22, 2, 22, LOAM);
     pen.rect(draw, width - 17, floor - 23, 12, 3, STEEL);
     pen.px(draw, width - 18, floor - 22, STEEL_LIGHT);
+}
+
+/// The trail's last site (Wave 10): where Amos Varga kept the Star Drive company. The cable
+/// root rises from the floor in gold-lit builder metal; beside it his chair, the sled's name
+/// board laid across two stones with his rail crutch as its back, Dov's recorder on the seat,
+/// his lamp beside it, burned out. The board is tied to the root with the tow rope.
+fn draw_last_chair(draw: &mut impl RaylibDraw, scene: &ExpeditionScene<'_>, site: &ExpeditionSite) {
+    let inner = site.interior();
+    let pen = pen_at(inner.min);
+    let floor = floor_y(site);
+    let width = (inner.max.x - inner.min.x + 1) * T;
+    // The cable root: a thick column of builder metal with gold seams that breathe slowly.
+    let root_x = width - 24;
+    pen.rect(draw, root_x, 0, 18, floor, SLATE_DARK);
+    pen.rect(draw, root_x + 2, 0, 14, floor, STEEL_DARK);
+    pen.rect(draw, root_x + 4, 0, 3, floor, STEEL);
+    let glow = 140 + ((scene.seconds * 1.2).sin() * 50.0) as i32;
+    for y in (6..floor).step_by(14) {
+        pen.rect(draw, root_x + 2, y, 14, 1, with_alpha(GOLD, glow as u8));
+    }
+    // Roots of metal spreading into the floor.
+    for (dx, len) in [(-8, 8), (18, 10), (-14, 5)] {
+        pen.rect(draw, root_x + dx, floor - 2, len, 2, SLATE_DARK);
+    }
+    // The chair: two stones, the board across them as the seat, the crutch tied upright as its
+    // back with his hat hung on it.
+    let seat_x = 50;
+    for x in [seat_x + 2, seat_x + 44] {
+        pen.boxed(draw, x, floor - 12, 14, 12, STONE_DARK);
+        pen.rect(draw, x + 1, floor - 11, 12, 10, STONE);
+        pen.rect(draw, x + 1, floor - 11, 12, 1, STONE_LIGHT);
+    }
+    pen.boxed(draw, seat_x, floor - 22, 62, 11, SOIL);
+    pen.rect(draw, seat_x + 1, floor - 21, 60, 2, CLAY);
+    pen.text(draw, "FATHERS'", seat_x + 5, floor - 19, RED);
+    let back_x = seat_x + 64;
+    pen.rect(draw, back_x, floor - 62, 3, 50, STEEL_DARK);
+    pen.rect(draw, back_x, floor - 62, 1, 50, STEEL_LIGHT);
+    pen.rect(draw, back_x - 5, floor - 64, 13, 3, STEEL);
+    pen.rect(draw, back_x - 5, floor - 64, 13, 1, STEEL_LIGHT);
+    pen.rect(draw, back_x - 1, floor - 40, 5, 3, MAROON);
+    // His hat on the crutch: a wide brim and a dented crown.
+    pen.rect(draw, back_x - 9, floor - 66, 21, 3, SOIL_DARK);
+    pen.rect(draw, back_x - 5, floor - 74, 13, 8, LOAM);
+    pen.rect(draw, back_x - 5, floor - 74, 13, 2, CLAY);
+    pen.rect(draw, back_x - 5, floor - 68, 13, 2, MAROON);
+    pen.px(draw, back_x + 1, floor - 74, SOIL_DARK);
+    // The tow rope from the board to the root, sagging.
+    let (from, to) = (back_x + 3, root_x);
+    for x in from..to {
+        let t = (x - from) as f32 / (to - from).max(1) as f32;
+        let sag = (t * (1.0 - t) * 16.0) as i32;
+        pen.rect(draw, x, floor - 20 + sag, 1, 2, SAND);
+    }
+    // Dov's recorder on the seat: a box with two reels and a strap.
+    pen.boxed(draw, seat_x + 12, floor - 32, 20, 10, SLATE_DARK);
+    pen.rect(draw, seat_x + 13, floor - 31, 18, 8, SLATE);
+    for reel in [seat_x + 16, seat_x + 25] {
+        pen.rect(draw, reel, floor - 29, 4, 4, MIST);
+        pen.px(draw, reel + 1, floor - 28, INK);
+    }
+    pen.rect(draw, seat_x + 14, floor - 35, 16, 1, INK);
+    // His lamp, burned out, at the chair's foot.
+    pen.boxed(draw, 6, floor - 12, 9, 12, STEEL_DARK);
+    pen.rect(draw, 7, floor - 9, 7, 5, SLATE);
+    pen.rect(draw, 8, floor - 15, 5, 3, STEEL);
+    // Gold motes rising from the root (slow).
+    for index in 0..12 {
+        let rise = ((scene.seconds * 5.0) as i32 + index * 11) % 70;
+        let x = root_x - 6 + (index * 17) % 30;
+        pen.px(
+            draw,
+            x,
+            floor - 3 - rise,
+            with_alpha(CREAM, 210 - (rise * 3) as u8),
+        );
+    }
 }
 
 /// Embers glow on and off slowly (twice a second at most: never a flash).
@@ -883,6 +1030,20 @@ pub(super) fn draw_expedition_lights(draw: &mut impl RaylibDraw, scene: &Expedit
             pen.rect(draw, -2, -3, 4, 5, GOLD);
             pen.rect(draw, -1, -2, 2, 3, CREAM);
             pen.rect(draw, -2, -4, 4, 1, STEEL_DARK);
+        }
+        if site.kind == SiteKind::Rig && usize::from(site.log) + 1 == LOGS.len() {
+            // The cable root's warm light over Amos's chair (Wave 10).
+            let x = col_px(inner.max.x) - 8.0 * ART;
+            let y = row_px(inner.max.y) + 4.0 * ART;
+            disc(draw, x, y, (70.0 * breathe) as i32, with_alpha(GOLD, 16));
+            disc(draw, x, y, (34.0 * breathe) as i32, with_alpha(CREAM, 22));
+        }
+        if site.kind == SiteKind::Camp && site.stratum.descent() == Descent::Ancients {
+            // The builder street lamp's cold blue light (Wave 10).
+            let x = col_px(inner.max.x) - 28.5 * ART;
+            let y = row_px(inner.max.y) + (T as f32 - 64.0) * ART;
+            disc(draw, x, y, (40.0 * breathe) as i32, with_alpha(SKY, 18));
+            disc(draw, x, y, (16.0 * breathe) as i32, with_alpha(ICE, 30));
         }
         if site.kind == SiteKind::Grave {
             // The headstone holds the sun's warmth and gives it back softly.

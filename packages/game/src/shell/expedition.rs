@@ -243,8 +243,41 @@ impl SeatUi {
             self.open_modal(ModalScreen::ExpeditionLog);
             return;
         }
-        // The star charts come next on Deep Descent worlds (Wave 10; only they have the
-        // Archive of Stars), then the map.
+        if input.tab_next {
+            self.open_modal(ModalScreen::DescentProgress);
+            return;
+        }
+        if !input.confirm {
+            return;
+        }
+        match rows.get(self.selected_menu_item) {
+            Some(CodexRow::Entry(..)) => cues.push(SoundCue::UiMove),
+            Some(CodexRow::TurnPage) | None => self.open_modal(ModalScreen::DescentProgress),
+        }
+    }
+
+    /// The Descent progress page (Wave 10): a row per Descent (selecting one shows its gate,
+    /// logs and chapter under the list), then "Turn the page" (the map).
+    pub(super) fn handle_descent_progress(
+        &mut self,
+        input: PlayerInput,
+        world: &WorldState,
+        cues: &mut Vec<SoundCue>,
+    ) {
+        if input.backs_out() {
+            self.modal = None;
+            cues.push(SoundCue::UiBack);
+            return;
+        }
+        let rows = progress_rows(world.expedition());
+        self.move_selection(input, rows.len().saturating_sub(1));
+        self.selected_menu_item = self.selected_menu_item.min(rows.len().saturating_sub(1));
+        if input.tab_previous {
+            self.open_modal(ModalScreen::ExpeditionCodex);
+            return;
+        }
+        // The star charts come next on Deep Descent worlds (Wave 10 ancients-a; only they have
+        // the Archive of Stars), then the map.
         let next = if world.terrain().settings().generator.has_descents() {
             ModalScreen::StarCharts
         } else {
@@ -258,10 +291,70 @@ impl SeatUi {
             return;
         }
         match rows.get(self.selected_menu_item) {
-            Some(CodexRow::Entry(..)) => cues.push(SoundCue::UiMove),
-            Some(CodexRow::TurnPage) | None => self.open_modal(next),
+            Some(ProgressRow::Descent(_)) => cues.push(SoundCue::UiMove),
+            Some(ProgressRow::TurnPage) | None => self.open_modal(next),
         }
     }
+
+    /// The ending's pages (Wave 10): confirm or a tap turns to the next beat, and past the last
+    /// the card closes and play goes on; back closes it at once.
+    pub(super) fn handle_ending(&mut self, input: PlayerInput, cues: &mut Vec<SoundCue>) {
+        if input.backs_out() {
+            self.modal = None;
+            cues.push(SoundCue::UiBack);
+            return;
+        }
+        if input.confirm || input.menu_pick.is_some() {
+            if self.selected_menu_item + 1 >= ENDING_PAGES {
+                self.modal = None;
+                cues.push(SoundCue::Ui);
+            } else {
+                self.selected_menu_item += 1;
+                cues.push(SoundCue::UiMove);
+            }
+        }
+    }
+}
+
+/// Pages of the ending: its lead, then one per epilogue beat.
+pub const ENDING_PAGES: usize = fatherload_simulation::expedition::ending::EPILOGUE.len() + 1;
+
+/// The words of ending page `page`: `(place, text)`.
+#[must_use]
+pub fn ending_page(page: usize) -> (&'static str, &'static str) {
+    use fatherload_simulation::expedition::ending::{ENDING_LEAD, ENDING_TITLE, EPILOGUE};
+    page.checked_sub(1)
+        .and_then(|beat| EPILOGUE.get(beat))
+        .map_or((ENDING_TITLE, ENDING_LEAD), |beat| (beat.place, beat.line))
+}
+
+/// One row of the Descent progress page.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProgressRow {
+    /// A Descent (index into [`fatherload_simulation::descent::Descent::ALL`]).
+    Descent(usize),
+    /// Back to the map.
+    TurnPage,
+}
+
+/// The progress page's rows: one per Descent, then "Turn the page". The crew's state is shared,
+/// so every seat and partner sees the same rows.
+#[must_use]
+pub fn progress_rows(_state: &ExpeditionState) -> Vec<ProgressRow> {
+    let mut rows: Vec<ProgressRow> = (0..fatherload_simulation::descent::Descent::ALL.len())
+        .map(ProgressRow::Descent)
+        .collect();
+    rows.push(ProgressRow::TurnPage);
+    rows
+}
+
+/// The card a Descent reached raises: `(title, text)`.
+#[must_use]
+pub fn descent_reached_words(descent: fatherload_simulation::descent::Descent) -> (String, String) {
+    (
+        format!("Descent {}: {}", descent.numeral(), descent.name()),
+        fatherload_simulation::expedition::progress::arrival_line(descent).to_owned(),
+    )
 }
 
 /// One row of the expedition codex.

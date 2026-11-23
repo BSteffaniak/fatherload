@@ -50,6 +50,8 @@ pub enum StoryMomentKind {
     /// A place of the Heart found (Wave 10: the Upfall, the Lens, the Ferry Terminal, the
     /// Heart's chamber).
     HeartPlace,
+    /// A new Descent reached (Wave 10 story): the chapter's name and what waits there.
+    DescentReached,
 }
 
 /// A card across the seat's view telling a moment of a story.

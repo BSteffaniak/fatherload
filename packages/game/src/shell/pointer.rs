@@ -67,11 +67,13 @@ impl ShellState {
                 match seat.modal {
                     None => false,
                     // A confirmation shows the one offer being confirmed; the selection stays
-                    // on the row that led here.
+                    // on the row that led here. The ending's selection is its page (Wave 10):
+                    // a tap anywhere turns it.
                     Some(
                         ModalScreen::FuelConfirm
                         | ModalScreen::RepairConfirm
-                        | ModalScreen::ShopConfirm,
+                        | ModalScreen::ShopConfirm
+                        | ModalScreen::Ending,
                     ) => true,
                     Some(_) => {
                         seat.selected_menu_item = row;

@@ -573,8 +573,12 @@ impl LocalGame {
     /// what the canister held (or that a chapter is complete). An anomaly room's card is for
     /// the seat that stepped in (its rule is where that rig is); a sealed canister is a line.
     fn announce_expedition(&mut self, players: &[PlayerId]) {
-        use crate::shell::expedition::{anomaly_words, echo_words, log_found_words, sealed_words};
+        use crate::shell::expedition::{
+            anomaly_words, descent_reached_words, echo_words, log_found_words, sealed_words,
+        };
+        use fatherload_simulation::expedition::progress::StoryEvent;
         let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut ending = false;
         let found = self.runtime.world().expedition().found;
         let mut moments: Vec<(usize, crate::shell::StoryMomentKind, String, String)> = Vec::new();
         let mut messages: Vec<(usize, String)> = Vec::new();
@@ -605,6 +609,30 @@ impl LocalGame {
                         }
                     }
                 }
+                // The finale (wave 10 story): a new Descent's card on every local seat (the
+                // crew's progress is shared), and the ending's pages when the Heart wakes.
+                GameplayEventKind::Story {
+                    what: StoryEvent::DescentReached(descent),
+                    ..
+                } => {
+                    // First in line: a log or echo raised on the same tick takes the card.
+                    let (title, text) = descent_reached_words(descent);
+                    for seat in 0..players.len() {
+                        moments.insert(
+                            0,
+                            (
+                                seat,
+                                crate::shell::StoryMomentKind::DescentReached,
+                                title.clone(),
+                                text.clone(),
+                            ),
+                        );
+                    }
+                }
+                GameplayEventKind::Story {
+                    what: StoryEvent::CableLit,
+                    ..
+                } => ending = true,
                 GameplayEventKind::AnomalyEntered {
                     player_id,
                     kind,
@@ -628,6 +656,13 @@ impl LocalGame {
         }
         for (seat, message) in messages {
             self.shell.seat_mut(seat).message = message;
+        }
+        if ending {
+            for seat in 0..players.len() {
+                let ui = self.shell.seat_mut(seat);
+                ui.modal = Some(crate::shell::ModalScreen::Ending);
+                ui.selected_menu_item = 0;
+            }
         }
     }
 

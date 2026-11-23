@@ -1420,6 +1420,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::ExpeditionLog => super::expedition_hud::draw_expedition_journal(draw, ui),
         ModalScreen::ExpeditionCodex => super::expedition_hud::draw_expedition_codex(draw, ui),
         ModalScreen::StarCharts => super::ancient_city_hud::draw_star_charts(draw, ui),
+        ModalScreen::DescentProgress => super::expedition_hud::draw_descent_progress(draw, ui),
+        ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
     }
 }
 

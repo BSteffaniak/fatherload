@@ -61,7 +61,7 @@ impl SeatUi {
         self.move_selection(input, rows.len().saturating_sub(1));
         self.selected_menu_item = self.selected_menu_item.min(rows.len().saturating_sub(1));
         if input.tab_previous {
-            self.open_modal(ModalScreen::ExpeditionCodex);
+            self.open_modal(ModalScreen::DescentProgress);
             return;
         }
         if input.tab_next {

@@ -80,14 +80,22 @@ fn reading_a_canister_puts_its_log_card_up_and_the_journal_lists_it() {
         },
     );
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionCodex));
-    // Nothing found yet: only "Turn the page", which goes on to the star charts (Wave 10)
-    // and from there, with none read, to the map.
+    // Nothing found yet: only "Turn the page", which goes on to the Descent progress page
+    // (Wave 10), then the star charts and, with none read, the map.
     let entries = crate::shell::expedition::codex_entries(game.world());
     assert_eq!(crate::shell::expedition::codex_rows(&entries).len(), 1);
     let _ = press(
         &mut game,
         PlayerInput {
             menu_pick: Some(0),
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::DescentProgress));
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            tab_next: true,
             ..PlayerInput::default()
         },
     );
@@ -231,4 +239,113 @@ fn arriving_at_the_old_deeps_outpost_its_people_come_out_to_talk() {
         })
         .count();
     assert_eq!(folk, 5, "the station's five residents are about");
+}
+
+/// Wave 10: a new Descent raises its card on every seat, the codex turns to the Descent
+/// progress page (rows by touch, tabs back to the codex) and the map after it.
+#[test]
+fn a_new_descent_has_its_card_and_the_progress_page_follows_the_codex() {
+    use crate::shell::expedition::{ProgressRow, progress_rows};
+    let mut world = deep_world();
+    world.set_expedition(ExpeditionState {
+        echoes: u8::try_from(ECHOES.len()).unwrap_or(u8::MAX),
+        ..ExpeditionState::default()
+    });
+    let mut game = playing(world, 2, "descent-progress");
+    idle(&mut game, 2);
+    // Somewhere in the Old Deep, clear of every canister.
+    let settings = *game.world().terrain().settings();
+    let site = sites::sites(&settings)[12];
+    let tile = site.canister();
+    game.edit_world(|world| {
+        world.grant_deep_claim();
+        world.teleport_rig_to(
+            PLAYER,
+            WorldPos::tile_center(i64::from(tile.x - 40), i64::from(tile.y)),
+        );
+    });
+    idle(&mut game, 2);
+    assert!(
+        game.world()
+            .expedition()
+            .reached(fatherload_simulation::descent::Descent::OldDeep)
+    );
+    for seat in 0..2 {
+        let moment = game.shell.seat(seat).story_moment.clone().expect("a card");
+        assert_eq!(moment.kind, StoryMomentKind::DescentReached);
+        assert!(moment.title.contains("The Old Deep"), "{}", moment.title);
+    }
+    // The page cycle: codex, then progress, then the map.
+    game.shell.seat_mut(0).modal = Some(ModalScreen::ExpeditionCodex);
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::DescentProgress));
+    let rows = progress_rows(game.world().expedition());
+    assert_eq!(rows.len(), 9);
+    assert_eq!(rows[8], ProgressRow::TurnPage);
+    // A tap on a Descent's row selects it and stays.
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(1),
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::DescentProgress));
+    assert_eq!(game.shell.seat(0).selected_menu_item, 1);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            tab_previous: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionCodex));
+    game.shell.seat_mut(0).modal = Some(ModalScreen::DescentProgress);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(8),
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
+}
+
+/// Wave 10: waking the Heart opens the ending's pages on every local seat; a tap turns each
+/// page and the last one closes it, and the game goes on.
+#[test]
+fn waking_the_heart_opens_the_ending_on_every_seat_and_taps_turn_its_pages() {
+    use crate::shell::expedition::ENDING_PAGES;
+    let mut world = deep_world();
+    world.set_expedition(ExpeditionState {
+        echoes: u8::try_from(ECHOES.len()).unwrap_or(u8::MAX),
+        ..ExpeditionState::default()
+    });
+    let mut game = playing(world, 2, "story-ending");
+    idle(&mut game, 2);
+    put_at_log(&mut game, 1);
+    game.edit_world(|world| {
+        world.note_descent_boss_beaten(fatherload_simulation::descent::DescentBoss::TheHeart);
+    });
+    idle(&mut game, 2);
+    assert!(game.world().expedition().cable_lit);
+    for seat in 0..2 {
+        assert_eq!(game.shell.seat(seat).modal, Some(ModalScreen::Ending));
+        assert_eq!(game.shell.seat(seat).selected_menu_item, 0);
+    }
+    for page in 1..ENDING_PAGES {
+        let _ = press(
+            &mut game,
+            PlayerInput {
+                menu_pick: Some(0),
+                ..PlayerInput::default()
+            },
+        );
+        assert_eq!(game.shell.seat(0).selected_menu_item, page);
+    }
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, None, "the last page closes");
+    // It plays once: more ticks never reopen it.
+    idle(&mut game, 5);
+    assert_eq!(game.shell.seat(0).modal, None);
 }

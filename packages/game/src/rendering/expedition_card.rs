@@ -114,20 +114,9 @@ pub(super) fn decorate(
             }
         }
         StoryMomentKind::BuilderEcho => builder_echo(draw, (x, y, width, height), age, color),
-        StoryMomentKind::HeartPlace => {
-            // The builders' cable down the card's left edge, a star burning at its foot.
-            let (cx, top) = (x + 10, y + 4);
-            draw.draw_rectangle(cx, top, 2, height - 12, STEEL);
-            draw.draw_rectangle(cx, top, 1, height - 12, GOLD);
-            let pulse = ((age as f32 / 20.0).sin() * 1.5) as i32;
-            draw.draw_circle(
-                cx + 1,
-                y + height - 8,
-                (4 + pulse) as f32,
-                with_alpha(GOLD, 120),
-            );
-            draw.draw_circle(cx + 1, y + height - 8, 2.5, CREAM);
-            let _ = width;
+        StoryMomentKind::HeartPlace => heart_place(draw, (x, y, height), age),
+        StoryMomentKind::DescentReached => {
+            descent_reached(draw, (x, y, width, height), age, color);
         }
         StoryMomentKind::Begun
         | StoryMomentKind::Climax
@@ -137,6 +126,40 @@ pub(super) fn decorate(
         | StoryMomentKind::DeepLore
         | StoryMomentKind::StrangePlace => {}
     }
+}
+
+/// A place of the Heart's card (Wave 10 heart): the builders' cable down the card's left edge,
+/// a star burning at its foot.
+fn heart_place(draw: &mut RaylibDrawHandle<'_>, (x, y, height): (i32, i32, i32), age: u64) {
+    let (cx, top) = (x + 10, y + 4);
+    draw.draw_rectangle(cx, top, 2, height - 12, STEEL);
+    draw.draw_rectangle(cx, top, 1, height - 12, GOLD);
+    let pulse = ((age as f32 / 20.0).sin() * 1.5) as i32;
+    draw.draw_circle(
+        cx + 1,
+        y + height - 8,
+        (4 + pulse) as f32,
+        with_alpha(GOLD, 120),
+    );
+    draw.draw_circle(cx + 1, y + height - 8, 2.5, CREAM);
+}
+
+/// A new Descent's card (Wave 10): the builders' cable as a plumb line down the card's left
+/// edge, a lamp sliding slowly down it to a ring that marks the new chapter.
+fn descent_reached(
+    draw: &mut RaylibDrawHandle<'_>,
+    (x, y, _width, height): (i32, i32, i32, i32),
+    age: u64,
+    color: Color,
+) {
+    let cx = x + 6;
+    draw.draw_rectangle(cx, y + 3, 1, height - 6, STEEL_LIGHT);
+    let ring = y + height - 9;
+    draw.draw_circle_lines(cx, ring, 3.0, color);
+    let travel = (height - 18).max(1);
+    let lamp = y + 4 + ((age as i32) / 3).min(travel);
+    draw.draw_rectangle(cx - 1, lamp, 3, 3, CREAM);
+    draw.draw_rectangle(cx, lamp + 1, 1, 1, color);
 }
 
 /// A builder echo's card (Wave 9): the ball-on-a-cable glyph in the corner, and slow rings of

@@ -37,6 +37,39 @@ impl StoryEvent {
     }
 }
 
+/// What the card says when the crew first reaches `descent`: the chapter's promise, never its
+/// spoiler.
+#[must_use]
+pub const fn arrival_line(descent: Descent) -> &'static str {
+    match descent {
+        Descent::Crust => {
+            "Six people went down a cable nobody can scratch, and never came back up. Follow it."
+        }
+        Descent::OldDeep => {
+            "Below the lid: sleeping machines, singing glass, and a lamp the town called the \
+             bottom."
+        }
+        Descent::LivingDark => {
+            "Life that makes its own light. Somewhere below, a hive remembers the Lamp-Bearers."
+        }
+        Descent::DrownedAndFrozen => {
+            "A sea under the rock, ice older than the town, and people who sing."
+        }
+        Descent::HollowWorld => "The rock gives way to sky. The planet is hollow, and lit.",
+        Descent::StrangeLayers => {
+            "Near the builders' machine the world wears thin. Trust the cable, not your eyes."
+        }
+        Descent::Ancients => {
+            "Streets: lamps on poles, trams on rails, and a voice that has waited an age to say \
+             hello."
+        }
+        Descent::Heart => {
+            "The hum is loud enough to feel in your teeth. At the bottom of everything, \
+             something sleeps."
+        }
+    }
+}
+
 /// The bit of `boss` in [`ExpeditionState::bosses`].
 #[must_use]
 pub const fn boss_bit(boss: DescentBoss) -> u16 {
