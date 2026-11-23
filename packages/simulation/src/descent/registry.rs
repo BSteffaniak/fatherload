@@ -1189,8 +1189,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Stone,
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(198, 202, 234),
-            Rgb(124, 130, 156),
+            Rgb(170, 160, 204),
+            Rgb(116, 112, 150),
             Rgb(30, 32, 48),
             Some(Rgb(200, 236, 255)),
         ),
@@ -1270,10 +1270,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         soft: TileKind::Stone,
         hard: TileKind::HardRock,
         palette: palette(
-            Rgb(70, 178, 104),
-            Rgb(40, 124, 78),
-            Rgb(8, 34, 22),
-            Some(Rgb(255, 72, 255)),
+            Rgb(54, 126, 82),
+            Rgb(34, 90, 62),
+            Rgb(10, 34, 24),
+            Some(Rgb(214, 96, 230)),
         ),
         ores: &[
             ore(Uranium, 200, 450, 40),

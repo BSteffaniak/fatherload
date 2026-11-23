@@ -52,6 +52,14 @@ impl WorldState {
         &self.distortion
     }
 
+    /// Marks every distortion landmark found before play (scenes and tools: their story cards
+    /// then stay out of the picture).
+    pub fn mark_distortion_landmarks_found(&mut self) {
+        for landmark in DistortionLandmark::ALL {
+            let _ = self.distortion.find(landmark);
+        }
+    }
+
     /// Whether a gazer holds `player_id`'s controls now.
     #[must_use]
     pub fn distortion_gazed(&self, player_id: PlayerId) -> bool {

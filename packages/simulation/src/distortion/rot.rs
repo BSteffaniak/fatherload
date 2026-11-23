@@ -32,16 +32,17 @@ use super::WarpedTile;
 pub const ROT_TIERS: usize = 5;
 /// Rock block size (tiles) per tier (the top tier keeps its rock).
 pub const BLOCK_SIZES: [i32; ROT_TIERS] = [1, 2, 3, 4, 5];
-/// Pixelation (percent of the post-process's) per tier.
-pub const PIXELATE: [u8; ROT_TIERS] = [18, 34, 52, 70, 88];
+/// Pixelation (percent of the post-process's) per tier: two-art-pixel blocks from the second
+/// tier, three from the bottom one (coarser hides the rig and its prey).
+pub const PIXELATE: [u8; ROT_TIERS] = [16, 24, 32, 42, 52];
 /// Palette collapse per tier.
-pub const PALETTE: [u8; ROT_TIERS] = [22, 38, 56, 74, 90];
+pub const PALETTE: [u8; ROT_TIERS] = [12, 20, 28, 38, 48];
 /// Sprite glitching per tier.
-pub const GLITCH: [u8; ROT_TIERS] = [6, 16, 28, 42, 56];
+pub const GLITCH: [u8; ROT_TIERS] = [4, 10, 16, 22, 30];
 /// Rows over which the screen eases from one tier into the next.
 pub const TIER_BLEND_ROWS: f32 = 6.0;
 /// `(width, height)` of the Dead Screen.
-pub const DEAD_SCREEN_SIZE: (i32, i32) = (50, 30);
+pub const DEAD_SCREEN_SIZE: (i32, i32) = (50, 22);
 
 const SALT_VOID: u64 = 0xB17_0001;
 const SALT_DATA: u64 = 0xB17_0002;
@@ -252,24 +253,41 @@ pub const fn dead_screen(settings: &WorldSettings, layout: &DescentLayout) -> Op
 /// The Dead Screen's picture (one character per 2x2 block of tiles; `#` a lit pixel, `.` the
 /// screen's dark, ` ` open air in front of it): the cable from the hanging stone to a sleeping
 /// star, and a builder glyph.
-const PICTURE: [&str; 11] = [
-    "......##.............",
-    ".....####.......#.#..",
-    "......##........###..",
-    ".......#.........#...",
-    ".......#.............",
-    ".......#.......##.##.",
-    ".......#........###..",
-    "......###......##.##.",
-    ".....#####...........",
-    "......###............",
-    ".......#.............",
+const PICTURE: [&str; 7] = [
+    "...##..........#.#...",
+    "..####.........###...",
+    "...##...........#....",
+    "....#..........##.##.",
+    "....#...........###..",
+    "...###.........##.##.",
+    "..#####..............",
 ];
+
+/// Whether the Dead Screen's picture lights tile `(x, y)`.
+///
+/// Two tiles a pixel, centred in the chamber's upper part. The picture is drawn on the
+/// chamber's back wall (presentation), so a rig flies in front of it.
+#[must_use]
+pub fn dead_screen_lit(screen: &TileRect, x: i32, y: i32) -> bool {
+    let width = i32::try_from(PICTURE[0].len()).unwrap_or(0) * 2;
+    let ox = screen.min.x + (screen.width() - width) / 2;
+    let oy = screen.min.y + 3;
+    let (px, py) = ((x - ox).div_euclid(2), (y - oy).div_euclid(2));
+    usize::try_from(py)
+        .ok()
+        .and_then(|row| PICTURE.get(row))
+        .and_then(|line| {
+            usize::try_from(px)
+                .ok()
+                .and_then(|col| line.as_bytes().get(col))
+        })
+        .is_some_and(|c| *c == b'#')
+}
 
 /// The tile the Dead Screen puts at `(x, y)` over `base`, or `None` outside it.
 ///
-/// A frame of rotten blocks, the screen (data-dark rock) with its lit pixels, and an open
-/// gallery in front of it along the floor.
+/// A bezel of rotten blocks round an open chamber (its back wall shows the picture), the floor
+/// lit by a row of screen pixels, doorways low in both sides.
 #[must_use]
 pub fn dead_screen_tile(screen: &TileRect, x: i32, y: i32, base: TileKind) -> Option<TileKind> {
     let at = TilePosition { x, y };
@@ -291,33 +309,15 @@ pub fn dead_screen_tile(screen: &TileRect, x: i32, y: i32, base: TileKind) -> Op
             TileKind::Warped(WarpedTile::RotBlock)
         });
     }
-    // The gallery: the lower third is open, so the picture is seen from below.
-    let gallery_top = screen.max.y - 9;
-    if y >= gallery_top {
-        if bottom == 2 {
-            return Some(TileKind::Warped(WarpedTile::RotBlock));
-        }
-        return Some(TileKind::Air);
+    // The floor: rotten blocks with a screen pixel lit every fourth column.
+    if bottom == 2 {
+        return Some(TileKind::Warped(if (x - screen.min.x).rem_euclid(4) == 2 {
+            WarpedTile::ScreenPixel
+        } else {
+            WarpedTile::RotBlock
+        }));
     }
-    // The picture, centred, two tiles a pixel.
-    let width = i32::try_from(PICTURE[0].len()).unwrap_or(0) * 2;
-    let ox = screen.min.x + (screen.width() - width) / 2;
-    let oy = screen.min.y + 2;
-    let (px, py) = ((x - ox).div_euclid(2), (y - oy).div_euclid(2));
-    let lit = usize::try_from(py)
-        .ok()
-        .and_then(|row| PICTURE.get(row))
-        .and_then(|line| {
-            usize::try_from(px)
-                .ok()
-                .and_then(|col| line.as_bytes().get(col))
-        })
-        .is_some_and(|c| *c == b'#');
-    Some(if lit {
-        TileKind::Warped(WarpedTile::ScreenPixel)
-    } else {
-        TileKind::HardRock
-    })
+    Some(TileKind::Air)
 }
 
 /// The tile the rot grid puts at `(x, y)` over `base`, or `None` to leave it.

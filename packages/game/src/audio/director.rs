@@ -2324,6 +2324,81 @@ mod tests {
     ];
 
     #[test]
+    fn the_distortion_strata_play_their_beds_and_pixel_rot_crushes_deeper() {
+        use fatherload_simulation::{
+            SimulationParams,
+            descent::Stratum,
+            position::WorldPos,
+            worldgen::{GeneratorVersion, WorldSettings},
+        };
+        // Wave 9: one bed per distortion stratum; Pixel Rot's bed bit-crushes tier by tier.
+        let beds = [
+            Patch::MirrorLoop,
+            Patch::ShearLoop,
+            Patch::RotLoop,
+            Patch::RotLoopCrushed,
+            Patch::RotLoopRuined,
+        ];
+        let one = PlayerId::new(1);
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..WorldSettings::new(7)
+        };
+        let base = WorldState::new_game_with_settings(one, &settings, SimulationParams::default());
+        let layout = fatherload_simulation::descent::fields::cached_layout(&settings);
+        let heard_at = |row: i32| {
+            let mut world = base.clone();
+            world.teleport_rig_to(one, WorldPos::tile_center(-300, i64::from(row)));
+            let seats = [seat(0, one)];
+            let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+            let mut director = Director::new(1);
+            let audio = [SeatAudio::default()];
+            let mut playing = BTreeSet::new();
+            for _ in 0..30 {
+                for command in director.update(&frame(&snapshot, &[], &audio)) {
+                    if let MixerCommand::Loop(request) = command
+                        && beds.contains(&request.patch)
+                        && request.gain > 0.0
+                    {
+                        playing.insert(request.patch);
+                    }
+                }
+            }
+            playing
+        };
+        let middle = |stratum: Stratum| {
+            let (top, bottom) = layout.rows(stratum);
+            top + (bottom - top) / 2
+        };
+        assert_eq!(
+            heard_at(middle(Stratum::MirrorStrata)),
+            BTreeSet::from([Patch::MirrorLoop])
+        );
+        assert_eq!(
+            heard_at(middle(Stratum::GravityShear)),
+            BTreeSet::from([Patch::ShearLoop])
+        );
+        let tops = fatherload_simulation::distortion::rot::tier_tops(&layout);
+        assert_eq!(heard_at(tops[0] + 6), BTreeSet::from([Patch::RotLoop]));
+        assert_eq!(
+            heard_at(tops[2] + 6),
+            BTreeSet::from([Patch::RotLoopCrushed])
+        );
+        assert_eq!(
+            heard_at(tops[4] + 6),
+            BTreeSet::from([Patch::RotLoopRuined])
+        );
+        // The mix moves from clean to ruined and always sums to one.
+        let mut last_clean = 2.0;
+        for tier in 0..5 {
+            let (clean, crushed, ruined) = distortion_bed_mix(Some(tier));
+            assert!((clean + crushed + ruined - 1.0).abs() < 1e-6);
+            assert!(clean <= last_clean);
+            last_clean = clean;
+        }
+    }
+
+    #[test]
     fn every_stratum_of_descents_one_to_three_plays_its_own_piece() {
         use fatherload_simulation::{
             SimulationParams,

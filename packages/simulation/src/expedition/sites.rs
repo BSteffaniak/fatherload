@@ -201,6 +201,10 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
     if let Some((center, top)) = crust::gravel_hollow(settings) {
         pieces.push(rect((center - 40, top - 6), (center + 40, top + 14)));
     }
+    // Parallax Station's settlement (Wave 9).
+    if let Some((center, top)) = crate::distortion::parallax_station(settings) {
+        pieces.push(rect((center - 40, top - 6), (center + 40, top + 14)));
+    }
     pieces.extend(crust::sinkhole_site(settings).map(|site| site.zone));
     pieces.extend(deep::cathedral(settings, &layout).map(|site| site.bounds));
     pieces.extend(deep::star_core_arena(settings, &layout).map(|site| site.bounds));

@@ -239,6 +239,48 @@ pub(super) fn paint(
     paint_edges(canvas, strata, edges, lip, shade, square);
 }
 
+/// Paints plain rock in Pixel Rot below its top tier as flat blocks (two shades of the
+/// stratum's rock, a darker seam between blocks), the blocks as big as the rot grid's pixel at
+/// that depth; `false` (nothing painted) elsewhere.
+pub(super) fn paint_rot_rock(
+    canvas: &mut TileCanvas,
+    terrain: &Terrain,
+    position: TilePosition,
+    hard: bool,
+    strata: &Strata,
+    edges: Edges,
+) -> bool {
+    let settings = terrain.settings();
+    if !settings.generator.has_descents() {
+        return false;
+    }
+    let layout = cached_layout(settings);
+    let Some(tier) = rot::tier_at(&layout, position.y).filter(|tier| *tier > 0) else {
+        return false;
+    };
+    if terrain.stratum_at(position) != Stratum::PixelRot {
+        return false;
+    }
+    let ramp = if hard { strata.hard } else { strata.stone };
+    let cell = 4 + i32::from(tier) * 3;
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+            let block = hash(gx.div_euclid(cell), gy.div_euclid(cell), 961);
+            let index = if gx.rem_euclid(cell) == 0 || gy.rem_euclid(cell) == 0 {
+                ramp[0]
+            } else if block.is_multiple_of(7) {
+                ramp[3]
+            } else {
+                ramp[1 + usize::from(block.is_multiple_of(2))]
+            };
+            canvas.set(px, py, index);
+        }
+    }
+    paint_edges(canvas, strata, edges, ramp[3], ramp[0], true);
+    true
+}
+
 /// The rot grid's pixel size (art pixels) at `position`: one tile's art per block side in
 /// Pixel Rot's tiers (4 above it), so data ore and rotten blocks coarsen with the rot.
 fn rot_cell_pixels(terrain: &Terrain, position: TilePosition) -> i32 {
@@ -276,12 +318,12 @@ fn back_pixel(stratum: Stratum, x: i32, y: i32, rot_cell: i32) -> PaletteIndex {
             // Strata lines tipped on their side, as if the whole place leaned.
             let line = (x * 3 - y + (noise(x, y, 16, 941) * 6.0) as i32).rem_euclid(17);
             if line == 0 {
-                index_of(PLUM)
-            } else if line == 1 {
-                index_of(INK)
-            } else if hash(x, y, 943).is_multiple_of(173) {
                 index_of(ROSE)
-            } else if noise(x, y, 9, 945) > 0.68 {
+            } else if line <= 2 {
+                index_of(PLUM)
+            } else if hash(x, y, 943).is_multiple_of(173) {
+                index_of(PINK)
+            } else if noise(x, y, 9, 945) + f32::from(bayer4(x, y)) / 40.0 > 0.6 {
                 index_of(PLUM)
             } else {
                 index_of(NIGHT)
@@ -304,6 +346,41 @@ fn back_pixel(stratum: Stratum, x: i32, y: i32, rot_cell: i32) -> PaletteIndex {
     }
 }
 
+/// One tile of the Dead Screen's back wall: a lit pixel of its picture (mint with a bright
+/// corner and a teal seam) or the screen's dark glass with faint scan lines.
+fn paint_screen(
+    canvas: &mut TileCanvas,
+    screen: &fatherload_simulation::worldgen::TileRect,
+    at: TilePosition,
+) {
+    let lit = rot::dead_screen_lit(screen, at.x, at.y);
+    for py in 0..TILE_ART {
+        for px in 0..TILE_ART {
+            let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+            // A picture pixel is two tiles square: seams on its own grid.
+            let (cx, cy) = (gx.rem_euclid(TILE_ART * 2), gy.rem_euclid(TILE_ART * 2));
+            let index = if lit {
+                if cx == 0 || cy == 0 {
+                    index_of(TEAL)
+                } else if cx <= 3 && cy <= 3 {
+                    index_of(BONE)
+                } else if cy.rem_euclid(4) == 0 {
+                    index_of(ICE)
+                } else {
+                    index_of(MINT)
+                }
+            } else if gy.rem_euclid(4) == 0 {
+                index_of(NIGHT)
+            } else if hash(gx, gy, 971).is_multiple_of(97) {
+                index_of(TEAL_DARK)
+            } else {
+                index_of(INK)
+            };
+            canvas.set(px, py, index);
+        }
+    }
+}
+
 /// Paints an open tile of `stratum`: its back wall, shadowed under rock overhead and beside
 /// rock walls (like every tunnel).
 pub(super) fn paint_back(
@@ -315,6 +392,16 @@ pub(super) fn paint_back(
 ) {
     let shade = index_of(INK);
     let rot_cell = rot_cell_pixels(terrain, position);
+    // The Dead Screen's chamber: its back wall is the picture.
+    if stratum == Stratum::PixelRot {
+        let layout = cached_layout(terrain.settings());
+        if let Some(screen) =
+            rot::dead_screen(terrain.settings(), &layout).filter(|screen| screen.contains(position))
+        {
+            paint_screen(canvas, &screen, position);
+            return;
+        }
+    }
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);

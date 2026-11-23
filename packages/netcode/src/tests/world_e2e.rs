@@ -1590,6 +1590,37 @@ fn world_rigs_rotate_in_fields_predict_and_converge() {
     assert!(leaned > 0.05, "the rigs leaned: {leaned}");
 }
 
+#[test]
+fn world_mirrored_controls_predict_and_converge() {
+    // Wave 9 (the Mirror Strata): a mirror field over the bots' hop swaps their stick, rotation
+    // thrusters and aim on host and clients alike (`WorldState::mirror_controls`), so predicted
+    // rigs steer the same mirrored way and everyone converges without a mismatch.
+    use fatherload_simulation::field::{FieldPreset, FieldZone};
+
+    let mut harness = harness(60, 2, LinkConditions::new(60, 10, 2.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let _ = world.place_field_zone(FieldZone::of_preset(FieldPreset::Mirror, (48, -2), (48, 6)));
+    harness.host.new_epoch(world);
+    let mut mirrored = false;
+    for _ in 0..16 {
+        harness.run_for(Duration::from_secs(1));
+        let world = harness.world();
+        mirrored |= world
+            .players()
+            .keys()
+            .any(|player| world.fields_for(*player).mirrored());
+    }
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+    }
+    assert!(mirrored, "the rigs flew in the mirror field");
+}
+
 /// Fluids online (Part III F9): a sealed aquifer beside the first crewmate is breached and floods
 /// a tunnel on the host while both clients watch over a lossy link. Only the changed fluid cells
 /// cross the wire (terrain ops); every client's world ends with exactly the host's water, tile

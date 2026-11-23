@@ -156,6 +156,38 @@ fn merrow_village(settings: &WorldSettings) -> Option<Arc<Village>> {
     built.as_ref().clone()
 }
 
+/// Parallax Station (Wave 9): the research station beside the Descent VI outpost in the Mirror
+/// Strata ([`crate::distortion::parallax_station`]), filed under its own site
+/// ([`crate::distortion::PARALLAX_SITE`]). Its hall and centre column; `None` before V11.
+#[must_use]
+pub fn parallax_station_hall(settings: &WorldSettings) -> Option<(UndergroundSite, i32)> {
+    if !settings.generator.has_villages() {
+        return None;
+    }
+    let (center, top) = crate::distortion::parallax_station(settings)?;
+    Some((
+        UndergroundSite {
+            site: crate::distortion::PARALLAX_SITE,
+            center,
+            top,
+            slide: 1,
+        },
+        center,
+    ))
+}
+
+/// Parallax Station's village (Wave 9), built on first use, named for the place.
+fn parallax_station(settings: &WorldSettings) -> Option<Arc<Village>> {
+    let (site, center) = parallax_station_hall(settings)?;
+    let built = VILLAGES.get_or_compute((*settings, crate::distortion::PARALLAX_SITE, 1), || {
+        let mut village = layout::build(settings, &SiteSpec::Underground { site, center });
+        crate::distortion::PARALLAX_STATION_NAME.clone_into(&mut village.name);
+        crate::distortion::PARALLAX_STATION_NAME.clone_into(&mut village.population.village_name);
+        Some(Arc::new(village))
+    });
+    built.as_ref().clone()
+}
+
 /// Gravel Hollow's village (Wave 8), built on first use, named for the place.
 fn gravel_hollow(settings: &WorldSettings) -> Option<Arc<Village>> {
     let (site, center) = gravel_hollow_hall(settings)?;
@@ -285,6 +317,13 @@ pub fn keeps_caves_out(ctx: &Ctx, x: i32, y: i32) -> bool {
     {
         return true;
     }
+    if let Some((hall, center)) = parallax_station_hall(&ctx.settings)
+        && hall_rect(center, hall.top)
+            .expanded(CAVE_KEEP_OUT)
+            .contains(TilePosition { x, y })
+    {
+        return true;
+    }
     // A hall slides at most three steps either way from its nominal centre.
     let slide_reach = 3 * (HALL_WIDTH + 24) + HALL_WIDTH + CAVE_KEEP_OUT;
     let near = placement::site_index_near(x);
@@ -350,6 +389,9 @@ pub fn village(settings: &WorldSettings, id: VillageId) -> Option<Arc<Village>> 
     if site == SUNFOLK_SITE && underground {
         return sunfolk(settings);
     }
+    if site == crate::distortion::PARALLAX_SITE && underground {
+        return parallax_station(settings);
+    }
     let geometry = geometry(&ctx, site)?;
     if underground && geometry.underground.is_none() {
         return None;
@@ -377,6 +419,11 @@ pub fn villages_between(settings: &WorldSettings, first: i32, last: i32) -> Vec<
         if (first..=last).contains(&center) {
             found.extend(deep_hall_village(settings, hall.site));
         }
+    }
+    if let Some((_, center)) = parallax_station_hall(settings)
+        && (first..=last).contains(&center)
+    {
+        found.extend(parallax_station(settings));
     }
     for site in sites_reaching(first, last) {
         let Some(geometry) = geometry(&ctx, site) else {
@@ -417,6 +464,11 @@ pub fn village_containing(
         if hall_rect(center, hall.top).contains(position) {
             return deep_hall_village(settings, hall.site);
         }
+    }
+    if let Some((hall, center)) = parallax_station_hall(settings)
+        && hall_rect(center, hall.top).contains(position)
+    {
+        return parallax_station(settings);
     }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, 0)
         && let Some(geometry) = geometry(&ctx, site.site)
@@ -468,6 +520,13 @@ pub fn in_village_area(settings: &WorldSettings, position: TilePosition, margin:
     }) {
         return true;
     }
+    if let Some((hall, center)) = parallax_station_hall(settings)
+        && hall_rect(center, hall.top)
+            .expanded(margin)
+            .contains(position)
+    {
+        return true;
+    }
     if let Some(site) = placement::surface_site_at(ctx.seed(), position.x, margin)
         && let Some(geometry) = geometry(&ctx, site.site)
         && geometry.surface_area().expanded(margin).contains(position)
@@ -498,6 +557,11 @@ pub fn layer_features(ctx: &Ctx, rect: &TileRect, out: &mut Vec<WorldFeature>) {
         if hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH)) {
             out.push(hall_feature(ctx, hall));
         }
+    }
+    if let Some(hall) = parallax_station_hall(&ctx.settings)
+        && hall_rect(hall.1, hall.0.top).intersects(&rect.expanded(SITE_REACH))
+    {
+        out.push(hall_feature(ctx, hall));
     }
     for site in crate::worldgen::sky::sky_towns_touching(&ctx.settings, rect) {
         out.push(sky_town_feature(&site));
@@ -595,6 +659,9 @@ pub fn feature(ctx: &Ctx, site: i32, ry: i32) -> Option<WorldFeature> {
     if site == SUNFOLK_SITE && ry == 1 {
         return sunfolk_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
     }
+    if site == crate::distortion::PARALLAX_SITE && ry == 1 {
+        return parallax_station_hall(&ctx.settings).map(|hall| hall_feature(ctx, hall));
+    }
     let geometry = geometry(ctx, site)?;
     match ry {
         0 => Some(surface_feature(ctx, &geometry)),
@@ -631,6 +698,15 @@ pub fn stamps_touching(ctx: &Ctx, rect: &TileRect) -> Vec<Arc<VillageStamp>> {
         found.push(STAMPS.get_or_compute((ctx.settings, SUNFOLK_SITE, 1), || {
             sunfolk_stamp(&ctx.settings, hall, center)
         }));
+    }
+    if let Some((hall, center)) = parallax_station_hall(&ctx.settings)
+        && hall_rect(center, hall.top).expanded(7).intersects(rect)
+    {
+        found.push(
+            STAMPS.get_or_compute((ctx.settings, crate::distortion::PARALLAX_SITE, 1), || {
+                station_stamp(&ctx.settings, hall, center)
+            }),
+        );
     }
     for site in sites_reaching(rect.min.x, rect.max.x) {
         let Some(geometry) = geometry(ctx, site) else {
@@ -799,6 +875,48 @@ fn sunfolk_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -
                 out.cells.push((x, hall.floor_row(), TileKind::Foundation));
             }
         }
+    }
+    out.bounds = Some(air.expanded(6));
+    out
+}
+
+/// Parallax Station's stamp (Wave 9): its hall carved out, a plated deck over a foundation
+/// floor with mirror glass set in it, a corridor out of both ends (one reaches the outpost's
+/// door) and its buildings' lots.
+fn station_stamp(settings: &WorldSettings, hall: UndergroundSite, center: i32) -> VillageStamp {
+    let mut out = VillageStamp::default();
+    let air = hall_rect(center, hall.top);
+    out.clear.push(air.expanded(3));
+    for y in air.min.y..hall.floor_row() {
+        for x in air.min.x..=air.max.x {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    for y in hall.floor_row() - 3..hall.floor_row() {
+        for x in (air.min.x - 5..air.min.x).chain(air.max.x + 1..=air.max.x + 5) {
+            out.cells.push((x, y, TileKind::Air));
+        }
+    }
+    for x in air.min.x - 5..=air.max.x + 5 {
+        let deck = if x.rem_euclid(9) == 4 {
+            TileKind::Warped(crate::distortion::WarpedTile::MirrorGlass)
+        } else {
+            TileKind::Built(crate::base::BuiltTile::Plating)
+        };
+        out.cells.push((x, hall.floor_row(), deck));
+        out.cells
+            .push((x, hall.floor_row() + 1, TileKind::Foundation));
+    }
+    // Glass skylights in the ceiling over the street.
+    for x in (air.min.x..=air.max.x).step_by(6) {
+        out.cells.push((
+            x,
+            air.min.y - 1,
+            TileKind::Built(crate::base::BuiltTile::Glass),
+        ));
+    }
+    if let Some(found) = parallax_station(settings) {
+        lot_foundations(settings.seed, &found, &mut out.cells);
     }
     out.bounds = Some(air.expanded(6));
     out

@@ -433,6 +433,78 @@ pub const fn distortion_rows(layout: &crate::worldgen::descent::DescentLayout) -
 /// The Descent the distortion strata belong to.
 pub const DESCENT: Descent = Descent::StrangeLayers;
 
+/// The authored content of a distortion stratum the descent probe counts, `(mechanics, set
+/// pieces)` (like `old_deep::authored_content`).
+#[must_use]
+pub const fn authored_content(stratum: Stratum) -> (u8, u8) {
+    match stratum {
+        // Mirror halls, twins and ore pairs; the Looking-Glass Hall and Parallax Station.
+        Stratum::MirrorStrata => (3, 2),
+        // Shear halls and the lodestars' pull; the Shear Spire. Rot tiers and data cores; the
+        // Dead Screen.
+        Stratum::GravityShear | Stratum::PixelRot => (2, 1),
+        _ => (0, 0),
+    }
+}
+
+/// The new things a distortion stratum shows a player beyond its registry entry, in the order
+/// they come (the descent probe's markers): `(what, is it a place)`.
+#[must_use]
+pub const fn novelties(stratum: Stratum) -> &'static [(&'static str, bool)] {
+    match stratum {
+        Stratum::MirrorStrata => &[
+            ("mirror halls flip the controls", false),
+            ("mirror ore and its reflection", false),
+            ("Parallax Station", true),
+            ("mirror twins", false),
+            ("the Looking-Glass Hall", true),
+        ],
+        Stratum::GravityShear => &[
+            ("walls become floors", false),
+            ("ceilings become floors", false),
+            ("the Shear Spire", true),
+        ],
+        Stratum::PixelRot => &[
+            ("the rock quantizes", false),
+            ("data cores", false),
+            ("the Dead Screen", true),
+            ("the rot deepens", false),
+        ],
+        _ => &[],
+    }
+}
+
+/// The name of the Descent VI outpost and the research station around it.
+pub const PARALLAX_STATION_NAME: &str = "Parallax Station";
+/// The village site Parallax Station's settlement is filed under: past every site a world
+/// places ([`crate::village::placement::MAX_SITE`]), so no generated village shares it.
+pub const PARALLAX_SITE: i32 = crate::village::placement::MAX_SITE + 6;
+
+/// Parallax Station's settlement hall: its centre column and first air row.
+///
+/// A research station of the Strange Layers (the people who study the mirror halls) beside the
+/// Descent VI outpost on the spawn side, sharing its floor, like Gravel Hollow beside the
+/// first. `None` before V11.
+#[must_use]
+pub fn parallax_station(settings: &WorldSettings) -> Option<(i32, i32)> {
+    use crate::village::placement::{HALL_AIR_ROWS, HALL_WIDTH};
+    use crate::worldgen::descent::landmarks::{OUTPOST_SIZE, outpost, outpost_column};
+    if !has_distortion(settings) {
+        return None;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    let hall = outpost(settings, &layout, DESCENT)?;
+    let floor = hall.bounds.max.y;
+    let column = outpost_column(settings);
+    let side = if column >= crate::worldgen::SPAWN_TILE_X {
+        -1
+    } else {
+        1
+    };
+    let center = column + side * (OUTPOST_SIZE.0 / 2 + 4 + HALL_WIDTH / 2);
+    Some((center, floor - HALL_AIR_ROWS))
+}
+
 /// Whether the generator's distortion passes may carve over `kind` (built pieces, points of
 /// interest, bedrock, fluid and the Descent landmarks' builder stone stay).
 #[must_use]

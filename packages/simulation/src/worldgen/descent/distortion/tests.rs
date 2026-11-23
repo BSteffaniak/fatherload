@@ -334,13 +334,23 @@ fn the_dead_screen_shows_its_picture() {
     let settings = settings(DEFAULT_WORLD_SEED);
     let layout = layout(&settings);
     let screen = rot::dead_screen(&settings, &layout).expect("the screen");
+    // The picture lights its back wall: a few dozen tiles of it.
     let lit = screen
         .positions()
-        .filter(|at| kind_at(&settings, at.x, at.y) == TileKind::Warped(WarpedTile::ScreenPixel))
+        .filter(|at| rot::dead_screen_lit(&screen, at.x, at.y))
         .count();
     assert!(lit > 60, "{lit} lit pixels");
-    let gallery = kind_at(&settings, screen.center().x, screen.max.y - 4);
-    assert_eq!(gallery, TileKind::Air);
+    // The chamber in front of it is open, its floor lit.
+    assert_eq!(
+        kind_at(&settings, screen.center().x, screen.max.y - 4),
+        TileKind::Air
+    );
+    let floor_lights = (screen.min.x..=screen.max.x)
+        .filter(|x| {
+            kind_at(&settings, *x, screen.max.y - 2) == TileKind::Warped(WarpedTile::ScreenPixel)
+        })
+        .count();
+    assert!(floor_lights > 6, "{floor_lights} floor lights");
 }
 
 #[test]

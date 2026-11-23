@@ -823,6 +823,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         } else if hollow_art::paint_hollow_air(&mut canvas, terrain, position, up, left, right) {
             // The Hollow World's open caverns (transparent: the backdrop's sky) and jungle
             // halls (Wave 9).
+        } else if let Some(stratum) = distortion_art::distortion_stratum(terrain, position) {
+            // The distortion strata's halls of mirrors, tipped strata and rot (Wave 9), over
+            // whatever cave biome the base layer put there.
+            distortion_art::paint_back(&mut canvas, terrain, position, stratum, (up, left, right));
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             // The Living Dark's open ground shows its stratum's own wall (Wave 8).
             if let Some(stratum) = living_art::living_stratum(terrain, position) {
@@ -830,15 +834,6 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             } else if let Some(stratum) = drowned_art::drowned_stratum(terrain, position) {
                 // So does the Drowned and Frozen's (Wave 9).
                 drowned_art::paint_back(&mut canvas, stratum, up, left, right);
-            } else if let Some(stratum) = distortion_art::distortion_stratum(terrain, position) {
-                // The distortion strata's halls of mirrors, tipped strata and rot (Wave 9).
-                distortion_art::paint_back(
-                    &mut canvas,
-                    terrain,
-                    position,
-                    stratum,
-                    (up, left, right),
-                );
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }
@@ -1084,6 +1079,25 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         return canvas;
     }
 
+    // Pixel Rot's rock below its top tier is drawn in flat blocks that coarsen with the rot
+    // (Wave 9): the world itself losing resolution.
+    if matches!(kind, TileKind::Stone | TileKind::HardRock)
+        && distortion_art::paint_rot_rock(
+            &mut canvas,
+            terrain,
+            position,
+            kind == TileKind::HardRock,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        )
+    {
+        return canvas;
+    }
     for py in 0..TILE_ART {
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);

@@ -244,6 +244,15 @@ pub fn registry_markers() -> Vec<Vec<Novelty>> {
                 }
             }
             markers.push(Novelty::new(NoveltyKind::Mechanic, def.signature));
+            // The distortion strata's authored rules and places (Wave 9).
+            for (what, place) in crate::distortion::novelties(*stratum) {
+                let kind = if *place {
+                    NoveltyKind::Landmark
+                } else {
+                    NoveltyKind::Mechanic
+                };
+                markers.push(Novelty::new(kind, *what));
+            }
             for rule in def.fluids {
                 markers.push(Novelty::new(
                     NoveltyKind::Mechanic,
@@ -409,6 +418,7 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::LivingDark
                                     | LandmarkKind::Drowned
                                     | LandmarkKind::HollowWorld
+                                    | LandmarkKind::Distortion
                             )
                         })
                         .count(),
@@ -423,9 +433,16 @@ impl StratumRegistry for RegistryStrata {
                 let authored_pieces = old_pieces.saturating_add(drowned_pieces);
                 // Wave 9: the Hollow World's authored mechanics and set pieces.
                 let (hollow_mechanics, hollow_pieces) = crate::hollow::authored_content(*stratum);
+                // Wave 9: the distortion strata's too.
+                let (warped_mechanics, warped_pieces) =
+                    crate::distortion::authored_content(*stratum);
                 let (authored_mechanics, authored_pieces) = (
-                    authored_mechanics.saturating_add(hollow_mechanics),
-                    authored_pieces.saturating_add(hollow_pieces),
+                    authored_mechanics
+                        .saturating_add(hollow_mechanics)
+                        .saturating_add(warped_mechanics),
+                    authored_pieces
+                        .saturating_add(hollow_pieces)
+                        .saturating_add(warped_pieces),
                 );
                 let set_pieces = set_pieces.saturating_add(authored_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).

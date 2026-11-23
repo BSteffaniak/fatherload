@@ -485,6 +485,9 @@ pub fn identity(settings: &WorldSettings, id: VillageId) -> Option<(String, Cult
     if id == placement::underground_id(crate::drowned::MERROW_SITE) {
         return Some((crate::drowned::MERROW_CITY_NAME.to_owned(), culture));
     }
+    if id == placement::underground_id(crate::distortion::PARALLAX_SITE) {
+        return Some((crate::distortion::PARALLAX_STATION_NAME.to_owned(), culture));
+    }
     Some((village_name(settings.seed, id.0, culture), culture))
 }
 
@@ -508,6 +511,13 @@ fn landscape_and_culture(settings: &WorldSettings, id: VillageId) -> Option<(Lan
         && settings.generator.has_descents()
     {
         // The Sunfolk (Wave 9): the jungle tribes of the Hollow World.
+        return Some((Landscape::Caverns, Culture::Deepfolk));
+    }
+    if site == crate::distortion::PARALLAX_SITE
+        && underground
+        && crate::distortion::has_distortion(settings)
+    {
+        // Parallax Station (Wave 9): the deep folk who study the Strange Layers.
         return Some((Landscape::Caverns, Culture::Deepfolk));
     }
     let surface = placement::surface_site(settings.seed, site)?;

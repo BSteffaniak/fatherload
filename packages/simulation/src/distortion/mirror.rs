@@ -35,9 +35,9 @@ pub const MIRROR_CELL: (i32, i32) = (64, 40);
 pub const MIRROR_FEATHER_TILES: f32 = 3.0;
 /// `(width, height)` of the Looking-Glass Hall.
 pub const LOOKING_GLASS_SIZE: (i32, i32) = (60, 26);
-/// Columns either side of the outposts' column no hall comes within (Parallax Station and the
-/// builders' cable stay plain).
-pub const STATION_CLEARANCE: i32 = 34;
+/// Columns either side of the outposts' column no hall comes within (Parallax Station, its
+/// settlement hall and the builders' cable stay plain).
+pub const STATION_CLEARANCE: i32 = 96;
 
 const SALT_CELL: u64 = 0x3171_0001;
 const SALT_SHAPE: u64 = 0x3171_0002;
@@ -93,7 +93,9 @@ impl MirrorZone {
     }
 
     /// How strongly the hall mirrors at fractional tile `(column, row)`: 0 outside, 1 deeper
-    /// inside than [`MIRROR_FEATHER_TILES`], a smoothstep across the feather.
+    /// inside than [`MIRROR_FEATHER_TILES`] from its side edges (the curtains), a smoothstep
+    /// across the feather. Its floor and ceiling are rock, so the rows inside it mirror fully:
+    /// a rig on the floor never sees a half-mirrored double image.
     #[must_use]
     pub fn weight(&self, column: f32, row: f32) -> f32 {
         #[allow(
@@ -109,10 +111,7 @@ impl MirrorZone {
         if column < left || column >= right || row < top || row >= bottom {
             return 0.0;
         }
-        let inside = (column - left)
-            .min(right - column)
-            .min(row - top)
-            .min(bottom - row);
+        let inside = (column - left).min(right - column);
         let t = (inside / MIRROR_FEATHER_TILES).clamp(0.0, 1.0);
         t * t * 2.0f32.mul_add(-t, 3.0)
     }

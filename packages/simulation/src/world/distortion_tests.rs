@@ -548,8 +548,8 @@ fn pixel_rot_lowers_the_resolution_tier_by_tier() {
         );
     }
     assert!(
-        previous.0 > 0.8,
-        "the bottom is nearly all pixels: {previous:?}"
+        previous.0 > 0.45,
+        "the bottom is coarse pixels: {previous:?}"
     );
     // A tier boundary eases in over a few rows (no pop).
     let boundary = tops[2];
@@ -997,4 +997,52 @@ fn the_distortion_creatures_keep_the_body_rules_in_a_fight() {
         }
     }
     assert!(checked > 300, "a real fight: {checked}");
+}
+
+#[test]
+fn parallax_station_is_a_peopled_research_station_beside_the_descent_vi_outpost() {
+    use crate::village::{self, placement::underground_id};
+    let settings = settings();
+    let id = underground_id(crate::distortion::PARALLAX_SITE);
+    let station = village::village(&settings, id).expect("Parallax Station");
+    assert_eq!(station.name, crate::distortion::PARALLAX_STATION_NAME);
+    assert!(
+        station.population.characters.len() >= 4,
+        "people live there"
+    );
+    assert_eq!(
+        crate::worldgen::descent::stratum_at(
+            &settings,
+            station.center_column(),
+            station.ground_row
+        ),
+        Stratum::MirrorStrata
+    );
+    let world = world_at(60);
+    let outpost = world
+        .logistics()
+        .outposts
+        .values()
+        .find(|outpost| outpost.descent == 5)
+        .expect("the Descent VI outpost");
+    assert_eq!(outpost.name, crate::distortion::PARALLAX_STATION_NAME);
+    assert_eq!(outpost.floor_row, station.ground_row);
+    assert!((outpost.column - station.center_column()).abs() < 60);
+    // The settlement's hall is open air on a deck, clear of every mirror hall.
+    let hall_air = TilePosition {
+        x: station.center_column(),
+        y: station.ground_row - 2,
+    };
+    let generated = crate::worldgen::streamed::generated_tile(&settings, hall_air);
+    assert!(generated.kind.is_open(), "{generated:?}");
+    assert!(
+        mirror::zones_touching(
+            &settings,
+            &layout(&settings),
+            &TileRect::around(hall_air, 40, 8)
+        )
+        .is_empty()
+    );
+    // No other world has it.
+    assert!(village::village(&WorldSettings::new(SEED), id).is_none());
 }

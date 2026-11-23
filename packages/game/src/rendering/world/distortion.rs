@@ -97,11 +97,11 @@ fn draw_mirror_halls(
             let x = frame.col_px(edge_column);
             let alpha = 60.0f32.mul_add(strength, 40.0) as u8;
             draw.draw_rectangle_rec(
-                Rectangle::new(x - ART, top, ART * 2.0, height),
-                with_alpha(SKY_LIGHT, alpha / 2),
+                Rectangle::new(x - ART * 3.0, top, ART * 6.0, height),
+                with_alpha(SKY_LIGHT, alpha / 3),
             );
             draw.draw_rectangle_rec(
-                Rectangle::new(x - ART * 0.5, top, ART, height),
+                Rectangle::new(x - ART, top, ART * 2.0, height),
                 with_alpha(ICE, alpha),
             );
             // Sparkles drifting up the curtain.
@@ -111,15 +111,15 @@ fn draw_mirror_halls(
                     (seconds * 0.35 + index as f32 * 0.37 + edge_column as f32 * 0.11).fract();
                 let y = bottom - phase * height;
                 let fade = (1.0 - (phase - 0.5).abs() * 2.0).max(0.0);
-                disc(draw, x, y, 1, with_alpha(BONE, (150.0 * fade) as u8));
+                disc(draw, x, y, 2, with_alpha(BONE, (170.0 * fade) as u8));
             }
         }
         // The axis: a faint line of light down the middle.
         let axis = (frame.col_px(bounds.min.x) + frame.col_px(bounds.max.x + 1)) * 0.5;
         let pulse = (seconds * 0.6).sin().mul_add(0.5, 0.5);
         draw.draw_rectangle_rec(
-            Rectangle::new(axis - ART * 0.5, top, ART, height),
-            with_alpha(SKY_LIGHT, (12.0 + 18.0 * pulse * strength) as u8),
+            Rectangle::new(axis - ART, top, ART * 2.0, height),
+            with_alpha(SKY_LIGHT, (14.0 + 22.0 * pulse * strength) as u8),
         );
         // Reflections breathe; real ore never does.
         for y in bounds.min.y.max(span.min.y)..=bounds.max.y.min(span.max.y) {
@@ -161,7 +161,7 @@ fn draw_shear_flow(
     if let Some(spire) = shear::spire(settings, layout).filter(|spire| spire.intersects(span)) {
         fields.push((spire, None));
     }
-    let alpha = 50.0f32.mul_add(strength, 50.0) as u8;
+    let alpha = 90.0f32.mul_add(strength, 90.0) as u8;
     for (bounds, down) in fields {
         // One streak per 3x3 tiles, each sliding along its own track.
         for ty in (bounds.min.y.max(span.min.y)..=bounds.max.y.min(span.max.y)).step_by(3) {
@@ -183,15 +183,17 @@ fn draw_shear_flow(
                 );
                 let fade = (1.0 - (phase - 0.5).abs() * 2.0).max(0.0);
                 let color = with_alpha(PINK, (f32::from(alpha) * fade) as u8);
-                // A streak four art pixels long along the flow, with a brighter head.
-                for step in 0..4 {
-                    let back = step as f32 * ART;
+                // A streak a tile long along the flow (two art pixels wide), with a brighter
+                // head.
+                for step in 0..8 {
+                    let back = step as f32 * ART * 2.0;
+                    let (wide_x, wide_y) = (ART * 2.0, ART * 2.0);
                     draw.draw_rectangle_rec(
                         Rectangle::new(
                             (dx as f32).mul_add(-back, x),
                             (dy as f32).mul_add(-back, y),
-                            ART,
-                            ART,
+                            wide_x,
+                            wide_y,
                         ),
                         if step == 0 {
                             with_alpha(CREAM, (f32::from(alpha) * fade) as u8)
@@ -256,10 +258,10 @@ pub(super) fn draw_creature_tell(
                 let on = (seconds * 4.0) as i32 % 2 == 0;
                 let alpha = if on { 120 } else { 60 };
                 draw.draw_rectangle_rec(
-                    Rectangle::new(gx - ART * 4.0, gy - ART * 4.0, ART * 8.0, ART * 8.0),
+                    Rectangle::new(gx - ART * 6.0, gy - ART * 6.0, ART * 12.0, ART * 12.0),
                     with_alpha(LIME, alpha / 3),
                 );
-                draw_ring(draw, gx, gy, 5, with_alpha(PINK, alpha));
+                draw_ring(draw, gx, gy, 7, with_alpha(PINK, alpha));
             }
             disc(draw, x, y, 6, with_alpha(LIME, 26));
         }
