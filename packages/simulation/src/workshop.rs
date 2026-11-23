@@ -159,14 +159,14 @@ impl DeepSupply {
     #[must_use]
     pub const fn about(self) -> &'static str {
         match self {
-            Self::BallastTank => "Blow or flood it: the submarine sinks or surfaces at once",
+            Self::BallastTank => "Blows when the sea crushes the sub: a surge no current holds",
             Self::FrostHeater => "Burns off hull frost and keeps the deep cold off for a while",
-            Self::FlareBuoy => "A floating flare that lights the black water around it",
-            Self::BeastBait => "A scent lure: predators chase it, herbivores calm down",
+            Self::FlareBuoy => "Dropped when a lure grabs you: lights the water, dazzles anglers",
+            Self::BeastBait => "Thrown when a predator hunts you: it chases the bait instead",
             Self::ShadeCanopy => "Throws a patch of shade against the inner sun's glare and heat",
-            Self::TimeBubbleBomb => "Blows a bubble of slow time where it lands",
+            Self::TimeBubbleBomb => "A time-bubble charge: slows every creature where it bursts",
             Self::EchoCharge => "One sonar ping: the dark cave shows for a moment",
-            Self::LampFilter => "Tints the headlamp to open the matching colour-keyed wall",
+            Self::LampFilter => "Coloured glass a tinted lamp needs: one set lasts ten minutes",
         }
     }
 
@@ -224,6 +224,150 @@ impl DeepSupply {
     #[must_use]
     pub const fn index(self) -> usize {
         self as usize
+    }
+}
+
+// --- Supplies at work (Wave 10 polish) ------------------------------------------------------
+
+/// How long an emergency Ballast Tank blows: the submarine rises at full lift and no current,
+/// whirlpool or lure holds it (world milliseconds).
+pub const BALLAST_BLOW_MILLIS: u64 = 6_000;
+/// A submerged rig at or under this share of its hull blows a Ballast Tank (if it carries one).
+pub const BALLAST_BLOW_HULL_SHARE: f32 = 0.3;
+/// Extra lift of a blowing Ballast Tank, px/s² (on top of a full trim).
+pub const BALLAST_BLOW_LIFT: f32 = 260.0;
+/// How long a Flare Buoy burns (world milliseconds).
+pub const FLARE_MILLIS: u64 = 45_000;
+/// How far a Flare Buoy's light reaches and dazzles lure anglers, tiles.
+pub const FLARE_REACH_TILES: f32 = 10.0;
+/// How long Beast Bait holds the predators that smell it (world milliseconds).
+pub const BAIT_MILLIS: u64 = 25_000;
+/// How far Beast Bait's scent carries, tiles: hunting predators this close turn to it.
+pub const BAIT_REACH_TILES: f32 = 14.0;
+/// How far Beast Bait is thrown, tiles (past the predator, away from the rig).
+pub const BAIT_THROW_TILES: i32 = 6;
+/// How long a fitted Lamp Filter set of coloured glass lasts (world milliseconds); a
+/// coloured lamp needs one ([`DeepSupply::LampFilter`]).
+pub const LAMP_FILTER_MILLIS: u64 = 600_000;
+/// Flares and baits in the world at once, at most (the oldest go first).
+pub const MAX_SUPPLY_LURES: usize = 12;
+
+/// A thrown supply lying in the world: a Flare Buoy's light or Beast Bait's scent.
+#[derive(Clone, Copy, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
+pub struct SupplyLure {
+    /// [`DeepSupply::FlareBuoy`] or [`DeepSupply::BeastBait`].
+    pub supply: DeepSupply,
+    /// Who threw it.
+    pub owner: crate::ids::PlayerId,
+    /// Where it lies (absolute tiles).
+    pub at: TilePosition,
+    /// When it was thrown and when it is spent.
+    pub since: crate::ids::SimulationTick,
+    pub until: crate::ids::SimulationTick,
+}
+
+/// What the spent deep supplies are still doing (Wave 10 polish).
+///
+/// Shared, saved and replicated in [`crate::logistics::Logistics::supply_effects`]. Every
+/// supply in the kit now has an effect, spent automatically where its stratum bites (no new
+/// input, so it works for every seat, online and by touch):
+///
+/// | Supply | Spent when | Effect |
+/// |---|---|---|
+/// | Ballast Tank | a submerged rig falls to [`BALLAST_BLOW_HULL_SHARE`] of its hull or the abyss's pressure cracks it | an emergency blow: [`BALLAST_BLOW_MILLIS`] of full lift that no current, whirlpool or lure holds |
+/// | Frost Heater | hull frost reaches the warning line | burns the frost off (Wave 9) |
+/// | Flare Buoy | a lure angler's light catches a rig | a buoy that lights the black water for [`FLARE_MILLIS`]; anglers in its light are dazzled and drag nobody |
+/// | Beast Bait | a hunting predator of the Hollow World notices a rig | thrown past the beast: every hunting predator within [`BAIT_REACH_TILES`] leaves the rig for it, [`BAIT_MILLIS`] |
+/// | Shade Canopy | the Sunforge's light starts to scorch | cools the rig (Wave 9) |
+/// | Time-Bubble Bomb | thrown like any charge | it **is** the far track's time bubble ([`crate::explosive::ExplosiveKind::TimeBubble`]): bought or crafted, it goes to the rig's charges |
+/// | Echo Charge | a scanner press in the Echo Caves without the Sonar Suite | one full ping (Wave 9) |
+/// | Lamp Filter | the lamp is first tinted (and as a set wears out) | the coloured glass a tinted lamp needs: one set lasts [`LAMP_FILTER_MILLIS`] |
+#[derive(Clone, Debug, Default, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
+pub struct SupplyEffects {
+    /// Rigs blowing an emergency Ballast Tank, until this tick.
+    #[serde(default)]
+    pub ballast_blows: std::collections::BTreeMap<crate::ids::PlayerId, crate::ids::SimulationTick>,
+    /// Flare buoys and beast bait lying in the world (oldest first).
+    #[serde(default)]
+    pub lures: Vec<SupplyLure>,
+    /// Rigs whose lamp has a Lamp Filter set fitted, until this tick.
+    #[serde(default)]
+    pub filter_sets: std::collections::BTreeMap<crate::ids::PlayerId, crate::ids::SimulationTick>,
+}
+
+impl SupplyEffects {
+    /// Whether nothing is at work.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ballast_blows.is_empty() && self.lures.is_empty() && self.filter_sets.is_empty()
+    }
+
+    /// Whether `player`'s Ballast Tank is blowing at `now`.
+    #[must_use]
+    pub fn blowing(&self, player: crate::ids::PlayerId, now: crate::ids::SimulationTick) -> bool {
+        self.ballast_blows
+            .get(&player)
+            .is_some_and(|until| now < *until)
+    }
+
+    /// Whether `player`'s lamp has a filter set fitted at `now`.
+    #[must_use]
+    pub fn filter_fitted(
+        &self,
+        player: crate::ids::PlayerId,
+        now: crate::ids::SimulationTick,
+    ) -> bool {
+        self.filter_sets
+            .get(&player)
+            .is_some_and(|until| now < *until)
+    }
+
+    /// The live lures of `supply` (spent ones are swept by the tick).
+    pub fn lures_of(&self, supply: DeepSupply) -> impl Iterator<Item = &SupplyLure> + '_ {
+        self.lures.iter().filter(move |lure| lure.supply == supply)
+    }
+
+    /// Forgets a leaving player's blow and filter set (their lures stay until spent).
+    pub fn forget(&mut self, player: crate::ids::PlayerId) {
+        self.ballast_blows.remove(&player);
+        self.filter_sets.remove(&player);
+    }
+}
+
+/// A supply at work (netcode codes `720 + code`, the polish track's range).
+#[derive(
+    Clone, Copy, Debug, serde::Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize,
+)]
+pub enum SupplyEvent {
+    /// A Ballast Tank blew: the submarine surges up.
+    BallastBlown,
+    /// A Flare Buoy was lit.
+    FlareLit,
+    /// Beast Bait was thrown and the predators turned to it.
+    BaitThrown,
+    /// A Lamp Filter set was fitted to the lamp.
+    FilterFitted,
+    /// A Lamp Filter set wore out with none to replace it: the lamp is white again.
+    FilterWornOut,
+}
+
+impl SupplyEvent {
+    /// Netcode code offset (append only).
+    #[must_use]
+    pub const fn code(self) -> u16 {
+        self as u16
+    }
+
+    /// The news line for the seat it concerns.
+    #[must_use]
+    pub const fn news(self) -> &'static str {
+        match self {
+            Self::BallastBlown => "Ballast blown: surfacing!",
+            Self::FlareLit => "Flare buoy lit: the anglers are dazzled",
+            Self::BaitThrown => "Beast bait thrown: the predators turn to it",
+            Self::FilterFitted => "Lamp filter glass fitted",
+            Self::FilterWornOut => "The lamp filter glass is spent: white light",
+        }
     }
 }
 

@@ -373,6 +373,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::FarStrange {
             what, player_id, ..
         } => (580 + what.code() as u32, player_id),
+        // Deep supplies at work (wave 10 polish): 720-739.
+        GameplayEventKind::Supply {
+            what, player_id, ..
+        } => (720 + what.code() as u32, player_id),
     }
 }
 

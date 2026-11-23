@@ -546,6 +546,7 @@ impl LocalGame {
         self.announce_drowned(&players);
         self.announce_distortion(&players);
         self.announce_far_strange(&players);
+        self.announce_supplies(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1255,6 +1256,30 @@ impl LocalGame {
                     text.clone(),
                 );
             }
+        }
+    }
+
+    /// A deep supply spent (Wave 10 polish): its news line for the seat whose kit it came from.
+    fn announce_supplies(&mut self, players: &[PlayerId]) {
+        let mut messages: Vec<(usize, &'static str)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Supply {
+                what, player_id, ..
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            for (seat, player) in players.iter().enumerate() {
+                if player_id == Some(*player) {
+                    messages.push((seat, what.news()));
+                }
+            }
+        }
+        for (seat, message) in messages {
+            message.clone_into(&mut self.shell.seat_mut(seat).message);
         }
     }
 

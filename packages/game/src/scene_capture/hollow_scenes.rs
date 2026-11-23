@@ -190,7 +190,7 @@ fn breach(stage: &mut SceneStage<'_>) {
 
 /// A jungle hall: crestbacks grazing, a skyneck, a fangrunner pack (by day) or the pack hunting
 /// (by night).
-fn jungle(stage: &mut SceneStage<'_>, day: bool) {
+pub(super) fn jungle(stage: &mut SceneStage<'_>, day: bool) {
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         let (x, floor) = jungle_floor();

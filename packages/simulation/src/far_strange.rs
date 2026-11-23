@@ -708,6 +708,8 @@ pub enum FarStrangeRefusal {
     NoBubbleSeller,
     /// On foot there is no lamp to filter.
     OnFoot,
+    /// A tinted lamp needs a Lamp Filter set of coloured glass in the kit (Wave 10 polish).
+    NoFilterGlass,
 }
 
 impl FarStrangeRefusal {
@@ -719,6 +721,9 @@ impl FarStrangeRefusal {
             Self::SameFilter => "That filter is already on the lamp.",
             Self::NoBubbleSeller => "Time bubbles sell at outposts and in town.",
             Self::OnFoot => "Board the rig to change its lamp.",
+            Self::NoFilterGlass => {
+                "A tinted lamp needs Lamp Filter glass: the Prism Relay sells it, Prism Sand makes it."
+            }
         }
         .to_owned()
     }

@@ -514,6 +514,20 @@ pub const fn far_strange_cue(
     }
 }
 
+/// The sound of a deep supply spent (Wave 10 polish): the ballast's rush, the flare's hiss,
+/// the bait's throw, the filter glass's clink.
+#[must_use]
+pub const fn supply_cue(what: fatherload_simulation::workshop::SupplyEvent) -> SoundCue {
+    use fatherload_simulation::workshop::SupplyEvent as E;
+    match what {
+        E::BallastBlown => SoundCue::SteamHiss,
+        E::FlareLit => SoundCue::FlareIgnite,
+        E::BaitThrown => SoundCue::ExplosiveThrow,
+        E::FilterFitted => SoundCue::KeyedGlass,
+        E::FilterWornOut => SoundCue::UiError,
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -992,6 +1006,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::DistortionLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
         // The far Strange Layers (Wave 9).
         GameplayEventKind::FarStrange { what, .. } => Some(far_strange_cue(*what)),
+        // Deep supplies at work (Wave 10 polish).
+        GameplayEventKind::Supply { what, .. } => Some(supply_cue(*what)),
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
@@ -1357,7 +1373,8 @@ mod tests {
             | GameplayEventKind::Hollow { .. }
             | GameplayEventKind::Distortion { .. }
             | GameplayEventKind::DistortionLandmarkFound { .. }
-            | GameplayEventKind::FarStrange { .. } => {}
+            | GameplayEventKind::FarStrange { .. }
+            | GameplayEventKind::Supply { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },

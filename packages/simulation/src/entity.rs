@@ -552,6 +552,18 @@ impl EntityState {
         }
     }
 
+    /// Where the entity can be hit, if it can be damaged (Wave 10 polish): an enemy's hit
+    /// circle widened to its drawn body ([`crate::enemy::EnemyKind::contact_half`]); anything
+    /// else its [`crate::combat::Health::radius`]. Weapons test hits against this.
+    #[must_use]
+    pub fn hit_area(&self) -> Option<crate::combat::HitArea> {
+        let health = self.health()?;
+        Some(match self {
+            Self::Enemy(enemy) => enemy.kind.hit_area(),
+            _ => crate::combat::HitArea::circle(health.radius),
+        })
+    }
+
     /// Mutable health, if the entity can be damaged.
     pub const fn health_mut(&mut self) -> Option<&mut crate::combat::Health> {
         match self {

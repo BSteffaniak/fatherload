@@ -276,8 +276,8 @@ impl WorldState {
                 let distance = dx.hypot(dy).max(1.0);
                 let near_hold = (x - hold.0).hypot(y - hold.1) <= HOLD_RADIUS;
                 let in_cone = dy.mul_add(aim.1, dx * aim.0) / distance >= 0.6;
-                let point_blank = entity.state.health().is_some_and(|health| {
-                    super::weapons::segment_distance((x, y), hardpoint, muzzle) <= health.radius
+                let point_blank = entity.state.hit_area().is_some_and(|area| {
+                    super::weapons::segment_hits_area((x, y), &area, hardpoint, muzzle)
                 });
                 point_blank
                     || ((near_hold || in_cone)
@@ -566,8 +566,12 @@ impl WorldState {
                 .into_iter()
                 .any(|enemy| {
                     self.entities.get(enemy).is_some_and(|entity| {
-                        let radius = entity.state.health().map_or(0.0, |health| health.radius);
-                        (entity.body.x - body.x).hypot(entity.body.y - body.y) <= fuse + radius
+                        let (dx, dy) = (entity.body.x - body.x, entity.body.y - body.y);
+                        let radius = entity
+                            .state
+                            .hit_area()
+                            .map_or(0.0, |area| area.reach_toward(dx, dy));
+                        dx.hypot(dy) <= fuse + radius
                     })
                 });
             if near || state.travelled >= spec.range {
@@ -606,12 +610,12 @@ impl WorldState {
             let Some(entity) = self.entities.get(target) else {
                 continue;
             };
-            let Some(health) = entity.state.health() else {
+            let Some(area) = entity.state.hit_area() else {
                 continue;
             };
             let (dx, dy) = (entity.body.x - at.0, entity.body.y - at.1);
             let distance = dx.hypot(dy);
-            let edge = radius + health.radius;
+            let edge = radius + area.reach_toward(dx, dy);
             if distance >= edge
                 || !line_clear(&self.terrain, at.0, at.1, entity.body.x, entity.body.y)
             {

@@ -408,6 +408,10 @@ pub struct Logistics {
     /// ([`crate::WorldState::take_supply`]). An emptied kit is dropped.
     #[serde(default)]
     pub supplies: BTreeMap<PlayerId, Vec<u8>>,
+    /// What the spent supplies are still doing (Wave 10 polish): blowing ballast, burning
+    /// flares, lying bait, fitted lamp filter glass.
+    #[serde(default)]
+    pub supply_effects: crate::workshop::SupplyEffects,
 }
 
 impl Logistics {
@@ -571,6 +575,7 @@ impl Logistics {
         self.rides.remove(&player);
         self.dives.remove(&player);
         self.gate_warned.remove(&player);
+        self.supply_effects.forget(player);
     }
 }
 

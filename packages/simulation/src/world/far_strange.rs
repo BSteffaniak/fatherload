@@ -296,6 +296,7 @@ impl WorldState {
                 if self.is_on_foot(player_id) {
                     return Err(FarStrangeRefusal::OnFoot);
                 }
+                self.check_filter_glass(player_id, self.lamp_filter_of(player_id).next())?;
                 Ok(0)
             }
             FarStrangeAction::SetFilter(filter) => {
@@ -305,6 +306,7 @@ impl WorldState {
                 if self.lamp_filter_of(player_id) == filter {
                     return Err(FarStrangeRefusal::SameFilter);
                 }
+                self.check_filter_glass(player_id, filter)?;
                 Ok(0)
             }
             FarStrangeAction::BuyTimeBubbles => {
@@ -341,6 +343,9 @@ impl WorldState {
                 return;
             }
         };
+        if filter != LampFilter::White && !self.fit_filter_glass(player_id, tile, output) {
+            return;
+        }
         if filter == LampFilter::White {
             self.far_strange.filters.remove(&player_id);
         } else {

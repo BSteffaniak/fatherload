@@ -54,8 +54,13 @@ use super::{
 const CELL: f32 = 8.0;
 /// Darkness levels the overlay is quantized to.
 const LEVELS: i32 = 10;
-/// How dark the Glow Sea is with no light near (0..1).
-const GLOW_SEA_DARK: f32 = 0.95;
+/// How dark the Glow Sea is with no light near (0..1). Wave 10 polish lifted it from 0.95: the
+/// rock's silhouettes now read faintly through the deep-sea blue, so a player can find the
+/// way, and the living lights still own the scene.
+const GLOW_SEA_DARK: f32 = 0.8;
+/// The Glow Sea's dark: a deep-sea blue-black rather than plain ink (Wave 10 polish), so the
+/// lifted dark keeps the sea's mood.
+const GLOW_SEA_INK: Color = Color::new(0x05, 0x0b, 0x18, 255);
 /// Strongest heartbeat wash over flesh (alpha 0..255).
 const PULSE_ALPHA: f32 = 46.0;
 
@@ -357,7 +362,7 @@ pub(super) fn draw_glow_sea_darkness(draw: &mut impl RaylibDraw, scene: &GlowSea
                         let x = (first_x + start) as f32 * CELL;
                         draw.draw_rectangle_rec(
                             Rectangle::new(x, y, (col - start) as f32 * CELL, CELL),
-                            with_alpha(INK, current),
+                            with_alpha(GLOW_SEA_INK, current),
                         );
                     }
                     run = Some((col, alpha));

@@ -46,10 +46,16 @@ use crate::{
 const fn village_set(style: BuildingStyle) -> &'static InteriorSet {
     match style {
         // Sky towns (WP-SKY): canvas-and-brass rooms read like timber, cloisters like stone.
-        BuildingStyle::Timber | BuildingStyle::Skyrig => &art::village_timber::SET,
-        BuildingStyle::Stone | BuildingStyle::Cloister => &art::village_stone::SET,
+        // Wave 10 polish: the Sunfolk's reed houses are timber inside, the merrow's coral
+        // halls pale stone, Parallax Station's plated rooms salvaged metal.
+        BuildingStyle::Timber | BuildingStyle::Skyrig | BuildingStyle::Jungle => {
+            &art::village_timber::SET
+        }
+        BuildingStyle::Stone | BuildingStyle::Cloister | BuildingStyle::Coral => {
+            &art::village_stone::SET
+        }
         BuildingStyle::Adobe => &art::village_adobe::SET,
-        BuildingStyle::Scrap => &art::village_scrap::SET,
+        BuildingStyle::Scrap | BuildingStyle::Machine => &art::village_scrap::SET,
         BuildingStyle::Carved => &art::village_carved::SET,
     }
 }

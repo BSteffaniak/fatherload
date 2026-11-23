@@ -488,7 +488,9 @@ impl WorldState {
         let seconds = self.timing.delta_seconds;
         let drilling = self.active_drills.contains_key(&player_id);
         let submerged = wet.share >= SUBMARINE_SHARE;
-        let current = if submerged {
+        // An emergency Ballast Tank (Wave 10 polish): full lift, and no current holds it.
+        let blowing = submerged && self.ballast_blowing(player_id);
+        let current = if submerged && !blowing {
             self.current_at(x, y)
         } else {
             (0.0, 0.0)
@@ -511,7 +513,9 @@ impl WorldState {
             };
             return;
         }
-        if thrust && !dive {
+        if blowing {
+            player.water.ballast = BALLAST_FULL;
+        } else if thrust && !dive {
             player.water.ballast = (player.water.ballast + step).min(BALLAST_FULL);
         } else if dive && !thrust {
             player.water.ballast = (player.water.ballast - step).max(-BALLAST_FULL);
@@ -523,7 +527,11 @@ impl WorldState {
         let kind = wet.kind.unwrap_or(FluidKind::Water);
         // A neutral trim carries the weight the water does not: the rig hovers.
         let neutral = AUTHORITATIVE_RIG_GRAVITY * (1.0 - kind.buoyancy()).max(0.0) * wet.share;
-        let trim = BALLAST_ACCELERATION * f32::from(player.water.ballast) / f32::from(BALLAST_FULL);
+        let mut trim =
+            BALLAST_ACCELERATION * f32::from(player.water.ballast) / f32::from(BALLAST_FULL);
+        if blowing {
+            trim += crate::workshop::BALLAST_BLOW_LIFT;
+        }
         let vy = (-(neutral + trim)).mul_add(seconds, player.velocity_y);
         // A sinking sub a few pixels off the bottom settles onto it and rests there, so its
         // drill can bite. (The sweep stops a rig a step short of the floor; at a low tick rate
@@ -646,7 +654,7 @@ impl WorldState {
         self.advance_geysers(next_tick, output);
         self.advance_fades(next_tick);
         self.find_lore(output);
-        self.advance_lures();
+        self.advance_lures(output);
         self.advance_eel_dragon(next_tick, output);
         self.advance_leviathan(next_tick, output);
     }
@@ -1043,12 +1051,17 @@ impl WorldState {
     }
 
     /// Lure anglers drag the rigs in their light toward their jaws.
-    fn advance_lures(&mut self) {
+    ///
+    /// Wave 10 polish: anglers in a Flare Buoy's light are dazzled and drag nobody; a rig caught
+    /// drops a flare from its kit (if it carries one), and a rig blowing ballast tears free.
+    fn advance_lures(&mut self, output: &mut TickOutput) {
         let seconds = self.timing.delta_seconds;
         let lures: Vec<(f32, f32)> = self
             .enemies()
-            .filter(|(_, state)| {
-                state.kind == EnemyKind::LureAngler && state.mode != EnemyMode::Stunned
+            .filter(|(entity, state)| {
+                state.kind == EnemyKind::LureAngler
+                    && state.mode != EnemyMode::Stunned
+                    && !self.flare_dazzles(entity.body.x, entity.body.y)
             })
             .map(|(entity, _)| (entity.body.x, entity.body.y))
             .collect();
@@ -1072,7 +1085,10 @@ impl WorldState {
                     let distance = dx.hypot(dy).max(1.0);
                     (acc.0 + dx / distance, acc.1 + dy / distance)
                 });
-            if pull == (0.0, 0.0) {
+            if pull == (0.0, 0.0)
+                || self.ballast_blowing(player_id)
+                || (!self.is_on_foot(player_id) && self.light_flare(player_id, output))
+            {
                 continue;
             }
             let length = pull.0.hypot(pull.1).max(1.0);

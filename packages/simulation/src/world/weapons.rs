@@ -43,9 +43,11 @@ use crate::{
 
 use super::{WorldState, bombs::Blast};
 
-/// Largest hit radius any damageable entity may have (spatial queries look this far; the
-/// Leviathan's great body is the largest, Wave 9).
-pub const MAX_HIT_RADIUS: f32 = TILE_SIZE * 1.5;
+/// Largest hit reach any damageable entity may have (spatial queries look this far).
+///
+/// Wave 10 polish hits a creature's whole drawn body ([`crate::combat::HitArea`]), and the
+/// Leviathan's is the longest (a test keeps every kind inside it).
+pub const MAX_HIT_RADIUS: f32 = TILE_SIZE * 3.5;
 /// How close a shot must pass a live charge to set it off, in pixels.
 const CHARGE_HIT_RADIUS: f32 = 9.0;
 /// How close a harpoon must pass a drop to spear it, in pixels.
@@ -95,16 +97,25 @@ fn point_blank_samples(origin: (f32, f32), muzzle: (f32, f32)) -> impl Iterator<
     })
 }
 
-/// Distance from `point` to the segment `from`-`to`.
-pub(super) fn segment_distance(point: (f32, f32), from: (f32, f32), to: (f32, f32)) -> f32 {
+/// Whether the segment `from`-`to` passes through `area` centred on `centre` (judged at the
+/// segment's closest point to the centre).
+pub(super) fn segment_hits_area(
+    centre: (f32, f32),
+    area: &crate::combat::HitArea,
+    from: (f32, f32),
+    to: (f32, f32),
+) -> bool {
     let (sx, sy) = (to.0 - from.0, to.1 - from.1);
     let length_sq = sx.mul_add(sx, sy * sy);
     let t = if length_sq > 0.0 {
-        ((point.0 - from.0).mul_add(sx, (point.1 - from.1) * sy) / length_sq).clamp(0.0, 1.0)
+        ((centre.0 - from.0).mul_add(sx, (centre.1 - from.1) * sy) / length_sq).clamp(0.0, 1.0)
     } else {
         0.0
     };
-    (sx.mul_add(t, from.0) - point.0).hypot(sy.mul_add(t, from.1) - point.1)
+    area.contains(
+        centre.0 - sx.mul_add(t, from.0),
+        centre.1 - sy.mul_add(t, from.1),
+    )
 }
 
 /// What a ray found, for the Act II weapons (`world/sky_weapons.rs`).
@@ -626,10 +637,10 @@ impl WorldState {
             let distance = dx.mul_add(dx, dy * dy).sqrt();
             match entity.state {
                 state_with_health if state_with_health.health().is_some() => {
-                    let radius = state_with_health
-                        .health()
-                        .map_or(0.0, |health| health.radius);
-                    if distance > radius || state.last_hit == Some(*other) {
+                    let inside = state_with_health
+                        .hit_area()
+                        .is_some_and(|area| area.contains(dx, dy));
+                    if !inside || state.last_hit == Some(*other) {
                         continue;
                     }
                     let (tx, ty) = (entity.body.x, entity.body.y);
@@ -830,9 +841,8 @@ impl WorldState {
             .into_iter()
             .filter(|id| {
                 self.entities.get(*id).is_some_and(|entity| {
-                    entity.state.health().is_some_and(|health| {
-                        segment_distance((entity.body.x, entity.body.y), origin, muzzle)
-                            <= health.radius
+                    entity.state.hit_area().is_some_and(|area| {
+                        segment_hits_area((entity.body.x, entity.body.y), &area, origin, muzzle)
                     })
                 })
             })
@@ -858,7 +868,7 @@ impl WorldState {
             aim.0.mul_add(-MUZZLE_REACH, muzzle.0),
             aim.1.mul_add(-MUZZLE_REACH, muzzle.1),
         );
-        let candidates: Vec<(EntityId, f32, f32, f32)> = self
+        let candidates: Vec<(EntityId, f32, f32, crate::combat::HitArea)> = self
             .entities
             .ids_in_rect(
                 origin.0.min(far.0) - MAX_HIT_RADIUS,
@@ -869,8 +879,8 @@ impl WorldState {
             .into_iter()
             .filter_map(|id| {
                 let entity = self.entities.get(id)?;
-                let health = entity.state.health()?;
-                Some((id, entity.body.x, entity.body.y, health.radius))
+                let area = entity.state.hit_area()?;
+                Some((id, entity.body.x, entity.body.y, area))
             })
             .collect();
         let charges = self.live_charges_between(muzzle, far);
@@ -886,11 +896,11 @@ impl WorldState {
         let steps = (range / RAY_STEP).ceil() as u32;
         let mut end = muzzle;
         for point in point_blank_samples(origin, muzzle) {
-            for (id, x, y, radius) in &candidates {
+            for (id, x, y, area) in &candidates {
                 let (dx, dy) = (x - point.0, y - point.1);
                 if !hit.contains(id)
                     && ray.hits.len() <= usize::from(spec.pierce)
-                    && dx.mul_add(dx, dy * dy) <= radius * radius
+                    && area.contains(dx, dy)
                 {
                     hit.insert(*id);
                     ray.hits.push(RayHit::Target(*id, point.0, point.1));
@@ -936,12 +946,12 @@ impl WorldState {
                 }
             }
             let mut spent = false;
-            for (id, x, y, radius) in &candidates {
+            for (id, x, y, area) in &candidates {
                 if hit.contains(id) {
                     continue;
                 }
                 let (dx, dy) = (x - point.0, y - point.1);
-                if dx.mul_add(dx, dy * dy) <= radius * radius {
+                if area.contains(dx, dy) {
                     hit.insert(*id);
                     ray.hits.push(RayHit::Target(*id, point.0, point.1));
                     if ray.hits.len() > usize::from(spec.pierce) {

@@ -108,6 +108,14 @@ pub enum BuildingStyle {
     Skyrig,
     /// White stone with blue-tiled upswept roofs and bells (Cloudborn sky towns).
     Cloister,
+    /// Pink coral walls grown round shell-tiled domes, pearl windows (Merrow City, Wave 10).
+    Coral,
+    /// Woven-reed walls on timber stilts under steep thatch, hung with hide and bone (the
+    /// Sunfolk Kraal, Wave 10).
+    Jungle,
+    /// Riveted builder-alloy plates, pipes and blinking panels under flat vented roofs
+    /// (Parallax Station, Wave 10).
+    Machine,
 }
 
 impl BuildingStyle {
@@ -122,10 +130,32 @@ impl BuildingStyle {
             Culture::Aeronaut => Self::Skyrig,
             // The colony is no village (never laid out); its glass and hull read as the
             // cloister's white stone where a style is asked for.
-            // Merrow City's coral-and-shell halls read as the cloister's pale stone and
-            // sea-blue tile too (Wave 9).
-            Culture::Cloudborn | Culture::Lunar | Culture::Merrow => Self::Cloister,
+            Culture::Cloudborn | Culture::Lunar => Self::Cloister,
+            // Merrow City's coral-and-shell halls (Wave 10 polish; Wave 9 borrowed the
+            // cloister's).
+            Culture::Merrow => Self::Coral,
         }
+    }
+
+    /// The style of village `id` of `culture`: its culture's, except the deep settlements
+    /// that build their own (Wave 10 polish): the Sunfolk Kraal's jungle stilts and thatch and
+    /// Parallax Station's machine plates (both Deepfolk-cultured, which built rock-cut).
+    #[must_use]
+    pub const fn for_village(settings: &WorldSettings, id: VillageId, culture: Culture) -> Self {
+        let (site, underground) = placement::decode_id(id);
+        if underground
+            && site == crate::worldgen::streamed::villages::SUNFOLK_SITE
+            && settings.generator.has_descents()
+        {
+            return Self::Jungle;
+        }
+        if underground
+            && site == crate::distortion::PARALLAX_SITE
+            && crate::distortion::has_distortion(settings)
+        {
+            return Self::Machine;
+        }
+        Self::of(culture)
     }
 
     #[must_use]
@@ -138,6 +168,9 @@ impl BuildingStyle {
             Self::Carved => "rock-cut",
             Self::Skyrig => "canvas-and-brass",
             Self::Cloister => "white-stone",
+            Self::Coral => "coral-and-shell",
+            Self::Jungle => "stilt-and-thatch",
+            Self::Machine => "machine-plated",
         }
     }
 }
@@ -978,7 +1011,7 @@ pub fn build(settings: &WorldSettings, spec: &SiteSpec) -> Village {
         name: population.village_name.clone(),
         culture,
         landscape,
-        style: BuildingStyle::of(culture),
+        style: BuildingStyle::for_village(settings, id, culture),
         size,
         specialty,
         prosperity,

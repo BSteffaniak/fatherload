@@ -39,6 +39,73 @@ pub struct Health {
     pub machine: bool,
 }
 
+/// Where a damageable entity can be hit (Wave 10 polish).
+///
+/// Its hit circle ([`Health::radius`]) widened to the ellipse of its drawn body (`half`, half
+/// extents in pixels; zero for none). A creature's drawn body is its contact box
+/// ([`crate::enemy::EnemyKind::contact_half`]), so a shot that visibly strikes the Leviathan's
+/// head or tail, or a boss's reach, lands; the circle alone missed most of a long body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HitArea {
+    pub radius: f32,
+    pub half: (f32, f32),
+    /// How far below the body's centre the drawn body's centre sits (negative: above; a
+    /// walker stands on its feet, so its drawn body rises over its centre).
+    pub centre_dy: f32,
+}
+
+impl HitArea {
+    /// Just a circle of `radius`.
+    #[must_use]
+    pub const fn circle(radius: f32) -> Self {
+        Self {
+            radius,
+            half: (0.0, 0.0),
+            centre_dy: 0.0,
+        }
+    }
+
+    /// How far from the centre the area reaches toward the direction `(dx, dy)` (the
+    /// ellipse taken about the body's centre: for reach tests, not exact hits).
+    #[must_use]
+    pub fn reach_toward(&self, dx: f32, dy: f32) -> f32 {
+        let (a, b) = self.half;
+        if a <= 0.0 || b <= 0.0 {
+            return self.radius;
+        }
+        let distance = dx.hypot(dy);
+        if distance <= f32::EPSILON {
+            return self.radius.max(a.min(b));
+        }
+        // The ellipse's radius along the direction.
+        let ellipse = a * b * distance / (b * dx).hypot(a * dy);
+        self.radius.max(ellipse)
+    }
+
+    /// Whether the point at offset `(ox, oy)` from the body's centre is inside: within the hit
+    /// circle, or the drawn body's ellipse.
+    #[must_use]
+    pub fn contains(&self, ox: f32, oy: f32) -> bool {
+        if ox.hypot(oy) <= self.radius {
+            return true;
+        }
+        let (a, b) = self.half;
+        if a <= 0.0 || b <= 0.0 {
+            return false;
+        }
+        let (ex, ey) = (ox / a, (oy - self.centre_dy) / b);
+        ex.mul_add(ex, ey * ey) <= 1.0
+    }
+
+    /// The farthest the area reaches from the body's centre in any direction.
+    #[must_use]
+    pub fn extent(&self) -> f32 {
+        self.radius
+            .max(self.half.0)
+            .max(self.half.1 + self.centre_dy.abs())
+    }
+}
+
 impl Health {
     /// Full health.
     #[must_use]

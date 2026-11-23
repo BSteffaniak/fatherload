@@ -1023,17 +1023,9 @@ fn hud_warnings(
     } else {
         snapshot.terrain.nominal_row(view.hud.row.max(0))
     };
-    // A Deep Descent world warns where its strata run hot (Wave 8: heat per stratum); older
-    // worlds by depth as before.
-    let hot = if fatherload_simulation::crust::crust_rules(snapshot.terrain.settings()) {
-        depth > 0
-            && fatherload_simulation::crust::heat_units(
-                snapshot.terrain,
-                player.tile_in(crate::view_frame::frame()),
-            ) > 0
-    } else {
-        depth >= 60
-    };
+    // Heat warns only where it cracks this rig's hull: the heat past its radiator and shielding
+    // (Wave 10 polish; the tick's own reading), never where its cooling tier covers it.
+    let hot = depth > 0 && heat_bites(snapshot.terrain, player);
     if hot {
         warnings.push(("HEAT", &icons::HEAT));
     }
@@ -1044,6 +1036,16 @@ fn hud_warnings(
         warnings.push(("NO SIGNAL", &icons::WARNING));
     }
     warnings
+}
+
+/// Whether the heat where `player`'s rig is runs past its cooling (the HUD's HEAT badge).
+fn heat_bites(terrain: &fatherload_simulation::terrain::Terrain, player: &Player) -> bool {
+    fatherload_simulation::crust::heat_danger_units(
+        terrain,
+        player.tile_in(crate::view_frame::frame()),
+        player.radiator_level,
+        player.hazard_gear.heat_shield,
+    ) > 0
 }
 
 /// Colour of an explored tile on the minimap.

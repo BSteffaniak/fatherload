@@ -215,7 +215,13 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `CraftOutput::Supply` recipes (no wire change: recipes are ids), and `Logistics::supplies`
 ///   (each player's supply kit of `workshop::DeepSupply`) in the logistics section.
 /// * The integration: no wire change (the Sonar Suite's one API reads the two sections above).
-pub const PROTOCOL_VERSION: u8 = 17;
+///
+/// Version 18 (Wave 10; the integrator collapses the tracks' bumps). The polish track:
+/// `Logistics::supply_effects` (blowing ballast, flare buoys and beast bait in the world,
+/// fitted lamp filter glass) in the logistics section, the supply events 720-739
+/// (`GameplayEventKind::Supply`), the appended `FarStrangeRefusal::NoFilterGlass`, and the
+/// appended `BuildingStyle::{Coral, Jungle, Machine}` in village records.
+pub const PROTOCOL_VERSION: u8 = 18;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

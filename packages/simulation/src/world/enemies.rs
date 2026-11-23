@@ -1292,7 +1292,9 @@ impl WorldState {
         // The Living Dark (Wave 8): factions, harmless kinds and the Mind's thralls.
         // The far Strange Layers (Wave 9): blind hunters hear, The Glitch knows its hall.
         let noticed = self
-            .living_notice(body, state)
+            // Deep supplies (Wave 10 polish): flares dazzle anglers, bait holds predators.
+            .supply_notice(body, state)
+            .or_else(|| self.living_notice(body, state))
             // The Drowned and Frozen (Wave 9): the Leviathan knows its arena.
             .or_else(|| self.drowned_notice(body, state))
             .or_else(|| self.hollow_notice(body, state, || self.perceive(body, state)))

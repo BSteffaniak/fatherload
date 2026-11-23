@@ -424,6 +424,11 @@ pub enum EnemyFamily {
     Machine,
 }
 
+/// A creature's hit ellipse over its contact box (Wave 10 polish): contact boxes are about
+/// 85 % of the drawn body, so this makes the hit area the drawn body
+/// ([`EnemyKind::hit_area`]).
+pub const HIT_OVER_CONTACT: f32 = 1.15;
+
 /// How an enemy moves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Locomotion {
@@ -3079,30 +3084,30 @@ impl EnemyKind {
             Self::AnimatedStatue => (13.0, 18.0),
             // Drawn half as large again as their art (the game scales the guardians up).
             Self::SunColossus => (32.0, 40.0),
-            Self::HollowMatriarch => (26.0, 30.0),
+            Self::HollowMatriarch => (28.0, 31.0),
             // Crypt creatures: seen from above, the box is the footprint.
             Self::CryptSkeleton => (11.0, 11.0),
-            Self::Spectre => (10.0, 11.0),
+            Self::Spectre => (11.0, 11.0),
             Self::Cultist => (11.0, 11.0),
             Self::CryptGolem => (17.0, 16.0),
             Self::CryptLord => (22.0, 21.0),
             // The Crust (Wave 8), sized to their art.
-            Self::BurrowMole => (11.0, 8.0),
-            Self::MudLeech => (10.0, 6.0),
-            Self::PotterWasp => (7.0, 6.0),
-            Self::MineBat => (10.0, 7.0),
-            Self::TimberBeetle => (11.0, 8.0),
-            Self::SlateSkink => (12.0, 6.0),
-            Self::ShelfCrab => (15.0, 10.0),
-            Self::TubeCrawler => (13.0, 8.0),
-            Self::CinderMoth => (9.0, 7.0),
+            Self::BurrowMole => (14.0, 8.0),
+            Self::MudLeech => (12.0, 6.0),
+            Self::PotterWasp => (9.0, 6.0),
+            Self::MineBat => (11.0, 7.0),
+            Self::TimberBeetle => (14.0, 8.0),
+            Self::SlateSkink => (17.0, 6.0),
+            Self::ShelfCrab => (19.0, 9.0),
+            Self::TubeCrawler => (16.0, 8.0),
+            Self::CinderMoth => (10.0, 7.0),
             // The Old Deep (Wave 8), sized to their art.
             Self::PrismMoth => (12.0, 9.0),
             Self::FossilEel => (16.0, 7.0),
             Self::JetRay => (20.0, 8.0),
-            Self::GlowGrub => (9.0, 6.0),
+            Self::GlowGrub => (10.0, 6.0),
             Self::Glowmother => (28.0, 18.0),
-            Self::PistonWarden => (14.0, 15.0),
+            Self::PistonWarden => (15.0, 15.0),
             Self::VoidJelly => (11.0, 13.0),
             Self::MagmaSalamander => (18.0, 8.0),
             // The Living Dark (Wave 8), sized to their art like the rest.
@@ -3116,10 +3121,10 @@ impl EnemyKind {
             Self::HiveDrone => (11.0, 8.0),
             Self::AcidLancer => (12.0, 12.0),
             Self::SwarmMatriarch => (26.0, 18.0),
-            Self::MawWorm => (13.0, 9.0),
+            Self::MawWorm => (13.0, 8.0),
             Self::BilePolyp => (14.0, 13.0),
-            Self::Leechling => (8.0, 5.0),
-            Self::LureFish => (10.0, 6.0),
+            Self::Leechling => (8.0, 4.0),
+            Self::LureFish => (10.0, 5.0),
             Self::GlowJelly => (10.0, 11.0),
             Self::Angler => (17.0, 12.0),
             Self::MycelialMind => (34.0, 28.0),
@@ -3129,7 +3134,7 @@ impl EnemyKind {
             Self::InkSquid => (10.0, 11.0),
             // Drawn half again larger, a mini-boss (Wave 9 review).
             Self::EelDragon => (54.0, 15.0),
-            Self::FrostMite => (7.0, 6.0),
+            Self::FrostMite => (9.0, 7.0),
             Self::TuskSeal => (18.0, 10.0),
             Self::ScaldBeetle => (11.0, 7.0),
             Self::SinterSnail => (12.0, 9.0),
@@ -3147,10 +3152,10 @@ impl EnemyKind {
             Self::Fangrunner => (16.0, 10.0),
             Self::Hangclaw => (13.0, 12.0),
             Self::LodeMite => (7.0, 6.0),
-            Self::CinderDrake => (18.0, 10.0),
+            Self::CinderDrake => (20.0, 10.0),
             Self::ShadeStalker => (14.0, 13.0),
             Self::Flarefly => (7.0, 7.0),
-            Self::SunSerpent => (30.0, 22.0),
+            Self::SunSerpent => (33.0, 22.0),
             Self::SerpentCoil => (20.0, 20.0),
             // The distortion strata (Wave 9), sized to their art; a twin is its rig's size.
             Self::MirrorTwin => (15.0, 13.0),
@@ -3162,18 +3167,46 @@ impl EnemyKind {
             Self::Glitchling => (9.0, 9.0),
             Self::Bitworm => (10.0, 10.0),
             Self::DeadPixel => (11.0, 11.0),
-            // The far Strange Layers (Wave 9 strange-b), sized to their art.
-            Self::TickMite => (8.0, 5.0),
-            Self::AmberSloth => (17.0, 12.0),
-            Self::RewindNewt => (13.0, 6.0),
-            Self::EchoStalker => (16.0, 11.0),
-            Self::Shrieker => (10.0, 8.0),
-            Self::HushMoth => (13.0, 10.0),
-            Self::PrismScarab => (14.0, 9.0),
-            Self::SplitterSpire => (8.0, 15.0),
-            Self::LensWraith => (11.0, 12.0),
-            Self::TheGlitch => (34.0, 34.0),
-            Self::GlitchShard => (7.0, 7.0),
+            // The far Strange Layers (Wave 9 strange-b), sized to their art; drawn half again as
+            // large (Wave 10 polish: they were specks beside the rig).
+            Self::TickMite => (12.0, 8.0),
+            Self::AmberSloth => (25.0, 18.0),
+            Self::RewindNewt => (19.0, 9.0),
+            Self::EchoStalker => (24.0, 16.0),
+            Self::Shrieker => (15.0, 12.0),
+            Self::HushMoth => (19.0, 15.0),
+            Self::PrismScarab => (21.0, 13.0),
+            Self::SplitterSpire => (12.0, 22.0),
+            Self::LensWraith => (16.0, 18.0),
+            Self::TheGlitch => (38.0, 37.0),
+            Self::GlitchShard => (10.0, 10.0),
+        }
+    }
+
+    /// Where shots hit this kind (Wave 10 polish): its terrain circle widened to the drawn
+    /// body, the ellipse [`HIT_OVER_CONTACT`] times its contact box (the contact box is about
+    /// 85 % of the drawn body, so the ellipse is the body's own outline). A walker stands on
+    /// its feet, so its drawn body (and the ellipse) rises over its centre, as the game draws
+    /// it. The game's tests hold every kind's contact box to its art.
+    #[must_use]
+    pub fn hit_area(self) -> crate::combat::HitArea {
+        let spec = self.stats();
+        let (cw, ch) = self.contact_half();
+        let half = (cw * HIT_OVER_CONTACT, ch * HIT_OVER_CONTACT);
+        let grounded = matches!(
+            spec.locomotion,
+            Locomotion::Walking | Locomotion::Stationary
+        ) && !matches!(self, Self::Leviathan);
+        // The game stands a walker's art on its terrain box's floor (plus an art pixel).
+        let centre_dy = if grounded {
+            (spec.radius + 2.0 - half.1).min(0.0)
+        } else {
+            0.0
+        };
+        crate::combat::HitArea {
+            radius: spec.radius,
+            half,
+            centre_dy,
         }
     }
 

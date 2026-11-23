@@ -179,6 +179,7 @@ mod sonar_tests;
 mod state_hash;
 #[cfg(test)]
 mod streaming_tests;
+mod supplies;
 mod test_mode;
 #[cfg(test)]
 mod test_mode_tests;
@@ -195,6 +196,8 @@ mod tombs;
 mod village_tests;
 mod villages;
 mod visibility;
+#[cfg(test)]
+mod wave10_polish_tests;
 #[cfg(test)]
 mod wave6_content_tests;
 #[cfg(test)]
@@ -279,6 +282,7 @@ pub use movement::{
 pub use no_clip::NO_CLIP_SPEED;
 pub use pilot_arms::{PILOT_AUTO_AIM_RANGE, SWING_SHOW_SECONDS as PILOT_SWING_SHOW_SECONDS};
 pub use pilot_gear::{RECALL_SPEED, SENTRY_COVER};
+pub use weapons::MAX_HIT_RADIUS;
 /// Tick deadline of a rig's next drill chip.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 pub struct ActiveDrillTimer {

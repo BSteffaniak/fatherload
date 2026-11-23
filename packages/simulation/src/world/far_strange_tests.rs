@@ -733,6 +733,8 @@ fn keyed_walls_open_only_to_their_own_colour_and_close_when_the_light_leaves() {
         "white light opens nothing"
     );
     assert!(world.filter_swap_here(PLAYER));
+    // A tinted lamp needs filter glass (Wave 10 polish).
+    world.stage_filter_glass(PLAYER);
     // Green: still shut. Red: open.
     assert_eq!(
         act(&mut world, FarStrangeAction::SetFilter(LampFilter::Green)),

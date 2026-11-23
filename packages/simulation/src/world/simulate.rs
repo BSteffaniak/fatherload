@@ -7,7 +7,7 @@ use crate::{
     infrastructure::InfrastructureKind,
     input::{ControlState, TickInputs},
     progression::WorldEventKind,
-    protection::{HEAT_DAMAGE_PER_EXCESS_UNIT, heat_cooling},
+    protection::HEAT_DAMAGE_PER_EXCESS_UNIT,
     quantize::quantize_simulation_scalar,
     rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
@@ -362,10 +362,12 @@ impl WorldState {
             // `crate::protection`), so heat follows the strata wherever they lie. A Deep
             // Descent world reads each stratum's own heat instead (Wave 8, lava tubes hotter),
             // capped fairly in the placeholder Descents (Wave 8 progression).
-            let excess = self
-                .heat_units_at(center)
-                .saturating_sub(heat_cooling(radiator_level, gear.heat_shield))
-                .min(self.placeholder_heat_excess_cap(center, radiator_level, gear.heat_shield));
+            let excess = crate::crust::heat_danger_units(
+                &self.terrain,
+                center,
+                radiator_level,
+                gear.heat_shield,
+            );
             let depth_damage = if excess > 0 {
                 HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
             } else {
@@ -581,6 +583,8 @@ impl WorldState {
         // The Hollow World (Wave 9): the inner sun, the breakthrough, exposure, isle landings,
         // the Gravity Anchor, rides, its creatures and the Sun Serpent.
         self.advance_hollow(next_tick, &mut output);
+        // Deep supplies at work (Wave 10 polish): ballast blows, flares, bait, filter glass.
+        self.advance_supplies(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

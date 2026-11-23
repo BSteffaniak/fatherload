@@ -133,6 +133,37 @@ fn look(style: BuildingStyle, culture: Culture, variant: u32) -> Look {
             trim: GOLD,
             accent: pick(&[SKY, TEAL, GOLD]),
         },
+        // Wave 10 polish: the deep settlements build their own.
+        // Merrow City: coral walls (rose, coral pink or sea-violet) under pearly shell domes.
+        BuildingStyle::Coral => Look {
+            wall: pick(&[ROSE, PINK, LAVENDER]),
+            wall_dark: pick(&[MAROON, PLUM, VIOLET]),
+            wall_light: CREAM,
+            roof: pick(&[BONE, CREAM, SKY_LIGHT]),
+            roof_light: ICE,
+            trim: TEAL_DARK,
+            accent: pick(&[TEAL, SKY, MINT]),
+        },
+        // The Sunfolk Kraal: woven reed walls on stilts under deep straw thatch.
+        BuildingStyle::Jungle => Look {
+            wall: SAND,
+            wall_dark: LOAM,
+            wall_light: CREAM,
+            roof: pick(&[GOLD, AMBER, CLAY]),
+            roof_light: CREAM,
+            trim: SOIL_DARK,
+            accent: pick(&[RED, ORANGE, LEAF, TEAL]),
+        },
+        // Parallax Station: riveted alloy plates, conduits and the station's instrument glow.
+        BuildingStyle::Machine => Look {
+            wall: pick(&[STEEL, SLATE, STEEL_DARK]),
+            wall_dark: STEEL_DARK,
+            wall_light: STEEL_LIGHT,
+            roof: SLATE_DARK,
+            roof_light: STEEL_LIGHT,
+            trim: INK,
+            accent: pick(&[MINT, LAVENDER, SKY]),
+        },
     }
 }
 
@@ -729,7 +760,121 @@ fn walls(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, h: i32) {
             pen.rect(draw, x, y, 2, h, look.wall_dark);
             pen.rect(draw, x + w - 2, y, 2, h, look.wall_dark);
         }
+        BuildingStyle::Coral => coral_walls(draw, lot, x, y, w, h),
+        BuildingStyle::Jungle => jungle_walls(draw, lot, x, y, w, h),
+        BuildingStyle::Machine => machine_walls(draw, lot, x, y, w, h),
     }
+}
+
+/// Merrow coral (Wave 10 polish): knobbly coral grown over the walls, a band of white shells
+/// at the foot and under the eaves, sea-fan sprigs at the corners.
+fn coral_walls(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, h: i32) {
+    let (pen, look) = (lot.pen, lot.look);
+    // Polyps: a knobbly speckle, the same on every visit (hashed from the lot).
+    for row in (y + 3..y + h - 4).step_by(3) {
+        let shift = ((row - y) * 7 + (lot.variant % 5) as i32) % 5;
+        let mut px = x + 1 + shift;
+        while px < x + w - 1 {
+            pen.px(draw, px, row, look.wall_dark);
+            pen.px(draw, px + 1, row - 1, look.wall_light);
+            px += 5;
+        }
+    }
+    // Shell bands.
+    pen.rect(draw, x, y, w, 2, look.roof);
+    pen.rect(draw, x, y + h - 3, w, 3, look.wall_dark);
+    let mut px = x + 1;
+    while px < x + w - 1 {
+        pen.px(draw, px, y + h - 2, look.roof);
+        pen.px(draw, px + 1, y + 1, look.roof_light);
+        px += 3;
+    }
+    // Sea fans up the corners.
+    for corner in [x, x + w - 2] {
+        pen.rect(draw, corner, y + 2, 2, h - 5, look.wall_dark);
+        for step in (y + 4..y + h - 4).step_by(4) {
+            pen.px(
+                draw,
+                corner + if corner == x { 2 } else { -1 },
+                step,
+                look.accent,
+            );
+        }
+    }
+}
+
+/// Sunfolk reed (Wave 10 polish): woven reed panels in a basket weave between timber posts,
+/// a hide hung by the door side, the house raised on stilts over the ground.
+fn jungle_walls(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, h: i32) {
+    let (pen, look) = (lot.pen, lot.look);
+    // Basket weave: alternating light and dark reed strokes.
+    for row in (y + 1..y + h - 4).step_by(2) {
+        let odd = ((row - y) / 2) % 2 == 1;
+        let mut px = x + if odd { 2 } else { 0 };
+        while px < x + w {
+            pen.rect(draw, px, row, 2, 1, look.wall_dark);
+            pen.px(draw, px + 2, row, look.wall_light);
+            px += 4;
+        }
+    }
+    // Timber posts and the binding round them.
+    for post in [x, x + w / 2 - 1, x + w - 2] {
+        pen.rect(draw, post, y, 2, h, look.trim);
+        for tie in (y + 3..y + h - 4).step_by(7) {
+            pen.rect(draw, post - 1, tie, 4, 1, look.roof);
+        }
+    }
+    // Stilts: the floor stands a few pixels proud of the ground on its posts.
+    pen.rect(draw, x - 1, y + h - 4, w + 2, 1, look.trim);
+    pen.rect(draw, x, y + h - 3, w, 3, with_alpha(INK, 170));
+    for stilt in (x + 1..x + w - 1).step_by(6) {
+        pen.rect(draw, stilt, y + h - 3, 2, 3, look.trim);
+    }
+    // A painted hide.
+    let hide_x = x + 4 + (lot.variant % 3) as i32 * 2;
+    pen.boxed(draw, hide_x, y + 4, 5, 7, look.accent);
+    pen.px(draw, hide_x + 2, y + 6, CREAM);
+}
+
+/// Parallax plates (Wave 10 polish): riveted builder-alloy plates, a conduit along the top
+/// and an instrument panel whose lights breathe slowly (never a blink).
+fn machine_walls(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, h: i32) {
+    let (pen, look) = (lot.pen, lot.look);
+    // Plate seams and rivets.
+    for row in (y + 6..y + h - 2).step_by(9) {
+        pen.rect(draw, x, row, w, 1, look.wall_dark);
+        for rivet in (x + 2..x + w - 1).step_by(5) {
+            pen.px(draw, rivet, row - 2, look.wall_light);
+        }
+    }
+    let mut px = x + 10;
+    while px < x + w - 2 {
+        pen.rect(draw, px, y, 1, h, look.wall_dark);
+        px += 14;
+    }
+    // The conduit, a pipe with its clamps.
+    pen.rect(draw, x - 1, y + 1, w + 2, 2, look.wall_light);
+    pen.rect(draw, x - 1, y + 3, w + 2, 1, look.wall_dark);
+    for clamp in (x + 3..x + w - 2).step_by(11) {
+        pen.rect(draw, clamp, y, 2, 4, INK);
+    }
+    // The instrument panel: three slow lights.
+    let panel_x = x + w - 13;
+    pen.boxed(draw, panel_x, y + h / 2 - 4, 9, 7, INK);
+    for light in 0..3_u8 {
+        let phase = lot
+            .seconds
+            .mul_add(0.7, f32::from(light) * 2.1 + (lot.variant % 7) as f32);
+        let alpha = (phase.sin().mul_add(70.0, 170.0)).clamp(60.0, 255.0) as u8;
+        pen.px(
+            draw,
+            panel_x + 2 + i32::from(light) * 2,
+            y + h / 2 - 1,
+            with_alpha(look.accent, alpha),
+        );
+    }
+    pen.rect(draw, x, y, 1, h, look.wall_dark);
+    pen.rect(draw, x + w - 1, y, 1, h, look.wall_dark);
 }
 
 /// The style's roof over `x..x + w` with its top at `y`, rising `rise` art pixels.
@@ -835,6 +980,80 @@ fn roof(draw: &mut impl RaylibDraw, lot: Lot, x: i32, y: i32, w: i32, rise: i32)
             }
             pen.rect(draw, x - 1, y + rise, w + 2, 2, look.roof_light);
         }
+        BuildingStyle::Coral => {
+            // A scallop-shell dome: a half-ellipse of pearly shell, ribbed from its hinge,
+            // with a pearl on top.
+            let half = w / 2 + 1;
+            let rise = rise + 3;
+            let top = y - 3;
+            let hinge = x + w / 2;
+            for row in 0..rise {
+                let t = (rise - row) as f32 / rise as f32;
+                let span = ((1.0 - t * t).max(0.0).sqrt() * half as f32) as i32;
+                pen.rect(draw, hinge - span - 1, top + row, span * 2 + 2, 1, INK);
+                let mut px = hinge - span;
+                while px < hinge + span {
+                    // Ribs fan out from the hinge.
+                    let rib = ((px - hinge) * 6 / (row + 2)).rem_euclid(3) == 0;
+                    let color = if row == 1 {
+                        look.roof_light
+                    } else if rib {
+                        darken(look.roof)
+                    } else {
+                        look.roof
+                    };
+                    pen.px(draw, px, top + row, color);
+                    px += 1;
+                }
+            }
+            pen.rect(draw, x - 2, y + rise - 3, w + 4, 2, INK);
+            pen.rect(draw, x - 1, y + rise - 3, w + 2, 1, look.accent);
+            pen.rect(draw, hinge - 1, top - 2, 3, 2, look.roof_light);
+            pen.px(draw, hinge, top - 3, CREAM);
+        }
+        BuildingStyle::Jungle => {
+            // Steep straw thatch over crossed ridge poles, its fringe hanging ragged.
+            let rise = rise + 4;
+            let top = y - 4;
+            for row in 0..rise {
+                let inset = (rise - 1 - row) * w / (2 * rise).max(1);
+                pen.rect(draw, x + inset - 2, top + row, w - inset * 2 + 4, 1, INK);
+                let color = if row % 3 == 0 {
+                    look.roof_light
+                } else if row % 3 == 2 {
+                    darken(look.roof)
+                } else {
+                    look.roof
+                };
+                pen.rect(draw, x + inset - 1, top + row, w - inset * 2 + 2, 1, color);
+            }
+            // The fringe.
+            let mut px = x - 3;
+            while px < x + w + 3 {
+                let drop = 1 + (px * 7 + (lot.variant % 5) as i32).rem_euclid(3);
+                pen.rect(draw, px, top + rise, 1, drop, look.roof);
+                px += 2;
+            }
+            // Crossed ridge poles.
+            for step in 0..4 {
+                pen.px(draw, x + w / 2 - 2 - step, top - 1 - step, look.trim);
+                pen.px(draw, x + w / 2 + 1 + step, top - 1 - step, look.trim);
+            }
+        }
+        BuildingStyle::Machine => {
+            // A flat plated roof, a vent stack and the station's antenna.
+            pen.rect(draw, x - 2, y + rise - 4, w + 4, 5, INK);
+            pen.rect(draw, x - 1, y + rise - 3, w + 2, 3, look.roof);
+            pen.rect(draw, x - 1, y + rise - 3, w + 2, 1, look.roof_light);
+            for vent in (x + 4..x + w - 6).step_by(9) {
+                pen.boxed(draw, vent, y + rise - 7, 5, 4, look.wall_dark);
+                pen.rect(draw, vent + 1, y + rise - 6, 3, 1, INK);
+            }
+            let mast = x + w - 6;
+            pen.rect(draw, mast, y + rise - 14, 1, 10, look.wall_light);
+            let glow = (lot.seconds * 0.9).sin().mul_add(60.0, 180.0) as u8;
+            pen.px(draw, mast, y + rise - 15, with_alpha(look.accent, glow));
+        }
     }
 }
 
@@ -904,6 +1123,9 @@ fn sign(draw: &mut impl RaylibDraw, lot: Lot, cx: i32, y: i32, text: &str) {
         BuildingStyle::Carved => (NIGHT, MINT),
         BuildingStyle::Skyrig => (COPPER, CREAM),
         BuildingStyle::Cloister => (OCEAN, GOLD),
+        BuildingStyle::Coral => (TEAL_DARK, CREAM),
+        BuildingStyle::Jungle => (SOIL, GOLD),
+        BuildingStyle::Machine => (INK, MINT),
     };
     pen.boxed(draw, x, y, width, 13, board);
     pen.rect(draw, x + 1, y + 1, width - 2, 1, with_alpha(BONE, 50));

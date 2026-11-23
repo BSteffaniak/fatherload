@@ -357,7 +357,7 @@ fn moon_pool(stage: &mut SceneStage<'_>) {
 
 /// The Pearl Abyss: a pearl bed of gaping clams in black water, a lure angler's light and a
 /// gulper eel; the pressure darkening and greying the screen.
-fn pearl_abyss(stage: &mut SceneStage<'_>) {
+pub(super) fn pearl_abyss(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         let player = seats[0].player;
         let Some(bed) = stamp(DrownedStampKind::PearlBed) else {

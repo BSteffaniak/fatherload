@@ -1273,6 +1273,14 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // Deep supplies at work (Wave 10 polish; netcode codes 720-739).
+    /// A deep supply was spent at tile `(x, y)` for `player_id`'s rig.
+    Supply {
+        what: crate::workshop::SupplyEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

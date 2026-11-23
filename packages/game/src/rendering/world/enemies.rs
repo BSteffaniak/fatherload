@@ -748,6 +748,18 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         // The Sun Serpent's coils loom large too (Wave 9); the jungle's giants share the
         // bosses' scale above.
         EnemyKind::SerpentCoil => ART * 1.25,
+        // The far Strange Layers' creatures were specks beside the rig: half again as large
+        // (Wave 10 polish; their contact boxes grew with them).
+        EnemyKind::TickMite
+        | EnemyKind::AmberSloth
+        | EnemyKind::RewindNewt
+        | EnemyKind::EchoStalker
+        | EnemyKind::Shrieker
+        | EnemyKind::HushMoth
+        | EnemyKind::PrismScarab
+        | EnemyKind::SplitterSpire
+        | EnemyKind::LensWraith
+        | EnemyKind::GlitchShard => ART * 1.5,
         _ => ART,
     }
 }
@@ -1588,6 +1600,60 @@ mod tests {
                     sprite.name
                 );
             }
+        }
+    }
+
+    /// The painted rows `(first, last)` of a sprite across all its frames.
+    fn painted_rows(sprite: &SpriteDef) -> (usize, usize) {
+        let mut span = (usize::MAX, 0);
+        for rows in sprite.frames {
+            for (index, row) in rows.iter().enumerate() {
+                if row.chars().any(|symbol| symbol != '.' && symbol != ' ') {
+                    span = (span.0.min(index), span.1.max(index));
+                }
+            }
+        }
+        span
+    }
+
+    /// Wave 10 polish: every kind's contact box is its drawn body (72-115 % of the painted
+    /// half extents), so creatures pressed against a rig are seen touching it and shots hit
+    /// what is drawn (the hit ellipse is `HIT_OVER_CONTACT` times the box: the Leviathan's
+    /// head and tail, the bosses' reach). A moth swarm is a cloud of moths round its core.
+    #[test]
+    #[allow(clippy::cast_precision_loss, reason = "small art sizes")]
+    fn every_contact_box_and_hit_area_matches_the_drawn_body() {
+        let mut misfits = Vec::new();
+        for kind in EnemyKind::ALL {
+            if kind == EnemyKind::MothSwarm {
+                continue;
+            }
+            let sprite = enemy_sprite(kind);
+            let scale = sprite_scale(kind);
+            let (c0, c1) = painted_columns(sprite);
+            let (r0, r1) = painted_rows(sprite);
+            let w = (c1 + 1 - c0) as f32 * scale * 0.5;
+            let h = (r1 + 1 - r0) as f32 * scale * 0.5;
+            let (cw, ch) = kind.contact_half();
+            let (rw, rh) = (cw / w, ch / h);
+            if !(0.72..=1.15).contains(&rw) || !(0.72..=1.15).contains(&rh) {
+                misfits.push(format!(
+                    "{kind:?}: drawn {w:.0}x{h:.0}, contact {cw:.0}x{ch:.0}"
+                ));
+            }
+            // The hit ellipse covers the drawn body and never less than the terrain circle.
+            let area = kind.hit_area();
+            assert!(area.half.0 >= w * 0.8 && area.half.1 >= h * 0.8, "{kind:?}");
+            assert!(area.extent() <= fatherload_simulation::world::MAX_HIT_RADIUS);
+        }
+        assert!(misfits.is_empty(), "{misfits:#?}");
+        // The far Strange Layers' creatures read beside the rig now.
+        for kind in [
+            EnemyKind::TickMite,
+            EnemyKind::Shrieker,
+            EnemyKind::GlitchShard,
+        ] {
+            assert!(kind.contact_half().0 >= 10.0, "{kind:?}");
         }
     }
 

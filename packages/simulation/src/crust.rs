@@ -506,6 +506,30 @@ pub fn heat_units(terrain: &crate::terrain::Terrain, tile: TilePosition) -> u8 {
     stratum_heat_units(terrain.stratum_at(tile)).saturating_add(tube)
 }
 
+/// Heat units at `tile` past a rig's cooling (`radiator_level` and `heat_shield` tiers): what
+/// actually cracks its hull there, zero where its cooling covers the heat (Wave 10 polish).
+///
+/// The tick's band heat damage and the game's HEAT warning both read it, so the warning shows
+/// only where the heat bites this rig: never in a new stratum whose heat the rig's tier
+/// already covers. Placeholder strata cap the excess as the tick does.
+#[must_use]
+pub fn heat_danger_units(
+    terrain: &crate::terrain::Terrain,
+    tile: TilePosition,
+    radiator_level: u8,
+    heat_shield: u8,
+) -> u8 {
+    let cooling = crate::protection::heat_cooling(radiator_level, heat_shield);
+    let excess = heat_units(terrain, tile).saturating_sub(cooling);
+    let settings = terrain.settings();
+    if !settings.generator.has_descents() {
+        return excess;
+    }
+    let descent = crate::depth_progression::descent_index_at_row(settings, tile.y);
+    crate::depth_progression::placeholder_heat_cap_units(descent)
+        .map_or(excess, |cap| excess.min(cap.saturating_sub(cooling)))
+}
+
 /// Heat units of `stratum` on a Deep Descent world.
 ///
 /// The Crust is authored: cool down to the slate, then the first heat in the Basalt Columns

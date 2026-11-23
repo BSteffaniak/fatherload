@@ -65,6 +65,7 @@ mod sky_continents;
 pub mod sky_isles;
 pub mod sky_lands;
 mod speed_fx;
+mod supplies;
 mod surface;
 mod tomb_traps;
 mod tombs;
@@ -753,6 +754,17 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         }
     }
     drowned::draw_drowned_lights(draw, &drowned_scene);
+    // Flares and bait lying in the world (Wave 10 polish), over the dark.
+    supplies::draw_supply_lures(
+        draw,
+        &supplies::SupplyScene {
+            logistics: scene.logistics,
+            visible: scene.visible,
+            world_tick: scene.world_tick,
+            seconds,
+            effects: scene.effects_strength,
+        },
+    );
     if let Some(preview) = scene.aim_preview {
         explosives::draw_aim_preview(draw, &preview.path, preview.sticks, seconds);
     }

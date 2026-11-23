@@ -213,11 +213,11 @@ impl WorldState {
             .into_iter()
             .filter_map(|id| {
                 let entity = self.entities.get(id)?;
-                let health = entity.state.health()?;
+                let area = entity.state.hit_area()?;
                 let (tx, ty) = (entity.body.x, entity.body.y);
                 let (dx, dy) = (tx - hx, ty - hy);
                 let distance = dx.hypot(dy);
-                if distance > reach + health.radius {
+                if distance > reach + area.reach_toward(dx, dy) {
                     return None;
                 }
                 let facing_share = if distance > 1.0 {

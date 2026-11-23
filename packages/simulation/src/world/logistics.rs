@@ -668,7 +668,7 @@ impl WorldState {
         if !crate::workshop::outpost_sells_supply(outpost.descent, supply) {
             return Err(LogisticsRefusal::SupplyNotSoldHere);
         }
-        if self.logistics.supplies_of(player_id, supply) >= crate::workshop::MAX_SUPPLY_STACK {
+        if self.supplies_of(player_id, supply) >= crate::workshop::MAX_SUPPLY_STACK {
             return Err(LogisticsRefusal::SupplyFull);
         }
         let price = crate::workshop::supply_price(supply, outpost.descent);
@@ -676,22 +676,8 @@ impl WorldState {
         Ok(u32::try_from(u64::from(price) * u64::from(percent) / 100).unwrap_or(u32::MAX))
     }
 
-    /// How many of `supply` `player_id`'s kit holds (Wave 9).
-    #[must_use]
-    pub fn supplies_of(&self, player_id: PlayerId, supply: crate::workshop::DeepSupply) -> u8 {
-        self.logistics.supplies_of(player_id, supply)
-    }
-
-    /// Spends one `supply` from `player_id`'s kit, if it holds one (Wave 9: the seam the
-    /// Descent mechanics call when a ballast tank is blown, a heater lit, a bomb thrown...).
-    /// Call it from inside the tick only.
-    pub fn take_supply(
-        &mut self,
-        player_id: PlayerId,
-        supply: crate::workshop::DeepSupply,
-    ) -> bool {
-        self.logistics.take_supply(player_id, supply)
-    }
+    // `supplies_of` and `take_supply` live in `world/supplies.rs` (Wave 10 polish: the
+    // Time-Bubble Bomb is the rig's time-bubble charge).
 
     /// The upgrade line `index` as outpost `outpost`'s counter sells it to `player_id` now: the
     /// offer and the counter's price (Wave 8 deep shops).
@@ -793,10 +779,7 @@ impl WorldState {
             CraftOutput::Bombs(_) => Ok(LogisticsQuote::default()),
             CraftOutput::Supply(supply, count) => {
                 // The whole batch must fit: a part-full kit never eats resources for nothing.
-                if self
-                    .logistics
-                    .supplies_of(player_id, supply)
-                    .saturating_add(count)
+                if self.supplies_of(player_id, supply).saturating_add(count)
                     > crate::workshop::MAX_SUPPLY_STACK
                 {
                     return Err(LogisticsRefusal::SupplyFull);
@@ -853,9 +836,10 @@ impl WorldState {
                 let charges = self.logistics.dive_charges.entry(player_id).or_insert(0);
                 *charges = charges.saturating_add(count).min(MAX_DIVE_CHARGES);
             }
-            CraftOutput::Supply(supply, count) => {
-                let _ = self.logistics.add_supplies(player_id, supply, count);
-            }
+            CraftOutput::Supply(..) => {}
+        }
+        if let CraftOutput::Supply(supply, count) = found.output {
+            let _ = self.add_supplies(player_id, supply, count);
         }
     }
 
@@ -1217,7 +1201,7 @@ impl WorldState {
             }
             LogisticsCommand::Craft { recipe, .. } => self.apply_craft(player_id, recipe),
             LogisticsCommand::BuySupply { supply, .. } => {
-                let _ = self.logistics.add_supplies(player_id, supply, 1);
+                let _ = self.add_supplies(player_id, supply, 1);
             }
         }
         PlayerScopedCommandOutcome::Applied
@@ -1532,6 +1516,7 @@ impl WorldState {
     /// a Deep Descent world's placeholder strata below Descent III
     /// ([`crate::depth_progression::placeholder_heat_cap_units`]); no cap anywhere else.
     #[must_use]
+    #[cfg(test)]
     pub(super) fn placeholder_heat_excess_cap(
         &self,
         center: TilePosition,

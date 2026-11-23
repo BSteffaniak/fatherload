@@ -1188,7 +1188,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Drowned { player_id, .. }
         | GameplayEventKind::Hollow { player_id, .. }
         | GameplayEventKind::Distortion { player_id, .. }
-        | GameplayEventKind::FarStrange { player_id, .. } => player_id,
+        | GameplayEventKind::FarStrange { player_id, .. }
+        | GameplayEventKind::Supply { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged
