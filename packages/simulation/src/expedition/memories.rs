@@ -16,8 +16,9 @@
 //!
 //! # Registering a settlement (Wave 9 seam)
 //!
-//! Merrow City (Descent IV), the jungle tribes' village (Descent V) and the Prism Relay
-//! (Descent VI) are built by their Descent tracks; their lines are here already. A settlement
+//! Merrow City (Descent IV), the jungle tribes' village (Descent V, the Sunfolk Kraal) and the
+//! Prism Relay (Descent VI, Parallax Station) are built by their Descent tracks and registered
+//! by their real names (Wave 9 integration); their generated people tell these lines. A settlement
 //! whose population's name is one of [`Settlement::place_names`] remembers the Fathers
 //! ([`Settlement::of_place_name`]); its people speak the lines whose speaker key
 //! [`Settlement::speaker_for_role`] gives their trade. Wiring a new place takes one name in
@@ -88,9 +89,20 @@ impl Settlement {
             Self::GravelHollow => &[crate::crust::GRAVEL_HOLLOW_NAME],
             Self::OldDeepCamp => &["Cathedral Station"],
             Self::TheHive => &["The Amber Court", "the Amber Court"],
-            Self::MerrowCity => &["Merrow City", "Merrow Air Dock"],
-            Self::JungleTribes => &["the Jungle Tribes", "The Jungle Tribes", "Sunward Camp"],
-            Self::PrismRelay => &["Prism Relay", "the Prism Relay"],
+            Self::MerrowCity => &[crate::drowned::MERROW_CITY_NAME, "Merrow Air Dock"],
+            // The Hollow World's Sunfolk village (Wave 9 integration: its real name).
+            Self::JungleTribes => &[
+                crate::hollow::SUNFOLK_NAME,
+                "the Jungle Tribes",
+                "The Jungle Tribes",
+                "Sunward Camp",
+            ],
+            // Parallax Station, the Descent VI outpost's researchers (Wave 9 integration).
+            Self::PrismRelay => &[
+                crate::distortion::PARALLAX_STATION_NAME,
+                "Prism Relay",
+                "the Prism Relay",
+            ],
         }
     }
 
