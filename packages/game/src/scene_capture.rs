@@ -406,6 +406,7 @@ mod drop_scenes;
 mod drowned_scenes;
 mod expedition_scenes;
 mod explosive_scenes;
+mod far_strange_scenes;
 mod field_scenes;
 mod fluid_scenes;
 mod hollow_scenes;
@@ -573,6 +574,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(hollow_scenes::HOLLOW_SCENES)
         .chain(expedition_scenes::EXPEDITION_SCENES)
         .chain(distortion_scenes::DISTORTION_SCENES)
+        .chain(far_strange_scenes::FAR_STRANGE_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

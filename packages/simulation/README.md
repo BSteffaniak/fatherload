@@ -5566,6 +5566,139 @@ and `LandmarkKind::Distortion` in each stratum's content minutes.
   in through them flips at once (the glass in the frame is the only warning). The Spire scene
   still catches the camera mid-turn.
 
+## Wave 9 strange-b: Descent VI part B, the far Strange Layers (`src/far_strange.rs`, `src/world/far_strange.rs`, `src/world/enemies/far_strange.rs`, `src/worldgen/descent/far_strange.rs`)
+
+Expansion plan §14, Descent VI strata 4-6 and its gate: near the builders' machine, time, sound
+and light come apart. Everything is V11 only (`has_descents()`); V1-V10 digests, hashes and
+replays are unchanged.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (gently, then pushed) | Creatures | Set pieces | Ores, resource | Music / ambience |
+|---|---|---|---|---|---|
+| Time Sludge | **slow pools** (time 0.62 at its top to 0.32 at its bottom) and **fast lanes** (1.3 to 1.85): generated pockets that grow commoner and stronger deeper ("Slow Pools" / "Fast Lanes" lean the mix); the stratum itself runs at 0.85. **Time bubbles** (`ExplosiveKind::TimeBubble`) slow every creature in their bubble to 0.22 | tick mite (lives at 2.1x, crumbles after 24 s), amber sloth (lives at 0.5x; its touch holds a rig in amber, 0.3x for 2.2 s), rewind newt (badly hurt, it rewinds 3 s of position and health, twice, never inside a bubble) | the **Stopped Clock** (a builders' hall striped slow and fast under a handless dial), slow pools rimmed with chronoglass, fast lanes with studded floors | platinum, uranium; Chrono Amber | `TimeSludge` (a lurching music box) / `Clockwork` |
+| Echo Caves | **total darkness** (field light 20 per mille; lamps a pinprick, `ECHO_LAMP_SCALE`): a scanner press is a **sonar ping** whose wave lights the cave as it passes and fades (`sonar_reveal`; 14 tiles, 32 with the Sonar Suite). **Blind hunters hear noise** (`rig_noise_tiles`: rolling 3, thrust 9, drilling 12, a ping 26 tiles; nothing at rest) | echo stalker (blind, hears noise along open paths, half as far through rock), shrieker (on finding prey it screams: a free ping and every stalker within 28 tiles of its prey comes), hush moth (drifts to the loudest rig; inside its hush a rig is silent but its pings reach a third as far) | the **Choir** (a hall of echo quartz pillars), echo hollows; **echo quartz** rings when struck (a free 22-tile ping) or drilled | mythril, diamond; Echo Quartz | `EchoCaves` (notes answered by their echoes) / `Echoes` |
+| Prism Desert | **colours split** (chromatic aberration up to 560 per mille, half that at its top; a softened slate-and-mauve palette); **colour-keyed walls** (`CaveTile::{PrismRed, PrismGreen, PrismBlue}`, unbreakable) open only in light of their colour: a rig's **lamp filter** (`LampFilter`, per rig, shared state) opens matching walls within 5 tiles in sight (coloured glass lets its colour through), and they close 2.5 s after the light leaves, never on a body | prism scarab (its shell turns red, green, blue every 4 s: x1.6 damage under the matching light, x0.2 otherwise; blasts always land), splitter spire (a fan of one red, one green and one blue bolt; a bolt of the rig's filter colour passes through it), lens wraith (unseen, and never auto-aimed, except under its own colour) | **keyed curtains** (a cave split by one keyed wall, two deeper, a cache behind), **spectrum vaults** (red, then green, then blue nested round a relic cache), the **Rewrite Hall** | diamond, emerald; Prism Sand | `PrismDesert` (a three-way split arpeggio) / `Prism` |
+| Gate | **The Glitch** (`EnemyKind::TheGlitch`, a 30x30 sprite drawn at 1.5x) in the Rewrite Hall (Descent VI's gate chamber grown by `ARENA_MARGIN`, builder alloy walls and floor, doors at both ends, alloy ledges): at 80/60/40/20 % health it **rewrites the hall's rule** (`GlitchRule`: gravity up, mirrored screen and controls, time x1.6, sideways gravity with pixel rot), each telegraphed for 3 s (it flickers, cannot attack, cannot be hurt; the HUD names the next rule). It blinks (its ghost shows where 1.1 s first) and sheds glitch shards from its third rule. It sleeps and heals after 30 s with nobody in the hall; no countdown | The Glitch, glitch shards | | | `TheGlitch` (bit-crushed, self-rewriting drums) |
+
+Reward: the **Phase Drill** (`RigSystem::boss_reward` is `TheGlitch`; never sold, `UpgradeLock::Boss`),
+fitted to every rig of the crew (and to rigs that join later). Only the Phase Drill cuts
+**builder alloy** (`CaveTile::BuilderAlloy`, blast-proof): three ragged rows of it under the
+Prism Desert's boundary zone across every column (`alloy_seal`) seal Descent VII. The Hall's
+own walls are alloy too.
+
+### Generation (`worldgen/descent/far_strange.rs`, a pass of `streamed::assemble` after the Old Deep and before the story)
+
+Stamps per `FAR_REGION` (48 x 36) rolled per stratum, more likely deeper (`stamps_with`,
+`stamp_tile`), plus the fixed Stopped Clock, Choir and Rewrite Hall; far rock (chronoglass veins,
+quartz specks, crystal); the alloy seal. The time pockets and the clock hall's stripes are a
+field source (`far_field_source`, registered in `field::STRATUM_FIELD_SOURCES` after the anomaly
+rooms): every reader of `fields_at` feels them, so rigs, pilots, creatures and drops all live at
+their time, deterministically and tick-rate safe. The expedition's story pass keeps its camps and
+anomaly rooms off these stamps (`crosses_strata_set_pieces`). The Rewrite Hall clears a
+derelict's wreckage or a pool from its floor. **`GOLDEN_V11_DIGEST` is updated**
+(`0x380f_1e09_eb47_e5dd`); V1-V10 digests unchanged.
+
+### Mechanics (`world/far_strange.rs`, after the Living Dark's pass, before the fluid pass)
+
+- Pings (`sonar_ping` from `PlayerCommand::UseScanner` in the Echo Caves; `push_ping`) live in the
+  shared `FarStrange::pings` until their wave has crossed and faded (`sonar_alive`); the renderer
+  and `sonar_light_at` read the same pure `sonar_reveal`.
+- Keyed walls are rewritten by rule (`Terrain::set_kind_by_rule`, they are unbreakable), and the
+  open ones wait in the host-only `FarSchedule::open_keyed` (saved through `pair_list`, never
+  hashed or replicated, cleared in client keyframes); clients see terrain ops.
+- Creature tempo (`world/enemies/far_strange.rs`): `advance_enemy` runs a creature at its tempo
+  (`far_tempo`: its own times a bubble's) by scaling the tick's seconds for its motion and
+  moving its timers onto its own clock (`shift_enemy_timers`: the clock advances
+  `floor((t + 1) tempo) - floor(t tempo)` ticks a tick), so slow and fast creatures agree at every
+  tick rate. Amber multiplies a rig's field time scale in the movement step.
+- Hearing (`far_notice`) overrides the generic perception for stalkers and moths; The Glitch and
+  its shards know every rig in the Hall.
+- Landmarks found (`FarLandmark`) are shared; their story beats go up as cards (below).
+
+### State, formats, events
+
+- `FarStrange` (world field, appended shared `SectionKey::FarStrange`, saved with serde defaults,
+  hashed once non-empty): lamp filters, pings, amber, landmarks found, `GlitchState`.
+  `FarSchedule` (saved, never hashed or replicated): open keyed walls, newts' memories (local
+  points, reframed with the frame), quartz and ping times, shriek times, pockets, speeds.
+- Commands: `LogisticsCommand::FarStrange(FarStrangeAction::{CycleFilter, SetFilter,
+  BuyTimeBubbles})` (refusals `LogisticsRefusal::FarStrange`), served by the depth logistics
+  dialog and, beside a keyed wall, by the **use button** (`filter_swap_here`; the use prompt
+  reads "Swap the lamp to green"), so keyboard, pad, touch and every seat have it.
+- Appended: six `CaveTile`s (codes 22-27), eleven `EnemyKind`s, four `ShotKind`s,
+  `ExplosiveKind::TimeBubble` (item id 11; outposts and town, not the shack), `MusicCue::{TimeSludge,
+  EchoCaves, PrismDesert, TheGlitch}`, `AmbienceCue::{Clockwork, Echoes, Prism}`,
+  `LandmarkKind::FarStrange`.
+- Events: `GameplayEventKind::FarStrange { what, player_id, x, y }`, netcode codes
+  `580 + FarStrangeEvent::code()` (580-598).
+- **`PROTOCOL_VERSION` 17** (one bump for the track; the integrator collapses Wave 9's). **No save
+  format bump** (every new field has a serde default).
+- Dev and scene seams: `set_lamp_filter`, `stage_sonar_ping`, `set_far_strange`,
+  `stage_glitch_rule`, `far_landmark_at`, `glitch_arena`.
+
+### Game side
+
+- Tile art (`tile_art/far_art.rs`): hexagonal echo quartz, stained-glass keyed walls, builder
+  alloy plates with circuit seams, chronoglass; each far stratum's own back wall (honey-gold in
+  slow pools, racing streaks in fast lanes, black ripples in the Echo Caves, spectrum sand bands).
+- World (`rendering/world/far_strange.rs`): motes and streaks in pockets, the Stopped Clock's dial,
+  time bubbles, amber on a rig, the Echo Caves' darkness cut back only by ping waves (cyan rings),
+  quartz and a pinprick lamp (the seat's post-process light is lifted there, like the Glow Sea),
+  keyed walls' glow and a filtered lamp's colour pool, the Rewrite Hall's glyphs in the rule's
+  colour, the rewrite's slow wash and torn scanlines, the blink ghost, The Glitch's torn colour
+  channels. Everything that moves is slow and low contrast, scaled by the effects setting.
+- Sprites (`pixel_art/sprites/far_strange.rs`): eleven creatures and four shots; scarabs and
+  wraiths are tinted their colour; a lens wraith is not drawn for a seat whose filter does not
+  match.
+- HUD (`rendering/far_strange_hud.rs`): time (slow pool, fast lane, amber, bubbles aboard), noise
+  in the Echo Caves, the lamp filter, The Glitch's rule and the rule being written.
+- News and cards (`local_game::announce_far_strange`): a landmark's story beat as a card on every
+  local seat; The Glitch waking, rewriting (with the next rule) and falling; amber, a shriek and a
+  pocket crossing for the seat they concern.
+- Audio (appended at the end of `patches!`, `audio/patch/far_strange.rs`): eight one-shots (sonar
+  ping with echoes, time bubble, rewind, shriek, quartz ring, keyed glass, The Glitch's rewrite
+  stutter and blink), three music beds, three ambience beds and The Glitch's theme
+  (`far_strange_music` in the director).
+- Scenes: `far_time_slow_pool`, `far_time_fast_lane`, `far_clock_hall`, `far_time_bubble`,
+  `far_echo_dark`, `far_echo_ping`, `far_choir`, `far_prism_curtain`, `far_prism_lit`,
+  `far_spectrum_vault`, `far_glitch_baseline`, `far_glitch_rewriting`, `far_glitch_gravity_up`,
+  `far_glitch_mirrored`, `far_glitch_time_warp`, `far_glitch_sideways`.
+
+### Tests
+
+`world/far_strange_tests.rs`: slow pools and fast lanes bending a rig's fall alike at 20 and
+60 Hz, a pocket crossing announced once, a time bubble slowing a creature and lapsing, time
+bubbles sold at an outpost, tick mites crumbling at the same world time at 20 and 60 Hz, amber
+slowing a rig, a newt rewinding (and not inside a bubble), a scanner ping lighting and fading,
+the Sonar Suite's reach and a hush moth's muffling, stalkers hearing a drilling rig but not a
+still one, a shriek calling a stalker, quartz ringing, keyed walls opening only to their colour,
+closing after, never on a rig, the scarab's colour damage, a spire's bolt passing through the
+matching lamp, the wraith unseen, a landmark's beat told once, the alloy seal refusing a drill
+and a blast and yielding to the Phase Drill, the Phase Drill boss-won, **a bot with Descent VI
+kit (railgun, hull tier 13) beating The Glitch through every rule in order**, each rewrite
+telegraphed for the full warning and immune, every rule felt, more than 20 % hull left, the Phase
+Drill fitted and the rules restored; a peaceful Hall yields its gate and a lonely Hall sleeps;
+the state saves, replicates and hashes and older worlds keep their hashes; determinism; the
+creatures keep the body rules in their own arena (they left the shared cave arena like the
+Living Dark's). `far_strange::tests` and `worldgen::descent::far_strange::tests` cover the
+rules' maths and the generation (every stamp kind rolled, the seal across every column, the
+vault's rings, the pockets' field).
+
+### Seams and known limits
+
+- The Sonar Suite: the Drowned track builds the full Sonar Suite; this track's sonar is the
+  scanner's ping in the Echo Caves behind `sonar_ping` / `push_ping` / `sonar_reveal` /
+  `sonar_light_at`. The integrator unifies them (the suite's longer reach is already honoured).
+- The story track owns logs 56-60 (Time Sludge, Echo Caves, Prism Desert); the far landmarks'
+  beats are separate cards, and the story pass already keeps its sites off these stamps.
+- Strange-a owns Descent VI's outpost (the Mirror Strata) and strata 1-3; the Time Sludge's
+  `StrangeLayers` music cue is replaced here only for strata 4-6.
+- Tempo slows a creature's motion and timers, not its shots in flight (a bubble does not catch
+  bolts).
+- Keyed walls opened by one rig's light close for everyone once it leaves; there is no ghost
+  outline of an open keyed wall on clients (the schedule is host-only).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

@@ -277,7 +277,11 @@ mod tests {
                 | Patch::SunforgeLoop
                 // The distortion strata (wave 9): gravity's groan and the shear's low bed.
                 | Patch::GravityGroan
-                | Patch::ShearLoop => (40.0, 3_000.0),
+                | Patch::ShearLoop
+                // The far Strange Layers (wave 9): The Glitch's crushed drums and bass, the
+                // Echo Caves' low breath under its rare notes.
+                | Patch::GlitchLoop
+                | Patch::EchoCavesLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

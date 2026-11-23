@@ -75,8 +75,8 @@ pub(super) fn shriek(rng: &mut Rng) -> Vec<f32> {
 /// Echo quartz ringing: a clear, long glass bell with a beating partial.
 pub(super) fn quartz_ring(rng: &mut Rng) -> Vec<f32> {
     let note = rng.range(1_160.0, 1_240.0);
-    let mut out = bell(note, 2.76, 0.9, 2.4);
-    mix_into(&mut out, &bell(note * 1.003, 4.1, 0.5, 2.0), 0.0, 0.35);
+    let mut out = bell(note, 2.76, 0.9, 1.5);
+    mix_into(&mut out, &bell(note * 1.003, 4.1, 0.5, 1.3), 0.0, 0.35);
     out
 }
 
@@ -126,10 +126,10 @@ pub(super) fn glitch_rewrite(rng: &mut Rng) -> Vec<f32> {
 /// The Glitch blinking: a quick digital "zip" across the stereo field of the mind.
 pub(super) fn glitch_blink(rng: &mut Rng) -> Vec<f32> {
     let mut fm = Fm::default();
-    let start = rng.range(2_400.0, 2_800.0);
+    let start = rng.range(900.0, 1_100.0);
     render(0.3, |t| {
-        let pitch = start * (1.0 - 0.8 * (t / 0.3));
-        fm.next(pitch, 2.0, 3.0) * perc(t, 0.002, 0.25) * 0.5
+        let pitch = start * (1.0 - 0.7 * (t / 0.3));
+        fm.next(pitch, 1.5, 1.2) * perc(t, 0.002, 0.25) * 0.5
     })
 }
 

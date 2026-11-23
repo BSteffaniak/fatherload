@@ -1376,10 +1376,10 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         share_per_mille: 170,
         host_band: deep(DeepStratum::CrystalFaults),
         palette: palette(
-            Rgb(96, 200, 216),
-            Rgb(220, 120, 200),
-            Rgb(40, 60, 88),
-            Some(Rgb(255, 255, 120)),
+            Rgb(150, 176, 196),
+            Rgb(178, 132, 176),
+            Rgb(36, 46, 70),
+            Some(Rgb(255, 250, 170)),
         ),
         ores: &[ore(Diamond, 600, 800, 60), ore(Emerald, 400, 600, 30)],
         layer_resource: resource("Prism Sand", StrategicResourceKind::CrystalLens),
@@ -1392,7 +1392,7 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         hazards: &[(Explosive, 5), (Pressure, 3)],
         field: FieldProfile {
             // Colours split, more the deeper (Wave 9: introduced gently, then pushed).
-            screen: &[screen(ScreenEffect::ChromaticAberration, 800)],
+            screen: &[screen(ScreenEffect::ChromaticAberration, 560)],
             deepening: true,
             ..FieldProfile::NEUTRAL
         },

@@ -118,15 +118,16 @@ fn glass_pixel(x: i32, y: i32, [dark, mid, light]: [Color; 3]) -> PaletteIndex {
     if px == 0 || py == 0 {
         return index_of(INK);
     }
-    // A diagonal highlight across every pane.
-    if px + py == 4 || px + py == 5 {
+    // A short diagonal highlight in each pane's corner, a shaded lower edge, solid colour
+    // between (so the wall reads as its colour at a glance).
+    if px + py == 3 {
         return index_of(light);
     }
-    if px >= 6 || py >= 6 {
+    if px == 7 || py == 7 {
         return index_of(dark);
     }
-    if noise(x, y, 6, 703) + f32::from(bayer4(x, y)) / 50.0 > 0.7 {
-        index_of(light)
+    if noise(x, y, 6, 703) + f32::from(bayer4(x, y)) / 50.0 > 0.86 {
+        index_of(dark)
     } else {
         index_of(mid)
     }
@@ -173,12 +174,14 @@ fn chronoglass_pixel(x: i32, y: i32) -> PaletteIndex {
     if drop.is_multiple_of(4) && (dx - 5).abs() + (dy - 5).abs() <= 1 {
         return index_of(if dy < 5 { ICE } else { SKY });
     }
-    if depth > 0.75 {
+    if depth > 0.85 {
         index_of(GOLD)
-    } else if depth > 0.4 {
+    } else if depth > 0.55 {
         index_of(AMBER)
-    } else {
+    } else if depth > 0.25 {
         index_of(RUST)
+    } else {
+        index_of(SOIL)
     }
 }
 
@@ -186,13 +189,16 @@ fn chronoglass_pixel(x: i32, y: i32) -> PaletteIndex {
 fn back_pixel(stratum: Stratum, time: Option<TimePocketKind>, x: i32, y: i32) -> PaletteIndex {
     match (stratum, time) {
         (Stratum::TimeSludge, Some(TimePocketKind::Slow)) => {
-            // Honey: warm gold murk, motes hanging still in it.
-            if hash(x, y, 721).is_multiple_of(97) {
-                index_of(CREAM)
-            } else if noise(x, y, 9, 723) + f32::from(bayer4(x, y)) / 40.0 > 0.6 {
-                index_of(AMBER)
-            } else {
+            // Honey: dark warm murk, amber swirls and motes hanging still in it.
+            let swirl = noise(x, y, 9, 723) + f32::from(bayer4(x, y)) / 40.0;
+            if hash(x, y, 721).is_multiple_of(131) {
+                index_of(GOLD)
+            } else if swirl > 0.78 {
                 index_of(RUST)
+            } else if swirl > 0.5 {
+                index_of(SOIL)
+            } else {
+                index_of(SOIL_DARK)
             }
         }
         (Stratum::TimeSludge, Some(TimePocketKind::Fast)) => {

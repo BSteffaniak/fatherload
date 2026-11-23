@@ -749,8 +749,8 @@ pub fn pocket_profile(base: FieldProfile, kind: TimePocketKind, along: u16) -> F
         // Slow: honey-gold, a little drained, edges heavy.
         TimePocketKind::Slow => inside
             .screen
-            .with(ScreenEffect::ColourGrade, 46)
-            .with(ScreenEffect::Desaturate, 22)
+            .with(ScreenEffect::ColourGrade, 28)
+            .with(ScreenEffect::Desaturate, 18)
             .with(ScreenEffect::Vignette, 30)
             .graded([255, 186, 92]),
         // Fast: a cold blue-white wash and a shiver.
