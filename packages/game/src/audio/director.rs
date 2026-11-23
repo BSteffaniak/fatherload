@@ -2379,7 +2379,8 @@ mod tests {
             BTreeSet::from([Patch::ShearLoop])
         );
         let tops = fatherload_simulation::distortion::rot::tier_tops(&layout);
-        assert_eq!(heard_at(tops[0] + 6), BTreeSet::from([Patch::RotLoop]));
+        // Clear of the ragged boundary with the Gravity Shear above.
+        assert_eq!(heard_at(tops[0] + 30), BTreeSet::from([Patch::RotLoop]));
         assert_eq!(
             heard_at(tops[2] + 6),
             BTreeSet::from([Patch::RotLoopCrushed])

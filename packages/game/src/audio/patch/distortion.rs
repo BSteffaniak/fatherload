@@ -42,13 +42,13 @@ pub(super) fn glass_chime(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn mirror_shatter(rng: &mut Rng) -> Vec<f32> {
     let mut out = burst(
         rng.next_u64(),
-        NoiseColor::White,
-        FilterMode::HighPass,
-        3_200.0,
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        3_500.0,
         0.8,
         0.35,
     );
-    grains(rng, &mut out, 22, (0.0, 0.5), (4_500.0, 11_000.0), 0.22);
+    grains(rng, &mut out, 22, (0.0, 0.5), (3_000.0, 7_500.0), 0.22);
     for (index, time) in [0.05_f32, 0.14, 0.27, 0.41].into_iter().enumerate() {
         let note = 2_200.0 + 340.0 * f32::from(u8::try_from(index).unwrap_or(0));
         mix_into(
@@ -65,8 +65,8 @@ pub(super) fn mirror_shatter(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn gravity_groan(rng: &mut Rng) -> Vec<f32> {
     let mut groan = Osc::new(Wave::Saw);
     let mut filter = Svf::new(FilterMode::LowPass, 400.0, 2.0);
-    let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
-    let mut rumble_filter = Svf::new(FilterMode::LowPass, 120.0, 0.7);
+    let mut rumble = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut rumble_filter = Svf::new(FilterMode::BandPass, 140.0, 1.2);
     let start = rng.range(95.0, 120.0);
     render(1.3, |t| {
         let pitch = glide(t, start, start * 0.62, 0.5) * (1.0 + 0.03 * sine(t, 3.0));
@@ -175,7 +175,8 @@ fn rot_tune(rng: &mut Rng, levels: f32, hold: f32) -> Vec<f32> {
     let lead = [
         523.25_f32, 659.26, 783.99, 659.26, 587.33, 698.46, 880.0, 698.46,
     ];
-    let bass = [130.81_f32, 130.81, 146.83, 146.83];
+    // Bass notes on whole cycles of the loop (multiples of 0.25 Hz), so the seam is clean.
+    let bass = [130.75_f32, 130.75, 146.75, 146.75];
     let mut tick = Noise::new(NoiseColor::White, rng.next_u64());
     let step = LOOP_SECONDS / 8.0;
     render(loop_length(), |t| {

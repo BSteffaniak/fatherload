@@ -128,6 +128,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // The Leviathan swims its own path in its arena (Wave 9,
         // `drowned_tests::a_bot_with_descent_iv_kit_beats_the_leviathan...`).
         && !matches!(kind, EnemyKind::Leviathan)
+        // So do the distortion strata's (Wave 9; their twins only exist in a mirror hall):
+        // `distortion_tests::the_distortion_creatures_keep_the_body_rules_in_a_fight`.
+        && !kind.is_distortion()
 }
 
 /// One of every cave kind at an open spot in the arena.

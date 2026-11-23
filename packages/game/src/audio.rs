@@ -274,7 +274,10 @@ mod tests {
                 | Patch::SerpentLoop
                 | Patch::ForgeAmbienceLoop
                 | Patch::AnchorThunk
-                | Patch::SunforgeLoop => (40.0, 3_000.0),
+                | Patch::SunforgeLoop
+                // The distortion strata (wave 9): gravity's groan and the shear's low bed.
+                | Patch::GravityGroan
+                | Patch::ShearLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }
