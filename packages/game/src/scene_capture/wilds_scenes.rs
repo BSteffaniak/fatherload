@@ -92,7 +92,7 @@ fn spot_tile(planet: &PlanetGround, spot: Spot) -> (i32, i32) {
         }
         Spot::Landmark => {
             let site = world.landmark_site(planet).expect("a landmark");
-            let column = site.centre() - 20;
+            let column = site.centre() - 14;
             (column, planet.surface_row(column))
         }
         Spot::Wilds => {
