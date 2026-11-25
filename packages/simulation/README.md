@@ -9413,7 +9413,13 @@ are silent: the bed and the hull hit carry them) and messages seats on a body.
 ### Formats
 
 - `PROTOCOL_VERSION` **20** (the frontier tiles, themes, creatures and events; no world field
-  or section). No save format bump: no new saved field; old saves load unchanged.
+  or section). No save format bump: no new saved field. A Wave 11 save that visited a body
+  tagged desert dunes, volcanic or crystal held that body's ground as barren (its
+  fingerprint no longer matches): such a round body now loads **fresh** (its edits,
+  creatures and fluids dropped) instead of the whole save refusing to load
+  (`world/places.rs`, `a_body_whose_ground_a_newer_build_regenerated_loads_fresh`). A rig
+  left on it may sit in the new ground's rock and has to drill free (TODO-SEAM
+  w12-integrator: every re-theming track relies on this; free such rigs on load if wanted).
 - Golden digests: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` unchanged. The theme
   digests (`frontier::tests::THEME_DIGESTS`, each world at R = 600) pin the generation.
 
