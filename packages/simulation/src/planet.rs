@@ -22,12 +22,12 @@
 //!   of an inner band really has half the tiles.
 //! * **Themes** come from the append-only registry in [`theme`]; Waves 12-13 add real ones.
 //!
-//! **Integration seam (TODO-SEAM, the w11-regions track):** the regions track owns `BodyId`,
-//! `Place` and its body-generator interface. [`BodyGround`] is this track's minimal stand-in:
-//! the regions track's planet bodies should implement their generator with
-//! [`PlanetGround`] (or adapt this trait onto theirs), and build the body's terrain with
-//! [`crate::terrain::Terrain::planet`]. Until a world holds many places,
-//! [`crate::WorldState::new_planet_world`] builds a world that *is* one planet.
+//! **Wired (Wave 11 integration):** a generated body's store (the regions track's
+//! `place::BodyWorld`) is built with [`crate::terrain::Terrain::planet`] from
+//! `place::planet_params_for` (the space generator's body: its seed, radius, gravity and
+//! theme), its gravity zone the store's own field zone. [`BodyGround`] is the strip's query
+//! interface. [`crate::WorldState::new_planet_world`] (a world that *is* one planet) stays for
+//! the polar track's own tests and scenes.
 
 pub mod landing;
 #[cfg(test)]
@@ -116,8 +116,7 @@ impl PlanetParams {
     }
 }
 
-/// A body's ground as a generator of its unrolled strip (TODO-SEAM: the regions track's
-/// body generator; see the module docs).
+/// A body's ground as a generator of its unrolled strip (see the module docs).
 pub trait BodyGround {
     /// The generated tile at strip tile `(column, row)` (columns wrap).
     fn generated_tile(&self, column: i32, row: i32) -> Tile;

@@ -285,8 +285,9 @@ pub struct BodyExtent {
     /// One past the last row (rows below read as bedrock).
     pub bottom_row: i32,
     /// Whether the ground wraps round from `max_col` to `min_col` (a round planet's unrolled
-    /// strip). TODO-SEAM (w11-polar): the terrain does not wrap yet; the polar track's planet
-    /// ground decides how crossing the seam works (rigs, entities, fluids, collision).
+    /// strip). A generated body's round ground is the polar track's planet terrain, which
+    /// wraps itself ([`crate::terrain::Terrain::planet`]); this generator interface serves the
+    /// flat test ground and free flight's vacuum.
     pub wraps: bool,
 }
 
@@ -304,10 +305,11 @@ impl BodyExtent {
 /// Generates a body's ground, chunk by chunk.
 ///
 /// Implementations must be pure: the same body, seed and chunk always give the same tiles on
-/// every machine (integer-only, no iteration-order dependence). The polar/planet track
-/// implements this for planets (TODO-SEAM w11-polar: `crate::planet`); [`FlatTestGenerator`]
-/// is the trivial one used until then and in tests, [`EmptySpaceGenerator`] the ground of
-/// free flight.
+/// every machine (integer-only, no iteration-order dependence). A generated body's round
+/// ground does not go through it: its store's terrain is the polar track's planet
+/// ([`planet_params_for`], [`crate::terrain::Terrain::planet`]). [`FlatTestGenerator`] is the
+/// ground of a key that names no body of the world's space (tests and tools),
+/// [`EmptySpaceGenerator`] the ground of free flight's store.
 pub trait BodyGenerator: Send + Sync + fmt::Debug {
     /// The ground's extent.
     fn extent(&self) -> BodyExtent;

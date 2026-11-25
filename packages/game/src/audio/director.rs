@@ -975,8 +975,9 @@ impl Director {
 
         if let Some(scene) = away {
             // Away from home the home world's hazards, ambience and music are not this seat's:
-            // its place's own sound (TODO-SEAM w11-space-render: space and planet ambience and
-            // music) is the place sound below, the rest is the rig's.
+            // its place's own sound (a body's low wind, free flight's suit hum; Waves 12-13 give
+            // planets their own ambience and music) is the place sound below, the rest is the
+            // rig's.
             self.away_ambience(live, listener, scene.place);
             state.initialized = true;
             state.velocity_x = velocity_x;
@@ -2483,8 +2484,8 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
                 y,
                 pan,
                 half_width: (view.visible_world_size().0 * 0.5).max(TILE_SIZE),
-                // Away from home (F11): free flight is vacuum; a body's air is the planet
-                // track's (TODO-SEAM w11-polar), thin but there for now.
+                // Away from home (F11): free flight is vacuum; a body's air carries sound
+                // (Waves 12-13 thin it by its atmosphere).
                 vacuum: view.place_scene.as_ref().map_or_else(
                     || {
                         fatherload_simulation::moon::vacuum_in(

@@ -1,9 +1,10 @@
 //! Space on screen (Wave 11 flight): a seat whose rig is away from home sees space instead of
 //! the home world, with the flight HUD, the nav HUD and the nav chart and station dialogs.
 //!
-//! **Placeholder art** until the space-render track's (TODO-SEAM(w11-space-render): its polar
-//! shader draws the round worlds and their ground; this view keeps the HUD and the flight
-//! cues). Everything is drawn from the seat's rig outward:
+//! The sky, the suns and the worlds are the space renderer's (from the real galaxy, Wave 11
+//! integration: `rendering/space_seat.rs`); this view draws flight's own layer over them
+//! (stations with their ports, pings, crewmates, the warp tunnel and the rig) and the HUD. Its
+//! own backdrop remains the fallback. Everything is drawn from the seat's rig outward:
 //!
 //! * **The camera is locked to the craft**: the rig is drawn upright in the middle of the view
 //!   and space turns around it (the screen-relative accessibility scheme keeps the chart up

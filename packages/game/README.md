@@ -383,3 +383,17 @@ stays upright. The full write-up, the seams the integrator wires and the timing 
 - Time the browser build: `node scripts/perf-web-space.cjs [names]` (serves `target/web`,
   opens `?space=<name>`; `FATHERLOAD_WEB_GPU=1` for the GPU).
 
+
+## Wave 11 integration (every seat in its own place)
+
+Each seat draws its own place every frame (`rendering/space_seat.rs`, synced in
+`GameRenderer::sync`): a seat under the Star Drive sees the real galaxy round its rig
+(`rendering/space/live.rs` gathers the space generator's suns, worlds, belts, comets, nebulae,
+black holes, wormholes and derelicts; flight's layer, stations and HUD go over it); a seat on a
+generated body sees that body store's round ground through the polar renderer, the galaxy above
+it, the camera locked to the craft and the HUD upright; a seat at home sees the home world as
+ever. Each seat keeps its own polar ground textures, and the body's tile writes
+(`FrameReport::changed_store_tiles`) repaint only their rows. Scenes on real worlds:
+`space_landed`, `space_moon_approach`, `space_moon_ground`, `space_moon_far_side`,
+`space_moon_shaft`, `space_split_places`, `space_near_black_hole`. Details in the simulation
+README ("Wave 11 integration").

@@ -1,14 +1,12 @@
 //! What the space renderer draws: a plain-data picture of the space around one seat, and the
 //! polar strip of the body it stands on.
 //!
-//! TODO-SEAM (Wave 11 integration): everything here is this track's *local* interface. The
-//! space generator (`simulation::space`) owns the real systems, bodies, belts and the rest; the
-//! polar track (`simulation::polar` / `simulation::planet`) owns the ring geometry and the
-//! planet's ground; the flight track (`simulation::flight`) owns the craft, cruise and warp;
-//! the regions track (`simulation::place`) owns `BodyId` / `Place`. The integrator fills a
-//! [`SpaceRenderView`] from the render snapshot (one per seat, positions as [`WorldPos`],
-//! never `f32` absolutes) and implements [`PolarStrip`] for the body's ground; nothing in the
-//! renderer reads the simulation beyond these types.
+//! The renderer's own plain-data interface (Wave 11 integration: filled from the real
+//! simulation by [`super::live`] and `rendering/space_seat.rs`): the space generator's systems,
+//! bodies, belts and the rest, the polar track's ring geometry and a body store's strip
+//! ([`PolarStrip`]), flight's craft, cruise and warp. One view per seat, positions as
+//! [`WorldPos`] (never `f32` absolutes); nothing in the renderer reads the simulation beyond
+//! these types.
 
 use fatherload_simulation::{
     position::WorldPos,
@@ -76,7 +74,8 @@ pub struct StarView {
     pub seed: u32,
 }
 
-/// The look of a round body (TODO-SEAM: the space generator's planet themes, Wave 12-13).
+/// The look of a round body (the space generator's themes map here, [`super::live::body_theme`];
+/// Waves 12-13 refine them).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BodyTheme {
     /// Grey dust and craters (small moons, the Moon).
@@ -143,7 +142,7 @@ impl BodyTheme {
 /// A round body seen from space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BodyView {
-    /// TODO-SEAM: `simulation::place::BodyId` (Home, Moon, or a generated body).
+    /// The body's id (a generated body's `place::SpaceBodyKey::mix`).
     pub id: u64,
     pub centre: WorldPos,
     /// Surface radius (tiles). Landable bodies are 400 tiles or more.
@@ -237,7 +236,7 @@ pub struct WormholeView {
     pub seed: u32,
 }
 
-/// How the craft is moving, for the speed and warp effects (TODO-SEAM: `simulation::flight`).
+/// How the craft is moving, for the speed and warp effects (from `simulation::flight`'s drive).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum FlightMotion {
     /// Thrusters only (no streaks).
@@ -301,7 +300,8 @@ impl SpaceRenderView<'_> {
     }
 }
 
-/// The ring layout of a body's ground (TODO-SEAM: `simulation::polar`'s geometry).
+/// The ring layout of a body's ground (`simulation::polar`'s geometry,
+/// [`super::live::polar_geometry`]).
 ///
 /// Row `surface_row` is the first ground row: its top edge sits at `radius_tiles` from the
 /// centre, and each row below is one tile closer. Columns are angles: the surface ring has
@@ -418,7 +418,8 @@ impl PolarGeometry {
     }
 }
 
-/// A body's ground as the renderer reads it (TODO-SEAM: the polar track's planet strip).
+/// A body's ground as the renderer reads it (a body store's planet strip,
+/// [`super::live::LiveStrip`]).
 pub trait PolarStrip {
     fn geometry(&self) -> &PolarGeometry;
     /// The unrolled ground: band `k`'s column `c` at terrain column `c` (see

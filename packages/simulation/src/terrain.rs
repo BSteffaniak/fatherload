@@ -913,7 +913,7 @@ impl Terrain {
     /// (its extent and surface too), with `edits` applied, in `frame`. The settings record is
     /// the legacy generator's for `seed`, which switches every settings-driven content system
     /// (villages, sky, Moon, Descents, tombs) off on the body; its band and heat rules are the
-    /// classic ones until the planet track gives bodies their own (TODO-SEAM w11-polar).
+    /// classic ones (a generated body's round ground is [`Self::planet`] instead).
     #[must_use]
     pub fn for_body(
         source: Arc<crate::place::BodySource>,

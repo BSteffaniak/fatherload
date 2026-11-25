@@ -49,15 +49,18 @@
 //!
 //! # Seams (Wave 11 integration)
 //!
-//! * TODO-SEAM(w11-regions): [`FlightPlace`] and [`BodyRef`] stand in for `place::Place` and
-//!   `place::BodyId`; the home world is [`space::HOME_BODY`]. Landing on a generated body
-//!   ([`FlightPlace::Landed`]) should hand over to the body's ground through
-//!   `move_to_place(Place::OnBody(..))`.
-//! * TODO-SEAM(w11-space-gen): [`space::PlaceholderSpace`] stands in for `crate::space`'s
-//!   systems, bodies, stations and gravity-source query; [`space::SpaceQuery`] is the
-//!   interface this module reads.
-//! * TODO-SEAM(w11-polar): a landed rig rests on the body's surface circle here; the polar
-//!   ground replaces it.
+//! * Regions (wired): a rig in free flight is `place::Place::Space` (its home-store slot parked
+//!   over the Moon, its exact space position in [`RigFlight::pos`]); [`BodyRef`] names any
+//!   flight body (suns, bodies, stations) and maps to the generator's body id, which **is**
+//!   `place::BodyId::Space`'s payload ([`space::GeneratedSpace::space_body`] /
+//!   [`space::GeneratedSpace::body_ref`]). Re-entry onto a generated body hands the rig to its
+//!   store with `move_to_place(Place::OnBody(..))` (`world/body_flight.rs`), and climbing out
+//!   of its strip hands it back.
+//! * Space generator (wired): [`space::GeneratedSpace`] reads `crate::space::Space` (one
+//!   shared cache per world seed); [`space::SpaceQuery`] is the interface this module reads.
+//! * Polar (wired): [`FlightPlace::Landed`] is a rig on a body's round ground, moved by the
+//!   ground code in the body's store; the circle landing in [`physics`] stays for bodies
+//!   without ground (none today).
 
 use std::collections::BTreeMap;
 
@@ -178,9 +181,9 @@ pub const STATION_REPAIR_PRICE: u32 = 4;
 
 /// Where a rig is in the flight model.
 ///
-/// TODO-SEAM(w11-regions): stands in for `place::Place` (`Home` is `OnBody(Home)`, `Space`,
-/// `Approach` and `Docked` are `Space`, `Landed` is `OnBody(..)` once the polar ground takes
-/// over).
+/// As a `place::Place`: `Home` is `OnBody(Home)` (or the Moon), `Space`, `Approach` and
+/// `Docked` are `Space`, and `Landed` is `OnBody(Space(..))`, the body's store
+/// (`WorldState::place_of`).
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum FlightPlace {
     /// On or over the home world (its ground and sky, the Moon included): classic movement.
@@ -218,8 +221,9 @@ impl FlightPlace {
 
 /// A body: a star, planet, the home world or a station of one system.
 ///
-/// TODO-SEAM(w11-regions): stands in for `place::BodyId` (`Generated { sector, system, body
-/// }`; the home world is [`space::HOME_BODY`]).
+/// A generated body's `BodyRef` maps to the space generator's id, the payload of
+/// `place::BodyId::Space` ([`space::GeneratedSpace::space_body`]); the home world is
+/// [`space::HOME_BODY`] (`place::BodyId::Home`).
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]

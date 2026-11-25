@@ -1161,7 +1161,8 @@ Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped 
   black holes, 55 nebulae, 2 wormhole pairs.
 - **Speed:** a sector generates in ~3 µs on average, ~10 µs at worst (release); 1,089 sectors
   in 3.2 ms. A release-only test asserts < 3 ms per sector.
-- `GOLDEN_SPACE_DIGEST` (`0xf303_d220_59a6_d7db`) pins the 25 sectors within two of home on
+- `GOLDEN_SPACE_DIGEST` (`0x0c0c_b46c_12ea_7136` since the Wave 11 integration added Halcyon
+  Dock to the home system; `0xf303_d220_59a6_d7db` before) pins the 25 sectors within two of home on
   the default seed (`StateHasher` over the serialized sectors). Change it only on purpose.
 - Tests (`space/tests.rs`, `space/trig.rs`): same seed gives the same bytes (postcard) and
   different seeds differ, including far sectors at the `i32` extremes; the cache equals the
@@ -1190,8 +1191,8 @@ Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped 
   flight. Keep one `Space` per world (built from the world's settings) for its cache.
 - **w11-space-render:** star colours from `StarClass::colour`, nebula colours and fog, comet
   tails, rings, black-hole lensing radii, `Atmosphere::visible` for the rim glow.
-- Space is not yet wired into `WorldState` (no accessor), so no world state, save or protocol
-  changed.
+- (Wired in the Wave 11 integration: see "Wave 11 integration" below. Space is still never
+  state: `Space::shared(seed)` is a process-wide cache per seed.)
 ## Wave 11 space-render: space and round bodies on screen (`game/src/rendering/space.rs`, `game/src/rendering/space/*`)
 
 The game-side drawing of space and of round bodies (expansion plan F12). Nothing in the
@@ -8541,6 +8542,133 @@ the Hive folk keep to their own words. Test:
   (append variants; answers can be new id ranges past 44,600); the supply line reads
   `Logistics::supply_row_above`, so a future stop kind (a docked ship, a space station) only
   has to be counted there.
+
+## Wave 11 integration: space foundations stacked and wired
+
+The six Wave 11 tracks (regions, space-gen, polar, flight, space-render, carryover) are stacked
+linearly on the Wave 10 master (f33d989) and their seams wired so the whole loop plays end to
+end: the Heart's ending gives the Star Drive, a rig flies up past the Moon into space, warps to
+a system from the Archive's star charts, lands on a round moon, drives all the way round it,
+digs toward its core, takes off, warps home, docks at Halcyon Dock and flies back into the home
+sky; single-player, online with another player elsewhere, and split screen with seats in two
+places.
+
+### Formats
+
+- `PROTOCOL_VERSION` **19**: one bump for the wave (regions, polar, flight and carryover each
+  bumped to 19; the doc on the constant lists every track's changes).
+- Save format **15** (the regions track's `places`; flight, polar and carryover need none:
+  serde defaults). `every_supported_save_format_loads_plays_and_round_trips` covers 1-15.
+- Golden digests: V1-V10 and `GOLDEN_V11_DIGEST` (`0xab0f_567c_0490_b4c9`) unchanged (home
+  generation is untouched). `GOLDEN_SPACE_DIGEST` is `0x0c0c_b46c_12ea_7136` (Halcyon Dock, the
+  home system's station, added to the generator; nothing else of space moved).
+- Event codes: regions 740, polar 780-784, flight 800-819 (carryover adds none). No new
+  `TileKind` codes, sound patches or world sections beyond the tracks' (`SectionKey::Flight`).
+
+### Conflicts the stacking resolved
+
+- `terrain.rs`: the regions track's body source (`Terrain::for_body`, extent) and the polar
+  track's planet strip (`Terrain::planet`) both live in `Terrain`; one chunk source
+  (`base_chunk(settings, body, planet, chunk)`), and every content switch-off reads either.
+- `GameplayEventKind`, `event_cue`, `effects`, netcode's event codes, `TestModeAction`
+  (`WarpToPlace`, `GrantStarDrive`), the `WorldState` exhaustive destructures (`places`,
+  `place_pass`, `flight`): appended in track order. `remove_player_with` forgets both the place
+  (unless parked) and the flight waypoint.
+- `simulate.rs`: flight's world pass (`advance_star_flight`) runs only in the home world pass.
+- Movement: the polar planet attitude context gained flight's `drag_scale`/`inertia`/`max_spin`
+  (identity values: the ground keeps its behaviour).
+- Scenes: flight's `space_cruise` / `space_warp` are `space_flight_cruise` /
+  `space_flight_warp` (the space renderer's staged views keep theirs). The shell's
+  `ModalScreen` gained `NavChart`, `Station` and `Archivist`.
+- The space-gen reviewer's unfinished platform-determinism fix (exact integer extents, no libm
+  `hypot` or `mul_add` in space) is committed on its own; the golden digest did not move.
+
+### Seams wired
+
+- **One body id.** `place::SpaceBodyKey` **is** `space::SpaceBodyId`; `BodyId::{Home, Moon}`
+  map to the generator's `HOME_WORLD_BODY` / `MOON_BODY` (`BodyId::space_id`, `of_space`).
+  Flight's `BodyRef` (any flight body: suns, bodies, stations) maps to and from it
+  (`GeneratedSpace::space_body`, `body_ref`); the renderer's `BodyView::id` is its `mix()`.
+- **Planet ground in the regions' stores.** `BodyWorld::generate` builds a generated body's
+  store as the polar track's planet (`place::planet_params_for`: the space body's ground seed,
+  radius, gravity and theme; `planet_theme_of` maps the twelve themes onto the three ground
+  themes so far), created lazily on first arrival, ticked when occupied (one ground pass,
+  `tick_planet` keeps its gravity zone and lap wrap), frozen when empty, saved by store and seed
+  with a fingerprint and digest check and its edits packed, replicated per store by relevance.
+  Its gravity zone is the store's own field zone (swapped in with its ground: home field zones
+  never reach a body). The ground frame is lap-aware (`wrapped_frame`, `nearest_lap_frame`); a
+  ground pass leaves the world's lost-cargo sites alone. A key that names no landable body of
+  the world's space keeps the flat test ground (tests, tools).
+- **Flight in the real galaxy.** `flight::GeneratedSpace` implements `SpaceQuery` over
+  `Space::shared(seed)` (one cache per world): every system of a sector (1-3), its suns, its
+  bodies (planets, moons, crater rocks: gravity `gravity_milli_g` x the rig's own 440 px/s²; air
+  by atmosphere), its stations; galactic sectors are space sectors (2^22 tiles). The departure
+  is the generator's (above the Moon); the home world and the Moon are `BodyKind::Home`
+  (flying into either approach sphere hands the rig back to the home sky). Halcyon Dock is a
+  real station of the home system (`HALCYON_DOCK_OFFSET`, home centre + (3,000, -42,000)
+  tiles, outside the home world's and the Moon's reach), its port facing the departure point.
+  Charts resolve to real systems (`chart_system`, legacy charts too); the scanner's nebula
+  check reads the generator's fog. `place_of` answers `Place::Space` for a rig under the Star
+  Drive (its home-store slot parked over the Moon, its space position exact in
+  `RigFlight::pos`).
+- **Landing and take-off** (`world/body_flight.rs`). A rig in a landable body's approach
+  sphere that comes down `LAND_INSIDE_ROWS` (8) inside the top of the body's strip is handed to
+  its store (`move_to_place(OnBody(Space(id)))`): the strip point under it
+  (`PolarGrid::from_world`), its velocity turned into the strip's frame (along the ground,
+  toward the core) and its orientation measured from the local up there; nothing levels it, and
+  the polar track's landing skill (touchdown, slide, scrape, tip, legs) takes over.
+  `FlightPlace::Landed` now means "on a body's ground" (not away: the ground code moves it).
+  Climbing `TAKE_OFF_ABOVE_ROWS` (2) over the strip's top hands it back to space at the
+  matching point round the body (`PolarGrid::to_world`), turned and moving as it left. Life
+  support counts on a body (refilling on a breathable world); the beacon (air out, wrecked, the
+  rescue or beacon command) tows a rig on a body home to the spawn point.
+- **Rendering.** `rendering/space/live.rs` gathers what the generator placed round a camera as
+  the renderer's views; `rendering/space_seat.rs` draws each seat: in free flight the real
+  galaxy (flight's stations, pings, crewmates, warp tunnel, rig and HUD over it), on a body its
+  round ground through the polar renderer (`LiveStrip`: the polar grid's rings, a ring tile of
+  band k kept across 2^k strip columns), the camera locked to the craft (its turn relative to
+  the local up), the HUD upright. Every seat keeps its own polar ground textures; a body
+  store's tile writes mark that seat's ground (`mark_tile_dirty` wired). The flight zoom
+  frames a black hole's disc. The stratum banner stays quiet away from the home world.
+- **The bot** (`flight::autopilot::SpaceBot`, doc-hidden): legs of a journey flown with the
+  player's controls only (rotation thrusters, main/retro/side thrust, cruise, warp, use; no
+  assist): leave, warp, waypoint, land, drive, dig, take off, dock, undock, home.
+
+### End-to-end tests
+
+- `world::space_journey_tests`: the whole loop above on a V11 world (the Heart's ending via
+  `heart_wakes`, a chart pushed as if read at a plinth), twice at 30 Hz (bit-identical end
+  state) and once at 60 Hz. About 19,400 ticks at 30 Hz (10.8 minutes of play): the warp to
+  the chart 54 s, the approach and landing 146 s, the lap of a 3,072-column moon 93 s, 24 rows
+  down in 26 s, the warp home 56 s, cruising in and docking 171 s, home 98 s.
+- netcode `tests::world_space_journey`: a client flies the journey online (a quarter lap and
+  8 rows of digging) while the host's own rig digs at home; the client's bot reads only its own
+  world, its view matches the host's at every leg, it holds the moon's strip exactly, and home
+  catches up on return.
+- game `local_game::tests::space_seat_tests`: split screen, one seat on the charted moon's
+  round ground, the other docked at Halcyon Dock; each seat's view shows its own place and the
+  game ticks both.
+- Scenes on real worlds: `space_landed` (a home-system world's store), `space_moon_approach`,
+  `space_moon_ground`, `space_moon_far_side`, `space_moon_shaft`, `space_split_places`,
+  `space_near_black_hole`; flight's other scenes now draw the real galaxy.
+
+### Still open (Waves 12-13)
+
+- Free flight's store (`StoreKey::Space`) is only the test-mode warp's: a rig under the Star
+  Drive stays in the home store's parked slot; players far apart in free flight never share a
+  ground pass (their positions are exact `WorldPos`es).
+- Ground themes: three (barren, rocky, ice) stand in for the twelve space themes; no planet
+  settlements, creatures, weather or day length yet; a planet's heat and bands are the classic
+  ones. A rig on a body keeps the home world's clock and economy.
+- Coming home always puts the rig over the column it left from; the Moon's approach sphere
+  hands it back like the home world's.
+- Black holes, wormholes, nebula fog and asteroids are drawn but have no flight physics yet
+  (no lensing pull, transit or mining from flight); stars pull with flight's per-class
+  surface gravity.
+- Tile-keyed state on a body is not lap-aware yet (the polar track's known limit); body maps
+  and discovery are the home world's.
+- Browser: the polar ground and the galaxy draw in WebGL1 (GLSL ES 100) as the space-render
+  track timed; see the integration report for this stack's numbers.
 
 ## Replication
 

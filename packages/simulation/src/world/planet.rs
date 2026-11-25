@@ -54,9 +54,9 @@ impl WorldState {
     /// terrain is the body's unrolled strip ([`Terrain::planet`]), its gravity the body's, the
     /// rig hovering just above the ground at [`PLANET_SPAWN_COLUMN`].
     ///
-    /// **TODO-SEAM (w11-regions):** until a world holds many places, a planet is a world of its
-    /// own; the regions track builds a body's region with [`Terrain::planet`] and
-    /// [`planet_gravity_zone`] instead.
+    /// A generated body's ground lives in its own store of a world with many places
+    /// (`place::BodyWorld`, built the same way); this world that *is* one planet serves the
+    /// polar track's tests and scenes.
     #[must_use]
     pub fn new_planet_world(
         player_id: PlayerId,

@@ -216,9 +216,9 @@ impl PolarGround {
         self.shader.is_some()
     }
 
-    /// Tile `tile` of the strip's terrain changed (TODO-SEAM: the integrator calls this for
-    /// each terrain change of the seat's body, as the home world's renderer is told of its
-    /// own). Its rows repaint on the next sync; a strip whose revision changes with no tile
+    /// Tile `tile` of the strip's terrain changed (the game calls this for each tile write of
+    /// the seat's body store, `SpaceRenderer::mark_ground_tile`, as the home world's renderer
+    /// is told of its own). Its rows repaint on the next sync; a strip whose revision changes with no tile
     /// marked repaints everything over a few frames. Assumes `PolarStrip::tile_at` keeps rows
     /// (band columns may map anywhere).
     pub fn mark_tile_dirty(&mut self, tile: TilePosition) {

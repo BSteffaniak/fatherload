@@ -271,8 +271,8 @@ impl GameRenderer {
     }
 
     /// Brings the space renderer up to date with `view` (the ground's textures, the lens's
-    /// target), once per frame before [`Self::render_space`]. TODO-SEAM: the integrator calls
-    /// it from `sync` for every seat whose place is in space or on a generated body.
+    /// target), once per frame before [`Self::render_space`] (the staged views; every seat in
+    /// play is synced by [`Self::sync`]).
     pub fn sync_space(
         &mut self,
         raylib: &mut RaylibHandle,
@@ -293,9 +293,9 @@ impl GameRenderer {
         self.space.polar.settled()
     }
 
-    /// Draws one space view over the whole screen (the screenshot scenes and the browser's
-    /// space timing page; TODO-SEAM: the integrator draws each seat's view in its viewport
-    /// from `render_seat`, then the seat's HUD over it as usual).
+    /// Draws one staged space view over the whole screen (the screenshot scenes and the
+    /// browser's space timing page; in play each seat draws its own view in its viewport, then
+    /// its HUD).
     pub fn render_space(
         &self,
         draw: &mut RaylibDrawHandle<'_>,

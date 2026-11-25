@@ -1,10 +1,10 @@
 //! The place view (Part III F11): what a seat away from the home store sees, the ground of a
 //! space body or free flight, in that store's own frame.
 //!
-//! A stub hook: the space-render track (TODO-SEAM w11-space-render) replaces the backdrop, the
-//! polar ground and the flight HUD. What it draws today is enough to play and read: a star
-//! backdrop, the body's ground with the game's own tile art (one terrain cache per store, lit
-//! round the seat's rigs), the rigs and pilots there. The HUD is the seat's usual one.
+//! A generated body's round ground is drawn by the polar renderer (`rendering/space_seat.rs`);
+//! this flat view draws the other stores (free flight's test-mode store and the flat test
+//! ground): a star backdrop, the ground with the game's own tile art (one terrain cache per
+//! store, lit round the seat's rigs), the rigs and pilots there. The HUD is the seat's usual one.
 
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -1230,11 +1230,23 @@ as a round world.
   the Archive's charts, nearby worlds, sharing a waypoint with the crew). The HUD shows the
   waypoint's distance and ETA, the warp's alignment, and arrows to the waypoint and
   crewmates. The scanner pings for new stars (nebula fog halves its reach).
+- **The galaxy is real.** Every star, world, moon, belt, comet, nebula, black hole and station
+  you see is the space generator's, the same for every player of a world (and the browser).
+  The Archive's star charts lead to real systems, and the home system has its own station,
+  **Halcyon Dock**, a short hop above the Moon.
+- **Landing on a world**: come down through the top of its air and you are on its round
+  ground, in your craft as it came in (nothing levels it for you). Drive all the way round a
+  small moon, dig toward its core, then climb back out of its sky and you are in space again,
+  right where you left it. What you dig stays dug.
+- **Many places at once**: in co-op and split screen each player can be somewhere else (one on
+  a moon, one docked, one at home), each with their own view, and every place keeps playing.
 - Test mode's pause menu has **Grant Star Drive**.
-- Scenes: `space_leaving_home`, `space_full_turn`, `space_cruise`, `space_warp`,
-  `space_nav_hud`, `space_nav_chart`, `space_docking`, `space_station`, `space_reentry`,
-  `space_landed`, `space_split_screen`, `touch_space`. The space art is a placeholder until
-  the space-render track's.
+- Scenes: `space_leaving_home`, `space_full_turn`, `space_flight_cruise`,
+  `space_flight_warp`, `space_nav_hud`, `space_nav_chart`, `space_docking`, `space_station`,
+  `space_reentry`, `space_landed`, `space_moon_approach`, `space_moon_ground`,
+  `space_moon_far_side`, `space_moon_shaft`, `space_split_screen`, `space_split_places`,
+  `space_near_black_hole`, `touch_space`; the space renderer's staged views are the other
+  `space_*` scenes.
 
 ### The Fathers' expedition (wave 8 story)
 
@@ -1334,10 +1346,11 @@ work exactly as at home. Gravity pulls toward the body's centre at the body's ow
   a step. Landing legs (an upgrade, not sold yet) widen the safe angle.
 - **Small moons** (radius 400-1,000 tiles) are quick landings: drive all the way round one, or
   dig straight down through its strata to the core chamber.
-- Placeholder themes for now (a barren moon, a rocky world, an ice world); the space waves add
-  real ones and the round, bent drawing. Review scenes (drawn flat): `planet_moon_surface`,
-  `planet_moon_halving_ring`, `planet_moon_core_chamber`, `planet_rocky_surface`,
-  `planet_ice_surface`, `planet_tipped_over`.
+- Placeholder grounds for now (a barren moon, a rocky world, an ice world, picked by the
+  world's theme); the space waves add real ones. The ground is drawn round, bent by the polar
+  renderer, with the galaxy above it. Review scenes of the strip itself (drawn flat):
+  `planet_moon_surface`, `planet_moon_halving_ring`, `planet_moon_core_chamber`,
+  `planet_rocky_surface`, `planet_ice_surface`, `planet_tipped_over`.
 
 ### Art and audio pass (wave 6)
 

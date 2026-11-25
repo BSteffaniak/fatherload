@@ -238,9 +238,8 @@ impl WorldState {
                     self.body_beacon(player_id, &mut output);
                     PlayerScopedCommandOutcome::Applied
                 } else if ground_only && crate::place::home_only_command(&action.command) {
-                    // Building, infrastructure, rescue, the Moon, lifts, homes, tombs and
-                    // beds belong to the home world (F11; TODO-SEAM w11-flight: a stranded
-                    // rig away from home is the flight track's life support and rescue).
+                    // Building, infrastructure, the Moon, lifts, homes, tombs and beds belong
+                    // to the home world (F11; the rescue call on a body is the beacon, above).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else if !self.command_allowed_here(player_id, &action.command)
                     || ((self.logistics.is_riding(player_id)

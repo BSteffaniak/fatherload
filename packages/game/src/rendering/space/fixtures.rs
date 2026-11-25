@@ -6,9 +6,9 @@
     reason = "fixture geometry: small whole tile counts"
 )]
 
-//! Staged space views for the screenshot scenes and the browser's timing page (TODO-SEAM: the
-//! integrator builds the same [`SpaceRenderView`] from the real space generator and flight
-//! state; these fixtures stand in until then).
+//! Staged space views for the screenshot scenes and the browser's timing page: art review and
+//! timing of every kind of object in one place (in play each seat's view is built from the real
+//! space generator and flight state, [`super::live`]).
 //!
 //! The systems sit a billion sectors from home, so every scene also proves the projection is
 //! exact far out. Ground fixtures are real [`Terrain`]s laid out as polar strips: a barren

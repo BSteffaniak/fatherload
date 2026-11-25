@@ -395,8 +395,9 @@ impl WorldState {
     }
 
     /// The store whose ground the running pass works on (the home store outside the tick).
-    /// Systems that behave differently in space or on a body read this (TODO-SEAM w11-flight,
-    /// w11-polar: gravity, life support and flight read it inside the tick).
+    /// Systems that behave differently on a body read this inside the tick (the planet's
+    /// gravity zone and lap wrap come with its ground; life support, take-off and the beacon on
+    /// a body are `world/body_flight.rs`'s).
     #[must_use]
     pub const fn active_store(&self) -> StoreKey {
         self.place_pass.store
@@ -517,7 +518,8 @@ impl WorldState {
     /// `position` in that place's frame, keeping cargo, fuel, hull, velocity, spin and every
     /// other piece of state; a drill in progress and a cart ride end. The destination's ground
     /// is created on first arrival and the chunks round the arrival point are generated at
-    /// once. Used by flight and landing (TODO-SEAM w11-flight); safe online (it runs inside the
+    /// once. Used by landing and take-off (`world/body_flight.rs`), the beacon and the test-mode
+    /// warp; safe online (it runs inside the
     /// tick on the host and in every client's prediction alike).
     ///
     /// Inside the tick the move is applied after the tick's last pass (so no pass sees a
@@ -982,8 +984,8 @@ impl WorldState {
             next_revision.max(world.entities.next_revision()),
         );
         self.swap_ground(&mut world);
-        // Discovery is the home world's map; a body's is left to its own map (TODO-SEAM
-        // w11-space-render: body maps).
+        // Discovery is the home world's map; a body's own map is Wave 12's (its ground is
+        // drawn round the rig, not from a discovered map).
         let discovered = std::mem::take(&mut self.discovered_tiles);
         self.place_pass.store = store;
         self.place_pass.ground_only = true;

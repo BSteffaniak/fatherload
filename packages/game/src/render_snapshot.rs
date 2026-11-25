@@ -628,8 +628,8 @@ pub struct ViewSnapshot<'w> {
 }
 
 /// What a seat away from the home store sees (F11): its store's ground, entities and the rigs
-/// there, all in the store's frame. Drawn by the place view hook (`rendering::place_view`,
-/// TODO-SEAM w11-space-render: space, planets and the polar ground replace its stub art).
+/// there, all in the store's frame. A generated body's round ground is drawn by the polar
+/// renderer (`rendering/space_seat.rs`), the other stores by `rendering::place_view`.
 #[derive(Clone, Debug)]
 pub struct PlaceScene<'w> {
     pub place: fatherload_simulation::place::Place,
@@ -1370,8 +1370,8 @@ fn away_view<'w>(
         .map_or((view.player.x, view.player.y), |(x, y, _)| (x, y));
     view.world_scale = world_scale;
     view.camera = camera_for(view.viewport, world_scale, x, y);
-    // Depth and altitude over the place's own ground (free flight has none: the flight
-    // track's nav HUD reads space, TODO-SEAM w11-flight).
+    // Depth and altitude over the place's own ground (free flight's store has none; a rig
+    // under the Star Drive shows the flight HUD instead).
     let tile = scene.frame.tile_at(x, y);
     let (depth, altitude) = if scene.place == fatherload_simulation::place::Place::Space {
         (0, None)

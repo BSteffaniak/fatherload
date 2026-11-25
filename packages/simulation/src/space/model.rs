@@ -23,8 +23,7 @@ pub struct SystemRef {
 
 /// A body you can land on, in a generated system: `(sector, system index, body index)`.
 ///
-/// TODO-SEAM (w11-regions): this is the payload of `place::BodyId`'s space variant; the
-/// integrator unifies the two. The home world is `(HOME_SECTOR, 0, 0)` and the Moon
+/// It is the payload of `place::BodyId`'s space variant (`place::SpaceBodyKey` is this type). The home world is `(HOME_SECTOR, 0, 0)` and the Moon
 /// `(HOME_SECTOR, 0, 1)` here ([`super::home::HOME_WORLD_BODY`], [`super::home::MOON_BODY`]),
 /// which `BodyId::Home` and `BodyId::Moon` map to.
 #[derive(
