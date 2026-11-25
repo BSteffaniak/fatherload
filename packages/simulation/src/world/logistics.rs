@@ -1534,9 +1534,26 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return 0.0;
         };
-        let row = player.tile_in(self.frame()).y;
-        self.logistics
-            .supply_strain_at(self.terrain.settings(), row)
+        let tile = player.tile_in(self.frame());
+        let strain = self
+            .logistics
+            .supply_strain_at(self.terrain.settings(), tile.y);
+        // A gate fight's arena is a destination, not the open deep: no strain in it (the
+        // final fight runs a quarter of an hour, far below Heart's Edge).
+        if strain > 0.0
+            && (self.in_heart_chamber(tile)
+                || [
+                    self.colossus_hall(),
+                    self.glitch_arena(),
+                    self.leviathan_arena(),
+                ]
+                .into_iter()
+                .flatten()
+                .any(|arena| arena.contains(tile)))
+        {
+            return 0.0;
+        }
+        strain
     }
 
     /// Wave 8, Descent worlds: the thruster fuel factor for `player_id`'s rig at its depth (1

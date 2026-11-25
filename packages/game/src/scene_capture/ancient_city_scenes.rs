@@ -587,7 +587,9 @@ fn ask_index(stage: &mut SceneStage<'_>) {
     seat.fanfare = None;
     stage.settle(3);
     // The journal's milestones were earned long ago: no medal over the page.
-    stage.seat(0).fanfare = None;
+    let seat = stage.seat(0);
+    seat.fanfare = None;
+    seat.rewards.banners.clear();
 }
 
 /// The alloy portals framing the way in under the seal.

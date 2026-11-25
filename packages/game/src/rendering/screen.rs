@@ -1070,11 +1070,7 @@ fn hud_warnings(
         warnings.push(("HEAT", &icons::HEAT));
     }
     // Wave 11 carryover: far below every supply stop, thrust also costs a share of the tank.
-    if snapshot
-        .logistics
-        .supply_strain_at(snapshot.terrain.settings(), view.hud.row)
-        > 0.0
-    {
+    if view.supply_strain > 0.0 {
         warnings.push(("FAR FROM SUPPLY", &icons::FUEL));
     }
     if view.deep_instability >= 60.0 {

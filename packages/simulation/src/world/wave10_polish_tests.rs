@@ -1050,6 +1050,16 @@ fn far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it() {
         (extra - strain * capacity).abs() <= (strain * capacity).mul_add(0.1, 0.5),
         "a second far out costs {extra} more (strain {strain} of {capacity})"
     );
+    // The Heart's chamber is a destination: no strain in the final fight's arena, though the
+    // open deep around it is far below Heart's Edge.
+    let heart = world.heart_centre().expect("the Heart");
+    let floor = TilePosition {
+        x: heart.x,
+        y: heart.y + 10,
+    };
+    put_rig(&mut world, floor);
+    assert!(world.logistics().supply_strain_at(&settings, floor.y) > 0.0);
+    assert!(world.supply_strain_for(PLAYER).abs() < f32::EPSILON);
     // Calm within reach of a stop, none in the Crust.
     assert!(supply_strain(SUPPLY_FREE_ROWS, 3).abs() < f32::EPSILON);
     assert!(supply_strain(5_000, 0).abs() < f32::EPSILON);

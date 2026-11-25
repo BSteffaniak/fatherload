@@ -542,6 +542,8 @@ pub struct ViewSnapshot<'w> {
     pub failure: Option<PlayerSurvivalSnapshot>,
     pub rescue_count: u32,
     pub deep_instability: f32,
+    /// The supply line's strain on the rig (Wave 11 carryover; the HUD's FAR FROM SUPPLY).
+    pub supply_strain: f32,
     /// The surface building the rig stands at (its door prompt).
     pub surface_zone: Option<SurfaceZone>,
     /// The village building whose door the rig stands at, as its door prompt ("Enter the
@@ -1577,6 +1579,7 @@ fn view_snapshot(
         deep_instability: world
             .deep_run_state(player_id)
             .map_or(0.0, |state| state.instability),
+        supply_strain: world.supply_strain_for(player_id),
         surface_zone: world.player_surface_zone(player_id),
         talk_target: talk_target(world, player_id),
         village_door: world
