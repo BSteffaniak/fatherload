@@ -1352,6 +1352,12 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
   warp 42, moon surface 30, deep starfield 19, core shaft 14, black hole 13 (the lens pass),
   asteroid belt 10, nebula 7 (big overlapping cloud quads). Desktop release CPU frame work
   (`--frame-timing 120`, loaded machine): medians 1.8-8 ms.
+- Review re-timing after the incremental repaint (GPU Chrome, load average ~60): the moon
+  flyover (ground panning 40 columns a second) 60.0 fps, mean 1.9 ms, p95 5.3 ms, max 13 ms;
+  core shaft, surfaces, black hole, nebula and cruise 60.0 fps at 1.3-1.7 ms mean; belt 2.9 ms,
+  quads fallback 3.6 ms mean (p95 12.9). Before it, a window step at the ground zoom cost a
+  ~60 ms repaint (desktop release, measured), i.e. a visible hitch every 16 tiles of flight and
+  on every dig. Software rendering was not re-timed.
 
 ## Replication of entities
 
