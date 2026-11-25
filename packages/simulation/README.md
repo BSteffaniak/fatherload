@@ -7877,6 +7877,12 @@ On a round body nothing turns the craft but the player (gravity never rotates it
   touchdowns, the roll back onto the tracks (never more than 0.2 rad a tick), righting a tipped
   craft; one tile per place round the laps; JSON save and postcard keyframe round trips with
   mirrored edits; a replica follows the frame across the seam.
+- netcode `tests::world_planet`: three clients over 120 ms / 2 % loss with duplication and
+  reordering play a radius-400 moon from just short of its seam; every client matches the host.
+- Game review scenes (drawn flat by the ordinary renderer until the polar renderer lands):
+  `planet_moon_surface`, `planet_moon_halving_ring`, `planet_moon_core_chamber`,
+  `planet_rocky_surface`, `planet_ice_surface`, `planet_tipped_over`. The game shows the home
+  sky, sun and town pointer over a planet for now (the space-render / regions seam).
 
 ### Seams for the integrator and the other Wave 11 tracks
 
