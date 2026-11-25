@@ -227,9 +227,16 @@ fn docking_opens_the_hub_and_every_service_works() {
         .station_quote(&profile, Good::Hydroponics)
         .expect("Halcyon trades greens");
     let events = hub(&mut world, StationAction::BuyGood(Good::Hydroponics, 100));
+    // Priced unit by unit: the first at the quote, each next a little dearer.
+    let paid = events
+        .iter()
+        .find(|(what, _)| *what == StationEvent::GoodsBought)
+        .map(|(_, credits)| *credits)
+        .expect("bought");
     assert!(
-        events.contains(&(StationEvent::GoodsBought, quote.buy * 8)),
-        "{events:?}"
+        paid > quote.buy * 8 && paid < quote.buy * 9,
+        "{events:?} at {}",
+        quote.buy
     );
     assert_eq!(
         world
@@ -615,11 +622,8 @@ fn planet_gear_counters_the_hazard_tags() {
         let counter = hazard.counter();
         let (bare, events) = exposure_on(body, counter, 0);
         assert!(
-            events.contains(&(StationEvent::HazardBiting, hazard.code()))
-                || hazards_of(&world.space().space().body(body).expect("body"))
-                    .first()
-                    .is_some_and(|(first, _)| *first != hazard),
-            "{hazard:?}: the warning"
+            events.contains(&(StationEvent::HazardBiting, hazard.code())),
+            "{hazard:?}: the warning ({events:?})"
         );
         let (geared, _) = exposure_on(body, counter, GEAR_MAX);
         let pick = |drain: (f32, f32, f32)| match hazard {

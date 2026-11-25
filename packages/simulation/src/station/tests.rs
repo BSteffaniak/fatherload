@@ -156,6 +156,46 @@ fn markets_trade_their_own_goods_and_trades_move_the_price() {
 }
 
 #[test]
+fn a_lot_pays_its_own_price_impact_so_selling_and_buying_back_always_loses() {
+    let seed = 11;
+    let context = halcyon_context(seed);
+    let halcyon = context.station.expect("profile");
+    for (good, _) in goods_of(&halcyon, seed) {
+        for units in [1_u32, 8, 20, 44, 60] {
+            let start = MarketShift::default();
+            let (sold, paid) =
+                market::trade_lot(seed, &halcyon, good, start, 0, units, false, 0).expect("sells");
+            assert_eq!(sold, units);
+            let after = start.traded(0, -i32::try_from(units).expect("units"));
+            let (bought, cost) =
+                market::trade_lot(seed, &halcyon, good, after, 0, units, true, u32::MAX)
+                    .expect("buys");
+            assert_eq!(bought, units);
+            assert!(
+                cost > paid,
+                "{good:?} x{units}: sold for {paid}, bought back for {cost}"
+            );
+        }
+        // A budget stops the lot.
+        let one = price(seed, &halcyon, good, MarketShift::default(), 0)
+            .expect("quote")
+            .buy;
+        let (bought, cost) = market::trade_lot(
+            seed,
+            &halcyon,
+            good,
+            MarketShift::default(),
+            0,
+            10,
+            true,
+            one * 3,
+        )
+        .expect("buys");
+        assert!(bought <= 3 && cost <= one * 3, "{good:?}");
+    }
+}
+
+#[test]
 fn halcyons_first_board_is_a_scan_a_quota_and_a_delivery() {
     for seed in [1_u64, 7, 0x00C0_FFEE, 0x5EED_0011] {
         let context = halcyon_context(seed);

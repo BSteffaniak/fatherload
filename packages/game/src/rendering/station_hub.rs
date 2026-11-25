@@ -376,8 +376,9 @@ fn entry_for(
                     upgrade.max_level()
                 )
             } else {
+                // The effect is the next tier's: say so (a fitted tier reads as its own).
                 format!(
-                    "tier {level}/{}: {}",
+                    "tier {level}/{}, next: {}",
                     upgrade.max_level(),
                     upgrade.effect(level)
                 )

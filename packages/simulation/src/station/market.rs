@@ -289,6 +289,44 @@ pub fn price(
     })
 }
 
+/// A lot of up to `units` of `good` traded at `station`, priced unit by unit.
+///
+/// Every unit moves the price before the next, so a big lot pays its own price impact, and
+/// selling a lot and buying it straight back always loses. `buying`: the player buys, paying at most `budget`;
+/// otherwise the player sells. Returns the units traded and the credits that change hands
+/// (`None`: the station does not deal in `good`).
+#[must_use]
+#[allow(clippy::too_many_arguments, reason = "a trade's whole context")]
+pub fn trade_lot(
+    seed: u64,
+    station: &StationProfile,
+    good: Good,
+    shift: MarketShift,
+    now: u64,
+    units: u32,
+    buying: bool,
+    budget: u32,
+) -> Option<(u32, u32)> {
+    let step = if buying { 1 } else { -1 };
+    let mut moving = MarketShift {
+        shift: shift.at_time(now),
+        at: now,
+    };
+    let mut traded = 0_u32;
+    let mut credits = 0_u32;
+    while traded < units {
+        let quote = price(seed, station, good, moving, now)?;
+        let unit = if buying { quote.buy } else { quote.sell };
+        if buying && credits.saturating_add(unit) > budget {
+            break;
+        }
+        credits = credits.saturating_add(unit);
+        traded += 1;
+        moving = moving.traded(now, step);
+    }
+    Some((traded, credits))
+}
+
 /// What `station` pays for one unit of ore worth `value` at home.
 #[must_use]
 pub const fn ore_price(station: &StationProfile, value: u32) -> u32 {

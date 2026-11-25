@@ -21,7 +21,7 @@ use crate::{
         bar::{ALIEN_ROUND_PRICE, Patron, ROUND_PRICE, patrons},
         bounty::{BOARD_SLOTS, BoardContext, MAX_ACTIVE, board_context, offer},
         hazard::{drain, hazards_of},
-        market::{Good, Quote, ore_price, price},
+        market::{Good, Quote, ore_price, price, trade_lot},
         profile::{StationOwner, profile_at, station_at},
         shipyard::{WEAVE_HULL_PER_SECOND, WEAVE_HULL_SHARE},
         station_hash,
@@ -305,9 +305,12 @@ impl WorldState {
         if !profile.market {
             return Err(StationRefusal::NotHere);
         }
-        let quote = self
-            .station_quote(profile, good)
-            .ok_or(StationRefusal::Nothing)?;
+        if self.station_quote(profile, good).is_none() {
+            return Err(StationRefusal::Nothing);
+        }
+        let seed = self.world_seed();
+        let now = self.millis_at(self.simulation_tick);
+        let shift_before = self.stations.shift(profile.id, good);
         let room = self
             .hold_capacity_of(player_id)
             .saturating_sub(self.stations.hold_used(player_id));
@@ -318,19 +321,27 @@ impl WorldState {
             .players
             .get_mut(&player_id)
             .ok_or(StationRefusal::NotDocked)?;
-        let afford = player.credits / quote.buy.max(1);
-        let lot = u32::from(units).min(room).min(afford);
+        // Priced unit by unit: the lot pays its own price impact.
+        let (lot, cost) = trade_lot(
+            seed,
+            profile,
+            good,
+            shift_before,
+            now,
+            u32::from(units).min(room),
+            true,
+            player.credits,
+        )
+        .ok_or(StationRefusal::Nothing)?;
         if lot == 0 {
             return Err(StationRefusal::Credits);
         }
-        let cost = lot * quote.buy;
         player.credits -= cost;
         self.stations
             .holds
             .entry(player_id)
             .or_default()
             .add(good, lot);
-        let now = self.millis_at(self.simulation_tick);
         let shift = self
             .stations
             .shift(profile.id, good)
@@ -351,9 +362,11 @@ impl WorldState {
         if !profile.market {
             return Err(StationRefusal::NotHere);
         }
-        let quote = self
-            .station_quote(profile, good)
-            .ok_or(StationRefusal::Nothing)?;
+        if self.station_quote(profile, good).is_none() {
+            return Err(StationRefusal::Nothing);
+        }
+        let now = self.millis_at(self.simulation_tick);
+        let shift_before = self.stations.shift(profile.id, good);
         let lot = self
             .stations
             .holds
@@ -370,11 +383,21 @@ impl WorldState {
         {
             self.stations.holds.remove(&player_id);
         }
-        let paid = lot * quote.sell;
+        // Priced unit by unit, like buying.
+        let (_, paid) = trade_lot(
+            self.world_seed(),
+            profile,
+            good,
+            shift_before,
+            now,
+            lot,
+            false,
+            0,
+        )
+        .unwrap_or((lot, 0));
         if let Some(player) = self.players.get_mut(&player_id) {
             player.credits = player.credits.saturating_add(paid);
         }
-        let now = self.millis_at(self.simulation_tick);
         let shift = self
             .stations
             .shift(profile.id, good)
@@ -777,7 +800,11 @@ impl WorldState {
             self.stations
                 .warned
                 .insert(player_id, (body, warned | taken.biting));
-            if let Some((hazard, _)) = hazards.iter().find(|(hazard, _)| fresh & hazard.bit() != 0)
+            // Every hazard that bites for the first time is named (a hot toxic world warns
+            // of both).
+            for (hazard, _) in hazards
+                .iter()
+                .filter(|(hazard, _)| fresh & hazard.bit() != 0)
             {
                 output.push_event(station_event(
                     StationEvent::HazardBiting,

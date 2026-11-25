@@ -168,6 +168,8 @@ impl WorldState {
             heat: 0.0,
             ..flight
         };
+        // A fresh landing warns of the world's hazards afresh (Wave 12 stations).
+        self.stations.warned.remove(&player_id);
         let place = Place::OnBody(BodyId::Space(ground.id));
         let _ = self.move_to_place(player_id, place, strip_position(u, v));
     }
