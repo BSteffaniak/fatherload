@@ -546,9 +546,11 @@ pub const fn colossus_post(
             x: centre,
             y: crypt_floor_row(hall),
         },
+        // Between the vault's rubble platforms (one above, two below), so the core hovers
+        // after the rigs end to end without passing through them.
         ColossusStage::Unbound => TilePosition {
             x: centre,
-            y: hall.min.y + 12,
+            y: hall.min.y + 11,
         },
     }
 }
@@ -684,11 +686,13 @@ pub fn collapse_writes(hall: &TileRect, stage: ColossusStage) -> Vec<(TilePositi
             for at in cracked_vault(hall).positions() {
                 writes.push((at, TileKind::Air));
             }
+            // One high in the middle and two low at the sides, clear of the row the unbound
+            // core hovers along (its head to its fists, `colossus_post`).
             let centre = i32::midpoint(hall.min.x, hall.max.x);
             let platforms = [
-                (centre - 15, hall.min.y + 12),
-                (centre, hall.min.y + 8),
-                (centre + 15, hall.min.y + 12),
+                (centre - 15, hall.min.y + 15),
+                (centre, hall.min.y + 6),
+                (centre + 15, hall.min.y + 15),
             ];
             for (px, py) in platforms {
                 for dx in -3..=2 {
@@ -976,6 +980,33 @@ mod tests {
                 .positions()
                 .all(|at| second.contains(&(at, TileKind::Air)))
         );
+        // The unbound core hovers end to end between the platforms, never through one: its
+        // body from the head's top to the fists' bottom (with its bob) misses their rows.
+        let post = colossus_post(&settings, &hall, ColossusStage::Unbound);
+        #[allow(clippy::cast_precision_loss, reason = "tile rows")]
+        let core_y = (post.y as f32 + 0.5) * crate::terrain::TILE_SIZE;
+        let (_, head_dy) = crate::garrison::ColossusPart::Head.rest_offset();
+        let (_, fist_dy) = crate::garrison::ColossusPart::LeftFist.rest_offset();
+        let top = core_y + head_dy - crate::garrison::ColossusPart::Head.radius() - 6.0;
+        let bottom = core_y + fist_dy + crate::garrison::ColossusPart::LeftFist.radius() + 6.0;
+        let platforms: Vec<TilePosition> = second
+            .iter()
+            .filter(|(_, kind)| *kind == TileKind::Cave(CaveTile::CollapseRubble))
+            .map(|(at, _)| *at)
+            .collect();
+        assert_eq!(platforms.len(), 18);
+        for at in platforms {
+            #[allow(clippy::cast_precision_loss, reason = "tile rows")]
+            let (row_top, row_bottom) = (
+                at.y as f32 * crate::terrain::TILE_SIZE,
+                (at.y + 1) as f32 * crate::terrain::TILE_SIZE,
+            );
+            assert!(
+                row_bottom <= top || row_top >= bottom,
+                "{at:?} crosses the core's lane {top}..{bottom}"
+            );
+            assert!(hall_inside(&hall).contains(at));
+        }
         // The posts are open air in their stage's hall.
         for stage in ColossusStage::ALL {
             let post = colossus_post(&settings, &hall, stage);
