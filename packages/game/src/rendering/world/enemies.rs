@@ -27,8 +27,9 @@ use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
-        drowned as drowned_art, enemies as art, far_strange as far_art, hollow as hollow_art,
-        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
+        drowned as drowned_art, enemies as art, far_strange as far_art, garrison as garrison_art,
+        hollow as hollow_art, living as living_art, moon as moon_art, old_deep as deep_art,
+        tomb as tomb_art,
     },
 };
 
@@ -174,6 +175,16 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::ArchiveWarden => &city_art::ARCHIVE_WARDEN,
         EnemyKind::PageMoth => &city_art::PAGE_MOTH,
         EnemyKind::IndexSpider => &city_art::INDEX_SPIDER,
+        // Descent VII part B (Wave 10).
+        EnemyKind::WarSentry => &garrison_art::WAR_SENTRY,
+        EnemyKind::SiegeWalker => &garrison_art::SIEGE_WALKER,
+        EnemyKind::LancerDrone => &garrison_art::LANCER_DRONE,
+        EnemyKind::SealWarden => &garrison_art::SEAL_WARDEN,
+        EnemyKind::GildedCrawler => &garrison_art::GILDED_CRAWLER,
+        EnemyKind::GatekeeperColossus => &garrison_art::COLOSSUS_CORE,
+        EnemyKind::ColossusHead => &garrison_art::COLOSSUS_HEAD,
+        EnemyKind::ColossusFist => &garrison_art::COLOSSUS_FIST,
+        EnemyKind::ColossusLegs => &garrison_art::COLOSSUS_LEGS,
     }
 }
 
@@ -215,6 +226,11 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::GlitchBolt => &far_art::SHOT_GLITCH_BOLT,
         ShotKind::SentinelBolt => &city_art::SHOT_SENTINEL_BOLT,
         ShotKind::ReadingBeam => &city_art::SHOT_READING_BEAM,
+        ShotKind::SentryBolt => &garrison_art::SHOT_SENTRY_BOLT,
+        ShotKind::SiegeShell => &garrison_art::SHOT_SIEGE_SHELL,
+        ShotKind::WardenOrb => &garrison_art::SHOT_WARDEN_ORB,
+        ShotKind::ColossusBolt => &garrison_art::SHOT_COLOSSUS_BOLT,
+        ShotKind::FallingStone => &garrison_art::SHOT_FALLING_STONE,
     }
 }
 
@@ -758,6 +774,43 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
             }
         }
         EnemyKind::SparkWisp | EnemyKind::PageMoth => sprite.frame_at(phase),
+        // Descent VII part B (Wave 10): strides and aims, the warden's flare, the Colossus's
+        // roar while its hall collapses (stunned), its bare core unbound (no legs left).
+        EnemyKind::WarSentry | EnemyKind::SiegeWalker | EnemyKind::GildedCrawler => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 4.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::LancerDrone => {
+            if attacking {
+                2
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
+        EnemyKind::SealWarden => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else {
+                ((phase * 2.0) as usize) % 2
+            }
+        }
+        EnemyKind::GatekeeperColossus => {
+            if state.mode == EnemyMode::Stunned {
+                1
+            } else if state.health_fraction() < 0.33 {
+                2
+            } else {
+                0
+            }
+        }
+        EnemyKind::ColossusHead => usize::from(state.mode == EnemyMode::Windup),
+        EnemyKind::ColossusFist => usize::from(((phase * 6.0) as usize).is_multiple_of(4)),
+        EnemyKind::ColossusLegs => 0,
     }
 }
 
@@ -779,6 +832,13 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::Crestback
         // The Glitch (Wave 9) towers over a rig: a big, readable boss.
         | EnemyKind::TheGlitch => ART * 1.5,
+        // Descent VII part B (Wave 10): the walker is a heavy machine; the Colossus's parts are
+        // drawn at their hit areas' size (each part's sprite is its hit circle's diameter).
+        EnemyKind::SiegeWalker => ART * 1.2,
+        EnemyKind::GatekeeperColossus
+        | EnemyKind::ColossusHead
+        | EnemyKind::ColossusFist
+        | EnemyKind::ColossusLegs => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
         // The Sun Serpent's coils loom large too (Wave 9); the jungle's giants share the
@@ -877,6 +937,11 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::RivetHound
             | EnemyKind::ArchiveWarden
             | EnemyKind::IndexSpider
+            // Descent VII part B's (Wave 10) asymmetric kinds.
+            | EnemyKind::WarSentry
+            | EnemyKind::SiegeWalker
+            | EnemyKind::LancerDrone
+            | EnemyKind::GildedCrawler
     )
 }
 
@@ -902,10 +967,18 @@ fn draw_enemy(
         sprite.height() as f32 * scale,
     );
     // The Leviathan swims its own pattern though it is "stationary" to the generic AI.
+    // The Colossus and its parts (Wave 10) are drawn centred on their hit circles.
     let grounded = matches!(
         stats.locomotion,
         Locomotion::Walking | Locomotion::Stationary
-    ) && state.kind != EnemyKind::Leviathan;
+    ) && state.kind != EnemyKind::Leviathan
+        && !matches!(
+            state.kind,
+            EnemyKind::GatekeeperColossus
+                | EnemyKind::ColossusHead
+                | EnemyKind::ColossusFist
+                | EnemyKind::ColossusLegs
+        );
     // Walkers stand on their collision box's floor; flyers and burrowers centre on it.
     let left = x - width * 0.5;
     let top = if grounded {
@@ -944,7 +1017,13 @@ fn draw_enemy(
     let hurt = state.hurt_until.get() > world_tick;
     let tint = if hurt {
         PINK
-    } else if stunned && state.kind != EnemyKind::TheGlitch && (seconds * 10.0) as i32 % 2 == 0 {
+    } else if stunned
+        && !matches!(
+            state.kind,
+            EnemyKind::TheGlitch | EnemyKind::GatekeeperColossus
+        )
+        && (seconds * 10.0) as i32 % 2 == 0
+    {
         SKY_LIGHT
     } else {
         // The far Strange Layers' creatures of colour (Wave 9): a scarab's shell and a lens
@@ -1119,6 +1198,73 @@ fn draw_enemy(
                 );
             }
         }
+        // Descent VII part B (Wave 10): the walker's mortar charging, the warden's ring, the
+        // Colossus's core light (white-hot while its hall collapses) and its eye.
+        EnemyKind::SiegeWalker if state.mode == EnemyMode::Windup => {
+            let charge = ((seconds * 5.0).fract() * 6.0) as i32;
+            let side = f32::from(state.facing.signum());
+            disc(
+                draw,
+                side.mul_add(ART * 8.0, x),
+                y - ART * 14.0,
+                6 + charge,
+                with_alpha(ORANGE, 70),
+            );
+            disc(
+                draw,
+                side.mul_add(ART * 8.0, x),
+                y - ART * 14.0,
+                3,
+                with_alpha(CREAM, 160),
+            );
+        }
+        EnemyKind::SealWarden => {
+            let pulse = ((seconds * 2.0).sin() * 2.0) as i32;
+            let tell = state.mode == EnemyMode::Windup;
+            disc(
+                draw,
+                x,
+                y,
+                18 + pulse,
+                with_alpha(GOLD, if tell { 70 } else { 30 }),
+            );
+        }
+        EnemyKind::GatekeeperColossus => {
+            let pulse = ((seconds * 1.6).sin() * 4.0) as i32;
+            let roaring = state.mode == EnemyMode::Stunned;
+            let unbound = state.health_fraction() < 0.33;
+            let (outer, inner) = if roaring {
+                (ORANGE, CREAM)
+            } else if unbound {
+                (MINT, ICE)
+            } else {
+                (TEAL_DARK, MINT)
+            };
+            disc(
+                draw,
+                x,
+                y,
+                46 + pulse,
+                with_alpha(outer, if roaring { 80 } else { 46 }),
+            );
+            disc(
+                draw,
+                x,
+                y,
+                22 + pulse / 2,
+                with_alpha(inner, if unbound { 70 } else { 34 }),
+            );
+        }
+        EnemyKind::ColossusHead => {
+            let glare = state.mode == EnemyMode::Windup;
+            disc(
+                draw,
+                x,
+                y - ART,
+                12,
+                with_alpha(if glare { RED } else { MINT }, 46),
+            );
+        }
         EnemyKind::PrismScarab => {
             let shell = fatherload_simulation::far_strange::scarab_shell(
                 entity.id.get(),
@@ -1260,7 +1406,11 @@ fn draw_enemy(
     }
     // Health once it is hurt or hunting (never on a sleeping mimic).
     let hurt_at_all = state.health < state.max_health - 0.5;
-    if state.mode != EnemyMode::Dormant && (hurt_at_all || state.mode.hostile() || stats.elite) {
+    // The Colossus's parts pass their hits to its core: only the core's bar shows (Wave 10).
+    if state.mode != EnemyMode::Dormant
+        && !state.kind.is_colossus_part()
+        && (hurt_at_all || state.mode.hostile() || stats.elite)
+    {
         let bar = if stats.elite {
             24
         } else {
@@ -1546,6 +1696,12 @@ fn draw_shot(
         // The buried city (Wave 10).
         ShotKind::SentinelBolt => GOLD,
         ShotKind::ReadingBeam => SKY_LIGHT,
+        // Descent VII part B (Wave 10).
+        ShotKind::SentryBolt => RED,
+        ShotKind::SiegeShell => ORANGE,
+        ShotKind::WardenOrb => GOLD,
+        ShotKind::ColossusBolt => MINT,
+        ShotKind::FallingStone => SAND,
     };
     disc(
         draw,

@@ -1233,6 +1233,14 @@ pub(in crate::rendering) fn draw_build_ghost(
                 ModuleKind::Workshop => workshop(draw, &art),
             }
         }
+        // The build kit's defences (Wave 10): the turret or trap sprite, a barricade block.
+        Buildable::Defence(kind) => {
+            let (x, y) = (
+                crate::view_frame::frame().rel_col(preview.origin.x) * TILE_SIZE,
+                crate::view_frame::frame().rel_row(preview.origin.y) * TILE_SIZE,
+            );
+            draw_defence_icon(draw, x, y, ART, kind, ghost_alpha);
+        }
     }
     let outline = if ok {
         MINT
@@ -1358,7 +1366,7 @@ pub(in crate::rendering) fn draw_item_icon(
                 px(&mut push, 2.0, 2.0, 12.0, 1.0, light);
                 px(&mut push, 2.0, 7.0, 12.0, 1.0, light);
             }
-            Buildable::Fixture(_) | Buildable::Module(_) => {}
+            Buildable::Fixture(_) | Buildable::Module(_) | Buildable::Defence(_) => {}
         }
     }
     for (rect, color) in rects {
@@ -1385,7 +1393,79 @@ pub(in crate::rendering) fn draw_item_icon(
             };
             draw_module_icon(draw, &art, kind);
         }
+        Buildable::Defence(kind) => {
+            // Fit the defence's footprint into the icon square.
+            let (_, h) = kind.footprint();
+            let fit = scale / h as f32;
+            let ox = x + (16.0 * scale - 16.0 * fit) * 0.5;
+            draw_defence_icon(draw, ox, y, fit, kind, 255);
+        }
         Buildable::Tile(_) | Buildable::BackWall(_) => {}
+    }
+}
+
+/// A defence's art (Wave 10) at world (or screen) `(x, y)`, `scale` units per art pixel:
+/// the turret or trap sprite, or a war-plate barricade block.
+fn draw_defence_icon(
+    draw: &mut impl RaylibDraw,
+    x: f32,
+    y: f32,
+    scale: f32,
+    kind: fatherload_simulation::garrison::DefenceKind,
+    alpha: u8,
+) {
+    use crate::rendering::pixel_art::{sprite, sprites::garrison as art};
+    use fatherload_simulation::garrison::DefenceKind;
+    let tint = Color::new(255, 255, 255, alpha);
+    match kind {
+        DefenceKind::Turret => {
+            sprite::draw_sprite(
+                draw,
+                &art::DEFENCE_TURRET,
+                0,
+                Vector2::new(x, y),
+                scale,
+                tint,
+            );
+        }
+        DefenceKind::ShockTrap => {
+            sprite::draw_sprite(
+                draw,
+                &art::DEFENCE_TRAP,
+                0,
+                Vector2::new(x, y + 11.0 * scale),
+                scale,
+                tint,
+            );
+        }
+        DefenceKind::Barricade => {
+            let px = |draw: &mut dyn FnMut(Rectangle, Color),
+                      ax: f32,
+                      ay: f32,
+                      w: f32,
+                      h: f32,
+                      c: Color| {
+                draw(
+                    Rectangle::new(x + ax * scale, y + ay * scale, w * scale, h * scale),
+                    c,
+                );
+            };
+            let mut rects: Vec<(Rectangle, Color)> = Vec::new();
+            {
+                let mut push = |rect: Rectangle, color: Color| rects.push((rect, color));
+                px(&mut push, 0.0, 0.0, 16.0, 16.0, INK);
+                px(&mut push, 1.0, 1.0, 14.0, 14.0, GOLD);
+                px(&mut push, 3.0, 3.0, 10.0, 10.0, MOSS);
+                px(&mut push, 3.0, 3.0, 10.0, 1.0, LEAF);
+                px(&mut push, 4.0, 4.0, 1.0, 1.0, STONE_LIGHT);
+                px(&mut push, 11.0, 4.0, 1.0, 1.0, STONE_LIGHT);
+                px(&mut push, 4.0, 11.0, 1.0, 1.0, STONE_LIGHT);
+                px(&mut push, 11.0, 11.0, 1.0, 1.0, STONE_LIGHT);
+            }
+            for (rect, color) in rects {
+                draw.draw_rectangle_rec(rect, Color::new(color.r, color.g, color.b, alpha));
+            }
+        }
     }
 }
 

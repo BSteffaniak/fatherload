@@ -381,10 +381,36 @@ pub enum CaveTile {
     /// Chronoglass of the Time Sludge: amber-gold glass with a moment frozen in it (soft,
     /// glowing).
     Chronoglass,
+    // --- Descent VII part B (Wave 10 ancients-b: the Sleeping Garrison, the Seal Gate), appended;
+    // codes from 160 so no other track's appended codes meet them -----------------------------
+    /// Olive war plate of a garrison fort's walls (hard, but a drill gets through).
+    WarPlate,
+    /// A war machine's bay in a fort's wall: dormant machines climb out of it (unbreakable).
+    WarBay,
+    /// A fort's hold pylon: hold the ground round it until the garrison sleeps (unbreakable).
+    HoldPylon,
+    /// A war-plate barricade the build kit placed: only machines batter it down (or the builder takes it down).
+    WarBarricade,
+    /// Gilded seal stone of the Seal Gate and the Gatekeeper's hall: nothing drills or blasts it.
+    SealStone,
+    /// A slab of the Seal Gate's door: it opens only to the keys of every Descent.
+    SealDoor,
+    /// The Heart Seal over Descent VIII: only a rig carrying the Heart Key drills it; no blast does.
+    HeartSeal,
+    /// Veins of seal gold in the Seal Gate's rock (soft, glowing).
+    SealGold,
+    /// Rubble of the Gatekeeper's hall where it gave way.
+    CollapseRubble,
+    /// The Gatekeeper's hall's cracked floor: it holds until the hall gives way.
+    CrackedFloor,
+    /// The Gatekeeper's hall's cracked vault: it holds until the hall gives way again.
+    CrackedVault,
+    /// One of the Seal Court's six key altars (unbreakable).
+    KeyAltar,
 }
 
 impl CaveTile {
-    pub const ALL: [Self; 41] = [
+    pub const ALL: [Self; 53] = [
         Self::Crystal,
         Self::MushroomStem,
         Self::MushroomCap,
@@ -426,6 +452,18 @@ impl CaveTile {
         Self::PrismBlue,
         Self::BuilderAlloy,
         Self::Chronoglass,
+        Self::WarPlate,
+        Self::WarBay,
+        Self::HoldPylon,
+        Self::WarBarricade,
+        Self::SealStone,
+        Self::SealDoor,
+        Self::HeartSeal,
+        Self::SealGold,
+        Self::CollapseRubble,
+        Self::CrackedFloor,
+        Self::CrackedVault,
+        Self::KeyAltar,
     ];
 
     #[must_use]
@@ -472,6 +510,18 @@ impl CaveTile {
             Self::PrismBlue => "blue prism wall",
             Self::BuilderAlloy => "builder alloy",
             Self::Chronoglass => "chronoglass",
+            Self::WarPlate => "war plate",
+            Self::WarBay => "war bay",
+            Self::HoldPylon => "hold pylon",
+            Self::WarBarricade => "war-plate barricade",
+            Self::SealStone => "seal stone",
+            Self::SealDoor => "seal door",
+            Self::HeartSeal => "heart seal",
+            Self::SealGold => "seal gold",
+            Self::CollapseRubble => "collapse rubble",
+            Self::CrackedFloor => "cracked floor",
+            Self::CrackedVault => "cracked vault",
+            Self::KeyAltar => "key altar",
         }
     }
 
@@ -520,6 +570,18 @@ impl CaveTile {
             Self::PrismBlue => 38,
             Self::BuilderAlloy => 39,
             Self::Chronoglass => 40,
+            Self::WarPlate => 160,
+            Self::WarBay => 161,
+            Self::HoldPylon => 162,
+            Self::WarBarricade => 163,
+            Self::SealStone => 164,
+            Self::SealDoor => 165,
+            Self::HeartSeal => 166,
+            Self::SealGold => 167,
+            Self::CollapseRubble => 168,
+            Self::CrackedFloor => 169,
+            Self::CrackedVault => 170,
+            Self::KeyAltar => 171,
         }
     }
 
@@ -585,6 +647,19 @@ impl CaveTile {
             Self::PillowBasalt => 4,
             Self::PearlClam => 2,
             Self::MerrowStone => 3,
+            // Descent VII part B (Wave 10): war plate wants a deep drill; the heart seal wants
+            // the Heart Key (checked by the drill); the rest never yields to a drill.
+            Self::WarPlate => 4,
+            Self::HeartSeal => 1,
+            Self::SealGold | Self::CollapseRubble => 2,
+            Self::WarBay
+            | Self::HoldPylon
+            | Self::WarBarricade
+            | Self::SealStone
+            | Self::SealDoor
+            | Self::CrackedFloor
+            | Self::CrackedVault
+            | Self::KeyAltar => crate::terrain::UNBREAKABLE_HARDNESS,
         }
     }
 
@@ -624,6 +699,19 @@ impl CaveTile {
             Self::PillowBasalt => 7,
             Self::PearlClam => 3,
             Self::MerrowStone => 8,
+            // Descent VII part B (Wave 10).
+            Self::WarPlate => 12,
+            Self::HeartSeal => 16,
+            Self::SealGold => 3,
+            Self::CollapseRubble => 4,
+            Self::WarBay
+            | Self::HoldPylon
+            | Self::WarBarricade
+            | Self::SealStone
+            | Self::SealDoor
+            | Self::CrackedFloor
+            | Self::CrackedVault
+            | Self::KeyAltar => 20,
         }
     }
 
@@ -668,6 +756,19 @@ impl CaveTile {
             Self::PillowBasalt => 0.17,
             Self::PearlClam => 0.1,
             Self::MerrowStone => 0.16,
+            // Descent VII part B (Wave 10).
+            Self::WarPlate => 0.22,
+            Self::HeartSeal => 0.26,
+            Self::SealGold => 0.1,
+            Self::CollapseRubble => 0.09,
+            Self::WarBay
+            | Self::HoldPylon
+            | Self::WarBarricade
+            | Self::SealStone
+            | Self::SealDoor
+            | Self::CrackedFloor
+            | Self::CrackedVault
+            | Self::KeyAltar => 0.3,
         }
     }
 
@@ -693,6 +794,10 @@ impl CaveTile {
             // pearls' sheen and the figures' cold light.
             Self::ThermalVent => 2,
             Self::Coral | Self::FrozenFigure | Self::GeyserVent | Self::PearlClam => 1,
+            // Descent VII part B (Wave 10): the pylons, altars and the heart seal glow; bays and
+            // seal gold glimmer.
+            Self::HoldPylon | Self::KeyAltar | Self::HeartSeal => 2,
+            Self::WarBay | Self::SealGold => 1,
             _ => 0,
         }
     }
@@ -709,6 +814,25 @@ impl CaveTile {
         matches!(
             self,
             Self::BuilderAlloy | Self::PrismRed | Self::PrismGreen | Self::PrismBlue
+        ) || self.is_garrison_fixture()
+            || matches!(self, Self::HeartSeal)
+    }
+
+    /// Whether it is one of Descent VII part B's fixtures nothing digs or blasts (Wave 10):
+    /// bays, pylons, barricades, the seal stone, the door, the hall's cracked floor and vault,
+    /// the altars.
+    #[must_use]
+    pub const fn is_garrison_fixture(self) -> bool {
+        matches!(
+            self,
+            Self::WarBay
+                | Self::HoldPylon
+                | Self::WarBarricade
+                | Self::SealStone
+                | Self::SealDoor
+                | Self::CrackedFloor
+                | Self::CrackedVault
+                | Self::KeyAltar
         )
     }
 

@@ -1886,7 +1886,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Deep(tile) => tile.indestructible(),
         TileKind::Hollow(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
-        TileKind::Cave(tile) => tile.is_keyed_wall(),
+        // ... and Descent VII part B's fixtures (Wave 10).
+        TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
         _ => false,
     }
 }

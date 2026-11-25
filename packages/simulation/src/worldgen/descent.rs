@@ -33,6 +33,7 @@ pub mod crust;
 pub mod distortion;
 pub mod drowned;
 pub mod far_strange;
+pub mod garrison;
 pub mod hollow;
 pub mod landmarks;
 pub mod living;

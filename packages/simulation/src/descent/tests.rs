@@ -259,6 +259,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::HollowWorld
                     | LandmarkGenerator::FarStrange
                     | LandmarkGenerator::AncientCity
+                    | LandmarkGenerator::Garrison
             ));
         }
         let field = def.field;
@@ -345,6 +346,12 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     def.music,
                     MusicCue::BuriedMegacity | MusicCue::EngineHalls | MusicCue::ArchiveOfStars
                 ),
+                "{stratum:?}"
+            );
+        } else if matches!(stratum, Stratum::SleepingGarrison | Stratum::TheSealGate) {
+            // So do the Sleeping Garrison and the Seal Gate (Wave 10 ancients-b).
+            assert!(
+                matches!(def.music, MusicCue::SleepingGarrison | MusicCue::SealGate),
                 "{stratum:?}"
             );
         } else {

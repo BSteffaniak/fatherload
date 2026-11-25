@@ -1079,6 +1079,18 @@ world dug to the floor, the browser memory fixture) show it.
   Glitch**, which rewrites the rules of its hall (gravity up, mirrored, sideways) until its
   shards fall. It wins the **Phase Drill**, which alone cuts the builder alloy sealed over
   Descent VII. Scenes: `far_*`.
+- **The Sleeping Garrison and the Seal Gate** (Descent VII part B, Wave 10): walk into a
+  builders' fort and its garrison stirs. Build defences with the build kit (a fourth group,
+  **Defences**: auto-turrets, war-plate barricades, shock traps; in a fort no claim is
+  needed, and they work in any claim too), then hold the fort while war sentries, lancer
+  drones and siege walkers climb out of its bays wave after wave (the bays glow red first);
+  when the last wave falls the garrison sleeps again and its armoury pays out. Walking away
+  lets it stand down. In **the Seal Gate** tremors shake stones from the ceilings (dust shows
+  where), and the great door's six sockets light for the keys of every Descent you carry; with
+  all six it opens. Behind it the **Gatekeeper Colossus** fights in three stages while its
+  hall collapses between them (the cracked floor, then the vault; telegraphed, never onto a
+  rig), and it gives the **Heart Key**, which alone cuts the Heart Seal over Descent VIII.
+  Scenes: `ab_*`.
 - **Wired together (Wave 9 integration):** one **Sonar Suite** for the water and the Echo
   Caves (the scanner pings both, the Leviathan's Suite reaches further in both); the deep
   counters' supplies work from the kit (an **Echo Charge** pings as far as the Suite, a **Frost

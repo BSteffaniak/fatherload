@@ -419,6 +419,31 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // Descent VII part B (V11, Wave 10 ancients-b): garrison forts and the Grand Bastion,
+        // the Seal Court and the Processional Way, the Gatekeeper's hall with the Seal Gate's
+        // door, and the Heart Seal over Descent VIII.
+        use crate::worldgen::descent::garrison;
+        let (top, bottom) = garrison::carve_rows(layout);
+        if rect.max.y >= top && rect.min.y <= bottom {
+            let plan = garrison::plan_for(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = garrison::garrison_tile(
+                    &ctx.settings,
+                    layout,
+                    &plan,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     // The Fathers' expedition (V11, Wave 8 story): its log sites and the anomaly rooms, a pass
     // of their own after the landmarks and under the builders' cable.
     let story = crate::expedition::sites::story_stamps(&ctx.settings, &rect);

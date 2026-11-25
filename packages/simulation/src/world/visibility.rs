@@ -54,6 +54,8 @@ impl WorldState {
         world.far_schedule = crate::far_strange::FarSchedule::default();
         // And the buried city's (Wave 10): plinths travel as terrain ops, rides in the section.
         world.city_schedule = crate::ancient_city::CitySchedule::default();
+        // And Descent VII part B's (Wave 10): whom the gate refused is the host's.
+        world.garrison_schedule = crate::garrison::GarrisonSchedule::default();
         world
     }
 
@@ -109,6 +111,8 @@ impl WorldState {
             far_schedule: _,
             ancient_city: _,
             city_schedule: _,
+            garrison: _,
+            garrison_schedule: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

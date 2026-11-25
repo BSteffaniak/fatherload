@@ -46,6 +46,7 @@ mod deep_art;
 mod distortion_art;
 mod drowned_art;
 mod far_art;
+mod garrison_art;
 mod hollow_art;
 mod living_art;
 mod lunar_art;
@@ -845,6 +846,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             } else if let Some(stratum) = city_art::city_stratum(terrain, position) {
                 // The builders' buried city's streets, towers, halls and stacks (Wave 10).
                 city_art::paint_back(&mut canvas, terrain, position, stratum, up, left, right);
+            } else if let Some(stratum) = garrison_art::garrison_stratum(terrain, position) {
+                // So does Descent VII part B's (Wave 10 ancients-b).
+                garrison_art::paint_back(&mut canvas, terrain, position, stratum, up, left, right);
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }

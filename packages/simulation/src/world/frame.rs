@@ -186,6 +186,9 @@ impl WorldState {
             // (Wave 10).
             ancient_city,
             city_schedule: _,
+            // Forts, defences, the gate and the fight are tiles, ticks and entity ids (Wave 10).
+            garrison: _,
+            garrison_schedule: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

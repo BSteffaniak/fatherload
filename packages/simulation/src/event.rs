@@ -1292,6 +1292,15 @@ pub enum GameplayEventKind {
         y: i32,
         detail: u16,
     },
+    // Descent VII part B (Wave 10 ancients-b; netcode codes 650-669).
+    /// Something of the Sleeping Garrison, the Seal Gate or the Colossus's fight happened at
+    /// tile `(x, y)`; `player_id` is whose deed or whom it concerns, if anyone's.
+    Garrison {
+        what: crate::garrison::GarrisonEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

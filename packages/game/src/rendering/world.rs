@@ -48,6 +48,7 @@ mod explosives;
 mod far_strange;
 mod fluids;
 mod fx;
+pub mod garrison;
 mod hollow;
 mod homes;
 mod lighting;
@@ -229,6 +230,13 @@ pub(super) struct WorldScene<'a> {
     pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
     /// The builders' buried city (Wave 10): rides, alarms, archivists, star charts.
     pub ancient_city: &'a fatherload_simulation::ancient_city::AncientCity,
+    /// Descent VII part B (Wave 10): forts, defences, the gate, the Colossus's fight.
+    pub garrison: &'a fatherload_simulation::garrison::Garrison,
+    pub forts: &'a [fatherload_simulation::worldgen::descent::garrison::Fort],
+    pub colossus_hall: Option<fatherload_simulation::worldgen::TileRect>,
+    pub seal_door: Option<fatherload_simulation::worldgen::TileRect>,
+    /// The Seal Gate's keys the view's rig carries.
+    pub seal_keys: Option<[bool; 6]>,
 }
 
 impl WorldScene<'_> {
@@ -547,6 +555,23 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         local: scene.local.map(|local| local.player_id),
     };
     ancient_city::draw_machinery(draw, &city_scene);
+    // Descent VII part B (Wave 10): fort lights and bays, the gate's sockets, the hall's marks
+    // and collapse, dust over falling stones, then the defences.
+    let garrison_scene = garrison::GarrisonScene {
+        terrain: scene.terrain,
+        visible: scene.visible,
+        garrison: scene.garrison,
+        forts: scene.forts,
+        hall: scene.colossus_hall,
+        door: scene.seal_door,
+        keys: scene.seal_keys,
+        world_tick: scene.world_tick,
+        tick_rate_hz: scene.tick_rate_hz,
+        seconds,
+        effects: scene.effects_strength,
+    };
+    garrison::draw_garrison_back(draw, &garrison_scene);
+    garrison::draw_defences(draw, &garrison_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);

@@ -410,6 +410,7 @@ mod explosive_scenes;
 mod far_strange_scenes;
 mod field_scenes;
 mod fluid_scenes;
+mod garrison_scenes;
 mod hollow_scenes;
 mod home_scenes;
 mod living_dark_scenes;
@@ -579,6 +580,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(far_strange_scenes::FAR_STRANGE_SCENES)
         .chain(polish_scenes::POLISH_SCENES)
         .chain(ancient_city_scenes::ANCIENT_CITY_SCENES)
+        .chain(garrison_scenes::GARRISON_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

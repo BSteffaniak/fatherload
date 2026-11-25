@@ -131,7 +131,13 @@ impl WorldState {
             // A leaving rig's ride and alarm go with it; its archivist waits for it (Wave 10).
             ancient_city,
             city_schedule: _,
+            // A leaving rig's defences stand where they were built (Wave 10); the gate and the
+            // fight are the world's.
+            garrison,
+            garrison_schedule,
         } = self;
+        garrison.forget(player_id);
+        garrison_schedule.refused.remove(&player_id);
         hollow.forget(player_id);
         distortion.forget(player_id);
         logistics.forget_transient(player_id);

@@ -84,7 +84,10 @@ pub const fn cave_glow(tile: CaveTile, band: Band) -> Option<Color> {
         CaveTile::PrismGreen => Some(LIME),
         CaveTile::PrismBlue => Some(SKY),
         CaveTile::Chronoglass => Some(GOLD),
-        _ => super::drowned_art::drowned_glow(tile),
+        _ => match super::garrison_art::garrison_glow(tile) {
+            Some(glow) => Some(glow),
+            None => super::drowned_art::drowned_glow(tile),
+        },
     }
 }
 
@@ -127,10 +130,13 @@ pub const fn cave_color(tile: CaveTile, band: Band) -> Color {
         CaveTile::PrismBlue => SKY,
         CaveTile::BuilderAlloy => STEEL_DARK,
         CaveTile::Chronoglass => AMBER,
-        // The Drowned and Frozen (Wave 9).
+        // The Drowned and Frozen (Wave 9) and Descent VII part B (Wave 10).
         _ => match super::drowned_art::drowned_color(tile) {
             Some(color) => color,
-            None => STONE,
+            None => match super::garrison_art::garrison_color(tile) {
+                Some(color) => color,
+                None => STONE,
+            },
         },
     }
 }
@@ -380,6 +386,20 @@ pub(super) fn paint(
             return;
         }
         _ => {}
+    }
+    // Descent VII part B's tiles (Wave 10): war plate, bays, pylons, barricades, seal stone,
+    // the door, the Heart Seal, gold, rubble, altars.
+    if let Some(material) = super::garrison_art::garrison_ramp(tile) {
+        for py in 0..TILE_ART {
+            for px in 0..TILE_ART {
+                let (x, y) = (canvas.origin_x + px, canvas.origin_y + py);
+                if let Some(index) = super::garrison_art::garrison_pixel(tile, x, y) {
+                    canvas.set(px, py, index);
+                }
+            }
+        }
+        paint_edges(canvas, strata, edges, material[3], material[0], true);
+        return;
     }
     // The far Strange Layers' tiles (Wave 9): quartz, keyed glass, alloy, chronoglass.
     if let Some(material) = super::far_art::far_ramp(tile) {

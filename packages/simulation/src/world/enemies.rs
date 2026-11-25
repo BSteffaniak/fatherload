@@ -71,6 +71,7 @@ mod crypt;
 mod distortion;
 mod drowned;
 mod far_strange;
+mod garrison;
 pub(super) mod hollow;
 mod living;
 mod sky;
@@ -687,6 +688,7 @@ impl WorldState {
             || !Self::drowned_spawn_allowed(kind)
             || !Self::hollow_spawn_allowed(kind)
             || !Self::far_spawn_allowed(kind)
+            || !Self::garrison_spawn_allowed(kind)
         {
             return false;
         }
@@ -1302,6 +1304,9 @@ impl WorldState {
             .or_else(|| self.far_notice(body, state))
             // The buried city (Wave 10): the city's watch and the sentinels' searchlights.
             .or_else(|| self.city_notice(body, state))
+            // Descent VII part B (Wave 10): a fort's machines know its holders, the Colossus
+            // its hall.
+            .or_else(|| self.garrison_notice(body, state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -2460,6 +2465,8 @@ impl WorldState {
             body.y = body.velocity_y.mul_add(step, body.y);
             if physics::solid_at(&self.terrain, body.x, body.y) {
                 self.burst_spore_shot(shot.kind, body.previous_x, body.previous_y, output);
+                // A siege shell breaks the defences it lands among (Wave 10).
+                self.garrison_shell_burst(shot.kind, body.previous_x, body.previous_y, output);
                 self.entities.despawn(id);
                 return;
             }
@@ -2489,6 +2496,7 @@ impl WorldState {
                 }
                 if !self.damage_immune() {
                     self.burst_spore_shot(shot.kind, body.x, body.y, output);
+                    self.garrison_shell_burst(shot.kind, body.x, body.y, output);
                     self.entities.despawn(id);
                     return;
                 }
@@ -2522,6 +2530,7 @@ impl WorldState {
     /// stuns, burning, aggro, flinch, fleeing, loot; see the module docs). Anything but an enemy
     /// is [`DamageOutcome::Ignored`]. Weapons and other callers use
     /// `WorldState::damage_entity` (`crate::combat`), which routes enemies here.
+    #[allow(clippy::too_many_lines, reason = "the damage model's steps in order")]
     pub fn damage_enemy(
         &mut self,
         id: EntityId,
@@ -2533,8 +2542,17 @@ impl WorldState {
         };
         // The Mycelial Mind cannot be hurt while its nerve nodes live (Wave 8), nor The Glitch
         // while it rewrites its arena (Wave 9).
-        if self.mind_shields(state.kind) || self.far_ignores_damage(&state) {
+        if self.mind_shields(state.kind)
+            || self.far_ignores_damage(&state)
+            || self.garrison_ignores_damage(&state)
+        {
             return DamageOutcome::Ignored;
+        }
+        // A hit on one of the Colossus's parts passes to its core (Wave 10).
+        if state.kind.is_colossus_part()
+            && let Some(outcome) = self.garrison_damage(id, &state, damage, output)
+        {
+            return outcome;
         }
         // A glassback's mirrored face throws a frontal shot back at its shooter (Wave 9).
         if let Some(at) =
@@ -2551,7 +2569,9 @@ impl WorldState {
             * self.far_damage_scale(id, &state, damage.kind, damage.source))
         .max(0.0)
             // The Leviathan's open maw takes double (Wave 9).
-            * self.drowned_damage_factor(state.kind);
+            * self.drowned_damage_factor(state.kind)
+            // The unbound Colossus's bare core (Wave 10).
+            * self.garrison_damage_factor(state.kind);
         // The Sun Serpent's armour and scales (Wave 9).
         if state.kind.is_hollow()
             && let Some(outcome) = self.hollow_damage(id, &state, amount, output)
@@ -2691,6 +2711,11 @@ impl WorldState {
         if state.kind.is_ancient_city() {
             // A scrap crawler drops the ore it carried off (Wave 10).
             self.city_kill(id.get(), body.x, body.y);
+        }
+        if state.kind.is_garrison() {
+            // A fort's wave thins, the Colossus falls (Wave 10).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.garrison_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2954,5 +2979,13 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::RivetHound
         | EnemyKind::ArchiveWarden
         | EnemyKind::IndexSpider => tags.nests || tags.swarmers,
+        // Descent VII part B (Wave 10): sentries and walkers stand on floors, drones and
+        // wardens hover in caves, crawlers nest; the Colossus lives only in its hall.
+        EnemyKind::WarSentry | EnemyKind::SiegeWalker | EnemyKind::GildedCrawler => tags.nests,
+        EnemyKind::LancerDrone | EnemyKind::SealWarden => tags.swarmers,
+        EnemyKind::GatekeeperColossus
+        | EnemyKind::ColossusHead
+        | EnemyKind::ColossusFist
+        | EnemyKind::ColossusLegs => false,
     }
 }

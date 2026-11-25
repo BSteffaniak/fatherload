@@ -937,6 +937,9 @@ pub enum Buildable {
     BackWall(BlockKind),
     Fixture(Fixture),
     Module(ModuleKind),
+    /// A defence (Wave 10 ancients-b, [`crate::garrison::DefenceKind`]): turrets, barricades,
+    /// traps; in any claim, and inside a garrison fort without one.
+    Defence(crate::garrison::DefenceKind),
 }
 
 /// Build-menu groups.
@@ -945,6 +948,8 @@ pub enum BuildGroup {
     Structure,
     Interior,
     Modules,
+    /// The defences (Wave 10 ancients-b).
+    Defences,
 }
 
 impl BuildGroup {
@@ -954,13 +959,14 @@ impl BuildGroup {
             Self::Structure => "Structure",
             Self::Interior => "Interior",
             Self::Modules => "Modules",
+            Self::Defences => "Defences",
         }
     }
 }
 
 impl Buildable {
     /// The build menu, in order.
-    pub const PALETTE: [Self; 32] = [
+    pub const PALETTE: [Self; 35] = [
         Self::Module(ModuleKind::Beacon),
         Self::Tile(BuiltTile::Wall(BlockKind::Dirt)),
         Self::Tile(BuiltTile::Wall(BlockKind::Clay)),
@@ -993,6 +999,9 @@ impl Buildable {
         Self::Module(ModuleKind::Workshop),
         Self::Module(ModuleKind::Refinery),
         Self::Module(ModuleKind::LunarUplink),
+        Self::Defence(crate::garrison::DefenceKind::Turret),
+        Self::Defence(crate::garrison::DefenceKind::Barricade),
+        Self::Defence(crate::garrison::DefenceKind::ShockTrap),
     ];
 
     #[must_use]
@@ -1005,6 +1014,7 @@ impl Buildable {
             Self::BackWall(BlockKind::HardRock) => "Granite Back Wall",
             Self::Fixture(fixture) => fixture.name(),
             Self::Module(module) => module.name(),
+            Self::Defence(defence) => defence.name(),
         }
     }
 
@@ -1014,6 +1024,7 @@ impl Buildable {
             Self::Tile(_) | Self::Module(ModuleKind::Beacon) => BuildGroup::Structure,
             Self::BackWall(_) | Self::Fixture(_) => BuildGroup::Interior,
             Self::Module(_) => BuildGroup::Modules,
+            Self::Defence(_) => BuildGroup::Defences,
         }
     }
 
@@ -1022,6 +1033,7 @@ impl Buildable {
     pub const fn footprint(self) -> (i32, i32) {
         match self {
             Self::Module(module) => module.footprint(),
+            Self::Defence(defence) => defence.footprint(),
             _ => (1, 1),
         }
     }
@@ -1032,7 +1044,7 @@ impl Buildable {
         match self {
             Self::Fixture(fixture) => fixture.facings(),
             Self::Module(_) => &[Facing::Right, Facing::Left],
-            Self::Tile(_) | Self::BackWall(_) => &[Facing::Right],
+            Self::Tile(_) | Self::BackWall(_) | Self::Defence(_) => &[Facing::Right],
         }
     }
 
@@ -1076,6 +1088,13 @@ impl Buildable {
                 block: None,
                 any_blocks: module.blocks(),
                 credits: module.credits(),
+            },
+            // The Crust's price; the world scales it by the Descent
+            // (`WorldState::defence_cost`).
+            Self::Defence(defence) => BuildCost {
+                block: None,
+                any_blocks: defence.blocks(),
+                credits: defence.base_credits(),
             },
         }
     }
@@ -1184,6 +1203,10 @@ pub enum BuildRefusal {
     NoUplinkTarget,
     /// The pilot must board the rig to beam it.
     BoardFirst,
+    /// Defences unlock once a crew reaches the Sleeping Garrison (Wave 10).
+    NeedsGarrison,
+    /// Garrison forts are not for claiming (Wave 10): defences go up inside without a claim.
+    InFort,
 }
 
 impl BuildRefusal {
@@ -1222,6 +1245,12 @@ impl BuildRefusal {
             }
             Self::NoUplinkTarget => "No uplink to lock onto: build one on the Moon.".to_owned(),
             Self::BoardFirst => "Board the rig to beam it.".to_owned(),
+            Self::NeedsGarrison => {
+                "Defences unlock once a crew reaches the Sleeping Garrison.".to_owned()
+            }
+            Self::InFort => {
+                "A garrison fort: no claims here, but defences go up without one.".to_owned()
+            }
         }
     }
 }

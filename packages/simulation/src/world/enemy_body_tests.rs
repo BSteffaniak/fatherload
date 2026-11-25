@@ -141,6 +141,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // So do the buried city's (Wave 10,
         // `ancient_city_tests::the_city_creatures_keep_the_body_rules`).
         && !kind.is_ancient_city()
+        // So do Descent VII part B's (Wave 10,
+        // `garrison_tests::the_garrison_creatures_keep_the_body_rules`).
+        && !kind.is_garrison()
 }
 
 /// One of every cave kind at an open spot in the arena.
@@ -460,11 +463,13 @@ fn wave_four_families_keep_their_bodies_in_their_habitats() {
     // The sky families (wyverns, storm elementals, airships and their turrets, boarders,
     // nesters), the night monsters and the Moon's creatures obey the same body rules as the
     // cave kinds: never inside rock (the isles, the surface, the regolith), never over the rig.
-    for (label, world) in [
-        ("sky", sky_arena(60)),
-        ("night", night_arena(60)),
-        ("Moon", moon_arena(60)),
-    ] {
+    // (Built one at a time: three whole worlds side by side outgrow a local array.)
+    for label in ["sky", "night", "Moon"] {
+        let world = match label {
+            "sky" => sky_arena(60),
+            "night" => night_arena(60),
+            _ => moon_arena(60),
+        };
         let spawned = world.entities().count_of(EntityKind::Enemy);
         assert!(spawned >= 4, "{label}: only {spawned} enemies spawned");
         let (deepest, _, checked) = fight(world, 60, 30, label);

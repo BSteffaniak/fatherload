@@ -760,25 +760,13 @@ fn descent_worlds_gate_deep_tiers_and_rig_systems_by_depth() {
         .position(|kind| *kind == UpgradeKind::HeartKey)
         .expect("line");
     let hull = upgrade_offers_for(&player, rules)[index];
-    let sold_from = RigSystem::HeartKey.sold_from_row(&PlanLayout);
-    assert!(matches!(
-        upgrade_lock_for(&hull, &settings, sold_from - 1, rules, 0),
-        Some(UpgradeLock::Depth { .. })
-    ));
-    // Wave 8: reached is not enough; the crew must have felt the crush first.
+    // Wave 10 ancients-b: the Heart Key is the Gatekeeper Colossus's, never sold however deep
+    // and however felt.
     assert_eq!(
-        upgrade_lock_for(&hull, &settings, sold_from, rules, 0),
-        Some(UpgradeLock::Unfelt(RigSystem::HeartKey))
-    );
-    assert_eq!(
-        upgrade_lock_for(
-            &hull,
-            &settings,
-            sold_from,
-            rules,
-            RigSystem::HeartKey.bit()
-        ),
-        None
+        upgrade_lock_for(&hull, &settings, i32::MAX, rules, u8::MAX),
+        Some(UpgradeLock::Boss(
+            crate::descent::DescentBoss::GatekeeperColossus
+        ))
     );
     // The Star Core's Pressure Hull is won, never sold (Wave 8 integration).
     let index = UpgradeKind::ALL
@@ -849,7 +837,7 @@ fn descent_gates_crush_rigs_without_their_system() {
 }
 
 #[test]
-fn the_shop_sells_rig_systems_on_descent_worlds() {
+fn the_shop_never_sells_the_heart_key_on_descent_worlds() {
     let mut world = world_at(60);
     world.set_progression_rules(ProgressionRules::Descent);
     let index = UpgradeKind::ALL
@@ -883,12 +871,13 @@ fn the_shop_sells_rig_systems_on_descent_worlds() {
     world.player_mut(PLAYER).expect("player").credits = 10_000_000;
     let inputs = TickInputs::default().act(PLAYER, buy);
     let output = world.simulate_tick(world.simulation_tick(), &inputs);
+    // Felt and affordable, and still the Gatekeeper Colossus's to give (Wave 10 ancients-b).
     assert_eq!(
         output.action_outcomes[0].outcome,
-        PlayerScopedCommandOutcome::Applied
+        PlayerScopedCommandOutcome::IgnoredUnavailable
     );
     assert!(
-        world
+        !world
             .player(PLAYER)
             .expect("player")
             .hazard_gear

@@ -206,6 +206,8 @@ pub(super) fn draw_view_hud(
     // seat's archivist's words while it talks.
     super::ancient_city_hud::draw_city_hud(draw, snapshot, view, rect, top + 124);
     super::ancient_city_hud::draw_archivist_line(draw, snapshot, view, rect);
+    // Descent VII part B (Wave 10): the fort's waves, the gate's keys, the Colossus's stage.
+    super::garrison_hud::draw_garrison_hud(draw, snapshot, view, rect, top + 124);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.

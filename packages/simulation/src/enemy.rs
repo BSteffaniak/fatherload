@@ -152,6 +152,20 @@
 //! | [`EnemyKind::LensWraith`] | creature (ambusher) | Prism Desert | unseen except in its own colour of light | swap filters to find it |
 //! | [`EnemyKind::TheGlitch`] | machine (boss) | the Rewrite Hall | flickers before every rule rewrite and blink | learn each rule; hit it between rewrites |
 //! | [`EnemyKind::GlitchShard`] | machine (swarmer) | shed by The Glitch | a jittering square | anything, EMP |
+//!
+//! Descent VII part B's creatures (Wave 10 ancients-b, [`crate::garrison`]);
+//! `world/enemies/garrison.rs` gives them their fort waves, their blows on defences and the
+//! Gatekeeper Colossus's fight:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::WarSentry`] | machine (ranged walker) | Sleeping Garrison forts, waves | its visor glows before a bolt | barricades, turrets, cover |
+//! | [`EnemyKind::SiegeWalker`] | machine (heavy, lobs shells) | waves from the third on | it crouches and its mortar glows long before a lobbed shell | keep moving; shells break defences, so spread them |
+//! | [`EnemyKind::LancerDrone`] | machine (diver) | waves | hangs and its lance glows, then dives | turrets shred it, sidestep the dive |
+//! | [`EnemyKind::SealWarden`] | machine (hovering, orbs) | the Seal Gate | a golden ring gathers before a slow orb | dodge the orb, EMP |
+//! | [`EnemyKind::GildedCrawler`] | creature (lunger) | the Seal Gate's ceilings and floors | rears and its gilded back flares, then lunges | sidestep, blasts |
+//! | [`EnemyKind::GatekeeperColossus`] | machine (boss) | the Gatekeeper's hall | a fist rises over a glowing mark before it slams; it roars before the hall collapses | strike the head (its eye), hit fists while they rest |
+//! | [`EnemyKind::ColossusHead`], [`EnemyKind::ColossusFist`], [`EnemyKind::ColossusLegs`] | its parts | on the Colossus | drawn where they are | hits pass to the core |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -421,6 +435,26 @@ pub enum EnemyKind {
     PageMoth,
     /// The Archive of Stars: a spider that keeps the shelves and drops on visitors.
     IndexSpider,
+    // --- Descent VII part B (Wave 10 ancients-b, `crate::garrison`), appended ---------------
+    /// Sleeping Garrison: a war sentry that marches out of a fort's bays and fires bolts.
+    WarSentry,
+    /// Sleeping Garrison: a heavy four-legged siege walker that lobs shells (they break
+    /// defences).
+    SiegeWalker,
+    /// Sleeping Garrison: a lancer drone that hangs, then dives.
+    LancerDrone,
+    /// The Seal Gate: a hovering golden warden that fires slow orbs.
+    SealWarden,
+    /// The Seal Gate: a gilded crawler that lunges from ceilings and floors.
+    GildedCrawler,
+    /// The Descent VII gate boss: the Gatekeeper Colossus (its core, the torso).
+    GatekeeperColossus,
+    /// The Colossus's head (its weak point; hits pass to the core).
+    ColossusHead,
+    /// One of the Colossus's fists (`EnemyState::pattern`: 0 left, 1 right).
+    ColossusFist,
+    /// The Colossus's hips and legs (gone once it is unbound).
+    ColossusLegs,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -535,6 +569,17 @@ pub enum ShotKind {
     SentinelBolt,
     /// An archive warden's reading beam: a slow, wide pulse of light.
     ReadingBeam,
+    // --- Descent VII part B (Wave 10 ancients-b), appended ------------------------------
+    /// A war sentry's bolt.
+    SentryBolt,
+    /// A siege walker's lobbed shell: it breaks the defences it lands among.
+    SiegeShell,
+    /// A seal warden's slow golden orb.
+    WardenOrb,
+    /// The Gatekeeper Colossus's eye bolt.
+    ColossusBolt,
+    /// A stone falling from a ceiling (tremors, the Colossus's crypt).
+    FallingStone,
 }
 
 impl ShotKind {
@@ -565,6 +610,11 @@ impl ShotKind {
             Self::GlitchBolt => 200.0,
             Self::SentinelBolt => 300.0,
             Self::ReadingBeam => 170.0,
+            Self::SentryBolt => 300.0,
+            Self::SiegeShell => 250.0,
+            Self::WardenOrb => 120.0,
+            Self::ColossusBolt => 230.0,
+            Self::FallingStone => 40.0,
         }
     }
 
@@ -595,7 +645,12 @@ impl ShotKind {
             | Self::PrismBlue
             | Self::GlitchBolt
             | Self::SentinelBolt
-            | Self::ReadingBeam => 0.0,
+            | Self::ReadingBeam
+            | Self::SentryBolt
+            | Self::WardenOrb
+            | Self::ColossusBolt => 0.0,
+            Self::SiegeShell => 380.0,
+            Self::FallingStone => 640.0,
         }
     }
 
@@ -622,6 +677,10 @@ impl ShotKind {
             Self::GlitchBolt => 6.0,
             Self::SentinelBolt => 4.0,
             Self::ReadingBeam => 8.0,
+            Self::SentryBolt => 4.0,
+            Self::SiegeShell => 8.0,
+            Self::WardenOrb | Self::ColossusBolt => 7.0,
+            Self::FallingStone => 9.0,
         }
     }
 
@@ -651,6 +710,11 @@ impl ShotKind {
             Self::GlitchBolt => 5.5,
             Self::SentinelBolt => 8.0,
             Self::ReadingBeam => 11.0,
+            Self::SentryBolt => 6.0,
+            Self::SiegeShell => 13.0,
+            Self::WardenOrb => 7.0,
+            Self::ColossusBolt => 7.5,
+            Self::FallingStone => 9.0,
         }
     }
 
@@ -674,6 +738,10 @@ impl ShotKind {
             Self::GlitchBolt => 4_200,
             Self::SentinelBolt => 2_600,
             Self::ReadingBeam => 4_000,
+            Self::SentryBolt => 2_400,
+            Self::SiegeShell | Self::FallingStone => 4_000,
+            Self::WardenOrb => 5_000,
+            Self::ColossusBolt => 4_500,
         }
     }
 
@@ -850,7 +918,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 127] = [
+    pub const ALL: [Self; 136] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -978,6 +1046,15 @@ impl EnemyKind {
         Self::ArchiveWarden,
         Self::PageMoth,
         Self::IndexSpider,
+        Self::WarSentry,
+        Self::SiegeWalker,
+        Self::LancerDrone,
+        Self::SealWarden,
+        Self::GildedCrawler,
+        Self::GatekeeperColossus,
+        Self::ColossusHead,
+        Self::ColossusFist,
+        Self::ColossusLegs,
     ];
 
     /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
@@ -1051,6 +1128,33 @@ impl EnemyKind {
                 | Self::LensWraith
                 | Self::TheGlitch
                 | Self::GlitchShard
+        )
+    }
+
+    /// Whether this is one of Descent VII part B's creatures (Wave 10 ancients-b: the Sleeping
+    /// Garrison's machines, the Seal Gate's, the Gatekeeper Colossus and its parts).
+    #[must_use]
+    pub const fn is_garrison(self) -> bool {
+        matches!(
+            self,
+            Self::WarSentry
+                | Self::SiegeWalker
+                | Self::LancerDrone
+                | Self::SealWarden
+                | Self::GildedCrawler
+                | Self::GatekeeperColossus
+                | Self::ColossusHead
+                | Self::ColossusFist
+                | Self::ColossusLegs
+        )
+    }
+
+    /// Whether this is one of the Colossus's parts (hits on it pass to the core).
+    #[must_use]
+    pub const fn is_colossus_part(self) -> bool {
+        matches!(
+            self,
+            Self::ColossusHead | Self::ColossusFist | Self::ColossusLegs
         )
     }
 
@@ -1147,6 +1251,13 @@ impl EnemyKind {
             Self::SplitterSpire => 1.8,
             Self::TheGlitch => 4.0,
             Self::PrismScarab | Self::GlitchShard => 1.0,
+            // Descent VII part B (Wave 10): visors, lances, the warden's ring, the Colossus's
+            // eye and core.
+            Self::WarSentry | Self::LancerDrone => 0.8,
+            Self::SiegeWalker | Self::GildedCrawler => 1.0,
+            Self::SealWarden => 2.2,
+            Self::GatekeeperColossus => 4.5,
+            Self::ColossusHead => 2.5,
             _ => 0.0,
         }
     }
@@ -3168,6 +3279,157 @@ impl EnemyKind {
                 knockback: 170.0,
                 ..stats("Index Spider", Creature, Walking, AttackStyle::Lunge)
             },
+            // Descent VII part B (Wave 10 ancients-b).
+            Self::WarSentry => EnemyStats {
+                radius: 11.0,
+                health: 85.0,
+                speed: 64.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 40.0,
+                contact_damage: 8.0,
+                windup_millis: 700,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 10.0,
+                knockback: 120.0,
+                ..stats(
+                    "War Sentry",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::SentryBolt, 1),
+                )
+            },
+            Self::SiegeWalker => EnemyStats {
+                radius: 15.0,
+                health: 300.0,
+                speed: 32.0,
+                sight_tiles: 18.0,
+                hearing_tiles: 10.0,
+                leash_tiles: 44.0,
+                contact_damage: 16.0,
+                // A long, readable crouch before every shell.
+                windup_millis: 1_400,
+                cooldown_millis: 4_200,
+                attack_range_tiles: 15.0,
+                knockback: 220.0,
+                ..stats(
+                    "Siege Walker",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::SiegeShell, 1),
+                )
+            },
+            Self::LancerDrone => EnemyStats {
+                radius: 8.0,
+                health: 34.0,
+                speed: 118.0,
+                dash_speed: 330.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 40.0,
+                contact_damage: 11.0,
+                windup_millis: 650,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 4.0,
+                knockback: 180.0,
+                ..stats("Lancer Drone", Machine, Flying, AttackStyle::Lunge)
+            },
+            Self::SealWarden => EnemyStats {
+                radius: 12.0,
+                health: 120.0,
+                speed: 44.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 6.0,
+                windup_millis: 1_000,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 11.0,
+                knockback: 120.0,
+                ..stats(
+                    "Seal Warden",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::WardenOrb, 1),
+                )
+            },
+            Self::GildedCrawler => EnemyStats {
+                radius: 10.0,
+                health: 70.0,
+                speed: 72.0,
+                dash_speed: 260.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 13.0,
+                windup_millis: 550,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 3.2,
+                knockback: 190.0,
+                ..stats("Gilded Crawler", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::GatekeeperColossus => EnemyStats {
+                radius: crate::garrison::COLOSSUS_CORE_RADIUS,
+                health: 1_700.0,
+                speed: 0.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 18.0,
+                windup_millis: 900,
+                cooldown_millis: 3_400,
+                attack_range_tiles: 26.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Gatekeeper Colossus",
+                    Machine,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::ColossusBolt, 3),
+                )
+            },
+            Self::ColossusHead => EnemyStats {
+                radius: 33.0,
+                health: 10_000.0,
+                speed: 0.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 6.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 160.0,
+                ..stats("Colossus Head", Machine, Stationary, AttackStyle::Contact)
+            },
+            Self::ColossusFist => EnemyStats {
+                radius: 30.0,
+                health: 10_000.0,
+                speed: 0.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 10.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 220.0,
+                ..stats("Colossus Fist", Machine, Stationary, AttackStyle::Contact)
+            },
+            Self::ColossusLegs => EnemyStats {
+                radius: 45.0,
+                health: 10_000.0,
+                speed: 0.0,
+                sight_tiles: 0.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 8.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 200.0,
+                ..stats("Colossus Legs", Machine, Stationary, AttackStyle::Contact)
+            },
         }
     }
 
@@ -3392,6 +3654,17 @@ impl EnemyKind {
             Self::ArchiveWarden => (17.0, 18.0),
             Self::PageMoth => (8.0, 6.0),
             Self::IndexSpider => (14.0, 8.0),
+            // Descent VII part B (Wave 10), sized to their art.
+            Self::WarSentry => (13.0, 15.0),
+            Self::SiegeWalker => (28.0, 20.0),
+            Self::LancerDrone => (13.0, 8.0),
+            Self::SealWarden => (14.0, 14.0),
+            Self::GildedCrawler => (15.0, 9.0),
+            // The Colossus is drawn half as large again as its art (Wave 10 review).
+            Self::GatekeeperColossus => (48.0, 42.0),
+            Self::ColossusHead => (30.0, 30.0),
+            Self::ColossusFist => (27.0, 27.0),
+            Self::ColossusLegs => (45.0, 42.0),
         }
     }
 
@@ -3566,6 +3839,11 @@ impl EnemyKind {
             }
             (Self::HushMoth | Self::RewindNewt | Self::TickMite, DamageKind::Fire) => 1.6,
             (Self::TheGlitch, DamageKind::Kinetic) => 0.8,
+            // Descent VII part B (Wave 10): war plate turns bullets on the walker, blasts crack
+            // it; the crawler's gilt cracks under blasts.
+            (Self::SiegeWalker, DamageKind::Kinetic) => 0.6,
+            (Self::SiegeWalker | Self::GildedCrawler, DamageKind::Explosive) => 1.5,
+            (Self::GatekeeperColossus, DamageKind::Kinetic) => 0.85,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -4604,6 +4882,35 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(ItemKind::Material(StrategicResourceKind::CrystalLens), 1);
         }
         EnemyKind::GlitchShard => add(mineral, 1),
+        // Descent VII part B (Wave 10): machines pay in war plate, the Seal Gate's in seal gold.
+        EnemyKind::WarSentry | EnemyKind::LancerDrone => {
+            if rare < 45 {
+                add(
+                    ItemKind::Layer(crate::descent::Stratum::SleepingGarrison),
+                    1,
+                );
+            } else {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::SiegeWalker => {
+            add(richer, 2 + extra);
+            add(
+                ItemKind::Layer(crate::descent::Stratum::SleepingGarrison),
+                2,
+            );
+        }
+        EnemyKind::SealWarden | EnemyKind::GildedCrawler => {
+            add(richer, 1 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::TheSealGate), 1);
+        }
+        EnemyKind::ColossusHead | EnemyKind::ColossusFist | EnemyKind::ColossusLegs => {}
+        EnemyKind::GatekeeperColossus => {
+            add(richer, 16 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::TheSealGate), 8);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 6);
+            add(ItemKind::Artifact(ArtifactKind::MachineSigil), 1);
+        }
         EnemyKind::TheGlitch => {
             add(richer, 12 + extra);
             add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 4);

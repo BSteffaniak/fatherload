@@ -337,6 +337,13 @@ enum SeatLoop {
     CityHumBed,
     EngineBed,
     StacksBed,
+    // Descent VII part B's music and beds (Wave 10 ancients-b): a piece and a bed per
+    // stratum, the Colossus's fight.
+    AbGarrisonMusic,
+    AbSealGateMusic,
+    AbColossusMusic,
+    AbBarracksBed,
+    AbSealHallBed,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -968,6 +975,7 @@ impl Director {
         self.distortion_music(live, listener, snapshot);
         self.far_strange_music(live, listener, snapshot);
         self.ancient_city_music(live, listener, snapshot);
+        self.garrison_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1917,6 +1925,75 @@ impl Director {
         }
     }
 
+    /// Descent VII part B's music (Wave 10): the piece and bed of the stratum the seat is in;
+    /// the Colossus's theme instead while it fights in the hall the seat is in.
+    fn garrison_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::descent::MusicCue;
+        let terrain = snapshot.terrain;
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let cue = terrain
+            .settings()
+            .generator
+            .has_descents()
+            .then(|| terrain.stratum_at(tile).def().music);
+        let fighting = snapshot.garrison.colossus.awake()
+            && snapshot
+                .colossus_hall
+                .is_some_and(|hall| hall.expanded(4).contains(tile));
+        let loops = [
+            (
+                MusicCue::SleepingGarrison,
+                SeatLoop::AbGarrisonMusic,
+                Patch::AbGarrisonLoop,
+                0.4,
+                true,
+            ),
+            (
+                MusicCue::SealGate,
+                SeatLoop::AbSealGateMusic,
+                Patch::AbSealGateLoop,
+                0.4,
+                true,
+            ),
+            (
+                MusicCue::SleepingGarrison,
+                SeatLoop::AbBarracksBed,
+                Patch::AbBarracksLoop,
+                0.3,
+                false,
+            ),
+            (
+                MusicCue::SealGate,
+                SeatLoop::AbSealHallBed,
+                Patch::AbSealHallLoop,
+                0.32,
+                false,
+            ),
+        ];
+        for (piece, slot, patch, gain, music) in loops {
+            let playing = cue == Some(piece) && !(music && fighting);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::AbColossusMusic,
+            Patch::AbColossusLoop,
+            (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
     /// one, the guardian's theme instead while its guardian is awake. Crypts (T29) bring their
     /// own.
@@ -2734,6 +2811,7 @@ mod tests {
     fn every_seat_loop_slot_has_its_own_key_range() {
         assert!((SeatLoop::PrismBed as u32) < SEAT_LOOP_SLOTS);
         assert!((SeatLoop::StacksBed as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::AbSealHallBed as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

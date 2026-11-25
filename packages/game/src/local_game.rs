@@ -548,6 +548,7 @@ impl LocalGame {
         self.announce_far_strange(&players);
         self.announce_supplies(&players);
         self.announce_ancient_city(&players);
+        self.announce_garrison(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1316,6 +1317,125 @@ impl LocalGame {
             };
             for (seat, player) in players.iter().enumerate() {
                 if player_id.is_none_or(|owner| owner == *player) {
+                    messages.push((seat, text.clone()));
+                }
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (title, text) in cards {
+            for seat in 0..players.len() {
+                self.shell.story_moment(
+                    seat,
+                    crate::shell::StoryMomentKind::Anomaly,
+                    title.clone(),
+                    text.clone(),
+                );
+            }
+        }
+    }
+
+    /// Descent VII part B for local seats (Wave 10): a landmark's story beat as a card on every
+    /// seat; a fort's waves, the gate's verdict and the Colossus's fight as news for the seats
+    /// they concern (a fort's for every seat: the garrison is the crew's fight).
+    #[allow(clippy::too_many_lines, reason = "one line of news per event")]
+    fn announce_garrison(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::garrison::GarrisonEvent as E;
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(String, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Garrison {
+                what,
+                player_id,
+                x,
+                y,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let tile = fatherload_simulation::terrain::TilePosition { x, y };
+            let fort = world.fort_state_at(tile);
+            let waves = fort.map_or(0, |fort| fort.kind.waves());
+            let wave = fort.map_or(0, |fort| fort.wave);
+            let colossus = &world.garrison().colossus;
+            let text = match what {
+                E::LandmarkFound => {
+                    if let Some(landmark) = world.garrison_landmark_at(tile) {
+                        cards.push((landmark.name().to_owned(), landmark.beat().to_owned()));
+                    }
+                    continue;
+                }
+                E::FortStirred => {
+                    "The garrison stirs! Build your defences: turrets, barricades, traps (build \
+                     kit, Defences). Hold the fort until it sleeps."
+                        .to_owned()
+                }
+                E::WaveTelegraphed => format!("Wave {wave} of {waves}: the red bays are opening!"),
+                E::WaveWoke => format!("Wave {wave} of {waves} is out. Hold the pylon!"),
+                E::WaveCleared => format!("Wave {wave} beaten. Repair and rebuild: more coming."),
+                E::GarrisonSlept => {
+                    "The garrison sleeps again. Its armoury pays out: credits, war plate and \
+                     alloy."
+                        .to_owned()
+                }
+                E::StoodDown => {
+                    "Nobody held the fort: the garrison stands down. Its waves start over."
+                        .to_owned()
+                }
+                E::DefenceDestroyed => "A defence was battered down!".to_owned(),
+                E::Tremor => "The ground shakes: watch the ceiling for falling stones.".to_owned(),
+                E::SealRefused => player_id
+                    .and_then(|player| world.missing_seal_key(player))
+                    .map_or_else(
+                        || "The Seal Gate wants the keys of every Descent.".to_owned(),
+                        |key| format!("The Seal Gate stays shut: it wants the {}.", key.name()),
+                    ),
+                E::SealOpening => {
+                    "Every key is here. The Seal Gate's sockets light, one by one...".to_owned()
+                }
+                E::ColossusAwoke => {
+                    "The Gatekeeper Colossus rises. Strike its head; hit its fists while they \
+                     rest."
+                        .to_owned()
+                }
+                E::HallCollapsing => colossus.collapsing.map_or_else(
+                    || "The hall is giving way!".to_owned(),
+                    |(next, _)| match next {
+                        fatherload_simulation::garrison::ColossusStage::Fallen => {
+                            "The floor is cracking! Get off the cracks or ride them down."
+                                .to_owned()
+                        }
+                        _ => {
+                            "The vault is coming down! Its rubble will hang in the air.".to_owned()
+                        }
+                    },
+                ),
+                E::HallCollapsed => format!("The hall gave way: {}.", colossus.stage.name()),
+                E::GateRewards => "The Gatekeeper falls. The Heart Key is yours: the Heart Seal \
+                                   yields, and the floor opens on Descent VIII."
+                    .to_owned(),
+                _ => continue,
+            };
+            let crew_wide = matches!(
+                what,
+                E::FortStirred
+                    | E::WaveTelegraphed
+                    | E::WaveWoke
+                    | E::WaveCleared
+                    | E::StoodDown
+                    | E::Tremor
+                    | E::ColossusAwoke
+                    | E::HallCollapsing
+                    | E::HallCollapsed
+                    | E::SealOpening
+            );
+            for (seat, player) in players.iter().enumerate() {
+                if crew_wide || player_id.is_none_or(|owner| owner == *player) {
                     messages.push((seat, text.clone()));
                 }
             }

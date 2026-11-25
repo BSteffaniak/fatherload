@@ -105,6 +105,9 @@ mod frame;
 #[cfg(test)]
 mod frame_tests;
 mod garage;
+mod garrison;
+#[cfg(test)]
+mod garrison_tests;
 #[cfg(test)]
 mod god_mode_tests;
 #[cfg(test)]
@@ -541,6 +544,15 @@ pub struct WorldState {
     /// with the world, never hashed or replicated.
     #[serde(default)]
     city_schedule: crate::ancient_city::CitySchedule,
+    /// Descent VII part B's shared state (Wave 10 ancients-b, see [`crate::garrison`]): garrison
+    /// forts and their waves, the build kit's defences, the Seal Gate, the Gatekeeper
+    /// Colossus's fight, falling stones and landmarks found.
+    #[serde(default)]
+    garrison: crate::garrison::Garrison,
+    /// Descent VII part B's host bookkeeping (whom the Seal Gate refused). Saved with the
+    /// world, never hashed or replicated.
+    #[serde(default)]
+    garrison_schedule: crate::garrison::GarrisonSchedule,
 }
 
 impl WorldState {

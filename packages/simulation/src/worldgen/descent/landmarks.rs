@@ -58,6 +58,9 @@ pub enum LandmarkGenerator {
     FarStrange,
     /// The buried city's stamps and rock ([`super::ancient_city`], Wave 10).
     AncientCity,
+    /// Descent VII part B's forts, the Seal Court, the Gatekeeper's hall and the Heart Seal
+    /// ([`super::garrison`], Wave 10).
+    Garrison,
 }
 
 /// The generator behind `kind`.
@@ -78,6 +81,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::Distortion => LandmarkGenerator::Distortion,
         LandmarkKind::FarStrange => LandmarkGenerator::FarStrange,
         LandmarkKind::AncientCity => LandmarkGenerator::AncientCity,
+        LandmarkKind::Garrison => LandmarkGenerator::Garrison,
     }
 }
 
@@ -424,6 +428,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::HollowWorld
         | LandmarkKind::Distortion
         | LandmarkKind::FarStrange
-        | LandmarkKind::AncientCity => return None,
+        | LandmarkKind::AncientCity
+        | LandmarkKind::Garrison => return None,
     })
 }

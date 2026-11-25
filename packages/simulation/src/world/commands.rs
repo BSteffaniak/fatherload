@@ -236,6 +236,11 @@ impl WorldState {
                 self.set_active_drill(player_id, None);
                 return PlayerScopedCommandOutcome::Applied;
             }
+            // The Heart Seal yields only to the Heart Key (Wave 10, the Colossus's reward).
+            if !unrestricted && self.heart_seal_refuses(player_id, tile.kind) {
+                self.set_active_drill(player_id, None);
+                return PlayerScopedCommandOutcome::Applied;
+            }
             let initial_durability = tile.durability.max(1);
             let seconds_per_chip = if unrestricted {
                 GOD_MODE_SECONDS_PER_CHIP

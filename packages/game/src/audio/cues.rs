@@ -322,6 +322,16 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::CityAlarm => Patch::CityAlarm,
         SoundCue::CityCargoSnatch => Patch::CityCargoSnatch,
         SoundCue::CitySparkZap => Patch::CitySparkZap,
+        SoundCue::GarrisonTurret => Patch::AbTurretShot,
+        SoundCue::GarrisonTrap => Patch::AbTrapZap,
+        SoundCue::GarrisonKlaxon => Patch::AbKlaxon,
+        SoundCue::GarrisonBay => Patch::AbBayOpen,
+        SoundCue::GarrisonBreak => Patch::AbDefenceBreak,
+        SoundCue::ColossusFistSlam => Patch::AbFistSlam,
+        SoundCue::ColossusCollapse => Patch::AbHallCollapse,
+        SoundCue::SealSocket => Patch::AbSocketChime,
+        SoundCue::SealDoorGrind => Patch::AbDoorGrind,
+        SoundCue::SealTremor => Patch::AbTremor,
     }
 }
 
@@ -379,6 +389,10 @@ pub const fn enemy_cue(kind: EnemyKind, creature: SoundCue, machine: SoundCue) -
 
 /// The sound of an enemy projectile being fired (exhaustive: a new shot needs a sound).
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "the Wave 10 shots keep rows of their own"
+)]
 pub const fn shot_cue(shot: ShotKind) -> SoundCue {
     match shot {
         ShotKind::Acid => SoundCue::AcidSpit,
@@ -398,6 +412,36 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::PrismRed | ShotKind::PrismGreen | ShotKind::PrismBlue => SoundCue::KeyedGlass,
         ShotKind::GlitchBolt => SoundCue::GlitchBlink,
         ShotKind::ReadingBeam => SoundCue::CityArchivistScan,
+        // Descent VII part B (Wave 10).
+        ShotKind::SentryBolt | ShotKind::ColossusBolt => SoundCue::MachineZap,
+        ShotKind::SiegeShell => SoundCue::CannonBoom,
+        ShotKind::WardenOrb => SoundCue::SealSocket,
+        ShotKind::FallingStone => SoundCue::FloorCrumble,
+    }
+}
+
+/// The sound of a Descent VII part B event (Wave 10; exhaustive: a new event decides how it
+/// sounds).
+#[must_use]
+pub const fn garrison_cue(what: fatherload_simulation::garrison::GarrisonEvent) -> SoundCue {
+    use fatherload_simulation::garrison::GarrisonEvent as E;
+    match what {
+        E::FortStirred | E::WaveTelegraphed => SoundCue::GarrisonKlaxon,
+        E::WaveWoke => SoundCue::GarrisonBay,
+        E::WaveCleared => SoundCue::Upgrade,
+        E::GarrisonSlept | E::GateRewards => SoundCue::MilestoneFanfare,
+        E::StoodDown => SoundCue::UiBack,
+        E::TurretFired => SoundCue::GarrisonTurret,
+        E::TrapSprung => SoundCue::GarrisonTrap,
+        E::DefenceDestroyed => SoundCue::GarrisonBreak,
+        E::Tremor => SoundCue::SealTremor,
+        E::SocketLit => SoundCue::SealSocket,
+        E::SealOpening => SoundCue::SealDoorGrind,
+        E::SealRefused => SoundCue::UiError,
+        E::ColossusAwoke | E::HallCollapsing | E::HallCollapsed => SoundCue::ColossusCollapse,
+        E::FistSlam => SoundCue::ColossusFistSlam,
+        E::ColossusDefeated => SoundCue::CreatureDeath,
+        E::LandmarkFound => SoundCue::AnomalyHum,
     }
 }
 
@@ -648,11 +692,13 @@ pub const fn pickup_cue(item: ItemKind) -> SoundCue {
 /// The sound of placing `item` (WP-BASE): a claim beacon's call sign, a module bolting down, or
 /// a block set in place.
 #[must_use]
+#[allow(clippy::match_same_arms, reason = "defences keep a row of their own")]
 pub const fn build_cue(item: Buildable) -> SoundCue {
     match item {
         Buildable::Module(ModuleKind::Beacon) => SoundCue::ClaimStaked,
         Buildable::Module(_) => SoundCue::ModuleBuilt,
         Buildable::Tile(_) | Buildable::BackWall(_) | Buildable::Fixture(_) => SoundCue::BuildPlace,
+        Buildable::Defence(_) => SoundCue::ModuleBuilt,
     }
 }
 
@@ -1044,6 +1090,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Supply { what, .. } => Some(supply_cue(*what)),
         // The builders' buried city (Wave 10).
         GameplayEventKind::AncientCity { what, .. } => Some(city_cue(*what)),
+        // Descent VII part B (Wave 10).
+        GameplayEventKind::Garrison { what, .. } => Some(garrison_cue(*what)),
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
@@ -1411,7 +1459,8 @@ mod tests {
             | GameplayEventKind::DistortionLandmarkFound { .. }
             | GameplayEventKind::FarStrange { .. }
             | GameplayEventKind::Supply { .. }
-            | GameplayEventKind::AncientCity { .. } => {}
+            | GameplayEventKind::AncientCity { .. }
+            | GameplayEventKind::Garrison { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2506,6 +2555,16 @@ mod tests {
             SoundCue::CityAlarm,
             SoundCue::CityCargoSnatch,
             SoundCue::CitySparkZap,
+            SoundCue::GarrisonTurret,
+            SoundCue::GarrisonTrap,
+            SoundCue::GarrisonKlaxon,
+            SoundCue::GarrisonBay,
+            SoundCue::GarrisonBreak,
+            SoundCue::ColossusFistSlam,
+            SoundCue::ColossusCollapse,
+            SoundCue::SealSocket,
+            SoundCue::SealDoorGrind,
+            SoundCue::SealTremor,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

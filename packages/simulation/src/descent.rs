@@ -677,6 +677,14 @@ pub enum MusicCue {
     EngineHalls,
     /// The Archive of Stars: slow starlit chimes and a choir pad, a music box of the sky.
     ArchiveOfStars,
+    // --- Descent VII part B (Wave 10 ancients-b), appended ------------------------------------
+    /// Sleeping Garrison: a martial snare and a low brass ostinato that wake into a march as the
+    /// waves come.
+    SleepingGarrison,
+    /// The Seal Gate: solemn gilded pads and a slow bell, the stone humming under them.
+    SealGate,
+    /// The Gatekeeper Colossus's theme: huge drums and brass, heavier with every stage.
+    GatekeeperColossus,
 }
 
 /// A stratum's ambience bed.
@@ -759,6 +767,11 @@ pub enum AmbienceCue {
     EngineBeat,
     /// The stacks' hush: settling paper, a ticking orrery, far chimes.
     Stacks,
+    // --- Descent VII part B (Wave 10 ancients-b), appended ------------------------------
+    /// A sleeping barracks: the hum of dormant machines, a far klaxon, a ratchet settling.
+    Barracks,
+    /// A sealed hall: deep resonance, trickling dust, a slow grinding far behind the stone.
+    SealHall,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -808,10 +821,14 @@ pub enum LandmarkKind {
     /// Great Engine, archive stacks, puzzle vaults and the Orrery
     /// ([`crate::worldgen::descent::ancient_city`]).
     AncientCity,
+    /// Descent VII part B's set pieces (Wave 10 ancients-b): garrison forts and the Grand
+    /// Bastion, the Seal Court and the Processional Way, the Gatekeeper's hall and the Heart
+    /// Seal ([`crate::worldgen::descent::garrison`]).
+    Garrison,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -826,6 +843,7 @@ impl LandmarkKind {
         Self::Distortion,
         Self::FarStrange,
         Self::AncientCity,
+        Self::Garrison,
     ];
 }
 

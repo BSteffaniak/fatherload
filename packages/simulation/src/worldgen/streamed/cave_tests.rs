@@ -477,6 +477,7 @@ fn glyph(kind: TileKind, water: bool) -> char {
             CaveTile::EchoQuartz => 'q',
             CaveTile::PrismRed | CaveTile::PrismGreen | CaveTile::PrismBlue => 'k',
             CaveTile::BuilderAlloy => 'A',
+            CaveTile::WarPlate | CaveTile::SealStone => 'W',
             CaveTile::Chronoglass => 'c',
             // The Drowned and Frozen (Wave 9) never generates in these tests' worlds.
             _ => '~',

@@ -29,6 +29,7 @@ pub mod far_strange_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
+pub mod garrison_hud;
 pub mod hollow_hud;
 mod homes;
 mod interior;
@@ -793,6 +794,14 @@ impl GameRenderer {
             far_strange: snapshot.far_strange,
             glitch_arena: snapshot.glitch_arena,
             ancient_city: snapshot.ancient_city,
+            garrison: snapshot.garrison,
+            forts: &snapshot.forts,
+            colossus_hall: snapshot.colossus_hall,
+            seal_door: snapshot.seal_door,
+            seal_keys: Some(world::garrison::seal_keys(
+                view.player,
+                snapshot.crust.deep_claim,
+            )),
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

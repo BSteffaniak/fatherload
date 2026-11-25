@@ -841,6 +841,17 @@ pub enum SoundCue {
     CityCargoSnatch,
     /// A spark wisp's jolt.
     CitySparkZap,
+    // Descent VII part B (Wave 10 ancients-b), appended.
+    GarrisonTurret,
+    GarrisonTrap,
+    GarrisonKlaxon,
+    GarrisonBay,
+    GarrisonBreak,
+    ColossusFistSlam,
+    ColossusCollapse,
+    SealSocket,
+    SealDoorGrind,
+    SealTremor,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

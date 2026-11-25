@@ -247,6 +247,10 @@ pub enum SectionKey {
     /// found, vaults opened and landmarks found (Wave 10 ancients-a; plinths read travel as
     /// terrain ops).
     AncientCity,
+    /// Descent VII part B: garrison forts and their waves, the build kit's defences, the Seal
+    /// Gate, the Gatekeeper Colossus's fight, falling stones and landmarks found (Wave 10
+    /// ancients-b; the hall's collapses travel as terrain ops).
+    Garrison,
 }
 
 impl SectionKey {
@@ -266,7 +270,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 29] = [
+    pub const SHARED: [Self; 30] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -299,6 +303,8 @@ impl SectionKey {
         Self::FarStrange,
         // The builders' buried city (Wave 10 ancients-a).
         Self::AncientCity,
+        // Descent VII part B (Wave 10 ancients-b).
+        Self::Garrison,
     ];
 }
 
@@ -336,6 +342,7 @@ pub enum SectionPayload {
     Distortion(Box<crate::distortion::Distortion>),
     FarStrange(Box<crate::far_strange::FarStrange>),
     AncientCity(Box<crate::ancient_city::AncientCity>),
+    Garrison(Box<crate::garrison::Garrison>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -540,6 +547,8 @@ impl WorldState {
             far_schedule: _,
             ancient_city,
             city_schedule: _,
+            garrison,
+            garrison_schedule: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -647,6 +656,7 @@ impl WorldState {
             SectionKey::Distortion => SectionPayload::Distortion(Box::new(distortion.clone())),
             SectionKey::FarStrange => SectionPayload::FarStrange(Box::new(far_strange.clone())),
             SectionKey::AncientCity => SectionPayload::AncientCity(Box::new(ancient_city.clone())),
+            SectionKey::Garrison => SectionPayload::Garrison(Box::new(garrison.clone())),
         })
     }
 
@@ -836,6 +846,9 @@ impl WorldState {
             }
             (SectionKey::AncientCity, SectionPayload::AncientCity(ancient_city)) => {
                 self.ancient_city = *ancient_city;
+            }
+            (SectionKey::Garrison, SectionPayload::Garrison(garrison)) => {
+                self.garrison = *garrison;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

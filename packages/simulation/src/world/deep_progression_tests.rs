@@ -194,11 +194,11 @@ fn a_geared_rig_holds_its_hull_in_the_heart() {
 }
 
 #[test]
-fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
+fn the_heart_key_is_never_sold_though_its_need_is_felt() {
     let mut world = deep_world(0x0FA1_4003);
     let layout = world.descent_layout();
-    // The Heart Key (the bosses' rewards above it are never sold, Waves 8-9): the crew holds
-    // the gates above the Heart.
+    // The Heart Key (every gate system is a boss's reward now, Waves 8-10: the Gatekeeper
+    // Colossus's): the crew holds the gates above the Heart.
     let hollow = layout.descent(7).expect("Descent VIII");
     let index = offer_index(UpgradeKind::HeartKey);
     world.progression.deepest_tile_reached = hollow.top + 30;
@@ -215,7 +215,10 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
             world.logistics().felt_systems,
         )
     };
-    assert_eq!(lock(&world), Some(UpgradeLock::Unfelt(RigSystem::HeartKey)));
+    let won = Some(UpgradeLock::Boss(
+        crate::descent::DescentBoss::GatekeeperColossus,
+    ));
+    assert_eq!(lock(&world), won);
     // A dip past the gate: the crush starts gently and the need is felt.
     {
         let rig = world.player_mut(PLAYER).expect("rig");
@@ -251,7 +254,8 @@ fn rig_systems_go_on_sale_only_once_their_need_is_felt() {
         world.logistics().felt_systems & RigSystem::HeartKey.bit(),
         0
     );
-    assert_eq!(lock(&world), None);
+    // Felt, and still the Colossus's to give (Wave 10 ancients-b).
+    assert_eq!(lock(&world), won);
 }
 
 #[test]

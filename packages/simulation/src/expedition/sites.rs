@@ -307,6 +307,8 @@ pub fn crosses_strata_set_pieces(settings: &WorldSettings, area: &TileRect) -> b
         || crate::worldgen::descent::far_strange::stamps_with(settings, &layout, &area.expanded(2))
             .iter()
             .any(|stamp| stamp.bounds.expanded(2).intersects(area))
+        // Descent VII part B's forts, court, hall and the Heart Seal (Wave 10 ancients-b).
+        || crate::worldgen::descent::garrison::crosses_set_pieces(settings, &layout, area)
         // ... and the alloy seal over Descent VII: a room carved through it would be a way
         // past The Glitch without the Phase Drill.
         || crate::worldgen::descent::far_strange::crosses_alloy_seal(settings, &layout, area)

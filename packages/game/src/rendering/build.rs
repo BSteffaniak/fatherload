@@ -174,6 +174,7 @@ pub(super) fn draw_build_bar(
         BuildGroup::Structure => SKY_LIGHT,
         BuildGroup::Interior => MINT,
         BuildGroup::Modules => PINK,
+        BuildGroup::Defences => ORANGE,
     };
     ui_kit::text(
         draw,

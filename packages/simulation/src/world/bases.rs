@@ -170,6 +170,7 @@ impl WorldState {
             if self.terrain.is_solid_at(tile)
                 || self.bases.fixtures_at(tile).front.is_some()
                 || self.bases.module_at(tile).is_some()
+                || self.garrison().defence_at(tile).is_some()
             {
                 return Err(BuildRefusal::Blocked);
             }
@@ -213,6 +214,10 @@ impl WorldState {
         }
         let mut cost = item.base_cost();
         match item {
+            // The build kit's defences (Wave 10): their own ground and footprint rules.
+            Buildable::Defence(kind) => {
+                return self.check_defence_place(player_id, player, kind, at);
+            }
             Buildable::Module(ModuleKind::Beacon) => {
                 let held = self.bases.claims_held(player_id);
                 let limit = if self.is_test_mode() {
@@ -229,6 +234,15 @@ impl WorldState {
                 };
                 if held >= limit {
                     return Err(BuildRefusal::TooManyClaims);
+                }
+                // Garrison forts stay unclaimed (Wave 10): a claim's safe zone would turn their
+                // waves' blows.
+                if self
+                    .forts_near(at, CLAIM_RADIUS + 50)
+                    .iter()
+                    .any(|fort| fort.bounds.expanded(CLAIM_RADIUS + 6).contains(at))
+                {
+                    return Err(BuildRefusal::InFort);
                 }
                 let (first, last) = crate::surface::town_span();
                 let overlaps_town = at.x + CLAIM_RADIUS >= first - TOWN_NO_BUILD_MARGIN
@@ -293,6 +307,7 @@ impl WorldState {
                 if self.terrain.is_solid_at(at)
                     || self.bases.module_at(at).is_some()
                     || self.bases.fixtures_at(at).front.is_some()
+                    || self.garrison().defence_at(at).is_some()
                     || self.rig_overlaps(at)
                 {
                     return Err(BuildRefusal::Blocked);
@@ -309,6 +324,7 @@ impl WorldState {
                 if self.terrain.is_solid_at(at)
                     || self.bases.fixtures_at(at).front.is_some()
                     || self.bases.module_at(at).is_some()
+                    || self.garrison().defence_at(at).is_some()
                 {
                     return Err(BuildRefusal::Blocked);
                 }
@@ -340,6 +356,10 @@ impl WorldState {
     ) -> Result<BuildQuote, BuildRefusal> {
         if (at.x - rig.x).abs() > BUILD_REACH || (at.y - rig.y).abs() > BUILD_REACH {
             return Err(BuildRefusal::OutOfReach);
+        }
+        // A defence first (Wave 10): half its credits back.
+        if let Some(verdict) = self.check_defence_remove(player_id, at) {
+            return verdict;
         }
         let Some(claim) = self.bases.claim_at(at) else {
             return Err(BuildRefusal::NothingThere);
@@ -665,10 +685,17 @@ impl WorldState {
                 self.bases
                     .update_fixtures(at, |fixtures| fixtures.front = Some((fixture, facing)));
             }
+            Buildable::Defence(kind) => {
+                self.apply_defence_place(player_id, kind, at, cost.credits);
+            }
         }
     }
 
     fn apply_remove(&mut self, player_id: PlayerId, at: TilePosition, refund: &BuildPayment) {
+        if self.apply_defence_remove(at) {
+            self.give_refund(player_id, at, refund);
+            return;
+        }
         if let Some(id) = self.bases.module_at(at).map(|module| module.id) {
             let _removed = self.bases.remove_module(id);
         } else if matches!(

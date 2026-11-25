@@ -37,6 +37,7 @@ pub mod explosive;
 pub mod far_strange;
 pub mod field;
 pub mod fluid;
+pub mod garrison;
 pub mod hash;
 pub mod hazard;
 pub mod hollow;

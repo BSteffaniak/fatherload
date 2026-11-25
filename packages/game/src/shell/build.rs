@@ -5,7 +5,7 @@
 //! [`BUILD_REACH`]), and on the main keyboard the mouse points it. Confirm (or a left click)
 //! places the selected piece, the remove button (X, a right click, a controller's use button)
 //! deconstructs, rotate turns the piece, and previous/next (Z/Q, the wheel, LB/RB) pick from
-//! [`Buildable::PALETTE`]; number keys 1-3 jump to its groups. Every action is checked with
+//! [`Buildable::PALETTE`]; number keys 1-4 jump to its groups (the fourth, the defences, Wave 10). Every action is checked with
 //! [`WorldState::check_build`] first, so a refused one buzzes with its reason instead of being
 //! sent; the host checks it again inside the tick.
 //!
@@ -157,7 +157,9 @@ impl SeatUi {
             draft.jump_to(match key {
                 0 => BuildGroup::Structure,
                 1 => BuildGroup::Interior,
-                _ => BuildGroup::Modules,
+                2 => BuildGroup::Modules,
+                // Wave 10: the fourth key jumps to the defences.
+                _ => BuildGroup::Defences,
             });
         }
         if draft.selected != before {

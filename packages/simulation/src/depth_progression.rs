@@ -463,7 +463,7 @@ impl RigSystem {
 
     /// The boss that hands this system out, if it is a gate's reward and never sold (Wave 8:
     /// the Star Core and the Mycelial Mind; Wave 9: the Leviathan, the Sun Serpent and the
-    /// Glitch; the Heart Key stays on sale until Wave 10 authors the Ancients).
+    /// Glitch; Wave 10: the Gatekeeper Colossus's Heart Key).
     #[must_use]
     pub const fn boss_reward(self) -> Option<crate::descent::DescentBoss> {
         match self {
@@ -475,7 +475,8 @@ impl RigSystem {
             Self::SonarSuite | Self::CryoHull => Some(crate::descent::DescentBoss::Leviathan),
             Self::GravityAnchor => Some(crate::descent::DescentBoss::SunSerpent),
             Self::PhaseDrill => Some(crate::descent::DescentBoss::TheGlitch),
-            Self::HeartKey => None,
+            // Wave 10 ancients-b: the Gatekeeper Colossus's Heart Key (Descent VII's gate).
+            Self::HeartKey => Some(crate::descent::DescentBoss::GatekeeperColossus),
         }
     }
 

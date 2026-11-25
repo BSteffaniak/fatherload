@@ -11,6 +11,7 @@ pub mod drowned;
 pub mod enemies;
 pub mod explosives;
 pub mod far_strange;
+pub mod garrison;
 pub mod hollow;
 pub mod icons;
 pub mod interior;
@@ -565,6 +566,23 @@ pub const ALL: &[&SpriteDef] = &[
     &ancient_city::SHOT_SENTINEL_BOLT,
     &ancient_city::SHOT_READING_BEAM,
     &ancient_city::ARCHIVIST,
+    // Descent VII part B (Wave 10 ancients-b).
+    &garrison::WAR_SENTRY,
+    &garrison::SIEGE_WALKER,
+    &garrison::LANCER_DRONE,
+    &garrison::SEAL_WARDEN,
+    &garrison::GILDED_CRAWLER,
+    &garrison::COLOSSUS_CORE,
+    &garrison::COLOSSUS_HEAD,
+    &garrison::COLOSSUS_FIST,
+    &garrison::COLOSSUS_LEGS,
+    &garrison::SHOT_SENTRY_BOLT,
+    &garrison::SHOT_SIEGE_SHELL,
+    &garrison::SHOT_WARDEN_ORB,
+    &garrison::SHOT_COLOSSUS_BOLT,
+    &garrison::SHOT_FALLING_STONE,
+    &garrison::DEFENCE_TURRET,
+    &garrison::DEFENCE_TRAP,
     &explosives::TIME_BUBBLE,
     &explosives::ICON_TIME_BUBBLE,
     // The deep supplies of Descents IV-VI (Wave 9 progression).

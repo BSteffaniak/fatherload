@@ -18,6 +18,7 @@ mod ancient_city;
 mod distortion;
 mod drowned;
 mod far_strange;
+mod garrison;
 mod hollow;
 mod old_deep;
 
@@ -489,6 +490,23 @@ patches! {
     CityHumLoop => "city_loop_hum",
     CityEngineBedLoop => "city_loop_engine_bed",
     CityStacksLoop => "city_loop_stacks",
+    // Descent VII part B (wave 10 ancients-b), appended at the end so every earlier patch
+    // keeps its seeds.
+    AbTurretShot => "ab_turret_shot",
+    AbTrapZap => "ab_trap_zap",
+    AbKlaxon => "ab_klaxon",
+    AbBayOpen => "ab_bay_open",
+    AbDefenceBreak => "ab_defence_break",
+    AbFistSlam => "ab_fist_slam",
+    AbHallCollapse => "ab_hall_collapse",
+    AbSocketChime => "ab_socket_chime",
+    AbDoorGrind => "ab_door_grind",
+    AbTremor => "ab_tremor",
+    AbGarrisonLoop => "loop_ab_sleeping_garrison",
+    AbSealGateLoop => "loop_ab_seal_gate",
+    AbColossusLoop => "loop_ab_colossus",
+    AbBarracksLoop => "loop_ab_barracks",
+    AbSealHallLoop => "loop_ab_seal_hall",
 }
 
 /// Playback metadata of a patch.
@@ -937,6 +955,33 @@ impl Patch {
             | Self::ClockworkLoop
             | Self::EchoesLoop
             | Self::PrismLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            // Descent VII part B (Wave 10): music and beds loop; the turret and trap are
+            // frequent and small, the fist and the collapse are big.
+            Self::AbGarrisonLoop
+            | Self::AbSealGateLoop
+            | Self::AbColossusLoop
+            | Self::AbBarracksLoop
+            | Self::AbSealHallLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::AbTurretShot | Self::AbTrapZap => PatchInfo::new(Feedback)
+                .instances(4)
+                .send(0.15)
+                .jitter(0.06, 1.0)
+                .priority(3),
+            Self::AbKlaxon | Self::AbSocketChime => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.0, 0.3),
+            Self::AbBayOpen | Self::AbDefenceBreak | Self::AbTremor | Self::AbDoorGrind => {
+                PatchInfo::new(Impact)
+                    .instances(2)
+                    .send(0.35)
+                    .jitter(0.05, 1.0)
+            }
+            Self::AbFistSlam | Self::AbHallCollapse => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.45)
+                .jitter(0.03, 0.5)
+                .priority(8),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -1620,6 +1665,21 @@ impl Patch {
             Self::CityHumLoop => ancient_city::city_hum_bed(rng),
             Self::CityEngineBedLoop => ancient_city::engine_bed(rng),
             Self::CityStacksLoop => ancient_city::stacks_bed(rng),
+            Self::AbTurretShot => garrison::turret_shot(rng),
+            Self::AbTrapZap => garrison::trap_zap(rng),
+            Self::AbKlaxon => garrison::klaxon(rng),
+            Self::AbBayOpen => garrison::bay_open(rng),
+            Self::AbDefenceBreak => garrison::defence_break(rng),
+            Self::AbFistSlam => garrison::fist_slam(rng),
+            Self::AbHallCollapse => garrison::hall_collapse(rng),
+            Self::AbSocketChime => garrison::socket_chime(rng),
+            Self::AbDoorGrind => garrison::door_grind(rng),
+            Self::AbTremor => garrison::tremor(rng),
+            Self::AbGarrisonLoop => garrison::garrison_loop(rng),
+            Self::AbSealGateLoop => garrison::seal_gate_loop(rng),
+            Self::AbColossusLoop => garrison::colossus_loop(rng),
+            Self::AbBarracksLoop => garrison::barracks_bed(rng),
+            Self::AbSealHallLoop => garrison::seal_hall_bed(rng),
         }
     }
 }

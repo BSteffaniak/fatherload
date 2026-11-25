@@ -574,6 +574,9 @@ impl WorldState {
         // The builders' buried city (Wave 10): rides, machinery, the alarm, plinths, vaults,
         // landmarks and the archivists.
         self.advance_ancient_city(next_tick, &mut output);
+        // Descent VII part B (Wave 10): forts and waves, defences, tremors, the Seal Gate and
+        // the Gatekeeper Colossus.
+        self.advance_garrison(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

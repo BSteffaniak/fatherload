@@ -381,6 +381,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::AncientCity {
             what, player_id, ..
         } => (630 + what.code() as u32, player_id),
+        // Descent VII part B (wave 10 ancients-b): 650-669.
+        GameplayEventKind::Garrison {
+            what, player_id, ..
+        } => (650 + what.code() as u32, player_id),
     }
 }
 

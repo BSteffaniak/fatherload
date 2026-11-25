@@ -124,6 +124,15 @@ const FAR_STRANGE: &[LandmarkKind] = &[
     LandmarkKind::Prefabs,
     LandmarkKind::FarStrange,
 ];
+/// The Sleeping Garrison (Wave 10 ancients-b): its forts and the Grand Bastion.
+const GARRISON: &[LandmarkKind] = &[LandmarkKind::Prefabs, LandmarkKind::Garrison];
+/// The Seal Gate (Wave 10 ancients-b): the gate chamber's stratum, with the Seal Court, the
+/// Gatekeeper's hall and the Heart Seal.
+const SEAL_GATE: &[LandmarkKind] = &[
+    LandmarkKind::GateChamber,
+    LandmarkKind::Prefabs,
+    LandmarkKind::Garrison,
+];
 
 /// The Crust's creature tables (Wave 8): each stratum's own natives, with a classic kind or two
 /// staying on from the stratum above or below.
@@ -1541,21 +1550,33 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::SleepingGarrison,
         descent: Descent::Ancients,
         name: "Sleeping Garrison",
-        signature: "Dormant war machines that wake in waves.",
+        signature: "Dormant war machines wake in waves: hold a fort with turrets, barricades and \
+                    traps until the garrison sleeps again.",
         share_per_mille: 200,
         host_band: deep(DeepStratum::AncientMachineLayer),
+        // Wave 10 ancients-b: olive drab and gunmetal, the alarm lamps' red.
         palette: palette(
-            Rgb(88, 92, 84),
-            Rgb(72, 80, 52),
-            Rgb(30, 34, 20),
-            Some(Rgb(255, 60, 40)),
+            Rgb(98, 102, 84),
+            Rgb(76, 84, 60),
+            Rgb(30, 34, 24),
+            Some(Rgb(255, 72, 48)),
         ),
         ores: &[ore(Mythril, 600, 800, 60), ore(Uranium, 400, 600, 30)],
         layer_resource: resource("War Plate", StrategicResourceKind::AncientAlloy),
-        creatures: &[(SentryTurret, 4), (RogueExcavator, 3), (AncientGuardian, 2)],
+        // Wave 10 ancients-b: the garrison's machines; the forts wake them in waves.
+        creatures: &[
+            (EnemyKind::WarSentry, 4),
+            (EnemyKind::LancerDrone, 3),
+            (EnemyKind::SiegeWalker, 1),
+        ],
         hazards: &[(Explosive, 7), (Lava, 1)],
-        music: MusicCue::Ancients,
-        ambience: AmbienceCue::Machines,
+        field: FieldProfile {
+            screen: &[screen(ScreenEffect::Vignette, 220)],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::SleepingGarrison,
+        ambience: AmbienceCue::Barracks,
+        landmarks: GARRISON,
         variants: &["Barracks", "Hangars"],
         ..TEMPLATE
     },
@@ -1563,7 +1584,8 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::TheSealGate,
         descent: Descent::Ancients,
         name: "The Seal Gate",
-        signature: "A gate that opens with the keys of every Descent.",
+        signature: "Tremors shake stones from the ceilings; a gate that opens with the keys of \
+                    every Descent.",
         share_per_mille: 180,
         host_band: deep(DeepStratum::RadioactiveHollow),
         palette: palette(
@@ -1574,11 +1596,16 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Mythril, 600, 800, 70), ore(Platinum, 400, 600, 30)],
         layer_resource: resource("Seal Gold", StrategicResourceKind::AncientAlloy),
-        creatures: &[(AncientGuardian, 2), (SentryTurret, 3)],
+        // Wave 10 ancients-b: the gate's wardens and its gilded crawlers.
+        creatures: &[(EnemyKind::SealWarden, 3), (EnemyKind::GildedCrawler, 3)],
         hazards: &[(MagmaVent, 4), (Explosive, 3)],
-        music: MusicCue::Ancients,
-        ambience: AmbienceCue::Silence,
-        landmarks: WITH_GATE,
+        field: FieldProfile {
+            screen: &[screen(ScreenEffect::Bloom, 160)],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::SealGate,
+        ambience: AmbienceCue::SealHall,
+        landmarks: SEAL_GATE,
         variants: &["Collapsing Hall", "Key Altars"],
         gate: Some(GateDef {
             boss: DescentBoss::GatekeeperColossus,

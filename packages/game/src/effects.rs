@@ -1190,7 +1190,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Distortion { player_id, .. }
         | GameplayEventKind::FarStrange { player_id, .. }
         | GameplayEventKind::Supply { player_id, .. }
-        | GameplayEventKind::AncientCity { player_id, .. } => player_id,
+        | GameplayEventKind::AncientCity { player_id, .. }
+        | GameplayEventKind::Garrison { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

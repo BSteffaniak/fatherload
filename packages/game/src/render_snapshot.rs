@@ -820,6 +820,15 @@ pub struct RenderSnapshot<'w> {
     pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
     /// The builders' buried city (Wave 10): rides, alarms, archivists, star charts.
     pub ancient_city: &'w fatherload_simulation::ancient_city::AncientCity,
+    /// Descent VII part B (Wave 10): forts and waves, defences, the Seal Gate, the Colossus's
+    /// fight, falling stones.
+    pub garrison: &'w fatherload_simulation::garrison::Garrison,
+    /// The Gatekeeper's hall, on Deep Descent worlds.
+    pub colossus_hall: Option<fatherload_simulation::worldgen::TileRect>,
+    /// The Seal Gate's door, on Deep Descent worlds.
+    pub seal_door: Option<fatherload_simulation::worldgen::TileRect>,
+    /// The forts near the local seats (their walls, bays and pylons; Wave 10).
+    pub forts: Vec<fatherload_simulation::worldgen::descent::garrison::Fort>,
 }
 
 /// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
@@ -829,6 +838,30 @@ pub struct DrownedSites {
     pub old_faithful: Option<fatherload_simulation::worldgen::TileRect>,
     pub city: Option<fatherload_simulation::worldgen::descent::drowned::MerrowSite>,
     pub grotto: Option<fatherload_simulation::worldgen::TileRect>,
+}
+
+/// How far round each local rig forts are looked for, tiles (Wave 10).
+const FORT_LOOK_TILES: i32 = 70;
+
+/// The forts round the local seats' rigs (Wave 10: the overlay and the HUD read them).
+#[must_use]
+pub fn forts_near_seats(
+    world: &WorldState,
+    seats: &[LocalSeat],
+) -> Vec<fatherload_simulation::worldgen::descent::garrison::Fort> {
+    let mut forts: Vec<fatherload_simulation::worldgen::descent::garrison::Fort> = Vec::new();
+    for seat in seats {
+        let Some(player) = world.player(seat.player) else {
+            continue;
+        };
+        let tile = player.tile_in(world.frame());
+        for fort in world.forts_near(tile, FORT_LOOK_TILES) {
+            if !forts.iter().any(|known| known.pylon() == fort.pylon()) {
+                forts.push(fort);
+            }
+        }
+    }
+    forts
 }
 
 /// Where Descent II's set pieces stand (Wave 8; `None` in worlds without them).
@@ -866,6 +899,8 @@ impl<'w> RenderSnapshot<'w> {
                 view_snapshot(world, seat_index, seat.player, viewport, world_scale)
             })
             .collect();
+        // The forts round the local seats (Wave 10).
+        let forts = forts_near_seats(world, seats);
         Self {
             effects: crate::screen_fx::EffectsIntensity::Full,
             tick: world.simulation_tick().get(),
@@ -964,6 +999,10 @@ impl<'w> RenderSnapshot<'w> {
             far_strange: world.far_strange(),
             glitch_arena: world.glitch_arena(),
             ancient_city: world.ancient_city(),
+            garrison: world.garrison(),
+            colossus_hall: world.colossus_hall(),
+            seal_door: world.seal_door(),
+            forts,
             expedition_lead: crate::shell::expedition::next_lead(world),
             people_day: world.people_clock().day,
             powered_modules: world
