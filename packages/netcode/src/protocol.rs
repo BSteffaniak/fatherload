@@ -222,7 +222,7 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// (`GameplayEventKind::Supply`), the appended `FarStrangeRefusal::NoFilterGlass`, and the
 /// appended `BuildingStyle::{Coral, Jungle, Machine}` in village records.
 /// Version 18 (wave 10 ancients-a, Descent VII strata 1-3, the builders' buried city):
-/// * `TileKind::City` (the `0x1A00` family: city stone, tower glass, tram rails, platforms,
+/// * `TileKind::City` (the `0x1C00` family: city stone, tower glass, tram rails, platforms,
 ///   lamps, alloy ore, lift rails, archivist cores, engine plating, belts, piston housings,
 ///   engine core ore, pipes, archive shelving and stone, star glass and chart plinths) in
 ///   terrain ops and keyframes;

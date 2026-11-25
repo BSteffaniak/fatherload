@@ -6496,7 +6496,7 @@ masonry), and the library cuts through one. Vaults are hand-authored layouts
   `CitySchedule` (saved, never hashed or replicated, cleared in client keyframes): crusher
   hits, the ore crawlers carry, launches, the logs each archivist has remarked on, and the
   tick's ride sticks (not saved).
-- Tiles: `TileKind::City(CityTile)`, a new family at code base **`0x1A00`** (19 tiles; the
+- Tiles: `TileKind::City(CityTile)`, a new family at code base **`0x1C00`** (19 tiles; the
   machinery's fixed parts and the plinths are indestructible and blast-proof).
 - Appended: nine `EnemyKind`s (`MaintenanceDrone` .. `IndexSpider`, with contact boxes matching
   their sprites), two `ShotKind`s (`SentinelBolt`, `ReadingBeam`), `MusicCue::{BuriedMegacity,

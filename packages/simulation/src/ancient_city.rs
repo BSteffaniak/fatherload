@@ -36,9 +36,9 @@ pub use archivist::Archivist;
 pub use movers::{CityRide, MoverKind, MoverRef};
 
 /// Kind-code range of [`crate::terrain::TileKind::City`] tiles in
-/// [`crate::terrain::Tile::code`] (`0x1A00 | CityTile::code`), clear of every other family
+/// [`crate::terrain::Tile::code`] (`0x1C00 | CityTile::code`), clear of every other family
 /// (Wave 10 ancients-a).
-pub const CITY_TILE_CODE_BASE: u64 = 0x1A00;
+pub const CITY_TILE_CODE_BASE: u64 = 0x1C00;
 
 /// A tile of the builders' buried city ([`crate::terrain::TileKind::City`], V11 worlds only).
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]

@@ -909,7 +909,7 @@ impl Tile {
                 Some(tile) => TileKind::Warped(tile),
                 None => return None,
             },
-            0x1A00..=0x1AFF => match crate::ancient_city::CityTile::from_code(variant as u64) {
+            0x1C00..=0x1CFF => match crate::ancient_city::CityTile::from_code(variant as u64) {
                 Some(tile) => TileKind::City(tile),
                 None => return None,
             },
