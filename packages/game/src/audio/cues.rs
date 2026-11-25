@@ -2391,6 +2391,13 @@ mod tests {
                     village: fatherload_simulation::village::VillageId(2),
                     service: VillageService::TradingPost,
                 },
+                // A clean touchdown on a round body is the landing's own thud (Wave 11).
+                GameplayEventKind::Planet {
+                    what: fatherload_simulation::planet::landing::PlanetEvent::Landed,
+                    player_id: Some(PlayerId::new(1)),
+                    x: 0,
+                    y: 0,
+                },
                 GameplayEventKind::PeopleInteraction {
                     player_id: PlayerId::new(1)
                 },
