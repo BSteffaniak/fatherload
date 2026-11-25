@@ -126,20 +126,28 @@ pub const fn exposure(gear: &ShipGear, hazard: PlanetHazard, severity: u8) -> f3
     }
 }
 
-/// Heat: hull a second per severity.
-pub const HEAT_HULL_PER_SECOND: f32 = 1.2;
-/// Cold: fuel a second per severity (the heaters).
-pub const COLD_FUEL_PER_SECOND: f32 = 0.6;
+// Heat and the fuel drains are shares of the rig's own hull and tank (as the supply line's
+// strain is), so a late rig's big hull and tank do not dwarf them.
+
+/// Heat: a share of the rig's hull a second per severity (severe, bare: the hull is gone in
+/// about twelve minutes).
+pub const HEAT_HULL_SHARE_PER_SECOND: f32 = 0.000_7;
+/// Cold: a share of the tank a second per severity (the heaters; severe, bare: about 17
+/// minutes from full).
+pub const COLD_FUEL_SHARE_PER_SECOND: f32 = 0.000_5;
 /// Toxic air: extra air a second per severity (the seals corrode).
 pub const TOXIC_AIR_PER_SECOND: f32 = 1.0;
-/// High gravity: extra fuel a second of thrust per severity.
-pub const GRAVITY_FUEL_PER_SECOND: f32 = 1.0;
+/// High gravity: an extra share of the tank a second of thrust per severity.
+pub const GRAVITY_FUEL_SHARE_PER_SECOND: f32 = 0.000_5;
 
 /// What a world's hazards take from a rig in one second.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct HazardDrain {
+    /// A share of the rig's hull ([`crate::Player::max_hull`]).
     pub hull: f32,
+    /// A share of the rig's tank.
     pub fuel: f32,
+    /// Seconds of air.
     pub air: f32,
     /// Tags biting (not fully countered), as [`PlanetHazard::bit`]s.
     pub biting: u8,
@@ -158,13 +166,14 @@ pub fn drain(hazards: &[(PlanetHazard, u8)], gear: &ShipGear, thrusting: bool) -
         let weight = f32::from(severity) * share;
         match hazard {
             PlanetHazard::Heat => {
-                out.hull = (HEAT_HULL_PER_SECOND * weight).mul_add(gear.damage_scale(), out.hull);
+                out.hull =
+                    (HEAT_HULL_SHARE_PER_SECOND * weight).mul_add(gear.damage_scale(), out.hull);
             }
-            PlanetHazard::Cold => out.fuel = COLD_FUEL_PER_SECOND.mul_add(weight, out.fuel),
+            PlanetHazard::Cold => out.fuel = COLD_FUEL_SHARE_PER_SECOND.mul_add(weight, out.fuel),
             PlanetHazard::ToxicAir => out.air = TOXIC_AIR_PER_SECOND.mul_add(weight, out.air),
             PlanetHazard::HighGravity => {
                 if thrusting {
-                    out.fuel = GRAVITY_FUEL_PER_SECOND.mul_add(weight, out.fuel);
+                    out.fuel = GRAVITY_FUEL_SHARE_PER_SECOND.mul_add(weight, out.fuel);
                 }
             }
         }

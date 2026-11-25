@@ -802,8 +802,11 @@ impl WorldState {
             return;
         };
         let taken = drain(&hazards, &player.hazard_gear.ship, thrusting);
+        // The hull and fuel drains are shares of the rig's own hull and tank.
+        let hull_lost = taken.hull * player.max_hull() * seconds;
         if !infinite_fuel {
-            player.fuel = taken.fuel.mul_add(-seconds, player.fuel).max(0.0);
+            let fuel_lost = taken.fuel * player.fuel_capacity * seconds;
+            player.fuel = (player.fuel - fuel_lost).max(0.0);
         }
         player.flight.air = taken.air.mul_add(-seconds, player.flight.air).max(0.0);
         let warned = match self.stations.warned.get(&player_id) {
@@ -828,7 +831,7 @@ impl WorldState {
                 ));
             }
         }
-        if taken.hull > 0.0 && self.damage_player(player_id, taken.hull * seconds) {
+        if hull_lost > 0.0 && self.damage_player(player_id, hull_lost) {
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
         }
     }

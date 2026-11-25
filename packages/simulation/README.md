@@ -9879,9 +9879,14 @@ waypoint on it.
 **cold** (<= -90 °C, severe <= -170 °C), **toxic air** (spores mild, toxic severe), **high
 gravity** (>= 1.4 g, severe >= 1.9 g); the home world and the Moon have none. On a body's ground
 (`advance_body_flight` -> `body_hazards`, in the body store's ground pass) a rig without the
-counter pays every second: heat 1.2 hull a severity (scaled by the hull line), cold 0.6 fuel,
-toxic 1.0 extra air, high gravity 1.0 fuel a second of thrust. Gear below the tag's severity
-halves it; at or over, none. `HazardBiting` fires once a landing per tag. Test mode's infinite
+counter pays every second, per severity: heat 0.07 % of its hull (scaled by the hull line),
+cold 0.05 % of its tank, toxic air 1 s of extra air, high gravity 0.05 % of its tank a second
+of thrust. Shares of the rig's own hull and tank (review fix: the first cut's fixed 1.2 hull
+and 0.6 fuel a second were dwarfed by a late rig's hull and tank, so cold and gravity gear
+hardly mattered): a severe hot world takes a bare hull in about twelve minutes, a severe cold
+one a full tank in about seventeen. Gear below the tag's severity halves it; at or over,
+none. `HazardBiting` fires once a landing for every tag that bites (review fix: it named only
+the first, and did not re-arm when landing on the same world again). Test mode's infinite
 fuel covers the fuel drains.
 
 ### State, formats and events
@@ -9990,6 +9995,17 @@ the worlds' hazard tags ask for.
   (a quota in that system); a per-body/system economy folds into `market::economy_percent`.
 * Station music and a station ambience patch are not added (the audio director plays the
   place's sound; stations reuse existing cues).
+* **Open for the integrator (review): the space economy's scale.** The first-hour model starts
+  from 0 credits, but credits are one purse: a rig reaches space after the Heart, where Descent
+  VIII's commonest ore is worth about 2,000 a unit (`deep_ore_value(7, 0)`) and the top home
+  tiers cost 300,000-560,000. Against that, ship-line tier 1 (5,200-8,000), planet gear
+  (2,000-7,800) and missions (1,000-3,500) are small change, and stations buy home ore at
+  100-135 % of its home value, so hauling Heart ore to an alien station out-earns any bounty.
+  Before Wave 13 ships, the integrator (with the planet themes' ore values) should pick one
+  space credit scale: either scale every station figure (ship lines, gear, alien tech, goods,
+  rewards, rounds, fuel and repair) by one constant matched to a late rig's income, or keep
+  space prices and pay home ore at stations far under its home value. The model and its
+  30-60 minute test then measure from a late rig's purse, not from nothing.
 
 ## Replication
 

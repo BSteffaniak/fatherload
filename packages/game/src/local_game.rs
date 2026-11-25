@@ -1960,7 +1960,9 @@ impl LocalGame {
                 E::GoodsSold => format!("Goods sold for {detail} credits."),
                 E::OreSold => format!("Ore sold for {detail} credits."),
                 E::MissionAccepted => {
-                    format!("Mission accepted: {detail} credits on completion. No clock runs.")
+                    format!(
+                        "Mission accepted: {detail} credits on completion. Waypoint set; no clock runs."
+                    )
                 }
                 E::MissionProgress => format!("Mission progress: {detail}."),
                 E::MissionPaid => format!("Bounty paid: {detail} credits."),
