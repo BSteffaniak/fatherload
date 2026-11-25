@@ -234,6 +234,17 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             touch_view: crate::input::touch::TouchView::default(),
         };
         (scene.setup)(&mut stage);
+        // A staged world starts wherever the scene puts it, so the story's "A new Descent" card
+        // (Wave 10) would cover every deep scene: only the story's own scenes keep it.
+        if !scene.name.starts_with("story_") {
+            for ui in &mut stage.game.shell.seats {
+                if ui.story_moment.as_ref().is_some_and(|moment| {
+                    moment.kind == crate::shell::StoryMomentKind::DescentReached
+                }) {
+                    ui.story_moment = None;
+                }
+            }
+        }
         let (report, gallery, ui_sheet, prompt_sheet, rig_sheet, touch_view) = (
             stage.report,
             stage.gallery,
