@@ -1041,6 +1041,158 @@ generalized; `Blast::explosive` for any explosive kind: linear falloff, line of 
 bodies), `steer_toward` (accelerate toward a point with a speed cap) and `find_tile_path` (a
 budgeted, deterministic 4-connected BFS over open tiles for creature AI).
 
+## Wave 11 space-gen: the seamless space generator (`src/space.rs`, `src/space/*`)
+
+Expansion plan §15 F12: above the Moon the world keeps going, generated per **space sector**
+as a pure function of `(world seed, sector)`. Pure data and queries; no rendering, no world
+state, nothing saved or replicated (every peer generates the same bytes). Only worlds whose
+generator has space get it: `space::has_space(generator)` is V11 (`has_descents`), and
+`Space::for_world(settings)` returns `None` for V1-V10. No other generator, golden digest, save
+format or protocol changed.
+
+### Units and the sector size
+
+- Positions are **absolute `i64` tiles** (`SpaceTile`), converted exactly to and from
+  `WorldPos` (`SpaceTile::pos` / `SpaceTile::of_pos`, `From<WorldPos>`); never `f32`
+  absolute coordinates. y grows down, as everywhere.
+- A space sector is `SPACE_SECTOR_TILES` = 2^22 = 4,194,304 tiles a side
+  (`SPACE_SECTOR_WORLD_SECTORS` = 8,192 `WorldPos` sectors), coordinates `SpaceSector { x:
+  i32, y: i32 }` with home at `(0, 0)` (`space::HOME_SECTOR` = `star_chart::HOME_SECTOR`).
+  Sized for the Star Drive: a system fits in one 2^21-tile cell (`SYSTEM_MAX_EXTENT` ≈ 1.0 M
+  tiles from its star), so cruise (a system in a minute or two, ~10^4 tiles/s at the top of
+  its ramp) stays within a sector or two and warp crosses sectors (charts lie 3-48 sectors
+  out).
+- Placement uses integer trigonometry (`space::cos_sin`, Q30, Taylor to x^13, error < 1e-9)
+  so native and WASM place every planet on the same tile; `f64` is used only for distances
+  and the gravity/time-scale answers (IEEE `+ - * / sqrt`, deterministic too).
+
+### What a sector holds (`space::generate_sector`)
+
+- **Cells:** 2 x 2 per sector. 1-3 hold a star system (45 % / 40 % / 15 %), each staying
+  inside its cell (centre jittered by what its extent leaves); the free cells hold the
+  interstellar things. A sector's first system always has a planet (charts point at it).
+- **Stars** (`Star`, class = `star_chart::StarClass`, so charts and space share it): radius,
+  heat radius (hulls burn inside; no orbit starts there), temperature, light (per mille of
+  home's sun), flare period and phase (white dwarfs never flare, red dwarfs often), surface
+  gravity. Twin suns are two stars around a barycentre.
+- **Bodies** (`SpaceBody`; `BodyKind::{Planet, Moon, CraterRock, HomeWorld, HomeMoon}`): static
+  orbits (radius + angle, never moving), placed outward in **non-overlapping annuli** (each
+  planet's annulus is its orbit ± its `extent`: moons, rings and a margin). Planets
+  1,500-10,000 tiles, moons and crater rocks 400-1,000 (`MIN_LANDABLE_RADIUS` 400; smaller is
+  an asteroid). Each carries its **theme** (`Theme`: the twelve §16 themes plus `Barren` for
+  small rocks and `Home`/`Moon`), picked by orbit temperature (equilibrium temperature from the
+  star's class, radius and distance, scaled so home's orbit is temperate), and its physical
+  parameters: `gravity_milli_g`, `day_seconds` (0 = tidally locked), `atmosphere` (vacuum,
+  thin, breathable, thick, toxic, spores, scalding), `temperature_c`, `surface_columns` (≈ 2πR,
+  a multiple of 32), `rows` (= the radius; the polar track halves columns toward the core),
+  `strata_rows` (§16: 800-2,500 for planets), an optional `Ring`, and a `ground_seed` for Wave
+  12's ground generator. Names: the system's name + a numeral, moons a letter
+  (`StarSystem::body_name`).
+- **Asteroid belts** (`AsteroidBelt`): annuli with a density, a favoured `AsteroidOre` (iron,
+  nickel, ice, cobalt, platinum, iridium, voidglass; Wave 12 maps them to items) and angular
+  segments of ~8,192 tiles. Asteroids are generated **per segment on demand**
+  (`asteroids_in_segment`, a pure function, so `AsteroidId { sector, system, belt, segment,
+  index }` names one rock forever): 3-399 tiles, an ore and a yield.
+- **Comets** (nucleus + tail end pointing straight away from the star), **derelicts**
+  (freighter, probe, builders' hulk, wreck field; a loot seed) in a system's outer band and
+  adrift in free cells, **stations** (`StationKind` trade post / shipyard / outpost / relay;
+  placeholders for Wave 12's hubs) parked 60° ahead of or behind a planet on its orbit.
+- **Nebulae:** a nebula star's own (around its system) and interstellar ones on a 4-sector
+  grid (`NEBULA_CELL_SECTORS`; 0.8-2.4 sectors in radius, never over home), each with a colour
+  and a sensor **fog** (per mille at the centre, `fog * (1 - (d/r)²)`).
+- **Black holes** (7 % of sectors with a free cell, never within 3 sectors of home): horizon,
+  lensing radius (the screen effect's), time scale at the horizon (`time_scale_at` eases to 1
+  at the lensing rim), gravity.
+- **Wormholes:** regions of 8 x 8 sectors (`WORMHOLE_REGION_SECTORS`) are paired by an
+  **involution** (`partner` flips bits 2-4 of the region coordinates, chosen by a hash of the
+  bits it leaves alone, so `partner(partner(r)) == r`, never `r`): mouths lie 24-150 sectors
+  apart, 45 % of pairs exist, each mouth sits in its sector's first free cell and knows its
+  exit (`WormholeMouth::{exit, exit_sector}`). Both ends are found from either side with no
+  search.
+
+### Home (`space/home.rs`)
+
+The home sector holds one system at its centre: a yellow sun (24,000 tiles), the **home
+world** (body 0, `HOME_WORLD_BODY`, nominal radius 10,000, 1 g, orbit 260,000 straight "up"
+from the sun), the **Moon** (body 1, `MOON_BODY`, radius 640, 36,000 tiles straight up from
+home), then the generator's own sister planets outward. These two are space-side stand-ins
+(map, scanner, gravity, the crossing); their ground stays the existing world and Moon,
+unchanged. `Space::home_departure()` is where a craft leaving the top of the home world's sky
+enters space: 256 tiles above the Moon's top, straight up.
+
+### Star charts lead to real systems (`star_chart.rs`, adjusted)
+
+`chart_at_site` keeps its sector ring and depth rule, then asks the generator
+(`space::chart_target`) which of that sector's systems with worlds it names: the chart's
+`system` is now the generator's `StarSystem::id`, its `class` and `worlds` the generator's star
+class and planet count, its `name` the system's name. `space::resolve_chart` /
+`Space::chart_system` maps a chart to `SystemRef { sector, system }`; a chart read before this
+wave (id hashed from its plinth) resolves to a system of its sector picked by that id. The
+`StarChart` format is unchanged (no save bump); two plinths naming the same star add it once.
+`StarClass` gained `Default` (yellow).
+
+### Queries (`Space`, `space/query.rs`)
+
+`Space::new(seed)` keeps a bounded LRU cache of generated sectors (`CACHE_SECTORS` 96, behind
+a `Mutex` so queries take `&self`; cloning gives an empty cache; the cache is never state).
+Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped to
+`MAX_QUERY_RADIUS` (4 sectors):
+
+- `sector`, `sectors_near`, `systems_near` (nearest first), `system(SystemRef)`,
+  `body(SpaceBodyId)`, `bodies_near` (nearest surface first, with `BodyHit::altitude`);
+- `gravity_sources_near(at) -> Vec<GravitySource>` (stars, bodies, black holes whose pull
+  reaches: `influence` is where it falls to 2 milli-g, capped at one sector) with
+  `GravitySource::pull_g(WorldPos)` (inverse square outside, linear inside, in g, from the
+  exact `WorldPos` delta) and `strength()` for blending; `gravity_g(at)` sums them;
+- `nearest_station(at, max_sectors)` (ring by ring), `asteroids_near(at, radius)` (only the
+  segments the disc can touch; equal to a brute-force search, tested);
+- `fog_at`, `nebula_at` (fog + colour), `time_scale_at`, `wormhole_at`;
+- `scan(at, range)`: stars (x4 range), black holes (x2), bodies, stations, derelicts, comets
+  and wormholes; fog where the scanner is cuts its range by up to 70 %, fog at a target by up
+  to 50 % more; each `ScanContact` has a signal strength;
+- `home_system`, `home_world`, `moon`, `home_departure`, `chart_system`.
+
+### Report, tests and numbers
+
+- `fatherload --space-report [--seed N] [--sectors R]` (`space::report::space_report`, plus
+  timing in the CLI). Default seed, 8 sectors (289): 494 systems (red 158, yellow 129, twin
+  74, white 51, nebula 47, blue 35), ~1,740 planets, ~1,980 moons, ~290 crater rocks; every
+  §16 theme within 1 sector of home; 310 belts, 329 comets, 388 derelicts, 237 stations, 23
+  black holes, 55 nebulae, 2 wormhole pairs.
+- **Speed:** a sector generates in ~3 µs on average, ~10 µs at worst (release); 1,089 sectors
+  in 3.2 ms. A release-only test asserts < 3 ms per sector.
+- `GOLDEN_SPACE_DIGEST` (`0xf303_d220_59a6_d7db`) pins the 25 sectors within two of home on
+  the default seed (`StateHasher` over the serialized sectors). Change it only on purpose.
+- Tests (`space/tests.rs`, `space/trig.rs`): same seed gives the same bytes (postcard) and
+  different seeds differ, including far sectors at the `i32` extremes; the cache equals the
+  generator; only V11 has space; systems well formed (inside their cell, the extent bound,
+  orbits where their radius says, star-orbit annuli and moon annuli never overlap, nothing
+  inside a star's heat, radii in range, columns ≈ 2πR, stations/comets/derelicts clear of
+  bodies, interstellar things clear of systems, systems clear of each other) over 81 sectors x
+  4 seeds; every planet theme within 3 sectors of home on 8 seeds; the home layout; every
+  chart (360 sites, 3 seeds) resolves to a real system matching its id, class, worlds and
+  name, legacy ids too; wormholes pair both ways and the partner map is an involution;
+  asteroid queries equal brute force; gravity is ~1 g on the home world, weakens with height
+  and fades inside; the scanner sees the Moon and the sun from the departure point; fog and
+  time dilation; the cache bound; the report.
+
+### Seams (TODO-SEAM for the integrator)
+
+- **w11-regions:** `SpaceBodyId { sector, system, body }` is the payload of `place::BodyId`'s
+  space variant; `BodyId::Home` maps to `HOME_WORLD_BODY` and `BodyId::Moon` to `MOON_BODY`.
+  Unify (re-export or `From` both ways).
+- **w11-polar / planet:** read `SpaceBody::{radius, rows, surface_columns, strata_rows,
+  gravity_milli_g, ring}`; if the polar grid wants a different column rounding, change
+  `space::surface_columns` (it moves the golden digest).
+- **w11-flight:** gravity via `gravity_sources_near` / `pull_g` (in g; scale to px/s² with
+  the home world's gravity), the departure point, `wormhole_at` for transit, `time_scale_at`,
+  `fog_at` for the nav HUD, `nearest_station` for docking, `asteroids_near` for mining from
+  flight. Keep one `Space` per world (built from the world's settings) for its cache.
+- **w11-space-render:** star colours from `StarClass::colour`, nebula colours and fog, comet
+  tails, rings, black-hole lensing radii, `Atmosphere::visible` for the rim glow.
+- Space is not yet wired into `WorldState` (no accessor), so no world state, save or protocol
+  changed.
+
 ## Replication of entities
 
 Entities replicate per client as deltas: the host keeps each client's `(EntityId, revision)`

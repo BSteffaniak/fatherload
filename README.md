@@ -671,6 +671,16 @@ stories each village grows, nearest town first:
 cargo run --release --bin fatherload -- --village-report [--seed 7] [--count 8]
 ```
 
+Space review (Wave 11, no window opens): the generated space around home within `--sectors`
+space sectors (Chebyshev; default 4): systems per star class, planets per system, bodies per
+kind and theme (with the nearest sector each theme appears in), a radius histogram, belts,
+comets, stations, derelicts, black holes, nebulae, wormhole pairs, the home departure point
+and how long generation took:
+
+```bash
+cargo run --release --bin fatherload -- --space-report [--seed 7] [--sectors 8]
+```
+
 ### Points of interest
 
 Hand-built places are stamped into every world (generator v2 and later; worlds and saves from
