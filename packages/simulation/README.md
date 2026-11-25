@@ -1193,6 +1193,7 @@ Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped 
   tails, rings, black-hole lensing radii, `Atmosphere::visible` for the rim glow.
 - (Wired in the Wave 11 integration: see "Wave 11 integration" below. Space is still never
   state: `Space::shared(seed)` is a process-wide cache per seed.)
+
 ## Wave 11 space-render: space and round bodies on screen (`game/src/rendering/space.rs`, `game/src/rendering/space/*`)
 
 The game-side drawing of space and of round bodies (expansion plan F12). Nothing in the
@@ -6721,6 +6722,7 @@ Stars, Sleeping Garrison and the Seal Gate (the Ancients track fills them).
 - **Still open**: expeditions are not yet stressful past Descent I (2-10 % of the tank: the
   deep tanks dwarf a Descent's climb; making them bite is a fuel economy change, reported by
   `balance_warnings`); the new settlements' quest arcs (a content track's).
+
 ## Wave 10 ancients-a: Descent VII part A, the builders' buried city (`src/ancient_city.rs`, `src/ancient_city/{movers,archivist}.rs`, `src/star_chart.rs`, `src/world/ancient_city.rs`, `src/world/enemies/ancient_city.rs`, `src/worldgen/descent/ancient_city.rs`)
 
 Expansion plan §13-§14, Descent VII strata 1-3: the builders' buried world, where the story
@@ -7894,6 +7896,7 @@ from `WorldOp::StoreTile`; client: digest-checked store edits). Scenes: `place_b
 * Infrastructure, scanner markers and collapse warnings are world lists (home only; building
   away from home is refused).
 * `PROTOCOL_VERSION` 19, save format 15 (one bump each).
+
 ## Wave 11 polar: round bodies, curved tiles, radial gravity and planet ground (`src/polar.rs`, `src/polar/trig.rs`, `src/planet.rs`, `src/planet/{theme,landing}.rs`, `src/world/planet.rs`, expansion plan F12)
 
 The polar track of Wave 11 (space foundations). It owns `simulation::polar` (geometry) and
@@ -8095,6 +8098,7 @@ On a round body nothing turns the craft but the player (gravity never rotates it
   way round. The terrain itself is unaffected (`slot()` wraps). The fix belongs with F11's
   per-body regions: wrap tile keys into `0..W0` where they are stored and compare tiles
   modulo the lap. Parked crew rigs are not lap-wrapped either.
+
 ## Wave 11 flight: the Star Drive, rotation in space, docking, life support and the nav HUD (`src/flight.rs`, `src/flight/{space,physics,nav}.rs`, `src/world/flight.rs`)
 
 The flight track of Wave 11 (expansion plan F12 "Flight in space", §18 decision 1 and 4). A
@@ -8359,6 +8363,7 @@ at stations and lands on worlds. Life support and the nav HUD come with it.
 - Scenes (`scene_capture/flight_scenes.rs`): `space_leaving_home`, `space_full_turn`,
   `space_cruise`, `space_warp`, `space_nav_hud`, `space_nav_chart`, `space_docking`,
   `space_station`, `space_reentry`, `space_landed`, `space_split_screen`, and `touch_space`.
+
 ## Wave 11 carryover: the Wave 10 leftovers
 
 The open items of the Wave 10 reports, closed (`ancient_city::questions`, `world/ancient_city.rs`,
@@ -8882,6 +8887,244 @@ tick rate agree. No generation changed: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_
   off at its right edge).
 - The mined-rock record drops its lowest-keyed rock past `MAX_MINED_RECORDS`, not the oldest
   (the record keeps no ages; the docs said "oldest").
+
+## Wave 12 bodylife: living bodies (`src/bodylife.rs`, `src/bodylife/{clock,weather,climate,market}.rs`, `src/planet/hooks.rs`, `src/world/bodylife.rs`)
+
+Expansion plan §16 WP-SPACE ("each a world like the home ground level: ... weather, day
+length, gravity strength"). Every landable body gets a life of its own: its clock and day,
+weather, climate and air, gravity and economy, and the planet theme framework that the theme
+tracks build their worlds on.
+
+**Nothing new is stored, saved or replicated.** A body's life (`BodyLife`) is a pure function
+of the world seed, the space body (`space::SpaceBody`: day length, mean temperature,
+atmosphere, gravity, ground seed) and world time, memoized per process
+(`world::body_life_of`). Every peer reads the same hour, weather and prices from the same tick
+at every tick rate. Bodies run on **world time by the tick** (`WorldState::body_millis`,
+`millis_at(tick)`): a night slept away at home jumps the home clock only. Scenes and tests set
+it with `set_body_millis` (doc-hidden). A lone planet world (`new_planet_world`) gets a life
+too (`BodyLife::of_planet`: the theme's typical climate, a 20-minute day).
+
+### The clock (`bodylife::clock::BodyClock`)
+
+- `BodyClock::new(day_seconds, columns, seed)`: the space body's day (480-2,400 s; `0` is
+  **tidally locked**), its columns and a seeded phase.
+- `local_permille(millis, column)`: local time, thousandths of a day from local midnight (500
+  is noon). The hour advances with the column, so noon sweeps round the body once a day and a
+  quarter lap is a quarter day; columns wrap. Two seats on two bodies (or at two columns of
+  one) read their own hour.
+- **Tidally locked**: column 0 has its star overhead forever, half a lap round is eternal
+  midnight, the terminators lie a quarter lap either way; the hour never moves.
+- `slice`, `phase` (the home clock's `DayPhase`), `hours_minutes`, `day`, `local_day`
+  (markets turn over at local midnight), `elevation` (the sun's sine, deterministic trig),
+  `sun_angle` (from the local up, clockwise), `turn` (column 0's continuous local time, what
+  the renderer lights by), `daylight(millis, column, night)` (per mille, a smooth twilight
+  between `NIGHT_ELEVATION` and `DAY_ELEVATION`), `millis_when(after, column, permille)` and
+  `column_at(millis, permille)` (scenes, tests).
+
+### Weather (`bodylife::weather`)
+
+- **The registry** `WEATHER_REGISTRY: &[&[WeatherKind]]` is a list of per-track lists; every
+  kind carries its own `WeatherId` from its track's range (bodylife `0..=63`, planets-a
+  `64..=127`, planets-b `128..=191`, aliens `192..=223`, stations `224..=239`, hostiles
+  `240..=255`, later waves 256+). A theme track defines `pub const MY_WEATHER: &[WeatherKind]`
+  and appends `MY_WEATHER` to the registry; `weather_kind(id)` (const) finds it, and unknown
+  ids read as clear.
+- A `WeatherKind` is data: `needs_air`, `night_only`, sustained `wind` and `gust` (px/s),
+  `visibility_permille`, `light_permille`, `temperature_c`, `hull_damage_milli` and
+  `suit_damage_milli` (a second, under the open sky), `fouls_air`, its `look`
+  (`WeatherParticles::{None, Rain, Snow, Dust, Ash, Spores, Aurora}`, append only: the game
+  matches every variant; colour, fog colour, sky glow) and its ambience `sound` name.
+- **This track's generic kinds**: `CLEAR` (0), `STORM` (1: rain and gales, gloom and fog, and
+  a little hail that stings a rig or pilot left in the open), `SNOW` (2: drifting snow,
+  -28 °C, white fog), `AURORA` (3: night-only curtains that light the dark). Sandstorms, ash
+  fall, acid rain, spore drift and the rest are the theme tracks' to register.
+- **The forecast** `forecast(seed, table, atmosphere, millis, night)`: time is cut into
+  `SPELL_MILLIS` (150 s) spells. Each spell's kind is drawn from the theme's weather table by
+  a hash of the body's seed and the spell (an airless body gets only kinds that need no air).
+  A kind fades in and out over `RAMP_MILLIS` (20 s) where the spell before or after differs.
+  The wind blows one way a spell and gusts as an integer triangle wave (`GUST_MILLIS`); thin
+  air pushes less, thick air more (`air_push_permille`). `WeatherNow` carries the kind,
+  intensity, wind, visibility, light, temperature change, hull and suit damage and fouled
+  air. `next_spell_of` finds the next spell of a kind (scenes, tests, an outlook).
+
+### Climate and air (`bodylife::climate::BodyClimate`)
+
+- **Temperature**: the body's mean (the space generator's: its star at its distance plus
+  theme and air), a day-night swing by its air (`day_swing_c`: bare rock ±85 °C, a thick sky
+  ±5 °C; a locked body's sides swing half again as far) and the weather's change. Underground
+  the swing and the weather fade within `SKIN_ROWS` (24) while the inner heat rises
+  quadratically to `core_c()` at the core chamber (bigger, heavier bodies keep more; themes
+  add `ThemeClimate::core_bias_c`).
+- **Heat and cold replace the home bands on a body**: every `HEAT_STEP_C` (45 °C) over
+  `HEAT_START_C` (70 °C) is a heat level (`HEAT_UNITS_PER_LEVEL` units; the radiator and heat
+  shielding cover them as at home), every `COLD_STEP_C` (22 °C) under `COLD_START_C` (-40 °C)
+  a cold level (the de-icer covers them). The tick's hazard pass reads `body_heat_units_at`
+  and `body_cold_at` for rigs, and the pilot's suit reads the same (`pilot_gear`); the classic
+  `crust::heat_danger_units` and the sky's cold apply only off a body.
+- **Pressure** (kPa: `surface_pressure_kpa` by air, scaled by gravity, rising underground) is a
+  reading for the HUD.
+- **Air**: breathable only under a breathable atmosphere and not while the weather fouls it.
+  A pilot on foot breathes there (`pilot_air_at`; else `Thin`: the suit's oxygen, the rig's
+  air line), and the rig's life support refills only there (`advance_body_flight`, per rig,
+  where it stands).
+
+### Weather in play (`world/bodylife.rs`)
+
+- Under the open sky (`open_sky_at`: nothing solid up to the strip's top, within
+  `SHELTER_DEPTH_ROWS` of the surface; caves, shafts and overhangs shelter):
+  - an **airborne rig** moves relative to the wind's air (`movement.rs`: the field path steps
+    the velocity relative to the air, the classic path coasts with it like the Inner Sky's
+    wind). It is tick-rate safe (`the_wind_drifts_the_same_at_every_tick_rate`);
+  - an **airborne pilot** is nudged at `PILOT_WIND_SHARE` where its box fits, and the suit
+    takes the weather's suit damage (`pilot_weather`);
+  - a **rig** takes the weather's hull damage through its mitigation (the hazard pass).
+- `body_visibility_at(x, y)`: the share of a clear day's sight (TODO-SEAM w12-aliens: scale
+  creatures' line-of-sight noticing by it).
+- **Events** (netcode 880-899): `GameplayEventKind::BodyLife { what: BodyLifeEvent, player_id,
+  detail }`: `WeatherTurned` (detail: the new weather id), `Dawn` and `Dusk` at the player's
+  column (edges between the tick's time and the next's, so every tick rate hears each once),
+  and `Sold` (detail: credits). They run in each body store's ground pass and in a lone
+  planet world.
+
+### Gravity (one number per body)
+
+`BodyLife::gravity_milli` (`effective_gravity_milli`: the space body's gravity within the
+ground's playable 0.25-2.5 g) is the ground's field-zone strength, flight's approach gravity
+(`flight::GeneratedSpace` now clamps a body's pull the same way, so a light moon pulls the
+same in its sky as on its ground) and the HUD's number (`body_gravity_of`). Rigs, pilots,
+drops, charges, creatures and fluids feel it through the planet's gravity zone. Test:
+`gravity_scales_with_each_body_and_shows_one_number` (a rig falls about four times as far on
+a 1.2 g body as on a 0.3 g one).
+
+### Economy (`bodylife::market`)
+
+- Credits are universal. `BodyPrices::new(seed, common, sectors)`: ore the body's ground is
+  rich in (`planet::hooks::common_minerals`: every stratum's ores and the core ore) sells at
+  `COMMON_PERMILLE` (72 %), the rest at `SCARCE_PERMILLE` (125 %) plus
+  `DISTANCE_PERMILLE_PER_SECTOR` (4 %) a galactic sector from home (at most +60 %), each with
+  ±8 % seeded jitter; artifacts sell at 120 %.
+- `LocalMarket::new(prices, settlement, day)`: a settlement's (or a station's) own jitter, two
+  **wanted** goods each local day (+60 %) and a **glut** (-40 %, never a wanted good).
+- `WorldState::body_market(player, settlement, column)` (the market at a settlement's column
+  now) and `WorldState::sell_cargo_at_market(player, &market, output)` (pays minerals and
+  artifacts at the market's prices, with no home premiums or rebates, and raises `Sold`).
+  TODO-SEAM w12-aliens / w12-stations: settlement and station counters call them through a
+  command of their own. The home depot's `SellCargo` stays refused away from home.
+
+### The planet theme framework (`planet::hooks`)
+
+A theme is its data (`PlanetTheme` in `PLANET_THEMES`, unchanged) plus its hooks:
+
+```rust
+pub trait PlanetThemeHooks: Sync {
+    fn id(&self) -> PlanetThemeId;
+    fn data(&self) -> &'static PlanetTheme;                            // default: theme(id)
+    fn surface_rows(&self, ground: &PlanetGround, column: i64) -> i32; // the surface shaper
+    fn strata(&self) -> &'static [PlanetStratum];
+    fn ore_at(&self, stratum: &PlanetStratum, roll: u16) -> Option<TileKind>; // the ore table
+    fn feature_tile(&self, ground, column, row, depth) -> Option<TileKind>;   // landmarks, secrets
+    fn secret(&self, ground: &PlanetGround) -> Option<SecretSite>;
+    fn creature_spawns(&self) -> &'static [CreatureSpawn];
+    fn weather_table(&self) -> &'static [WeatherOdds];
+    fn settlement_sites(&self, ground: &PlanetGround, count: usize) -> Vec<i32>;
+    fn climate(&self) -> ThemeClimate;
+    fn hazards(&self) -> ThemeHazards;
+    fn music_bed(&self) -> MusicBed;
+}
+```
+
+- Every hook has a default that reads the data, so a theme registered as data alone plays
+  (`DataTheme`, the generic hooks). A theme track implements the trait on its own type and
+  appends `&MyTheme` to `THEME_HOOKS`; `hooks(id)` returns its hooks (or the generic ones).
+- `PlanetGround` generates **through the hooks** for every tile: the shaper (clamped to the
+  hill limit), then `feature_tile` before the strata (landmarks, ruins, surface growth, the
+  secret; above or below the surface), then the strata and the ore table. Generation stays a
+  pure function of the params, and the per-ring-tile rule is unchanged.
+- **Ported placeholders**: `BarrenTheme` (clear skies, the odd aurora; music
+  `bodylife_barren`), `RockyTheme` (storms, aurora; a +40 °C core), `IceTheme` (snow, storms,
+  bright auroras; a -60 °C core). Their ground is the Wave 11 ground (plus the secret on
+  small bodies).
+- **One secret each**: every body up to `SMALL_BODY_RADIUS` (1,000: craters and small moons)
+  keeps one `SecretSite` (`default_secret`). It is a 9 x 5 vault of hard rock
+  `SECRET_COVER_ROWS` under the crust at a seeded column inside one lap, holding an artifact
+  (void pearl, machine sigil, crystal prism or radiant shell) on its floor between seams of
+  the theme's core ore. `PlanetGround::secret()` names it (for a scanner hint or a story).
+- `flattest_sites(ground, count)` is the default settlement finder (the flattest 24-column
+  stretch of each share of the lap). `CreatureSpawn` (creature id, weight, depth band,
+  night-only) is data the fauna and aliens tracks spawn (TODO-SEAM w12-aliens). `MusicBed`
+  (name, tempo, brightness) names a theme's bed (TODO-SEAM: the theme tracks add the patches;
+  today the game plays a body's ambience by its weather).
+
+### Game side
+
+- `render_snapshot::BodyLifeView` (in `PlaceBody::life`): the body's name, the reading where
+  the seat's player is (hour, light, elevation, weather, climate, exposure), gravity, air,
+  whether it is locked, and its night light.
+- **Each body lit by its own clock**: `LiveSpace::turn_bodies(millis)` gives every gathered
+  generated body its clock's sun (`BodyView::sun`, `live::body_sun`: noon at column 0 straight
+  up, sweeping round with the day). Its disc and its round ground are lit from there
+  (`light_toward_body`), so a body's approach and its ground agree and every column shows its
+  own hour. The polar shader's sky goes dark at night and warms toward the terminator.
+- **Weather over the view** (`rendering/body_life.rs`, `draw_weather`): rain streaks along the
+  wind, drifting snow, grit, ash and spores, the storm's gloom, a fog thicker at the edges,
+  and the aurora's curtains (additive, swaying slowly). It is drawn in the body's local frame
+  turned by the craft's roll (the camera stays locked to the craft), fixed in the world as
+  the craft moves, and scaled by the screen-effects setting (fewer particles at Reduced, none
+  at Off; fog and gloom stay, softer). Nothing flashes. Plain raylib shapes (browser-safe).
+- **The body badge** replaces the clock badge on a body: the name, the local hour (DAY SIDE,
+  TWILIGHT or NIGHT SIDE when locked), temperature and gravity, air, and the weather and wind.
+- **Audio**: `away_ambience` hears the body: the wind rises with a storm's gusts, rain hisses
+  (`RainLoop`), snow and grit whistle (`HighWindLoop`), an aurora shimmers softly
+  (`SkyAirLoop`), and an airless ground is near silent. Event cues: the weather turning
+  (thunder, a gust, a chime), dawn, dusk and a sale (`body_life_cue`). No new patches.
+- Fixes found on the way: a seat on a body no longer gets the home world's village banners
+  (its strip coordinates are not the home world's), and nebula clouds and the galaxy's band
+  are faint from a body's ground (they painted the whole night sky at ground zoom).
+- Scenes: `bodylife_terminator`, `bodylife_night`, `bodylife_locked_day`,
+  `bodylife_locked_night`, `bodylife_locked_terminator`, `bodylife_storm`, `bodylife_snow`,
+  `bodylife_aurora` (real bodies of the scene world's space).
+
+### Formats and codes
+
+- `PROTOCOL_VERSION` **20** (this track's one bump: the body-life events 880-883).
+- No save format bump, no new world sections, no `TileKind` codes, no sound patches.
+- Generation: home untouched (V1-V10 and `GOLDEN_V11_DIGEST` unchanged); space generation
+  untouched (`GOLDEN_SPACE_DIGEST` unchanged). Planet ground changes only by the secret vault
+  on bodies up to radius 1,000.
+
+### Tests
+
+- `bodylife::tests`: each body keeps its own clock (days, phases, quarter laps, wrap, noon,
+  midnight, the sun's angle, `millis_when`); tidal locking (eternal day and night sides,
+  terminators, the wider swing); weather determinism (pure, every kind comes up, seeds differ,
+  nothing needing air on an airless body, aurora only in the dark, the registry); fading and
+  effects (no jumps, a full-strength storm, thin against thick air); the temperature, air and
+  pressure model; per-body prices and local markets; the theme registry round trip; the
+  secret vault; settlement sites; one gravity per body.
+- `world::bodylife_tests`: a storm carries an airborne rig and a cave stops it (and the storm
+  hides the view); the drift agrees at 30, 60 and 120 Hz; dawn is heard at the rig's column
+  and the night is dark and cold; the climate replaces the home bands (deep heat, the airless
+  night's cold bites a stock rig, no damage at noon); a pilot breathes only a breathable sky;
+  gravity scales a fall; two seats on two real bodies read their own clocks and air, and life
+  support refills only where it is breathable; flight's pull matches the ground's; a body's
+  market pays its own prices; weather turns replay bit for bit.
+- Game: `split_screen_seats_in_two_places_each_see_their_own` checks the seat's body life;
+  the scenes build headlessly.
+
+### Seams for the integrator and the other Wave 12 tracks
+
+- **Theme tracks (planets-a/b)**: implement `PlanetThemeHooks` for each theme and append it to
+  `THEME_HOOKS`; register weather kinds in their id range (`WEATHER_REGISTRY`), point
+  `weather_table` at them, and refine `place::planet_theme_of`. Use `feature_tile` for
+  landmarks and settlement buildings, and `settlement_sites` for where they stand.
+- **Aliens and stations**: open counters on `body_market` / `sell_cargo_at_market`; spawn
+  `creature_spawns`; scale noticing by `body_visibility_at`; night-only spawns can read
+  `BodyLife::clock.daylight`.
+- **Hostiles**: storms and fog are cover (`body_visibility_at`).
+- Known limits: a body's strip does not turn in space (flight's handover is static), so the
+  renderer lights a turning body from its clock's sun rather than the star's bearing (the lit
+  face of a turning world follows its clock); weather is one per body (no fronts by longitude,
+  the aurora aside); the theme music beds are names only.
 
 ## Replication
 

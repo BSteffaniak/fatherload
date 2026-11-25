@@ -1247,6 +1247,21 @@ as a round world.
   `space_moon_far_side`, `space_moon_shaft`, `space_split_screen`, `space_split_places`,
   `space_near_black_hole`, `touch_space`; the space renderer's staged views are the other
   `space_*` scenes.
+- **Living worlds** (Wave 12): every world keeps its own day. The badge under your wallet
+  shows the world's name, its **local hour** (or DAY SIDE / NIGHT SIDE on a tidally locked
+  world, whose star never moves), the temperature where you stand, the air and the gravity.
+  Dawn and dusk sweep round the world as it turns; its night is dark and cold. **Weather**
+  rolls in by the world: storms drive rain and hail sideways and push you about in the air,
+  snow drifts and freezes, auroras hang over the night side. Shelter in a cave or a shaft
+  and the weather cannot reach you. Deep down every world heats up toward its core; a
+  radiator and heat shielding matter as at home, a de-icer on a frozen night. You breathe
+  only where the air is breathable, and your rig's air refills only there. Each world's
+  markets pay their own prices in the same credits: what the ground is full of sells cheap,
+  what it lacks sells dear, dearer the further from home, and each settlement's boards want
+  something new every local day. Small moons and crater rocks each hide **one secret**: a
+  sealed vault under the crust. Scenes: `bodylife_terminator`, `bodylife_night`,
+  `bodylife_locked_day`, `bodylife_locked_night`, `bodylife_locked_terminator`,
+  `bodylife_storm`, `bodylife_snow`, `bodylife_aurora`.
 
 ### The Fathers' expedition (wave 8 story)
 
