@@ -62,6 +62,22 @@ pub fn run(frame: impl FnMut(f32) -> bool + 'static) {
     }
 }
 
+/// Which of `choices` the page's `?key=` query names, if any (the space timing page, Wave 11).
+pub fn query_choice(key: &str, choices: &[&str]) -> Option<usize> {
+    let list = choices
+        .iter()
+        .map(|choice| format!("'{choice}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let script = std::ffi::CString::new(format!(
+        "[{list}].indexOf(new URLSearchParams(location.search).get('{key}'))"
+    ))
+    .ok()?;
+    // SAFETY: a NUL-terminated script built from our own constant names; it only reads the URL.
+    let index = unsafe { emscripten_run_script_int(script.as_ptr()) };
+    usize::try_from(index).ok()
+}
+
 /// Background tabs must not simulate missed real time.
 pub fn is_hidden() -> bool {
     // SAFETY: static NUL-terminated script, no borrowed JavaScript values cross the boundary.

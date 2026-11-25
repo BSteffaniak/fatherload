@@ -30,6 +30,7 @@ mod planet_scenes;
 mod reward_scenes;
 mod rig_scenes;
 mod sky_isle_scenes;
+mod space_scenes;
 mod sky_scenes;
 mod surface_scenes;
 mod village_scenes;
@@ -233,6 +234,7 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
             prompt_sheet: false,
             rig_sheet: None,
             touch_view: crate::input::touch::TouchView::default(),
+            space: None,
         };
         (scene.setup)(&mut stage);
         // A staged world starts wherever the scene puts it, so the story's "A new Descent" card
@@ -246,13 +248,14 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 }
             }
         }
-        let (report, gallery, ui_sheet, prompt_sheet, rig_sheet, touch_view) = (
+        let (report, gallery, ui_sheet, prompt_sheet, rig_sheet, touch_view, mut space) = (
             stage.report,
             stage.gallery,
             stage.ui_sheet,
             stage.prompt_sheet,
             stage.rig_sheet,
             stage.touch_view,
+            stage.space,
         );
         let renderer = renderer.get_or_insert_with(|| {
             let renderer = GameRenderer::new(&mut raylib, &thread, game.world().terrain());
@@ -265,6 +268,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                     "FAILED"
                 }
             );
+            let (planet, polar, lens) = renderer.space_shaders_ready();
+            println!("space shaders: planet {planet}, polar ground {polar}, lens {lens}");
             renderer
         });
         // Each scene starts with fresh dialog focus and scroll, whatever the last one showed.
@@ -286,8 +291,13 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 &touch_view,
             );
             renderer.sync(&mut raylib, &thread, &snapshot, &frame_report);
+            if let Some(fixture) = &space {
+                renderer.sync_space(&mut raylib, &thread, &fixture.view(), fixture.force_quads);
+            }
             let mut draw = raylib.begin_drawing(&thread);
-            if gallery {
+            if let Some(fixture) = &space {
+                renderer.render_space(&mut draw, &fixture.view());
+            } else if gallery {
                 renderer.render_art_gallery(&mut draw);
             } else if ui_sheet {
                 renderer.render_ui_sheet(&mut draw);
@@ -304,6 +314,16 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
         }
         println!("captured {}", path.display());
         if options.timing_frames > 0
+            && let Some(fixture) = space.as_mut()
+        {
+            space_scenes::time_space_frames(
+                (&mut raylib, &thread),
+                renderer,
+                fixture,
+                scene.name,
+                options.timing_frames,
+            );
+        } else if options.timing_frames > 0
             && !(gallery || ui_sheet || prompt_sheet || rig_sheet.is_some())
         {
             time_frames(
@@ -373,6 +393,7 @@ fn export_saves(dir: &Path, scenes: &[&Scene]) -> Result<(), String> {
             prompt_sheet: false,
             rig_sheet: None,
             touch_view: crate::input::touch::TouchView::default(),
+            space: None,
         };
         (scene.setup)(&mut stage);
         let path = dir.join(format!("{}.json", scene.name));
@@ -468,6 +489,8 @@ pub struct SceneStage<'g> {
     rig_sheet: Option<crate::rendering::rig_art::sheet::RigSheet>,
     /// Fingers on the touch controls (drawn when the first seat's device is the touch screen).
     touch_view: crate::input::touch::TouchView,
+    /// Draw a staged space view instead of the game (Wave 11 space-render).
+    space: Option<crate::rendering::space::fixtures::SpaceFixture>,
 }
 
 impl SceneStage<'_> {
@@ -603,6 +626,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(garrison_scenes::GARRISON_SCENES)
         .chain(planet_scenes::PLANET_SCENES)
         .chain(flight_scenes::FLIGHT_SCENES)
+        .chain(space_scenes::SPACE_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
@@ -3319,6 +3343,7 @@ mod tests {
                 prompt_sheet: false,
                 rig_sheet: None,
                 touch_view: crate::input::touch::TouchView::default(),
+                space: None,
             };
             (scene.setup)(&mut stage);
             let snapshot = game.snapshot(DEFAULT_SIZE);

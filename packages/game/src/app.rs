@@ -290,6 +290,31 @@ struct App {
     touch: TouchDevice,
     thread: raylib::RaylibThread,
     raylib: raylib::RaylibHandle,
+    /// A staged space view shown instead of the game (Wave 11: `--space-view <name>` on the
+    /// desktop, `?space=<name>` in the browser), for looking at and timing the space renderer
+    /// until the integrator wires real space.
+    space_view: Option<crate::rendering::space::fixtures::SpaceFixture>,
+}
+
+/// The staged space view asked for, if any (see [`App::space_view`]).
+fn requested_space_view() -> Option<crate::rendering::space::fixtures::SpaceFixture> {
+    use crate::rendering::space::fixtures;
+    #[cfg(target_os = "emscripten")]
+    let name = crate::browser::query_choice("space", &fixtures::NAMES)
+        .map(|index| fixtures::NAMES[index].to_owned());
+    #[cfg(not(target_os = "emscripten"))]
+    let name = {
+        let args: Vec<String> = std::env::args().collect();
+        args.iter()
+            .position(|arg| arg == "--space-view")
+            .and_then(|at| args.get(at + 1).cloned())
+    };
+    let name = name?;
+    let fixture = fixtures::build(&name);
+    if fixture.is_none() {
+        eprintln!("unknown space view {name}; try one of {:?}", fixtures::NAMES);
+    }
+    fixture
 }
 
 impl App {
@@ -328,6 +353,7 @@ impl App {
             touch: TouchDevice::new(touch_with_mouse()),
             thread,
             raylib,
+            space_view: requested_space_view(),
         }
     }
 
@@ -345,6 +371,7 @@ impl App {
             router,
             mouse,
             touch,
+            space_view,
         } = self;
         if game.should_exit() {
             // Remember a resized or (un)maximized window for the next run.
@@ -368,6 +395,17 @@ impl App {
             crate::browser::resize_canvas(raylib);
         }
         let delta_seconds = browser_delta.unwrap_or_else(|| raylib.get_frame_time());
+        if let Some(fixture) = space_view {
+            #[cfg(not(target_os = "emscripten"))]
+            if raylib.window_should_close() {
+                return false;
+            }
+            fixture.advance(delta_seconds);
+            renderer.sync_space(raylib, thread, &fixture.view(), fixture.force_quads);
+            let mut draw = raylib.begin_drawing(thread);
+            renderer.render_space(&mut draw, &fixture.view());
+            return true;
+        }
         #[cfg(not(target_os = "emscripten"))]
         let exit_requested = raylib.window_should_close();
         // raylib's web WindowShouldClose sleeps internally; RAF owns scheduling here.

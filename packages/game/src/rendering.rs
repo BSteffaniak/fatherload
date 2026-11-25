@@ -52,6 +52,7 @@ pub mod rig_art;
 mod screen;
 mod sky_hud;
 mod space_view;
+pub mod space;
 mod story;
 pub mod terrain;
 mod title;
@@ -134,6 +135,8 @@ pub struct GameRenderer {
     explored_drawn: DiscoveredTiles,
     /// The post-process pipeline (F9): screen effects and the rolling camera, per seat.
     post: post_process::PostProcess,
+    /// Space and round bodies (Wave 11, F12).
+    space: space::SpaceRenderer,
 }
 
 /// Whose dialogs a [`layout::widgets::UiState`] tracks: the global screens (title, pause,
@@ -251,7 +254,50 @@ impl GameRenderer {
             ui_states: RefCell::new(BTreeMap::new()),
             explored_drawn: DiscoveredTiles::default(),
             post: post_process::PostProcess::new(raylib, thread),
+            space: space::SpaceRenderer::new(raylib, thread),
         }
+    }
+
+    /// Whether the space shaders compiled (planet, polar ground, lens; scene capture reports
+    /// them).
+    #[cfg(not(target_os = "emscripten"))]
+    #[must_use]
+    pub const fn space_shaders_ready(&self) -> (bool, bool, bool) {
+        self.space.shaders_ready()
+    }
+
+    /// Brings the space renderer up to date with `view` (the ground's textures, the lens's
+    /// target), once per frame before [`Self::render_space`]. TODO-SEAM: the integrator calls
+    /// it from `sync` for every seat whose place is in space or on a generated body.
+    pub fn sync_space(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        view: &space::view::SpaceRenderView<'_>,
+        force_quads: bool,
+    ) {
+        self.space.polar.force_quads = force_quads;
+        let size = (raylib.get_screen_width(), raylib.get_screen_height());
+        self.space.sync(raylib, thread, view, size);
+    }
+
+    /// Draws one space view over the whole screen (the screenshot scenes and the browser's
+    /// space timing page; TODO-SEAM: the integrator draws each seat's view in its viewport
+    /// from `render_seat`, then the seat's HUD over it as usual).
+    pub fn render_space(
+        &self,
+        draw: &mut RaylibDrawHandle<'_>,
+        view: &space::view::SpaceRenderView<'_>,
+    ) {
+        sprite::set_current_atlas(self.atlas.as_ref());
+        draw.clear_background(space::SPACE_BLACK);
+        let viewport = Rectangle::new(
+            0.0,
+            0.0,
+            draw.get_screen_width() as f32,
+            draw.get_screen_height() as f32,
+        );
+        self.space.draw(draw, view, viewport);
     }
 
     /// Whether the post-process effect shader compiled (F9; scene capture reports it).
