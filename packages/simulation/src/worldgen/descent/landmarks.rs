@@ -56,6 +56,8 @@ pub enum LandmarkGenerator {
     Distortion,
     /// The far Strange Layers' stamps, rock and alloy seal ([`super::far_strange`], Wave 9).
     FarStrange,
+    /// The buried city's stamps and rock ([`super::ancient_city`], Wave 10).
+    AncientCity,
 }
 
 /// The generator behind `kind`.
@@ -75,6 +77,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::HollowWorld => LandmarkGenerator::HollowWorld,
         LandmarkKind::Distortion => LandmarkGenerator::Distortion,
         LandmarkKind::FarStrange => LandmarkGenerator::FarStrange,
+        LandmarkKind::AncientCity => LandmarkGenerator::AncientCity,
     }
 }
 
@@ -420,6 +423,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::Drowned
         | LandmarkKind::HollowWorld
         | LandmarkKind::Distortion
-        | LandmarkKind::FarStrange => return None,
+        | LandmarkKind::FarStrange
+        | LandmarkKind::AncientCity => return None,
     })
 }

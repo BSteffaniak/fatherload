@@ -37,12 +37,17 @@ use crate::{
 pub const CATHEDRAL_STATION: VillageId = VillageId(0x3FFF_FE00);
 /// The Amber Court's settlement id.
 pub const AMBER_COURT: VillageId = VillageId(0x3FFF_FD00);
+/// The Archive Post's settlement id (Wave 10 ancients-a).
+pub const ARCHIVE_POST: VillageId = VillageId(0x3FFF_FC00);
 
 /// One of the deep settlements with residents.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum DeepSettlement {
     CathedralStation,
     AmberCourt,
+    /// The Descent VII outpost in the Buried Megacity (Wave 10 ancients-a): the Lamplighters
+    /// and the builders' patient machines.
+    ArchivePost,
 }
 
 /// One authored resident: who they are and which memories they tell.
@@ -138,14 +143,67 @@ const COURT_CAST: [Cast; 5] = [
     },
 ];
 
+/// The Archive Post's residents (Wave 10 ancients-a): two Lamplighters, descendants of a crew
+/// that came down long before the Fathers and stayed to keep the street lamps burning, and
+/// three of the builders' machines who still keep the city's ways.
+const POST_CAST: [Cast; 5] = [
+    Cast {
+        speaker: "keeper",
+        given: "Keeper-Unit",
+        family: "Nine",
+        role: Role::Quartermaster,
+        greeting: "Welcome to the Archive Post. Please sign the register. Fuel, repair and a \
+                   bench: in that order, or any order. I am not particular.",
+    },
+    Cast {
+        speaker: "lamplighter",
+        given: "Ada",
+        family: "Lantry",
+        role: Role::Storyteller,
+        greeting: "Mind the wick. Every lamp you see burning, a Lantry lit. Sit; the oil's \
+                   cheap and the stories are cheaper.",
+    },
+    Cast {
+        speaker: "tinker",
+        given: "Pell",
+        family: "Corran",
+        role: Role::Mechanic,
+        greeting: "Builder alloy, surface steel, it all welds if you sweet-talk it. What's \
+                   rattling on that rig of yours?",
+    },
+    Cast {
+        speaker: "sweeper",
+        given: "Sweep",
+        family: "of the Post",
+        role: Role::Courier,
+        greeting: "Sweep-sweep! Visitor! Sweep will tidy around you. Please lift your treads.",
+    },
+    Cast {
+        speaker: "curator",
+        given: "Curator",
+        family: "Thessaly",
+        role: Role::Scholar,
+        greeting: "A reader. How rare. The Archive is below the halls; the charts are behind \
+                   their locks. I can tell you how the locks think.",
+    },
+];
+
+/// Whether `character` of the Archive Post is one of the builders' machines (the keeper, the
+/// sweeper and the curator): the game draws them as automatons.
+#[must_use]
+pub const fn is_automaton(id: VillageId, index: u8) -> bool {
+    id.0 == ARCHIVE_POST.0 && matches!(index, 0 | 3 | 4)
+}
+
 impl DeepSettlement {
-    pub const ALL: [Self; 2] = [Self::CathedralStation, Self::AmberCourt];
+    pub const ALL: [Self; 3] = [Self::CathedralStation, Self::AmberCourt, Self::ArchivePost];
 
     #[must_use]
     pub const fn id(self) -> VillageId {
         match self {
             Self::CathedralStation => CATHEDRAL_STATION,
             Self::AmberCourt => AMBER_COURT,
+            Self::ArchivePost => ARCHIVE_POST,
         }
     }
 
@@ -155,6 +213,7 @@ impl DeepSettlement {
         match id.0 {
             value if value == CATHEDRAL_STATION.0 => Some(Self::CathedralStation),
             value if value == AMBER_COURT.0 => Some(Self::AmberCourt),
+            value if value == ARCHIVE_POST.0 => Some(Self::ArchivePost),
             _ => None,
         }
     }
@@ -164,6 +223,7 @@ impl DeepSettlement {
         match self {
             Self::CathedralStation => "Cathedral Station",
             Self::AmberCourt => "The Amber Court",
+            Self::ArchivePost => "The Archive Post",
         }
     }
 
@@ -173,6 +233,7 @@ impl DeepSettlement {
         match self {
             Self::CathedralStation => Remembering::OldDeepCamp,
             Self::AmberCourt => Remembering::TheHive,
+            Self::ArchivePost => Remembering::ArchivePost,
         }
     }
 
@@ -182,12 +243,13 @@ impl DeepSettlement {
         match self {
             Self::CathedralStation => &STATION_CAST,
             Self::AmberCourt => &COURT_CAST,
+            Self::ArchivePost => &POST_CAST,
         }
     }
 
     const fn culture(self) -> Culture {
         match self {
-            Self::CathedralStation => Culture::Frontier,
+            Self::CathedralStation | Self::ArchivePost => Culture::Frontier,
             Self::AmberCourt => Culture::Deepfolk,
         }
     }
@@ -285,6 +347,17 @@ pub fn hall(settings: &WorldSettings, place: DeepSettlement) -> Option<(i32, i32
             let court = living::court_hall(settings, &layout)?;
             Some((court.max.y - 1, court.min.x + 6, court.max.x - 6))
         }
+        DeepSettlement::ArchivePost => {
+            // Descent VII's outpost hall, like Cathedral Station: the half away from the lift's
+            // door (Wave 10 ancients-a).
+            let hall = landmarks::outpost(settings, &layout, Descent::Ancients)?.bounds;
+            let middle = i32::midpoint(hall.min.x, hall.max.x);
+            if landmarks::lift_column(settings) > middle {
+                Some((hall.max.y, hall.min.x + 3, middle - 2))
+            } else {
+                Some((hall.max.y, middle + 2, hall.max.x - 3))
+            }
+        }
     }
 }
 
@@ -323,7 +396,7 @@ mod tests {
         let settings = v11(0x5EED);
         assert_eq!(
             settlement_ids(&settings),
-            vec![CATHEDRAL_STATION, AMBER_COURT]
+            vec![CATHEDRAL_STATION, AMBER_COURT, ARCHIVE_POST]
         );
         for place in DeepSettlement::ALL {
             let settlement = routine::settlement(&settings, place.id()).expect("a settlement");
@@ -415,7 +488,7 @@ mod tests {
         assert!(spoken(&state) > early);
         assert_eq!(
             spoken(&state),
-            10,
+            15,
             "every resident has a line once the trail is read"
         );
     }

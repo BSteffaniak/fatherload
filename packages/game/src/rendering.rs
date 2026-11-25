@@ -17,6 +17,7 @@ use fatherload_simulation::{
     terrain::{Terrain, TilePosition},
 };
 
+pub mod ancient_city_hud;
 mod build;
 mod counters;
 mod crypt_map;
@@ -791,6 +792,7 @@ impl GameRenderer {
             hollow: snapshot.hollow,
             far_strange: snapshot.far_strange,
             glitch_arena: snapshot.glitch_arena,
+            ancient_city: snapshot.ancient_city,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;

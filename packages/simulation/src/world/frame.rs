@@ -182,9 +182,14 @@ impl WorldState {
             // Pings and keyed walls are tiles and ticks (Wave 9); newts remember local points.
             far_strange: _,
             far_schedule,
+            // Rides are mover references and offsets; the archivists' drones are local points
+            // (Wave 10).
+            ancient_city,
+            city_schedule: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);
+        ancient_city.reframe(shift);
         player_template.reframe(shift);
         players.reframe(shift);
         lost_cargo_sites.reframe(shift);

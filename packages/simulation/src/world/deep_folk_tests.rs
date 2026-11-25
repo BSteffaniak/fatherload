@@ -161,7 +161,11 @@ fn cathedral_station_and_the_amber_court_have_residents_who_remember_the_fathers
             );
         }
         // Away from the hall, its people go home to the deep's quiet.
-        park(&mut world, PLAYER, DeepSettlement::ALL[1 - place as usize]);
+        park(
+            &mut world,
+            PLAYER,
+            DeepSettlement::ALL[(place as usize + 1) % DeepSettlement::ALL.len()],
+        );
         run(&mut world, 60);
         assert!(
             folk_of(&world, place.id()).is_empty(),

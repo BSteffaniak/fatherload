@@ -202,6 +202,10 @@ pub(super) fn draw_view_hud(
     );
     // The far Strange Layers (Wave 9): time, noise, the lamp filter, The Glitch's rule.
     super::far_strange_hud::draw_far_strange_hud(draw, snapshot, view, rect, top + 124);
+    // The builders' buried city (Wave 10): the alarm, the ride, the beat, the charts; and the
+    // seat's archivist's words while it talks.
+    super::ancient_city_hud::draw_city_hud(draw, snapshot, view, rect, top + 124);
+    super::ancient_city_hud::draw_archivist_line(draw, snapshot, view, rect);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.
@@ -1077,6 +1081,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Deep(tile) => super::terrain::tile_art::deep_color(tile),
         TileKind::Hollow(tile) => super::terrain::tile_art::hollow_color(tile),
         TileKind::Warped(tile) => super::terrain::tile_art::warped_color(tile),
+        TileKind::City(tile) => super::terrain::tile_art::city_color(tile),
     }
 }
 
@@ -1388,6 +1393,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Logistics => super::logistics_hud::draw_logistics(draw, ui),
         ModalScreen::ExpeditionLog => super::expedition_hud::draw_expedition_journal(draw, ui),
         ModalScreen::ExpeditionCodex => super::expedition_hud::draw_expedition_codex(draw, ui),
+        ModalScreen::StarCharts => super::ancient_city_hud::draw_star_charts(draw, ui),
     }
 }
 

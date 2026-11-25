@@ -138,6 +138,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // So do the far Strange Layers' (Wave 9,
         // `far_strange_tests::the_far_strange_creatures_keep_the_body_rules`).
         && !kind.is_far_strange()
+        // So do the buried city's (Wave 10,
+        // `ancient_city_tests::the_city_creatures_keep_the_body_rules`).
+        && !kind.is_ancient_city()
 }
 
 /// One of every cave kind at an open spot in the arena.

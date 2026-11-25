@@ -142,6 +142,16 @@ impl Material {
                 | fatherload_simulation::sky::SkyTile::TempleKeystone
                 | fatherload_simulation::sky::SkyTile::TempleCache => Self::Hard,
             },
+            // The buried city (Wave 10): glass, ore and star glass ring, shelving gives, the
+            // rest grinds.
+            TileKind::City(tile) => match tile {
+                fatherload_simulation::ancient_city::CityTile::TowerGlass
+                | fatherload_simulation::ancient_city::CityTile::AlloyOre
+                | fatherload_simulation::ancient_city::CityTile::EngineCoreOre
+                | fatherload_simulation::ancient_city::CityTile::StarGlass => Self::Ore,
+                fatherload_simulation::ancient_city::CityTile::ArchiveShelf => Self::Soft,
+                _ => Self::Hard,
+            },
             // The distortion strata (Wave 9): glass and ore ring, plates and blocks grind.
             TileKind::Warped(tile) => match tile {
                 fatherload_simulation::distortion::WarpedTile::MirrorGlass
@@ -320,10 +330,17 @@ enum SeatLoop {
     ClockworkBed,
     EchoesBed,
     PrismBed,
+    // The buried city's music and beds (Wave 10): one piece and one bed per stratum.
+    MegacityMusic,
+    EngineMusic,
+    ArchiveMusic,
+    CityHumBed,
+    EngineBed,
+    StacksBed,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
-const SEAT_LOOP_SLOTS: u32 = 64;
+const SEAT_LOOP_SLOTS: u32 = 128;
 
 /// Seconds for an environment's ambience to crossfade in or out (Wave 6), so walking into a
 /// town, a tomb or the colony blends the beds instead of cutting them.
@@ -950,6 +967,7 @@ impl Director {
         self.hollow_music(live, listener, snapshot);
         self.distortion_music(live, listener, snapshot);
         self.far_strange_music(live, listener, snapshot);
+        self.ancient_city_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1803,6 +1821,102 @@ impl Director {
         );
     }
 
+    /// The buried city's music (Wave 10): the bed and ambience of the stratum the seat is in;
+    /// the Engine Halls' groove runs at the Great Engine's beat (a whole number of its strokes
+    /// a stroke of the engine, so its rate stays near 1).
+    fn ancient_city_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::descent::MusicCue;
+        let terrain = snapshot.terrain;
+        let settings = terrain.settings();
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let (cue, along) = if settings.generator.has_descents() {
+            let layout = fatherload_simulation::descent::fields::cached_layout(settings);
+            (
+                Some(terrain.stratum_at(tile).def().music),
+                layout.along(tile.y),
+            )
+        } else {
+            (None, 0)
+        };
+        let beat = fatherload_simulation::ancient_city::engine_beat_millis(along).max(1);
+        let strokes = ((beat + 500) / 1_000).max(1);
+        #[allow(clippy::cast_precision_loss, reason = "a few strokes")]
+        let rate = (strokes * 1_000) as f32 / beat as f32;
+        let pieces = [
+            (
+                MusicCue::BuriedMegacity,
+                SeatLoop::MegacityMusic,
+                Patch::CityMegacityLoop,
+                0.4,
+                1.0,
+            ),
+            (
+                MusicCue::EngineHalls,
+                SeatLoop::EngineMusic,
+                Patch::CityEngineLoop,
+                0.42,
+                rate,
+            ),
+            (
+                MusicCue::ArchiveOfStars,
+                SeatLoop::ArchiveMusic,
+                Patch::CityArchiveLoop,
+                0.38,
+                1.0,
+            ),
+        ];
+        let beds = [
+            (
+                MusicCue::BuriedMegacity,
+                SeatLoop::CityHumBed,
+                Patch::CityHumLoop,
+                0.3,
+            ),
+            (
+                MusicCue::EngineHalls,
+                SeatLoop::EngineBed,
+                Patch::CityEngineBedLoop,
+                0.34,
+            ),
+            (
+                MusicCue::ArchiveOfStars,
+                SeatLoop::StacksBed,
+                Patch::CityStacksLoop,
+                0.3,
+            ),
+        ];
+        for (piece, slot, patch, gain, piece_rate) in pieces {
+            let playing = cue == Some(piece);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (
+                    if playing { gain } else { 0.0 },
+                    0.0,
+                    piece_rate,
+                    OPEN_CUTOFF,
+                ),
+            );
+        }
+        for (piece, slot, patch, gain) in beds {
+            let playing = cue == Some(piece);
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+    }
+
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
     /// one, the guardian's theme instead while its guardian is awake. Crypts (T29) bring their
     /// own.
@@ -2619,6 +2733,7 @@ mod tests {
     #[test]
     fn every_seat_loop_slot_has_its_own_key_range() {
         assert!((SeatLoop::PrismBed as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::StacksBed as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

@@ -145,7 +145,11 @@ impl WorldState {
             return false;
         };
         let centre = player.tile_in(self.frame());
-        if self.deep_stratum_at(centre) != Some(Stratum::PrismDesert) {
+        // The Prism Desert's keyed walls, and the Archive of Stars' light vaults (Wave 10).
+        if !matches!(
+            self.deep_stratum_at(centre),
+            Some(Stratum::PrismDesert | Stratum::ArchiveOfStars)
+        ) {
             return false;
         }
         let reach = FILTER_SWAP_REACH_TILES;
@@ -469,6 +473,8 @@ impl WorldState {
             return;
         };
         let (top, bottom) = layout.rows(Stratum::PrismDesert);
+        // The Archive of Stars' light vaults use the same glass (Wave 10 ancients-a).
+        let (archive_top, archive_bottom) = layout.rows(Stratum::ArchiveOfStars);
         let frame = self.frame();
         let lamps: Vec<(PlayerId, LampFilter, f32, f32)> = self
             .players
@@ -477,7 +483,9 @@ impl WorldState {
             .filter_map(|(id, player)| {
                 let filter = self.far_strange.filter_of(*id);
                 let tile = player.tile_in(frame);
-                (filter != LampFilter::White && tile.y >= top - 30 && tile.y <= bottom + 30)
+                let in_rows = (tile.y >= top - 30 && tile.y <= bottom + 30)
+                    || (tile.y >= archive_top - 30 && tile.y <= archive_bottom + 30);
+                (filter != LampFilter::White && in_rows)
                     .then_some((*id, filter, player.x, player.y))
             })
             .collect();

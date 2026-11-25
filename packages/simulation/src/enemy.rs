@@ -401,6 +401,26 @@ pub enum EnemyKind {
     TheGlitch,
     /// A shard The Glitch sheds: a jittering square that rams.
     GlitchShard,
+    // --- The buried city (Wave 10 ancients-a, Descent VII, `crate::ancient_city`), appended --
+    /// Buried Megacity: a drone that mends the city; it only hunts a rig the city's alarm
+    /// names.
+    MaintenanceDrone,
+    /// Buried Megacity: a scuttling scrap-eater that bites ore out of open bays.
+    ScrapCrawler,
+    /// Buried Megacity: a tall walker that sees only what its searchlight shows.
+    StreetSentinel,
+    /// Engine Halls: a toothed wheel that charges along the floors.
+    CogRoller,
+    /// Engine Halls: a crackling spark drawn to engines; its jolt drains fuel.
+    SparkWisp,
+    /// Engine Halls: a builder watchdog that pounces from afar.
+    RivetHound,
+    /// The Archive of Stars: a slow armoured guardian that reads a rig with a beam, then fires.
+    ArchiveWarden,
+    /// The Archive of Stars: a moth that lives on the shelving (it nibbles).
+    PageMoth,
+    /// The Archive of Stars: a spider that keeps the shelves and drops on visitors.
+    IndexSpider,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -510,6 +530,11 @@ pub enum ShotKind {
     PrismBlue,
     /// The Glitch's bolt: a corrupted square that flies straight.
     GlitchBolt,
+    // --- The buried city (Wave 10 ancients-a), appended ----------------------------------
+    /// A street sentinel's bolt.
+    SentinelBolt,
+    /// An archive warden's reading beam: a slow, wide pulse of light.
+    ReadingBeam,
 }
 
 impl ShotKind {
@@ -538,6 +563,8 @@ impl ShotKind {
             Self::RotPulse => 105.0,
             Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 230.0,
             Self::GlitchBolt => 200.0,
+            Self::SentinelBolt => 300.0,
+            Self::ReadingBeam => 170.0,
         }
     }
 
@@ -566,7 +593,9 @@ impl ShotKind {
             | Self::PrismRed
             | Self::PrismGreen
             | Self::PrismBlue
-            | Self::GlitchBolt => 0.0,
+            | Self::GlitchBolt
+            | Self::SentinelBolt
+            | Self::ReadingBeam => 0.0,
         }
     }
 
@@ -591,6 +620,8 @@ impl ShotKind {
             Self::RotPulse => 8.0,
             Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 4.0,
             Self::GlitchBolt => 6.0,
+            Self::SentinelBolt => 4.0,
+            Self::ReadingBeam => 8.0,
         }
     }
 
@@ -618,6 +649,8 @@ impl ShotKind {
             Self::RotPulse => 3.5,
             Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 5.0,
             Self::GlitchBolt => 5.5,
+            Self::SentinelBolt => 8.0,
+            Self::ReadingBeam => 11.0,
         }
     }
 
@@ -639,6 +672,8 @@ impl ShotKind {
             Self::RotPulse => 4_800,
             Self::PrismRed | Self::PrismGreen | Self::PrismBlue => 2_800,
             Self::GlitchBolt => 4_200,
+            Self::SentinelBolt => 2_600,
+            Self::ReadingBeam => 4_000,
         }
     }
 
@@ -815,7 +850,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 118] = [
+    pub const ALL: [Self; 127] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -934,6 +969,15 @@ impl EnemyKind {
         Self::LensWraith,
         Self::TheGlitch,
         Self::GlitchShard,
+        Self::MaintenanceDrone,
+        Self::ScrapCrawler,
+        Self::StreetSentinel,
+        Self::CogRoller,
+        Self::SparkWisp,
+        Self::RivetHound,
+        Self::ArchiveWarden,
+        Self::PageMoth,
+        Self::IndexSpider,
     ];
 
     /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
@@ -971,6 +1015,23 @@ impl EnemyKind {
                 | Self::Glitchling
                 | Self::Bitworm
                 | Self::DeadPixel
+        )
+    }
+
+    /// Whether this is one of the buried city's creatures (Wave 10 ancients-a, Descent VII).
+    #[must_use]
+    pub const fn is_ancient_city(self) -> bool {
+        matches!(
+            self,
+            Self::MaintenanceDrone
+                | Self::ScrapCrawler
+                | Self::StreetSentinel
+                | Self::CogRoller
+                | Self::SparkWisp
+                | Self::RivetHound
+                | Self::ArchiveWarden
+                | Self::PageMoth
+                | Self::IndexSpider
         )
     }
 
@@ -2966,6 +3027,147 @@ impl EnemyKind {
                 knockback: 90.0,
                 ..stats("Glitch Shard", Machine, Flying, AttackStyle::Contact)
             },
+            // The buried city (Wave 10 ancients-a).
+            Self::MaintenanceDrone => EnemyStats {
+                radius: 10.0,
+                health: 60.0,
+                speed: 95.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 8.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 110.0,
+                ..stats("Maintenance Drone", Machine, Flying, AttackStyle::Contact)
+            },
+            Self::ScrapCrawler => EnemyStats {
+                radius: 11.0,
+                health: 80.0,
+                speed: 72.0,
+                dash_speed: 250.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 8.0,
+                windup_millis: 550,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 3.0,
+                knockback: 150.0,
+                ..stats("Scrap Crawler", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::StreetSentinel => EnemyStats {
+                radius: 14.0,
+                health: 170.0,
+                speed: 40.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 10.0,
+                windup_millis: 900,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 13.0,
+                knockback: 120.0,
+                ..stats(
+                    "Street Sentinel",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::SentinelBolt, 1),
+                )
+            },
+            Self::CogRoller => EnemyStats {
+                radius: 12.0,
+                health: 110.0,
+                speed: 80.0,
+                dash_speed: 360.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 15.0,
+                windup_millis: 750,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 6.0,
+                knockback: 260.0,
+                ..stats("Cog Roller", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::SparkWisp => EnemyStats {
+                radius: 8.0,
+                health: 34.0,
+                speed: 110.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_600,
+                attack_range_tiles: 0.6,
+                knockback: 70.0,
+                ..stats("Spark Wisp", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::RivetHound => EnemyStats {
+                radius: 12.0,
+                health: 95.0,
+                speed: 105.0,
+                dash_speed: 330.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 28.0,
+                contact_damage: 13.0,
+                windup_millis: 600,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 5.0,
+                knockback: 210.0,
+                ..stats("Rivet Hound", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::ArchiveWarden => EnemyStats {
+                radius: 16.0,
+                health: 240.0,
+                speed: 34.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 16.0,
+                contact_damage: 14.0,
+                windup_millis: 1_100,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 12.0,
+                knockback: 200.0,
+                ..stats(
+                    "Archive Warden",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::ReadingBeam, 1),
+                )
+            },
+            Self::PageMoth => EnemyStats {
+                radius: 7.0,
+                health: 16.0,
+                speed: 90.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 18.0,
+                contact_damage: 2.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.6,
+                knockback: 30.0,
+                ..stats("Page Moth", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::IndexSpider => EnemyStats {
+                radius: 10.0,
+                health: 70.0,
+                speed: 85.0,
+                dash_speed: 280.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 18.0,
+                contact_damage: 11.0,
+                windup_millis: 500,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 3.5,
+                knockback: 170.0,
+                ..stats("Index Spider", Creature, Walking, AttackStyle::Lunge)
+            },
         }
     }
 
@@ -3180,6 +3382,16 @@ impl EnemyKind {
             Self::LensWraith => (16.0, 18.0),
             Self::TheGlitch => (38.0, 37.0),
             Self::GlitchShard => (10.0, 10.0),
+            // The buried city (Wave 10): the drawn bodies (`sprites::ancient_city`).
+            Self::MaintenanceDrone => (12.0, 8.0),
+            Self::ScrapCrawler => (15.0, 8.0),
+            Self::StreetSentinel => (13.0, 17.0),
+            Self::CogRoller => (13.0, 13.0),
+            Self::SparkWisp => (8.0, 8.0),
+            Self::RivetHound => (17.0, 10.0),
+            Self::ArchiveWarden => (17.0, 18.0),
+            Self::PageMoth => (8.0, 6.0),
+            Self::IndexSpider => (14.0, 8.0),
         }
     }
 
@@ -4396,6 +4608,29 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 12 + extra);
             add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 4);
             add(ItemKind::Artifact(ArtifactKind::OldCircuit), 1);
+        }
+        // The buried city (Wave 10): machines drop their makings, the archive its glass.
+        EnemyKind::MaintenanceDrone | EnemyKind::SparkWisp | EnemyKind::PageMoth => {
+            add(mineral, 1 + extra / 2);
+        }
+        EnemyKind::ScrapCrawler | EnemyKind::CogRoller | EnemyKind::RivetHound => {
+            add(mineral, 2 + extra);
+            if rare < 18 {
+                add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+            }
+        }
+        EnemyKind::StreetSentinel => {
+            add(richer, 2 + extra);
+            if rare < 30 {
+                add(ItemKind::Layer(crate::descent::Stratum::BuriedMegacity), 1);
+            }
+        }
+        EnemyKind::IndexSpider => add(mineral, 1 + extra),
+        EnemyKind::ArchiveWarden => {
+            add(richer, 3 + extra);
+            if rare < 40 {
+                add(ItemKind::Layer(crate::descent::Stratum::ArchiveOfStars), 1);
+            }
         }
     }
     drops

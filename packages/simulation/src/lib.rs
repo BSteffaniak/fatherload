@@ -20,6 +20,7 @@ pub mod command;
 pub mod contract;
 pub mod cosmetics;
 
+pub mod ancient_city;
 pub mod crew;
 pub mod crust;
 pub mod depth_progression;
@@ -67,6 +68,7 @@ pub mod rng;
 pub mod service;
 pub mod sky;
 pub mod skycraft;
+pub mod star_chart;
 pub mod summary;
 pub mod surface;
 pub mod terrain;

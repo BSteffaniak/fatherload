@@ -234,7 +234,7 @@ pub(super) fn draw_expedition_codex(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
         FOG,
         vec![SectionItem::item(ItemEntry {
             icon: Some(&menu_icons::BACK),
-            label: "Turn the page: the map".to_owned(),
+            label: "Turn the page: the star charts".to_owned(),
             detail: String::new(),
             value: String::new(),
             value_color: GOLD,

@@ -258,6 +258,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::Drowned
                     | LandmarkGenerator::HollowWorld
                     | LandmarkGenerator::FarStrange
+                    | LandmarkGenerator::AncientCity
             ));
         }
         let field = def.field;
@@ -334,6 +335,15 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                 matches!(
                     def.music,
                     MusicCue::TimeSludge | MusicCue::EchoCaves | MusicCue::PrismDesert
+                ),
+                "{stratum:?}"
+            );
+        } else if crate::worldgen::descent::ancient_city::is_city(stratum) {
+            // And the builders' buried city (Wave 10 ancients-a).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::BuriedMegacity | MusicCue::EngineHalls | MusicCue::ArchiveOfStars
                 ),
                 "{stratum:?}"
             );

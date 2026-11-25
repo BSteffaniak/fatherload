@@ -21,6 +21,9 @@ use crate::{
 };
 
 mod altitude;
+mod ancient_city;
+#[cfg(test)]
+mod ancient_city_tests;
 #[cfg(test)]
 mod arc_tests;
 mod arcs;
@@ -529,6 +532,15 @@ pub struct WorldState {
     /// pings and quartz rings). Saved with the world, never hashed or replicated.
     #[serde(default)]
     far_schedule: crate::far_strange::FarSchedule,
+    /// The builders' buried city's shared state (Wave 10 ancients-a, Descent VII strata 1-3,
+    /// see [`crate::ancient_city`]): rides, alarms, archivists, star charts, vaults and
+    /// landmarks found.
+    #[serde(default)]
+    ancient_city: crate::ancient_city::AncientCity,
+    /// The buried city's host bookkeeping (crusher hits, crawlers' loot, launches). Saved
+    /// with the world, never hashed or replicated.
+    #[serde(default)]
+    city_schedule: crate::ancient_city::CitySchedule,
 }
 
 impl WorldState {

@@ -310,6 +310,18 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::KeyedGlass => Patch::KeyedGlass,
         SoundCue::GlitchRewrite => Patch::GlitchRewrite,
         SoundCue::GlitchBlink => Patch::GlitchBlink,
+        SoundCue::CityTramBell => Patch::CityTramBell,
+        SoundCue::CityLiftChime => Patch::CityLiftChime,
+        SoundCue::CityPistonHiss => Patch::CityPistonHiss,
+        SoundCue::CityPistonThump => Patch::CityPistonThump,
+        SoundCue::CityCrusherSlam => Patch::CityCrusherSlam,
+        SoundCue::CityArchivistChirp => Patch::CityArchivistChirp,
+        SoundCue::CityArchivistScan => Patch::CityArchivistScan,
+        SoundCue::CityChartChord => Patch::CityChartChord,
+        SoundCue::CityVaultGive => Patch::CityVaultGive,
+        SoundCue::CityAlarm => Patch::CityAlarm,
+        SoundCue::CityCargoSnatch => Patch::CityCargoSnatch,
+        SoundCue::CitySparkZap => Patch::CitySparkZap,
     }
 }
 
@@ -371,7 +383,7 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
     match shot {
         ShotKind::Acid => SoundCue::AcidSpit,
         ShotKind::Fireball | ShotKind::Wispfire => SoundCue::FireWhoosh,
-        ShotKind::Bolt => SoundCue::MachineZap,
+        ShotKind::Bolt | ShotKind::SentinelBolt => SoundCue::MachineZap,
         ShotKind::Cannonball => SoundCue::CannonBoom,
         ShotKind::Arrow | ShotKind::Thorn => SoundCue::DartFire,
         ShotKind::Rubble => SoundCue::FloorCrumble,
@@ -385,6 +397,7 @@ pub const fn shot_cue(shot: ShotKind) -> SoundCue {
         ShotKind::RotPulse => SoundCue::GlitchBlip,
         ShotKind::PrismRed | ShotKind::PrismGreen | ShotKind::PrismBlue => SoundCue::KeyedGlass,
         ShotKind::GlitchBolt => SoundCue::GlitchBlink,
+        ShotKind::ReadingBeam => SoundCue::CityArchivistScan,
     }
 }
 
@@ -525,6 +538,27 @@ pub const fn supply_cue(what: fatherload_simulation::workshop::SupplyEvent) -> S
         E::BaitThrown => SoundCue::ExplosiveThrow,
         E::FilterFitted => SoundCue::KeyedGlass,
         E::FilterWornOut => SoundCue::UiError,
+    }
+}
+
+/// The sound of a buried city event (Wave 10; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn city_cue(what: fatherload_simulation::ancient_city::CityEvent) -> SoundCue {
+    use fatherload_simulation::ancient_city::CityEvent as E;
+    match what {
+        E::TramBoarded | E::TramArrived => SoundCue::CityTramBell,
+        E::TramAlighted | E::LiftBoarded | E::LiftAlighted => SoundCue::CityLiftChime,
+        E::PistonBoarded => SoundCue::CityPistonHiss,
+        E::PistonLaunched => SoundCue::CityPistonThump,
+        E::Crushed => SoundCue::CityCrusherSlam,
+        E::AlarmRising | E::AlarmHunt => SoundCue::CityAlarm,
+        E::ArchivistWoke | E::ArchivistSpoke => SoundCue::CityArchivistChirp,
+        E::ArchivistScanned => SoundCue::CityArchivistScan,
+        E::ChartRead => SoundCue::CityChartChord,
+        E::VaultOpened => SoundCue::CityVaultGive,
+        E::LandmarkFound => SoundCue::AnomalyHum,
+        E::CargoStolen => SoundCue::CityCargoSnatch,
+        E::FuelJolted => SoundCue::CitySparkZap,
     }
 }
 
@@ -1008,6 +1042,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::FarStrange { what, .. } => Some(far_strange_cue(*what)),
         // Deep supplies at work (Wave 10 polish).
         GameplayEventKind::Supply { what, .. } => Some(supply_cue(*what)),
+        // The builders' buried city (Wave 10).
+        GameplayEventKind::AncientCity { what, .. } => Some(city_cue(*what)),
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
@@ -1374,7 +1410,8 @@ mod tests {
             | GameplayEventKind::Distortion { .. }
             | GameplayEventKind::DistortionLandmarkFound { .. }
             | GameplayEventKind::FarStrange { .. }
-            | GameplayEventKind::Supply { .. } => {}
+            | GameplayEventKind::Supply { .. }
+            | GameplayEventKind::AncientCity { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2457,6 +2494,18 @@ mod tests {
             SoundCue::KeyedGlass,
             SoundCue::GlitchRewrite,
             SoundCue::GlitchBlink,
+            SoundCue::CityTramBell,
+            SoundCue::CityLiftChime,
+            SoundCue::CityPistonHiss,
+            SoundCue::CityPistonThump,
+            SoundCue::CityCrusherSlam,
+            SoundCue::CityArchivistChirp,
+            SoundCue::CityArchivistScan,
+            SoundCue::CityChartChord,
+            SoundCue::CityVaultGive,
+            SoundCue::CityAlarm,
+            SoundCue::CityCargoSnatch,
+            SoundCue::CitySparkZap,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

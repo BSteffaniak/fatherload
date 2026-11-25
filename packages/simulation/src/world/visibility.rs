@@ -52,6 +52,8 @@ impl WorldState {
         world.living_schedule = crate::living_dark::LivingSchedule::default();
         // And the far Strange Layers' (Wave 9): keyed walls reach clients as terrain ops.
         world.far_schedule = crate::far_strange::FarSchedule::default();
+        // And the buried city's (Wave 10): plinths travel as terrain ops, rides in the section.
+        world.city_schedule = crate::ancient_city::CitySchedule::default();
         world
     }
 
@@ -105,6 +107,8 @@ impl WorldState {
             hollow: _,
             far_strange: _,
             far_schedule: _,
+            ancient_city: _,
+            city_schedule: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

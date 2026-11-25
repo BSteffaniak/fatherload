@@ -547,6 +547,7 @@ impl LocalGame {
         self.announce_distortion(&players);
         self.announce_far_strange(&players);
         self.announce_supplies(&players);
+        self.announce_ancient_city(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1173,6 +1174,7 @@ impl LocalGame {
                 Settlement::MerrowCity => "Merrow City",
                 Settlement::JungleTribes => "The Jungle Tribes",
                 Settlement::PrismRelay => "The Prism Relay",
+                Settlement::ArchivePost => "The Archive Post",
             };
             cards.push((seat, settlement, place, memory.told()));
         }
@@ -1236,6 +1238,80 @@ impl LocalGame {
                         "Time races: a fast lane.".to_owned()
                     }
                 }
+                _ => continue,
+            };
+            for (seat, player) in players.iter().enumerate() {
+                if player_id.is_none_or(|owner| owner == *player) {
+                    messages.push((seat, text.clone()));
+                }
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (title, text) in cards {
+            for seat in 0..players.len() {
+                self.shell.story_moment(
+                    seat,
+                    crate::shell::StoryMomentKind::Anomaly,
+                    title.clone(),
+                    text.clone(),
+                );
+            }
+        }
+    }
+
+    /// The buried city's news (Wave 10): a landmark's story beat and a star chart as cards on
+    /// every local seat; the alarm, a crusher, a theft, a jolt and a launch for the seat they
+    /// concern. (The archivist's words are the seat's HUD speech box, not a message.)
+    fn announce_ancient_city(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::ancient_city::{CityEvent as E, CityLandmark};
+        let world = self.runtime.world();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(String, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::AncientCity {
+                what,
+                player_id,
+                detail,
+                ..
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let text = match what {
+                E::LandmarkFound => {
+                    if let Some(landmark) = CityLandmark::ALL.get(usize::from(detail)) {
+                        cards.push((landmark.name().to_owned(), landmark.beat().to_owned()));
+                    }
+                    continue;
+                }
+                E::ChartRead => {
+                    if let Some(chart) = world.star_charts().get(usize::from(detail)) {
+                        cards.push((
+                            format!("STAR CHART: {}", chart.name),
+                            crate::shell::star_charts::chart_words(chart),
+                        ));
+                    }
+                    continue;
+                }
+                E::VaultOpened => {
+                    "The vault's lock gives. Its chart waits on the plinth.".to_owned()
+                }
+                E::AlarmRising => {
+                    "The city has noticed you cutting it. Ride instead, and it forgets.".to_owned()
+                }
+                E::AlarmHunt => "CITY ALARM: the drones and sentinels hunt you!".to_owned(),
+                E::Crushed => "Crushed! Wait for the lamp: then you have a whole beat.".to_owned(),
+                E::CargoStolen => {
+                    format!("A scrap crawler made off with {detail} ore. Get it back!")
+                }
+                E::FuelJolted => "A spark wisp's jolt drains your fuel.".to_owned(),
+                E::PistonLaunched => "Thrown off the piston!".to_owned(),
+                E::ArchivistWoke => "The archivist wakes, and comes with you.".to_owned(),
                 _ => continue,
             };
             for (seat, player) in players.iter().enumerate() {

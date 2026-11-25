@@ -66,6 +66,7 @@ use crate::{
 
 use super::{WorldState, bombs::Blast, movement::AUTHORITATIVE_PLAYER_RADIUS};
 
+mod ancient_city;
 mod crypt;
 mod distortion;
 mod drowned;
@@ -1299,6 +1300,8 @@ impl WorldState {
             .or_else(|| self.drowned_notice(body, state))
             .or_else(|| self.hollow_notice(body, state, || self.perceive(body, state)))
             .or_else(|| self.far_notice(body, state))
+            // The buried city (Wave 10): the city's watch and the sentinels' searchlights.
+            .or_else(|| self.city_notice(body, state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -2266,6 +2269,10 @@ impl WorldState {
             // An amber sloth's touch holds the rig in amber (Wave 9, the Time Sludge).
             self.amber_rig(player_id, output);
         }
+        if kind.is_ancient_city() {
+            // A scrap crawler's theft, a spark wisp's jolt (Wave 10, the buried city).
+            self.city_strike(player_id, kind, from, output);
+        }
         if kind == EnemyKind::MudLeech
             && let Some(player) = self.players.get_mut(&player_id)
         {
@@ -2681,6 +2688,10 @@ impl WorldState {
             let tile = self.frame().tile_at(body.x, body.y);
             self.far_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
+        if state.kind.is_ancient_city() {
+            // A scrap crawler drops the ore it carried off (Wave 10).
+            self.city_kill(id.get(), body.x, body.y);
+        }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
         output.push_event(GameplayEventKind::EnemyKilled {
@@ -2933,5 +2944,15 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::PrismScarab
         | EnemyKind::SplitterSpire => tags.nests,
         EnemyKind::TheGlitch | EnemyKind::GlitchShard => false,
+        // The buried city (Wave 10): fliers roost in any open space, walkers on floors.
+        EnemyKind::MaintenanceDrone | EnemyKind::SparkWisp | EnemyKind::PageMoth => {
+            tags.swarmers || tags.nests
+        }
+        EnemyKind::ScrapCrawler
+        | EnemyKind::StreetSentinel
+        | EnemyKind::CogRoller
+        | EnemyKind::RivetHound
+        | EnemyKind::ArchiveWarden
+        | EnemyKind::IndexSpider => tags.nests || tags.swarmers,
     }
 }

@@ -394,6 +394,31 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The builders' buried city (V11, Wave 10 ancients-a, Descent VII strata 1-3): avenues
+        // and tram lines, towers and their lifts, the Lantern Library, the alloy portals under
+        // the seal, engine halls, piston shafts, crusher lines, the Great Engine, archive
+        // stacks, puzzle vaults and the Orrery (the outpost hall stays as stamped).
+        use crate::worldgen::descent::ancient_city;
+        let plan = ancient_city::plan_for(&ctx.settings, layout, &rect);
+        if plan.active {
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = ancient_city::city_tile(
+                    &ctx.settings,
+                    layout,
+                    &plan,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     // The Fathers' expedition (V11, Wave 8 story): its log sites and the anomaly rooms, a pass
     // of their own after the landmarks and under the builders' cable.
     let story = crate::expedition::sites::story_stamps(&ctx.settings, &rect);

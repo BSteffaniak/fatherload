@@ -325,7 +325,21 @@ pub type SetPieceQuery = fn(&WorldSettings, &TileRect) -> bool;
 /// arena or set piece of its own appends its query (Merrow City's bubble, the jungle tribes'
 /// village, the Sun Serpent's orbit, the Prism Relay ...); the log sites then move along their
 /// rows and the anomaly rooms are dropped, exactly as for Descents I-III.
-pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[crosses_descent_landmarks, crosses_drowned];
+pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[
+    crosses_descent_landmarks,
+    crosses_drowned,
+    // The builders' buried city (Wave 10 ancients-a): avenues, towers, engine halls, vaults.
+    crosses_ancient_city,
+];
+
+/// Whether `area` crosses one of the buried city's set pieces (Wave 10 ancients-a).
+fn crosses_ancient_city(settings: &WorldSettings, area: &TileRect) -> bool {
+    if !settings.generator.has_descents() {
+        return false;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    crate::worldgen::descent::ancient_city::crosses_city_set_pieces(settings, &layout, area)
+}
 
 /// Whether `area` crosses one of the Drowned and Frozen's set pieces (Wave 9 integration):
 /// Merrow City's bubble, the eel-dragon's grotto, the drowned builder sub, Old Faithful, the

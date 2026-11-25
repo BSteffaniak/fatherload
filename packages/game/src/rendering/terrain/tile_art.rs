@@ -40,6 +40,7 @@ use crate::rendering::pixel_art::{
 
 mod built_art;
 mod cave_art;
+mod city_art;
 mod crust_art;
 mod deep_art;
 mod distortion_art;
@@ -53,6 +54,7 @@ mod sky_art;
 
 pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
+pub use city_art::city_color;
 pub use crust_art::{crust_color, crust_glow};
 pub use deep_art::deep_color;
 pub use distortion_art::warped_color;
@@ -427,6 +429,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Deep(tile) => return deep_art::deep_color(tile),
         TileKind::Hollow(tile) => return hollow_art::hollow_color(tile),
         TileKind::Warped(tile) => return distortion_art::warped_color(tile),
+        TileKind::City(tile) => return city_art::city_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -611,7 +614,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Crust(_)
         | TileKind::Deep(_)
         | TileKind::Hollow(_)
-        | TileKind::Warped(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Warped(_)
+        | TileKind::City(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -838,6 +842,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
                 drowned_art::paint_back(&mut canvas, stratum, up, left, right);
             } else if let Some(stratum) = far_art::far_stratum(terrain, position) {
                 far_art::paint_back(&mut canvas, terrain, position, stratum, up, left, right);
+            } else if let Some(stratum) = city_art::city_stratum(terrain, position) {
+                // The builders' buried city's streets, towers, halls and stacks (Wave 10).
+                city_art::paint_back(&mut canvas, terrain, position, stratum, up, left, right);
             } else {
                 paint_cave(&mut canvas, &strata, up, left, right);
             }
@@ -915,6 +922,22 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         hollow_art::paint(
             &mut canvas,
             position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // The builders' buried city's materials (Wave 10).
+    if let TileKind::City(tile) = kind {
+        city_art::paint(
+            &mut canvas,
             tile,
             &strata,
             Edges {
@@ -1406,6 +1429,7 @@ const fn grows_grass(material: TileKind) -> bool {
             | TileKind::Deep(_)
             | TileKind::Hollow(_)
             | TileKind::Warped(_)
+            | TileKind::City(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

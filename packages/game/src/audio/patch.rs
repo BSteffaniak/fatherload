@@ -14,6 +14,7 @@
 
 use std::f32::consts::TAU;
 
+mod ancient_city;
 mod distortion;
 mod drowned;
 mod far_strange;
@@ -468,6 +469,26 @@ patches! {
     ClockworkLoop => "loop_clockwork",
     EchoesLoop => "loop_echoes",
     PrismLoop => "loop_prism",
+    // The builders' buried city (wave 10 ancients-a), appended at the end so every earlier
+    // patch keeps its seeds.
+    CityTramBell => "city_tram_bell",
+    CityLiftChime => "city_lift_chime",
+    CityPistonHiss => "city_piston_hiss",
+    CityPistonThump => "city_piston_thump",
+    CityCrusherSlam => "city_crusher_slam",
+    CityArchivistChirp => "city_archivist_chirp",
+    CityArchivistScan => "city_archivist_scan",
+    CityChartChord => "city_chart_chord",
+    CityVaultGive => "city_vault_give",
+    CityAlarm => "city_alarm",
+    CityCargoSnatch => "city_cargo_snatch",
+    CitySparkZap => "city_spark_zap",
+    CityMegacityLoop => "city_loop_megacity",
+    CityEngineLoop => "city_loop_engine_halls",
+    CityArchiveLoop => "city_loop_archive",
+    CityHumLoop => "city_loop_hum",
+    CityEngineBedLoop => "city_loop_engine_bed",
+    CityStacksLoop => "city_loop_stacks",
 }
 
 /// Playback metadata of a patch.
@@ -935,6 +956,36 @@ impl Patch {
                 .send(0.4)
                 .jitter(0.0, 0.3)
                 .priority(8),
+            // The buried city (Wave 10): music and beds loop; the machinery is heard from where
+            // it is, the crusher's slam and the vault's lock are big.
+            Self::CityMegacityLoop | Self::CityEngineLoop | Self::CityArchiveLoop | Self::CityHumLoop | Self::CityEngineBedLoop | Self::CityStacksLoop => {
+                PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0)
+            }
+            Self::CityTramBell | Self::CityLiftChime | Self::CityChartChord => {
+                PatchInfo::new(Feedback)
+                    .instances(2)
+                    .send(0.45)
+                    .jitter(0.01, 0.5)
+            }
+            Self::CityArchivistChirp | Self::CityArchivistScan => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.15)
+                .jitter(0.03, 0.5),
+            Self::CityPistonHiss | Self::CityCargoSnatch | Self::CitySparkZap => {
+                PatchInfo::new(Feedback)
+                    .instances(3)
+                    .send(0.25)
+                    .jitter(0.05, 1.0)
+            }
+            Self::CityPistonThump | Self::CityAlarm => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.35)
+                .jitter(0.04, 0.8),
+            Self::CityCrusherSlam | Self::CityVaultGive => PatchInfo::new(Big)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.03, 0.6)
+                .priority(6),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1546,6 +1597,24 @@ impl Patch {
             Self::ClockworkLoop => far_strange::clockwork_bed(rng),
             Self::EchoesLoop => far_strange::echoes_bed(rng),
             Self::PrismLoop => far_strange::prism_bed(rng),
+            Self::CityTramBell => ancient_city::tram_bell(rng),
+            Self::CityLiftChime => ancient_city::lift_chime(rng),
+            Self::CityPistonHiss => ancient_city::piston_hiss(rng),
+            Self::CityPistonThump => ancient_city::piston_thump(rng),
+            Self::CityCrusherSlam => ancient_city::crusher_slam(rng),
+            Self::CityArchivistChirp => ancient_city::archivist_chirp(rng),
+            Self::CityArchivistScan => ancient_city::archivist_scan(rng),
+            Self::CityChartChord => ancient_city::chart_chord(rng),
+            Self::CityVaultGive => ancient_city::vault_give(rng),
+            Self::CityAlarm => ancient_city::city_alarm(rng),
+            Self::CityCargoSnatch => ancient_city::cargo_snatch(rng),
+            Self::CitySparkZap => ancient_city::spark_zap(rng),
+            Self::CityMegacityLoop => ancient_city::megacity_loop(rng),
+            Self::CityEngineLoop => ancient_city::engine_loop(rng),
+            Self::CityArchiveLoop => ancient_city::archive_loop(rng),
+            Self::CityHumLoop => ancient_city::city_hum_bed(rng),
+            Self::CityEngineBedLoop => ancient_city::engine_bed(rng),
+            Self::CityStacksLoop => ancient_city::stacks_bed(rng),
         }
     }
 }

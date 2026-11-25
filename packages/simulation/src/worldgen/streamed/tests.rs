@@ -559,6 +559,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Deep(_) => 'd',
         TileKind::Hollow(_) => 'h',
         TileKind::Warped(_) => 'w',
+        TileKind::City(_) => 'y',
     }
 }
 

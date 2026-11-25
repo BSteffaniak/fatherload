@@ -40,6 +40,7 @@ pub(super) mod daylight;
 mod distortion;
 mod drops;
 pub(super) use drops::drop_sprite;
+mod ancient_city;
 mod drowned;
 mod enemies;
 mod expedition;
@@ -226,6 +227,8 @@ pub(super) struct WorldScene<'a> {
     pub far_strange: &'a fatherload_simulation::far_strange::FarStrange,
     /// The Rewrite Hall (The Glitch's arena), on Deep Descent worlds.
     pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
+    /// The builders' buried city (Wave 10): rides, alarms, archivists, star charts.
+    pub ancient_city: &'a fatherload_simulation::ancient_city::AncientCity,
 }
 
 impl WorldScene<'_> {
@@ -529,6 +532,21 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     far_strange::draw_prism_light(draw, &far_scene);
     far_strange::draw_rewrite_hall(draw, &far_scene);
     far_strange::draw_glitch_channels(draw, &far_scene);
+    // The builders' buried city (Wave 10): trams, lifts, pistons, crushers, belts, the Great
+    // Engine's flywheel, the Orrery and the plinths' light, behind the rigs.
+    let city_scene = ancient_city::CityScene {
+        terrain: scene.terrain,
+        visible: scene.visible,
+        city: scene.ancient_city,
+        players: scene.players,
+        world_millis: scene.world_millis,
+        tick_rate_hz: scene.tick_rate_hz,
+        alpha: scene.bomb_alpha,
+        seconds,
+        effects: scene.effects_strength,
+        local: scene.local.map(|local| local.player_id),
+    };
+    ancient_city::draw_machinery(draw, &city_scene);
     if let Some(local) = scene.local {
         fx::draw_scanner_marks(draw, scene.terrain, local, seconds);
         fx::draw_poi_scanner_marks(draw, scene.terrain, local, seconds);
@@ -572,6 +590,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
         }
     }
     pilot::draw_pilots(draw, scene.pilots, scene.visible, scene.ticks);
+    // Every player's archivist hovering by its rig (Wave 10).
+    ancient_city::draw_archivists(draw, &city_scene);
     // Fluids over the rigs and pilots in them (Part III F9).
     fluids::draw_fluids(draw, scene.terrain, scene.explored, scene.visible, seconds);
     tombs::draw_downed(draw, scene.tombs, scene.pilots, seconds);

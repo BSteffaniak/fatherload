@@ -861,6 +861,8 @@ const fn blast_proof(kind: TileKind) -> bool {
         // Cave caches shrug off blasts (`Terrain::blast_radius` skips them), so lanes stop too.
         // Builder alloy and the Prism Desert's keyed walls too (Wave 9).
         TileKind::Cave(cave) => cave.is_cache() || cave.blast_proof(),
+        // The buried city's machinery and plinths (Wave 10).
+        TileKind::City(tile) => tile.indestructible(),
         _ => false,
     }
 }

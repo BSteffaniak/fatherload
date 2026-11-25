@@ -40,6 +40,7 @@ mod pilot;
 mod pointer;
 mod quests;
 pub mod rewards;
+pub mod star_charts;
 mod story;
 mod test_mode;
 pub mod tombs;
@@ -170,6 +171,10 @@ pub enum ModalScreen {
     /// The expedition codex (Wave 9 story, `shell/expedition.rs`): the Crust's strongbox diary
     /// and the builders' tablets and inscriptions. After the journal in the page cycle.
     ExpeditionCodex,
+    /// The star charts (Wave 10 ancients-a, `shell/star_charts.rs`): the stars the crew has
+    /// charted in the Archive of Stars, with a picture of the charted sky. After the codex in
+    /// the page cycle.
+    StarCharts,
 }
 
 impl ModalScreen {
@@ -811,6 +816,31 @@ pub enum SoundCue {
     GlitchRewrite,
     /// The Glitch blinking across its hall.
     GlitchBlink,
+    // --- The builders' buried city (Wave 10 ancients-a), appended ---------------------------
+    /// A tram's bell (Wave 10, the buried city).
+    CityTramBell,
+    /// A lift's chime.
+    CityLiftChime,
+    /// A piston's hiss of steam.
+    CityPistonHiss,
+    /// A rig thrown off a rising piston.
+    CityPistonThump,
+    /// A crusher's slam.
+    CityCrusherSlam,
+    /// The archivist speaking.
+    CityArchivistChirp,
+    /// The archivist's ore scan.
+    CityArchivistScan,
+    /// A star chart read.
+    CityChartChord,
+    /// A vault's lock giving.
+    CityVaultGive,
+    /// The Megacity's alarm.
+    CityAlarm,
+    /// A scrap crawler snatching ore.
+    CityCargoSnatch,
+    /// A spark wisp's jolt.
+    CitySparkZap,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1644,6 +1674,10 @@ impl SeatUi {
             self.handle_expedition_codex(input, ctx.world, cues);
             return true;
         }
+        if modal == ModalScreen::StarCharts {
+            self.handle_star_charts(input, ctx.world, cues);
+            return true;
+        }
         if modal == ModalScreen::Logistics {
             self.handle_logistics(input, ctx, cues, requests);
             return true;
@@ -1866,7 +1900,8 @@ impl SeatUi {
             | ModalScreen::TombCodex
             | ModalScreen::Logistics
             | ModalScreen::ExpeditionLog
-            | ModalScreen::ExpeditionCodex => None,
+            | ModalScreen::ExpeditionCodex
+            | ModalScreen::StarCharts => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1

@@ -1281,6 +1281,17 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The builders' buried city (Wave 10 ancients-a, Descent VII; netcode codes 630-649).
+    /// Something of the buried city happened at tile `(x, y)`; `player_id` is whose deed or
+    /// whom it concerns, if anyone's; `detail` is the event's number (a stop, a line id, a
+    /// chart's index, a landmark's index, an amount; see [`crate::ancient_city::CityEvent`]).
+    AncientCity {
+        what: crate::ancient_city::CityEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+        detail: u16,
+    },
 }
 
 /// What a weapon shot struck.

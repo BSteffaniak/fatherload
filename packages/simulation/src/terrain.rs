@@ -341,6 +341,12 @@ pub enum TileKind {
     /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
     /// [`crate::distortion`]): mirror glass and mirror ore, flow stone, data ore, rotten blocks.
     Warped(crate::distortion::WarpedTile),
+    /// A tile of the builders' buried city (Wave 10 ancients-a, Descent VII strata 1-3 of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see
+    /// [`crate::ancient_city`]): city stone, tower glass, tram rails and platforms, lamps, lift
+    /// rails, archivist cores, engine plating, belts, piston housings, archive stone and
+    /// shelving, star glass and star chart plinths.
+    City(crate::ancient_city::CityTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -452,6 +458,7 @@ impl TileKind {
             Self::Deep(tile) => tile.name(),
             Self::Hollow(tile) => tile.name(),
             Self::Warped(tile) => tile.name(),
+            Self::City(tile) => tile.name(),
         }
     }
 
@@ -550,6 +557,7 @@ impl Tile {
             TileKind::Deep(tile) => crate::old_deep::DEEP_TILE_CODE_BASE | tile.code(),
             TileKind::Hollow(tile) => crate::hollow::HOLLOW_TILE_CODE_BASE | tile.code(),
             TileKind::Warped(tile) => crate::distortion::WARPED_TILE_CODE_BASE | tile.code(),
+            TileKind::City(tile) => crate::ancient_city::CITY_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1589,6 +1597,8 @@ impl Terrain {
                     // the core; bombs still break pylons and pistons).
                     // The Sun Well and the inner sun (Wave 9) shrug off every blast.
                     TileKind::Hollow(tile) if tile.indestructible() => continue,
+                    // The buried city's machinery and plinths (Wave 10).
+                    TileKind::City(tile) if tile.indestructible() => continue,
                     TileKind::Deep(tile)
                         if tile.indestructible()
                             || matches!(tile, crate::old_deep::DeepTile::FirstCore) =>
@@ -1935,6 +1945,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Deep(tile) => tile.hardness(),
         TileKind::Hollow(tile) => tile.hardness(),
         TileKind::Warped(tile) => tile.hardness(),
+        TileKind::City(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1980,6 +1991,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Deep(tile) => tile.durability(),
         TileKind::Hollow(tile) => tile.durability(),
         TileKind::Warped(tile) => tile.durability(),
+        TileKind::City(tile) => tile.durability(),
     }
 }
 

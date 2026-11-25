@@ -818,6 +818,8 @@ pub struct RenderSnapshot<'w> {
     pub far_strange: &'w fatherload_simulation::far_strange::FarStrange,
     /// The Rewrite Hall (The Glitch's arena), on Deep Descent worlds.
     pub glitch_arena: Option<fatherload_simulation::worldgen::TileRect>,
+    /// The builders' buried city (Wave 10): rides, alarms, archivists, star charts.
+    pub ancient_city: &'w fatherload_simulation::ancient_city::AncientCity,
 }
 
 /// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
@@ -961,6 +963,7 @@ impl<'w> RenderSnapshot<'w> {
             expedition: world.expedition(),
             far_strange: world.far_strange(),
             glitch_arena: world.glitch_arena(),
+            ancient_city: world.ancient_city(),
             expedition_lead: crate::shell::expedition::next_lead(world),
             people_day: world.people_clock().day,
             powered_modules: world

@@ -2,6 +2,7 @@
 //! atlas packs them (the tests fail for a sprite that is drawn but missing here only at runtime,
 //! so keep groups' lists complete).
 
+pub mod ancient_city;
 pub mod crypt;
 pub mod deep_gear;
 pub mod deep_supplies;
@@ -551,6 +552,19 @@ pub const ALL: &[&SpriteDef] = &[
     &far_strange::SHOT_PRISM_GREEN,
     &far_strange::SHOT_PRISM_BLUE,
     &far_strange::SHOT_GLITCH_BOLT,
+    // The builders' buried city (Wave 10 ancients-a).
+    &ancient_city::MAINTENANCE_DRONE,
+    &ancient_city::SCRAP_CRAWLER,
+    &ancient_city::STREET_SENTINEL,
+    &ancient_city::COG_ROLLER,
+    &ancient_city::SPARK_WISP,
+    &ancient_city::RIVET_HOUND,
+    &ancient_city::ARCHIVE_WARDEN,
+    &ancient_city::PAGE_MOTH,
+    &ancient_city::INDEX_SPIDER,
+    &ancient_city::SHOT_SENTINEL_BOLT,
+    &ancient_city::SHOT_READING_BEAM,
+    &ancient_city::ARCHIVIST,
     &explosives::TIME_BUBBLE,
     &explosives::ICON_TIME_BUBBLE,
     // The deep supplies of Descents IV-VI (Wave 9 progression).

@@ -221,6 +221,19 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// fitted lamp filter glass) in the logistics section, the supply events 720-739
 /// (`GameplayEventKind::Supply`), the appended `FarStrangeRefusal::NoFilterGlass`, and the
 /// appended `BuildingStyle::{Coral, Jungle, Machine}` in village records.
+/// Version 18 (wave 10 ancients-a, Descent VII strata 1-3, the builders' buried city):
+/// * `TileKind::City` (the `0x1A00` family: city stone, tower glass, tram rails, platforms,
+///   lamps, alloy ore, lift rails, archivist cores, engine plating, belts, piston housings,
+///   engine core ore, pipes, archive shelving and stone, star glass and chart plinths) in
+///   terrain ops and keyframes;
+/// * nine appended `EnemyKind`s (`MaintenanceDrone` .. `IndexSpider`) and two `ShotKind`s
+///   (`SentinelBolt`, `ReadingBeam`) in entity records;
+/// * the `AncientCity` world field and `SectionKey::AncientCity` section (rides on trams, lifts
+///   and pistons, the Megacity's alarms, every player's archivist, the star charts read, vaults
+///   opened, landmarks found);
+/// * the buried city's events 630-649 (`GameplayEventKind::AncientCity`, with a `detail`
+///   number);
+/// * the Archive Post's residents (a third deep settlement) in NPC entities.
 pub const PROTOCOL_VERSION: u8 = 18;
 
 /// One client input frame: the controls and actions for exactly one tick.

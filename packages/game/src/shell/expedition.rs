@@ -243,8 +243,10 @@ impl SeatUi {
             self.open_modal(ModalScreen::ExpeditionLog);
             return;
         }
+        // The star charts come next (Wave 10), then the map.
+        let next = ModalScreen::StarCharts;
         if input.tab_next {
-            self.open_modal(ModalScreen::Map);
+            self.open_modal(next);
             return;
         }
         if !input.confirm {
@@ -252,7 +254,7 @@ impl SeatUi {
         }
         match rows.get(self.selected_menu_item) {
             Some(CodexRow::Entry(..)) => cues.push(SoundCue::UiMove),
-            Some(CodexRow::TurnPage) | None => self.open_modal(ModalScreen::Map),
+            Some(CodexRow::TurnPage) | None => self.open_modal(next),
         }
     }
 }

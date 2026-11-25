@@ -377,6 +377,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Supply {
             what, player_id, ..
         } => (720 + what.code() as u32, player_id),
+        // The builders' buried city (wave 10 ancients-a, Descent VII): 630-649.
+        GameplayEventKind::AncientCity {
+            what, player_id, ..
+        } => (630 + what.code() as u32, player_id),
     }
 }
 

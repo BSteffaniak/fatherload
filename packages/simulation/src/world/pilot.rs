@@ -236,6 +236,7 @@ impl WorldState {
         // Not out of a moving lift cab (Part III F10).
         !self.is_on_foot(player_id)
             && !self.logistics.is_riding(player_id)
+            && !self.ancient_city.is_riding(player_id)
             && self.exit_spot(player_id).is_some()
     }
 

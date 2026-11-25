@@ -811,6 +811,7 @@ impl Terrain {
 impl Tile {
     /// Inverse of [`Tile::code`], or `None` for a code no tile has.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per tile family")]
     pub const fn from_code(code: u64) -> Option<Self> {
         const MINERALS: [MineralKind; 12] = [
             MineralKind::Copper,
@@ -906,6 +907,10 @@ impl Tile {
             },
             0x1600..=0x16FF => match crate::distortion::WarpedTile::from_code(variant as u64) {
                 Some(tile) => TileKind::Warped(tile),
+                None => return None,
+            },
+            0x1A00..=0x1AFF => match crate::ancient_city::CityTile::from_code(variant as u64) {
+                Some(tile) => TileKind::City(tile),
                 None => return None,
             },
             _ => return None,

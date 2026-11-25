@@ -238,6 +238,11 @@ impl WorldState {
         if !self.far_strange.is_empty() {
             hash.write_serialized(&self.far_strange);
         }
+        // Absent until something happens in the buried city (Wave 10), so older worlds keep
+        // their hashes.
+        if !self.ancient_city.is_empty() {
+            hash.write_serialized(&self.ancient_city);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

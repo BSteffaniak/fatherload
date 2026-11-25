@@ -44,16 +44,21 @@ pub enum Settlement {
     JungleTribes,
     /// The Descent VI outpost on the edge of the Prism Desert.
     PrismRelay,
+    // --- Wave 10 ancients-a (appended). -----------------------------------------------------
+    /// The Archive Post, Descent VII's outpost in the Buried Megacity: the Lamplighters and the
+    /// builders' patient machines.
+    ArchivePost,
 }
 
 impl Settlement {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::GravelHollow,
         Self::OldDeepCamp,
         Self::TheHive,
         Self::MerrowCity,
         Self::JungleTribes,
         Self::PrismRelay,
+        Self::ArchivePost,
     ];
 
     #[must_use]
@@ -65,6 +70,7 @@ impl Settlement {
             Self::MerrowCity => "Merrow City",
             Self::JungleTribes => "the jungle tribes",
             Self::PrismRelay => "the Prism Relay",
+            Self::ArchivePost => "the Archive Post",
         }
     }
 
@@ -78,6 +84,7 @@ impl Settlement {
             Self::MerrowCity => "merrow_city.",
             Self::JungleTribes => "jungle_tribes.",
             Self::PrismRelay => "prism_relay.",
+            Self::ArchivePost => "archive_post.",
         }
     }
 
@@ -102,6 +109,12 @@ impl Settlement {
                 crate::distortion::PARALLAX_STATION_NAME,
                 "Prism Relay",
                 "the Prism Relay",
+            ],
+            // The Descent VII outpost's Lamplighters (Wave 10 ancients-a).
+            Self::ArchivePost => &[
+                "The Archive Post",
+                "the Archive Post",
+                "Megacity Archive Post",
             ],
         }
     }
@@ -143,9 +156,14 @@ impl Settlement {
             (Self::JungleTribes, Role::Warden | Role::Hermit) => Some("chief"),
             (Self::JungleTribes, Role::Healer) => Some("healer"),
             (Self::JungleTribes, Role::Farmer | Role::Prospector) => Some("hunter"),
-            (Self::PrismRelay, Role::Quartermaster | Role::Mechanic) => Some("keeper"),
+            (Self::PrismRelay, Role::Quartermaster | Role::Mechanic)
+            | (Self::ArchivePost, Role::Quartermaster | Role::Trader) => Some("keeper"),
             (Self::PrismRelay, Role::Tinkerer | Role::Smith) => Some("glass_cutter"),
             (Self::PrismRelay, Role::Courier | Role::Prospector | Role::Hermit) => Some("drifter"),
+            (Self::ArchivePost, Role::Storyteller | Role::RetiredMiner) => Some("lamplighter"),
+            (Self::ArchivePost, Role::Mechanic | Role::Tinkerer | Role::Smith) => Some("tinker"),
+            (Self::ArchivePost, Role::Courier | Role::Apprentice) => Some("sweeper"),
+            (Self::ArchivePost, Role::Scholar | Role::Cartographer) => Some("curator"),
             _ => None,
         }
     }
@@ -180,7 +198,7 @@ impl SettlementMemory {
 }
 
 /// Every remembered line.
-pub const MEMORIES: [SettlementMemory; 40] = [
+pub const MEMORIES: [SettlementMemory; 50] = [
     SettlementMemory {
         id: "gravel_hollow.smith.rails",
         settlement: Settlement::GravelHollow,
@@ -508,6 +526,88 @@ pub const MEMORIES: [SettlementMemory; 40] = [
         after_log: Some(60),
         line: "Past the glass the walls turn into streets. Varga and Calloway went down there, \
                and the relay's needle has pointed after them ever since.",
+    },
+    // --- Wave 10 ancients-a: the Archive Post (Descent VII), the Lamplighters' hall. --------
+    SettlementMemory {
+        id: "archive_post.keeper.register",
+        settlement: Settlement::ArchivePost,
+        speaker: "Keeper-Unit Nine",
+        after_log: None,
+        line: "Nine visitors in four hundred years, and six of them in one week. The Fathers \
+               signed my register in a hurry. I keep the page dusted.",
+    },
+    SettlementMemory {
+        id: "archive_post.lamplighter.lamps",
+        settlement: Settlement::ArchivePost,
+        speaker: "Ada Lantry, the lamplighter",
+        after_log: None,
+        line: "My grandmother came down after a crew that never went home. She found the street \
+               lamps still burning and could not bear to let them go out. Neither can I.",
+    },
+    SettlementMemory {
+        id: "archive_post.tinker.runner",
+        settlement: Settlement::ArchivePost,
+        speaker: "Pell Corran, the tinker",
+        after_log: None,
+        line: "Varga's sled came in on a cracked runner. I welded it on that bench there. He \
+               paid me in chocolate. I still have the wrapper.",
+    },
+    SettlementMemory {
+        id: "archive_post.sweeper.boots",
+        settlement: Settlement::ArchivePost,
+        speaker: "Sweep",
+        after_log: None,
+        line: "Sweep-sweep. Muddy boots. Six pairs. The tall one's were muddiest. Sweep was very \
+               busy that week. Sweep did not mind.",
+    },
+    SettlementMemory {
+        id: "archive_post.curator.lifetime",
+        settlement: Settlement::ArchivePost,
+        speaker: "Curator Thessaly",
+        after_log: None,
+        line: "The builders charted every star they passed. Calloway asked to see them all. I \
+               said it would take a lifetime. She said: then I will stay a lifetime.",
+    },
+    SettlementMemory {
+        id: "archive_post.keeper.late",
+        settlement: Settlement::ArchivePost,
+        speaker: "Keeper-Unit Nine",
+        after_log: Some(55),
+        line: "The archivist will say you are late. It said the same to them. It means it \
+               kindly. It has been waiting a very long time.",
+    },
+    SettlementMemory {
+        id: "archive_post.lamplighter.song",
+        settlement: Settlement::ArchivePost,
+        speaker: "Ada Lantry, the lamplighter",
+        after_log: Some(58),
+        line: "Brannigan's song came down ahead of them, somehow. A load and six fools. We sing \
+               it when we light the far streets, so the dark knows someone's coming.",
+    },
+    SettlementMemory {
+        id: "archive_post.curator.soup",
+        settlement: Settlement::ArchivePost,
+        speaker: "Curator Thessaly",
+        after_log: Some(60),
+        line: "Calloway went down to the Archive and did not come back for supper. I sent Sweep \
+               with soup. Sweep came back with an empty bowl and a note: thank you, still \
+               reading.",
+    },
+    SettlementMemory {
+        id: "archive_post.tinker.pipe",
+        settlement: Settlement::ArchivePost,
+        speaker: "Pell Corran, the tinker",
+        after_log: Some(60),
+        line: "If you go through the Engine Halls, count the beat. Folk who don't come back \
+               with a leg set in a length of my pipe. Ask Varga.",
+    },
+    SettlementMemory {
+        id: "archive_post.keeper.stars",
+        settlement: Settlement::ArchivePost,
+        speaker: "Keeper-Unit Nine",
+        after_log: Some(60),
+        line: "Varga asked me which way was home. I showed him up. He laughed and said: no, \
+               the other home. I showed him up again, further.",
     },
 ];
 

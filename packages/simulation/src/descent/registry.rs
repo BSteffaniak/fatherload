@@ -1431,14 +1431,25 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Mythril, 500, 800, 50), ore(Platinum, 500, 600, 40)],
         layer_resource: resource("Ancient Alloy", StrategicResourceKind::AncientAlloy),
-        creatures: &[(MiningDrone, 4), (SentryTurret, 3), (AncientGuardian, 1)],
+        // Wave 10 ancients-a: the city's machines.
+        creatures: &[
+            (EnemyKind::MaintenanceDrone, 4),
+            (EnemyKind::ScrapCrawler, 3),
+            (EnemyKind::StreetSentinel, 2),
+        ],
         hazards: &[(Explosive, 5), (Pressure, 2)],
-        music: MusicCue::Ancients,
-        ambience: AmbienceCue::Machines,
+        field: FieldProfile {
+            // The lamps' warm amber over cold stone.
+            screen: &[screen(ScreenEffect::ColourGrade, 220)],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::BuriedMegacity,
+        ambience: AmbienceCue::CityHum,
         landmarks: &[
             LandmarkKind::Outpost,
             LandmarkKind::Settlements,
             LandmarkKind::Prefabs,
+            LandmarkKind::AncientCity,
         ],
         variants: &["Tram Avenues", "Fallen Towers"],
         ..TEMPLATE
@@ -1458,10 +1469,29 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         ),
         ores: &[ore(Uranium, 500, 800, 40), ore(Mythril, 500, 600, 50)],
         layer_resource: resource("Engine Core", StrategicResourceKind::MachineRelic),
-        creatures: &[(MiningDrone, 4), (RogueExcavator, 3), (SentryTurret, 2)],
+        // Wave 10 ancients-a: the halls' machines and the sparks they throw.
+        creatures: &[
+            (EnemyKind::CogRoller, 4),
+            (EnemyKind::SparkWisp, 3),
+            (EnemyKind::RivetHound, 2),
+        ],
         hazards: &[(Explosive, 6), (MagmaVent, 2)],
-        music: MusicCue::Ancients,
-        ambience: AmbienceCue::Machines,
+        field: FieldProfile {
+            // Hot, oily air: a little haze and a vignette, heavier deeper.
+            screen: &[
+                screen(ScreenEffect::Wobble, 160),
+                screen(ScreenEffect::Vignette, 260),
+            ],
+            deepening: true,
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::EngineHalls,
+        ambience: AmbienceCue::EngineBeat,
+        landmarks: &[
+            LandmarkKind::Prefabs,
+            LandmarkKind::CaveEcosystems,
+            LandmarkKind::AncientCity,
+        ],
         variants: &["Crusher Lines", "Piston Shafts"],
         fluids: &[FluidPocketRule::sealed(LiquidMetal, 90)],
         ..TEMPLATE
@@ -1480,11 +1510,30 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             Some(Rgb(255, 255, 200)),
         ),
         ores: &[ore(Diamond, 500, 800, 40), ore(Mythril, 500, 600, 50)],
-        layer_resource: resource("Star Chart", StrategicResourceKind::AncientAlloy),
-        creatures: &[(SentryTurret, 3), (AncientGuardian, 1), (MiningDrone, 3)],
+        layer_resource: resource("Star Glass", StrategicResourceKind::AncientAlloy),
+        // Wave 10 ancients-a: the stacks' keepers and pests.
+        creatures: &[
+            (EnemyKind::PageMoth, 4),
+            (EnemyKind::IndexSpider, 3),
+            (EnemyKind::ArchiveWarden, 2),
+        ],
         hazards: &[(Pressure, 5), (Explosive, 3)],
-        music: MusicCue::Ancients,
-        ambience: AmbienceCue::Silence,
+        field: FieldProfile {
+            // Starlit and hushed: dimmer, a deep blue grade and a vignette.
+            light_permille: 760,
+            screen: &[
+                screen(ScreenEffect::ColourGrade, 320),
+                screen(ScreenEffect::Vignette, 240),
+            ],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::ArchiveOfStars,
+        ambience: AmbienceCue::Stacks,
+        landmarks: &[
+            LandmarkKind::Prefabs,
+            LandmarkKind::CaveEcosystems,
+            LandmarkKind::AncientCity,
+        ],
         variants: &["Stacks", "Orrery Halls"],
         ..TEMPLATE
     },

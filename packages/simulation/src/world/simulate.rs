@@ -81,7 +81,12 @@ impl WorldState {
                     self.drop_cart(player_id);
                 }
                 let carted = self.riding_cart(player_id);
-                let riding = self.logistics.is_riding(player_id) || carted;
+                // A rig on a tram, lift or piston (Wave 10, the buried city): the mover carries
+                // it (`advance_ancient_city`), with its stick and thrust.
+                self.note_city_stick(player_id, controls.horizontal(), controls.thrust);
+                let riding = self.logistics.is_riding(player_id)
+                    || carted
+                    || self.ancient_city.is_riding(player_id);
                 if !riding {
                     let _drill = self.apply_drill_intent(
                         player_id,
@@ -190,7 +195,8 @@ impl WorldState {
                 let outcome = if !self.players.contains_key(&player_id) {
                     PlayerScopedCommandOutcome::UnknownPlayer
                 } else if !self.command_allowed_here(player_id, &action.command)
-                    || (self.logistics.is_riding(player_id)
+                    || ((self.logistics.is_riding(player_id)
+                        || self.ancient_city.is_riding(player_id))
                         && matches!(action.command, crate::PlayerCommand::TogglePilot))
                 {
                     // Building services only work at the building (validated here, inside the
@@ -565,6 +571,9 @@ impl WorldState {
         self.advance_distortion(next_tick, &mut output);
         // The far Strange Layers (Wave 9): amber, pings, keyed walls, landmarks, The Glitch.
         self.advance_far_strange(next_tick, &mut output);
+        // The builders' buried city (Wave 10): rides, machinery, the alarm, plinths, vaults,
+        // landmarks and the archivists.
+        self.advance_ancient_city(next_tick, &mut output);
         self.advance_pilot_pickups(&mut output);
         self.advance_critters(next_tick);
         self.advance_people(next_tick);

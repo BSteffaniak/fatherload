@@ -26,9 +26,9 @@ use crate::rendering::pixel_art::palette::*;
 use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
-        crypt as crypt_art, distortion as warp_art, drowned as drowned_art, enemies as art,
-        far_strange as far_art, hollow as hollow_art, living as living_art, moon as moon_art,
-        old_deep as deep_art, tomb as tomb_art,
+        ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
+        drowned as drowned_art, enemies as art, far_strange as far_art, hollow as hollow_art,
+        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
     },
 };
 
@@ -164,6 +164,16 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::LensWraith => &far_art::LENS_WRAITH,
         EnemyKind::TheGlitch => &far_art::THE_GLITCH,
         EnemyKind::GlitchShard => &far_art::GLITCH_SHARD,
+        // The builders' buried city (Wave 10).
+        EnemyKind::MaintenanceDrone => &city_art::MAINTENANCE_DRONE,
+        EnemyKind::ScrapCrawler => &city_art::SCRAP_CRAWLER,
+        EnemyKind::StreetSentinel => &city_art::STREET_SENTINEL,
+        EnemyKind::CogRoller => &city_art::COG_ROLLER,
+        EnemyKind::SparkWisp => &city_art::SPARK_WISP,
+        EnemyKind::RivetHound => &city_art::RIVET_HOUND,
+        EnemyKind::ArchiveWarden => &city_art::ARCHIVE_WARDEN,
+        EnemyKind::PageMoth => &city_art::PAGE_MOTH,
+        EnemyKind::IndexSpider => &city_art::INDEX_SPIDER,
     }
 }
 
@@ -203,6 +213,8 @@ pub const fn shot_sprite(shot: ShotKind) -> &'static SpriteDef {
         ShotKind::PrismGreen => &far_art::SHOT_PRISM_GREEN,
         ShotKind::PrismBlue => &far_art::SHOT_PRISM_BLUE,
         ShotKind::GlitchBolt => &far_art::SHOT_GLITCH_BOLT,
+        ShotKind::SentinelBolt => &city_art::SHOT_SENTINEL_BOLT,
+        ShotKind::ReadingBeam => &city_art::SHOT_READING_BEAM,
     }
 }
 
@@ -722,6 +734,30 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::Shrieker
         | EnemyKind::HushMoth
         | EnemyKind::GlitchShard => sprite.frame_at(phase),
+        // The buried city (Wave 10): strides and wind-ups (a drone's band and a sentinel's
+        // lamp turn red when they hunt or fire; a hound crouches; a warden reads).
+        EnemyKind::MaintenanceDrone => {
+            if state.target.is_some() {
+                2
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
+        EnemyKind::ScrapCrawler
+        | EnemyKind::StreetSentinel
+        | EnemyKind::CogRoller
+        | EnemyKind::RivetHound
+        | EnemyKind::ArchiveWarden
+        | EnemyKind::IndexSpider => {
+            if attacking {
+                2
+            } else if moving || state.kind == EnemyKind::CogRoller {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::SparkWisp | EnemyKind::PageMoth => sprite.frame_at(phase),
     }
 }
 
@@ -835,6 +871,12 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::EchoStalker
             | EnemyKind::PrismScarab
             | EnemyKind::LensWraith
+            // The buried city's (Wave 10) asymmetric kinds.
+            | EnemyKind::ScrapCrawler
+            | EnemyKind::StreetSentinel
+            | EnemyKind::RivetHound
+            | EnemyKind::ArchiveWarden
+            | EnemyKind::IndexSpider
     )
 }
 
@@ -1501,6 +1543,9 @@ fn draw_shot(
         ShotKind::PrismGreen => LIME,
         ShotKind::PrismBlue => SKY,
         ShotKind::GlitchBolt => PINK,
+        // The buried city (Wave 10).
+        ShotKind::SentinelBolt => GOLD,
+        ShotKind::ReadingBeam => SKY_LIGHT,
     };
     disc(
         draw,
@@ -1584,6 +1629,8 @@ mod tests {
             ShotKind::PrismBlue,
             ShotKind::GlitchBolt,
             ShotKind::MindSpore,
+            ShotKind::SentinelBolt,
+            ShotKind::ReadingBeam,
         ] {
             let sprite = shot_sprite(shot);
             assert!(

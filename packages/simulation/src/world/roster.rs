@@ -128,6 +128,9 @@ impl WorldState {
             // world's.
             far_strange,
             far_schedule: _,
+            // A leaving rig's ride and alarm go with it; its archivist waits for it (Wave 10).
+            ancient_city,
+            city_schedule: _,
         } = self;
         hollow.forget(player_id);
         distortion.forget(player_id);
@@ -137,6 +140,7 @@ impl WorldState {
         living_dark.forget(player_id);
         drowned.forget(player_id);
         far_strange.forget(player_id);
+        ancient_city.forget(player_id);
         players.remove(&player_id);
         equipped_rig_parts.remove(&player_id);
         mechanic_levels.remove(&player_id);

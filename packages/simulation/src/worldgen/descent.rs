@@ -28,6 +28,7 @@
     reason = "const integer layout maths on small row counts, indices and reduced hashes"
 )]
 
+pub mod ancient_city;
 pub mod crust;
 pub mod distortion;
 pub mod drowned;

@@ -243,6 +243,10 @@ pub enum SectionKey {
     /// The far Strange Layers: lamp filters, sonar pings, amber, landmarks found and The
     /// Glitch's fight (Wave 9 strange-b; keyed walls travel as terrain ops).
     FarStrange,
+    /// The builders' buried city: rides, alarms, every player's archivist, the star charts
+    /// found, vaults opened and landmarks found (Wave 10 ancients-a; plinths read travel as
+    /// terrain ops).
+    AncientCity,
 }
 
 impl SectionKey {
@@ -262,7 +266,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 28] = [
+    pub const SHARED: [Self; 29] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -293,6 +297,8 @@ impl SectionKey {
         Self::Distortion,
         // The far Strange Layers (Wave 9 strange-b).
         Self::FarStrange,
+        // The builders' buried city (Wave 10 ancients-a).
+        Self::AncientCity,
     ];
 }
 
@@ -329,6 +335,7 @@ pub enum SectionPayload {
     Hollow(Box<crate::hollow::Hollow>),
     Distortion(Box<crate::distortion::Distortion>),
     FarStrange(Box<crate::far_strange::FarStrange>),
+    AncientCity(Box<crate::ancient_city::AncientCity>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -531,6 +538,8 @@ impl WorldState {
             distortion,
             far_strange,
             far_schedule: _,
+            ancient_city,
+            city_schedule: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -637,6 +646,7 @@ impl WorldState {
             SectionKey::Hollow => SectionPayload::Hollow(Box::new(hollow.clone())),
             SectionKey::Distortion => SectionPayload::Distortion(Box::new(distortion.clone())),
             SectionKey::FarStrange => SectionPayload::FarStrange(Box::new(far_strange.clone())),
+            SectionKey::AncientCity => SectionPayload::AncientCity(Box::new(ancient_city.clone())),
         })
     }
 
@@ -823,6 +833,9 @@ impl WorldState {
             }
             (SectionKey::FarStrange, SectionPayload::FarStrange(far_strange)) => {
                 self.far_strange = *far_strange;
+            }
+            (SectionKey::AncientCity, SectionPayload::AncientCity(ancient_city)) => {
+                self.ancient_city = *ancient_city;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

@@ -670,6 +670,13 @@ pub enum MusicCue {
     PrismDesert,
     /// The Glitch's fight: stuttering, bit-crushed drums that rewrite their own pattern.
     TheGlitch,
+    // --- The builders' buried city (Wave 10 ancients-a), appended ---------------------------
+    /// Buried Megacity: a stately, lonely civic anthem on a far tram bell and electric piano.
+    BuriedMegacity,
+    /// Engine Halls: a driving machine groove whose tempo is the Great Engine's beat.
+    EngineHalls,
+    /// The Archive of Stars: slow starlit chimes and a choir pad, a music box of the sky.
+    ArchiveOfStars,
 }
 
 /// A stratum's ambience bed.
@@ -745,6 +752,13 @@ pub enum AmbienceCue {
     Echoes,
     /// Glassy hiss of prism sand, singing edges.
     Prism,
+    // --- The builders' buried city (Wave 10 ancients-a), appended ---------------------------
+    /// The city's hum: far tram bells, buzzing lamps, a lift's whine.
+    CityHum,
+    /// The halls' machinery: hissing pistons and the deep thud of the beat.
+    EngineBeat,
+    /// The stacks' hush: settling paper, a ticking orrery, far chimes.
+    Stacks,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -789,10 +803,15 @@ pub enum LandmarkKind {
     /// Clock, echo hollows and the Choir, keyed curtains and spectrum vaults, the Rewrite Hall
     /// ([`crate::worldgen::descent::far_strange`]).
     FarStrange,
+    /// The builders' buried city's set pieces (Wave 10 ancients-a): avenues and tram lines,
+    /// towers and lifts, the Lantern Library, engine halls, piston shafts, crusher lines, the
+    /// Great Engine, archive stacks, puzzle vaults and the Orrery
+    /// ([`crate::worldgen::descent::ancient_city`]).
+    AncientCity,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -806,6 +825,7 @@ impl LandmarkKind {
         Self::HollowWorld,
         Self::Distortion,
         Self::FarStrange,
+        Self::AncientCity,
     ];
 }
 

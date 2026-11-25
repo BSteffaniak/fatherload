@@ -226,6 +226,8 @@ impl WorldState {
             distortion: crate::distortion::Distortion::default(),
             far_strange: crate::far_strange::FarStrange::default(),
             far_schedule: crate::far_strange::FarSchedule::default(),
+            ancient_city: crate::ancient_city::AncientCity::default(),
+            city_schedule: crate::ancient_city::CitySchedule::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders
