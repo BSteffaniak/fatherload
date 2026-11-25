@@ -216,55 +216,45 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   (each player's supply kit of `workshop::DeepSupply`) in the logistics section.
 /// * The integration: no wire change (the Sonar Suite's one API reads the two sections above).
 ///
-/// Version 18 (Wave 10; the integrator collapses the tracks' bumps). The polish track:
-/// `Logistics::supply_effects` (blowing ballast, flare buoys and beast bait in the world,
-/// fitted lamp filter glass) in the logistics section, the supply events 720-739
-/// (`GameplayEventKind::Supply`), the appended `FarStrangeRefusal::NoFilterGlass`, and the
-/// appended `BuildingStyle::{Coral, Jungle, Machine}` in village records.
-///
-/// Version 18 (wave 10 ancients-a, Descent VII strata 1-3, the builders' buried city):
-/// * `TileKind::City` (the `0x1C00` family: city stone, tower glass, tram rails, platforms,
-///   lamps, alloy ore, lift rails, archivist cores, engine plating, belts, piston housings,
-///   engine core ore, pipes, archive shelving and stone, star glass and chart plinths) in
-///   terrain ops and keyframes;
-/// * nine appended `EnemyKind`s (`MaintenanceDrone` .. `IndexSpider`) and two `ShotKind`s
-///   (`SentinelBolt`, `ReadingBeam`) in entity records;
-/// * the `AncientCity` world field and `SectionKey::AncientCity` section (rides on trams, lifts
-///   and pistons, the Megacity's alarms, every player's archivist, the star charts read, vaults
-///   opened, landmarks found);
-/// * the buried city's events 630-649 (`GameplayEventKind::AncientCity`, with a `detail`
-///   number);
-/// * the Archive Post's residents (a third deep settlement) in NPC entities.
-///
-/// Wave 10 ancients-b (Descent VII part B: the Sleeping Garrison, the Seal Gate and the
-/// Gatekeeper Colossus), one bump for the track (the integrator collapses Wave 10's):
-/// * twelve appended `CaveTile`s (codes 160-171: war plate, war bays, hold pylons, barricades,
-///   seal stone, the seal door, the Heart Seal, seal gold, collapse rubble, the cracked floor
-///   and vault, key altars) in terrain ops and keyframes;
-/// * nine appended `EnemyKind`s (`WarSentry` .. `ColossusLegs`) and five `ShotKind`s
-///   (`SentryBolt` .. `FallingStone`) in entity records;
-/// * `Buildable::Defence` (turrets, barricades, shock traps) in build commands and `BasePlaced`
-///   events, two appended `BuildRefusal`s;
-/// * the `Garrison` world field and `SectionKey::Garrison` section (forts and waves, defences,
-///   the Seal Gate, the Colossus's fight, falling stones, landmarks found);
-/// * the Descent VII part B events 650-669 (`GameplayEventKind::Garrison`).
-///
-/// Version 18 (Wave 10: Descents VII-VIII and the ending; the integration collapses the
-/// tracks' bumps into this one):
+/// Version 18 (Wave 10: Descents VII-VIII, the ending and the polish; the integration collapses
+/// the five tracks' bumps into this one):
+/// * Polish: `Logistics::supply_effects` (blowing ballast, flare buoys and beast bait in the
+///   world, fitted lamp filter glass) in the logistics section, the supply events 720-739
+///   (`GameplayEventKind::Supply`), the appended `FarStrangeRefusal::NoFilterGlass`, and the
+///   appended `BuildingStyle::{Coral, Jungle, Machine}` in village records.
+/// * Ancients-a (Descent VII strata 1-3, the builders' buried city): `TileKind::City` (the
+///   `0x1C00` family: city stone, tower glass, tram rails, platforms, lamps, alloy ore, lift
+///   rails, archivist cores, engine plating, belts, piston housings, engine core ore, pipes,
+///   archive shelving and stone, star glass and chart plinths) in terrain ops and keyframes;
+///   nine appended `EnemyKind`s (`MaintenanceDrone` .. `IndexSpider`) and two `ShotKind`s
+///   (`SentinelBolt`, `ReadingBeam`) in entity records; the `AncientCity` world field and
+///   `SectionKey::AncientCity` section (rides on trams, lifts and pistons, the Megacity's
+///   alarms, every player's archivist, the star charts read, vaults opened, landmarks found);
+///   the buried city's events 630-649 (`GameplayEventKind::AncientCity`, with a `detail`
+///   number; an archivist's line id past 1000 is one of the story's lines); the Archive Post's
+///   residents (a third deep settlement) in NPC entities.
+/// * Ancients-b (the Sleeping Garrison, the Seal Gate and the Gatekeeper Colossus): twelve
+///   appended `CaveTile`s (codes 160-171: war plate, war bays, hold pylons, barricades, seal
+///   stone, the seal door, the Heart Seal, seal gold, collapse rubble, the cracked floor and
+///   vault, key altars) in terrain ops and keyframes; nine appended `EnemyKind`s (`WarSentry`
+///   .. `ColossusLegs`) and five `ShotKind`s (`SentryBolt` .. `FallingStone`) in entity
+///   records; `Buildable::Defence` (turrets, barricades, shock traps) in build commands and
+///   `BasePlaced` events, two appended `BuildRefusal`s; the `Garrison` world field and
+///   `SectionKey::Garrison` section (forts and waves, defences, the Seal Gate, the Colossus's
+///   fight, falling stones, landmarks found); the events 650-669
+///   (`GameplayEventKind::Garrison`).
 /// * The Heart (Descent VIII): `TileKind::Core(CoreTile)` tiles (codes `0x1A00`) in terrain
 ///   ops, chunk refreshes and keyframes, fourteen appended `EnemyKind`s (`NullMoth` ..
-///   `HeartSpark`) in entity records, `ScreenEffect` levels unchanged, the `Heart` world field
-///   and `SectionKey::Heart` section (floating rigs, wells, landmarks found, the Heart's fight,
-///   `space_unlocked`, the Star Drives, the ending's start), and the Heart events 670-699
-///   (`GameplayEventKind::Heart`, `HeartLandmarkFound`).
-///
-/// Version 18 (Wave 10; each track bumps at most once and the integration collapses them):
-/// * The story (w10-story): `ExpeditionState::{descents, bosses, cable_lit}` in the shared
-///   `Expedition` section, the story events 700-719 (`GameplayEventKind::Story` with
+///   `HeartSpark`) in entity records, the `Heart` world field and `SectionKey::Heart` section
+///   (floating rigs, wells, landmarks found, the Heart's fight, `space_unlocked`, the Star
+///   Drives, the ending's start), and the Heart events 670-699 (`GameplayEventKind::Heart`,
+///   `HeartLandmarkFound`).
+/// * The story: `ExpeditionState::{descents, bosses, cable_lit}` in the shared `Expedition`
+///   section, the story events 700-719 (`GameplayEventKind::Story` with
 ///   `expedition::progress::StoryEvent`), the appended finale `Milestone`s and their
 ///   `PaintColor` rewards, the appended deep-settlement story places
-///   (`StoryPlace::{FathersSite, DeepSeam}`), `ArcKind::Deep` and the deep settlements'
-///   arcs in the arc log.
+///   (`StoryPlace::{FathersSite, DeepSeam}`), `ArcKind::Deep` and the deep settlements' arcs
+///   in the arc log; the appended `memories::Settlement::{ArchivePost, HeartCamp}`.
 pub const PROTOCOL_VERSION: u8 = 18;
 
 /// One client input frame: the controls and actions for exactly one tick.

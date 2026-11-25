@@ -212,6 +212,8 @@ mod village_tests;
 mod villages;
 mod visibility;
 #[cfg(test)]
+mod wave10_integration_tests;
+#[cfg(test)]
 mod wave10_polish_tests;
 #[cfg(test)]
 mod wave6_content_tests;

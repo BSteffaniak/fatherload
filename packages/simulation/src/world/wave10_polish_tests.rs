@@ -160,6 +160,9 @@ fn the_heat_warning_reads_the_heat_past_the_rigs_cooling_not_the_strata_heat() {
         Descent::DrownedAndFrozen,
         Descent::HollowWorld,
         Descent::StrangeLayers,
+        // Wave 10 integration: the builders' world and the Heart are authored now too.
+        Descent::Ancients,
+        Descent::Heart,
     ] {
         let cap = core_tier_cap(u8::try_from(descent.index()).expect("index"));
         for stratum in descent.strata() {

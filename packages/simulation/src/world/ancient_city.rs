@@ -1199,12 +1199,21 @@ impl WorldState {
         {
             return false;
         }
-        let Some(line) = archivist::line_for(archivist, trigger) else {
-            return false;
-        };
-        let id = line.id;
         let frame = self.frame();
         let tile = frame.tile_at(archivist.x, archivist.y);
+        // Every other musing is the story's (Wave 10 integration): what the archivist knows of
+        // the Fathers, the Descent it stands in and, once the cable is lit, what comes after.
+        let story = (trigger == Trigger::Muse && archivist.musing.is_multiple_of(2))
+            .then(|| {
+                let here = self.deep_stratum_at(tile)?.descent();
+                archivist::story_musing(archivist, &self.expedition, here)
+            })
+            .flatten();
+        let Some(id) =
+            story.or_else(|| archivist::line_for(archivist, trigger).map(|line| line.id))
+        else {
+            return false;
+        };
         if let Some(archivist) = self.ancient_city.archivists.get_mut(&player_id) {
             archivist.said.insert(id);
             archivist.line = Some((id, now));

@@ -657,9 +657,16 @@ impl LocalGame {
         for (seat, message) in messages {
             self.shell.seat_mut(seat).message = message;
         }
-        if ending {
-            for seat in 0..players.len() {
-                let ui = self.shell.seat_mut(seat);
+        // The story's pages follow the Heart's own sequence (Wave 10 integration): each seat
+        // reads them once its awakening, cutaway, credits and epilogue are done or skipped.
+        let ending_elapsed = self.runtime.world().ending_elapsed();
+        for seat in 0..players.len() {
+            let ui = self.shell.seat_mut(seat);
+            ui.story_ending_pending |= ending;
+            let sequence_done =
+                ending_elapsed.is_none_or(|elapsed| !ui.ending.phase(elapsed).playing());
+            if ui.story_ending_pending && sequence_done {
+                ui.story_ending_pending = false;
                 ui.modal = Some(crate::shell::ModalScreen::Ending);
                 ui.selected_menu_item = 0;
             }

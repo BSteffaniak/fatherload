@@ -1305,6 +1305,9 @@ pub struct SeatUi {
     /// The seat's own view of the ending (Wave 10): what it skipped (every seat skips only its
     /// own; the world only says when the cable lit).
     pub ending: fatherload_simulation::heart::ending::EndingView,
+    /// The story's ending pages wait to open (Wave 10 integration): the cable lit, and they
+    /// open once the seat's own awakening, cutaway, credits and epilogue are done.
+    pub story_ending_pending: bool,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1356,6 +1359,7 @@ impl SeatUi {
             tomb: tombs::SeatTomb::new(),
             logistics: logistics::SeatLogistics::new(),
             remembered: None,
+            story_ending_pending: false,
         }
     }
 

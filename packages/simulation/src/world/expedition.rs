@@ -123,7 +123,9 @@ impl WorldState {
             DescentBoss::Leviathan => self.drowned.leviathan.beaten,
             DescentBoss::SunSerpent => self.hollow.serpent.beaten,
             DescentBoss::TheGlitch => self.far_strange.glitch.beaten,
-            DescentBoss::GatekeeperColossus | DescentBoss::TheHeart => false,
+            // Wave 10 integration: Descent VII's gate fight and the Heart's own state.
+            DescentBoss::GatekeeperColossus => self.garrison.colossus.beaten,
+            DescentBoss::TheHeart => self.heart.fight.beaten,
         };
         own || self.expedition.bosses & (boss_bit(boss) << BOSS_NOTED_SHIFT) != 0
     }

@@ -665,13 +665,56 @@ pub const LINES: [Line; 62] = [
     ),
 ];
 
-/// The line with id `id`, if any.
+/// Ids from here on are the story track's lines.
+///
+/// Id `STORY_LINE_BASE + n` is `ARCHIVIST_LINES[n]` (Wave 10 integration: the companion speaks
+/// the story's words about the Fathers, the Descents and after the end in its musings).
+pub const STORY_LINE_BASE: u16 = 1_000;
+
+/// The line with id `id`, if any (its own, or the story's past [`STORY_LINE_BASE`]).
 #[must_use]
 pub fn line_text(id: u16) -> Option<&'static str> {
+    if let Some(index) = id.checked_sub(STORY_LINE_BASE) {
+        return crate::expedition::archivist::ARCHIVIST_LINES
+            .get(usize::from(index))
+            .map(|line| line.line);
+    }
     LINES
         .iter()
         .find(|line| line.id == id)
         .map(|line| line.text)
+}
+
+/// The story's line the companion muses on next.
+///
+/// For a crew with `state` standing in `here`: one it has not said: the story's remark for its next musings, see
+/// [`crate::expedition::archivist::remark`], as its id past [`STORY_LINE_BASE`].
+#[must_use]
+pub fn story_musing(
+    archivist: &Archivist,
+    state: &crate::expedition::ExpeditionState,
+    here: crate::descent::Descent,
+) -> Option<u16> {
+    let tries = u32::try_from(crate::expedition::archivist::ARCHIVIST_LINES.len()).unwrap_or(0) * 2;
+    (0..tries)
+        .filter_map(|offset| {
+            crate::expedition::archivist::remark(
+                state,
+                here,
+                u32::from(archivist.musing).wrapping_add(offset),
+            )
+        })
+        .filter_map(story_line_id)
+        .find(|id| !archivist.has_said(*id))
+}
+
+/// The id the companion says the story's line `line` by (see [`STORY_LINE_BASE`]).
+#[must_use]
+pub fn story_line_id(line: &crate::expedition::archivist::ArchivistLine) -> Option<u16> {
+    let index = crate::expedition::archivist::ARCHIVIST_LINES
+        .iter()
+        .position(|candidate| candidate.id == line.id)?;
+    STORY_LINE_BASE.checked_add(u16::try_from(index).ok()?)
 }
 
 /// The archivist's line answering `trigger` it has not said yet, if any (musings in order;
