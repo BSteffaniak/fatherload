@@ -27,6 +27,7 @@
 
 pub mod bodies;
 pub mod fixtures;
+pub mod live;
 pub mod motion;
 pub mod objects;
 pub mod polar;
@@ -193,7 +194,11 @@ pub struct SpaceRenderer {
     lens: Option<(Shader, i32, i32)>,
     /// The picture behind a black hole, for its lens (view sized, logical points).
     behind: Option<RenderTexture2D>,
+    /// The first seat's ground (and the staged views').
     pub polar: polar::PolarGround,
+    /// The other split-screen seats' grounds (made when a seat first stands on a body), so
+    /// seats on different bodies keep their own textures.
+    seats: Vec<polar::PolarGround>,
 }
 
 impl SpaceRenderer {
@@ -216,6 +221,30 @@ impl SpaceRenderer {
             lens,
             behind: None,
             polar: polar::PolarGround::new(raylib, thread),
+            seats: Vec::new(),
+        }
+    }
+
+    /// Seat `seat`'s ground renderer.
+    fn ground(&self, seat: usize) -> Option<&polar::PolarGround> {
+        if seat == 0 {
+            Some(&self.polar)
+        } else {
+            self.seats.get(seat - 1)
+        }
+    }
+
+    /// Marks a changed tile of seat `seat`'s body for repainting (Wave 11 integration: the
+    /// body store's tile writes, as the home world's renderer is told of its own).
+    pub fn mark_ground_tile(
+        &mut self,
+        seat: usize,
+        tile: fatherload_simulation::terrain::TilePosition,
+    ) {
+        if seat == 0 {
+            self.polar.mark_tile_dirty(tile);
+        } else if let Some(ground) = self.seats.get_mut(seat - 1) {
+            ground.mark_tile_dirty(tile);
         }
     }
 
@@ -239,10 +268,32 @@ impl SpaceRenderer {
         view: &SpaceRenderView<'_>,
         size: (i32, i32),
     ) {
+        self.sync_seat(raylib, thread, view, size, 0);
+    }
+
+    /// [`Self::sync`] for split-screen seat `seat` (each seat keeps its own ground).
+    pub fn sync_seat(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        view: &SpaceRenderView<'_>,
+        size: (i32, i32),
+        seat: usize,
+    ) {
         if let Some(ground) = &view.ground {
             let reach = (size.0 as f32).hypot(size.1 as f32) * 0.5;
-            self.polar
-                .sync(raylib, thread, ground, view.camera.px_per_tile, reach);
+            let force_quads = self.polar.force_quads;
+            let polar = if seat == 0 {
+                &mut self.polar
+            } else {
+                while self.seats.len() < seat {
+                    let mut extra = polar::PolarGround::new(raylib, thread);
+                    extra.force_quads = force_quads;
+                    self.seats.push(extra);
+                }
+                &mut self.seats[seat - 1]
+            };
+            polar.sync(raylib, thread, ground, view.camera.px_per_tile, reach);
         }
         let wants_lens = self.lens.is_some()
             && view.black_holes.iter().any(|hole| {
@@ -271,6 +322,17 @@ impl SpaceRenderer {
         draw: &mut RaylibDrawHandle<'_>,
         view: &SpaceRenderView<'_>,
         viewport: Rectangle,
+    ) {
+        self.draw_seat(draw, view, viewport, 0);
+    }
+
+    /// [`Self::draw`] for split-screen seat `seat` (its own ground).
+    pub fn draw_seat(
+        &self,
+        draw: &mut RaylibDrawHandle<'_>,
+        view: &SpaceRenderView<'_>,
+        viewport: Rectangle,
+        seat: usize,
     ) {
         let projection = Projection::new(&view.camera, viewport);
         let lensed = view
@@ -359,8 +421,9 @@ impl SpaceRenderer {
             let toward = view.light_toward(ground.body.centre);
             let sun = polar::sun_angle(ground, toward);
             let blend = bodies::ground_blend(projection.px_per_tile);
-            self.polar
-                .draw(ground, &camera, viewport, sun, blend, view.seconds);
+            if let Some(polar) = self.ground(seat) {
+                polar.draw(ground, &camera, viewport, sun, blend, view.seconds);
+            }
             if blend > 0.5 {
                 polar::PolarGround::draw_things(draw, ground, &camera, sun, view.seconds);
             }

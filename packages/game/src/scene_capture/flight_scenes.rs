@@ -2,7 +2,9 @@
 //! fitted): leaving the home world over the Moon, a full turn in vacuum, cruising across the
 //! home system, a warp's streak, the nav HUD with a ping and a crewmate, docking at a station
 //! and its counter, the nav chart, re-entry heat over a world, a landing, and two seats in
-//! space at once. Placeholder space art until the space-render track's.
+//! space at once. Drawn from the real galaxy (the space generator) by the space renderer,
+//! with flight's own layer and HUD over it; a rig on a body stands on its round ground (the
+//! regions' body store, the polar track's strip, the polar renderer). Wave 11 integration.
 
 #![allow(
     clippy::missing_const_for_fn,
@@ -344,27 +346,191 @@ fn reentry(stage: &mut SceneStage<'_>) {
     stage.settle(8);
 }
 
-/// Landed on a world: the view at one to one, the curve of the ground.
+/// `player`'s rig set down on `body`'s round ground (its store, made on arrival) at strip
+/// column `column`, `rows_up` rows over the surface, level and still.
+fn set_down(
+    world: &mut WorldState,
+    player: PlayerId,
+    body: fatherload_simulation::flight::FlightBody,
+    column: i32,
+    rows_up: i32,
+) {
+    let Some(ground) = world.body_ground(body.body) else {
+        return;
+    };
+    let planet = fatherload_simulation::planet::PlanetGround::new(ground.params);
+    let surface = fatherload_simulation::planet::BodyGround::surface_row(&planet, column);
+    let at = fatherload_simulation::world::strip_position(
+        f64::from(column) + 0.5,
+        f64::from(surface - rows_up),
+    );
+    let _ = world.move_to_place(
+        player,
+        fatherload_simulation::place::Place::OnBody(fatherload_simulation::place::BodyId::Space(
+            ground.id,
+        )),
+        at,
+    );
+    if let Some(rig) = world.player_mut(player) {
+        rig.flight.place = FlightPlace::Landed(body.body);
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+        rig.attitude = RigAttitude::LEVEL;
+    }
+}
+
+/// The Archive's charted small moon (the journey's): its chart read.
+fn charted_moon(world: &mut WorldState) -> Option<fatherload_simulation::flight::FlightBody> {
+    let (chart, _, body) =
+        fatherload_simulation::flight::autopilot::chart_with_a_small_moon(SCENE_SEED)?;
+    world.record_star_chart(chart);
+    Some(body)
+}
+
+/// Landed on a world of the home system: its round ground under the rig, the curve of it.
 fn landed(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         space_world(world);
         let planet = home_planet(world);
-        let pos = planet.centre.offset(
-            0.0,
-            -(planet.radius + fatherload_simulation::flight::RIG_CONTACT),
-        );
         launch(
             world,
             seats[0].player,
-            pos,
+            planet.centre,
             0.0,
             (0.0, 0.0),
             StarDrive::Off,
             true,
         );
+        set_down(world, seats[0].player, planet, 200, 1);
+    });
+    stage.settle(120);
+}
+
+/// On the charted small moon's round ground at `column`; `dig` frames of drilling first.
+fn moon_ground(stage: &mut SceneStage<'_>, column: i32, dig: usize) {
+    stage.play(1, |world, seats| {
+        space_world(world);
+        world.enable_test_mode();
+        let Some(moon) = charted_moon(world) else {
+            return;
+        };
+        launch(
+            world,
+            seats[0].player,
+            moon.centre,
+            0.0,
+            (0.0, 0.0),
+            StarDrive::Off,
+            true,
+        );
+        set_down(world, seats[0].player, moon, column, 1);
+    });
+    stage.settle(120);
+    if dig > 0 {
+        stage.hold(
+            dig,
+            crate::input::PlayerInput {
+                drill_down: true,
+                ..crate::input::PlayerInput::default()
+            },
+        );
+        stage.settle(20);
+    }
+}
+
+/// Coming down over the charted small moon, nose up, a few hundred tiles over its hills.
+fn moon_approach(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        space_world(world);
+        let Some(moon) = charted_moon(world) else {
+            return;
+        };
+        let altitude = moon.radius + space::tiles(140.0);
+        let pos = moon.centre.offset(altitude * 0.6, -altitude * 0.8);
+        launch(
+            world,
+            seats[0].player,
+            pos,
+            nav::bearing(moon.centre, pos) + 0.3,
+            (-40.0, 60.0),
+            StarDrive::Off,
+            true,
+        );
         if let Some(rig) = world.player_mut(seats[0].player) {
-            rig.flight.place = FlightPlace::Landed(planet.body);
+            rig.flight.place = FlightPlace::Approach(moon.body);
         }
+        set_waypoint(world, seats[0].player, NavTarget::Body(moon.body));
+    });
+    stage.settle(10);
+}
+
+/// Two seats in two places: one on the charted moon's ground, one just past the Moon.
+fn split_places(stage: &mut SceneStage<'_>) {
+    stage.play(2, |world, seats| {
+        space_world(world);
+        let Some(moon) = charted_moon(world) else {
+            return;
+        };
+        launch(
+            world,
+            seats[0].player,
+            moon.centre,
+            0.0,
+            (0.0, 0.0),
+            StarDrive::Off,
+            true,
+        );
+        set_down(world, seats[0].player, moon, 600, 1);
+        launch(
+            world,
+            seats[1].player,
+            space::home_launch(),
+            0.5,
+            (240.0, -700.0),
+            StarDrive::Off,
+            true,
+        );
+    });
+    stage.settle(120);
+}
+
+/// Near the black hole nearest home: its disc and the lens bending the stars behind it.
+fn near_black_hole(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        space_world(world);
+        let galaxy = fatherload_simulation::space::Space::shared(SCENE_SEED);
+        let nearest = (1..=6).find_map(|ring: i32| {
+            let mut found = None;
+            for y in -ring..=ring {
+                for x in -ring..=ring {
+                    if x.abs() != ring && y.abs() != ring {
+                        continue;
+                    }
+                    let sector =
+                        galaxy.sector(fatherload_simulation::space::SpaceSector::new(x, y));
+                    if let Some(first) = sector.black_holes.first() {
+                        found = Some(*first);
+                    }
+                }
+            }
+            found
+        });
+        let Some(hole) = nearest else {
+            return;
+        };
+        let centre = hole.centre.pos();
+        #[allow(clippy::cast_precision_loss, reason = "a horizon in tiles")]
+        let reach = space::tiles(hole.horizon as f32 * 14.0);
+        let pos = centre.offset(-reach * 0.6, reach * 0.8);
+        launch(
+            world,
+            seats[0].player,
+            pos,
+            nav::bearing(pos, centre) - 1.1,
+            (20.0, -10.0),
+            StarDrive::Off,
+            true,
+        );
     });
     stage.settle(10);
 }
@@ -428,12 +594,12 @@ pub const FLIGHT_SCENES: &[Scene] = &[
         setup: |stage| leaving(stage, true),
     },
     Scene {
-        name: "space_cruise",
+        name: "space_flight_cruise",
         summary: "Cruising across the home system toward a world: streaking stars, the drive's glow, the nav panel's ETA",
         setup: cruise,
     },
     Scene {
-        name: "space_warp",
+        name: "space_flight_warp",
         summary: "Mid-warp to a star to the east: the tunnel of light, the target star's tint, the warp's progress",
         setup: warp,
     },
@@ -464,8 +630,38 @@ pub const FLIGHT_SCENES: &[Scene] = &[
     },
     Scene {
         name: "space_landed",
-        summary: "Landed on a world of the home system: the view at one to one over its curved ground",
+        summary: "Landed on a world of the home system: its round ground (the body store's polar strip) under the rig, the camera locked to the craft",
         setup: landed,
+    },
+    Scene {
+        name: "space_moon_approach",
+        summary: "Coming down over the Archive's charted small moon, nose up: the round world from space, its ground's tiles fading in",
+        setup: moon_approach,
+    },
+    Scene {
+        name: "space_moon_ground",
+        summary: "Standing on the charted small moon's round ground: curved horizon, ring tiles, the galaxy above, the HUD upright",
+        setup: |stage| moon_ground(stage, 300, 0),
+    },
+    Scene {
+        name: "space_moon_far_side",
+        summary: "The charted small moon's far side (half a lap round its strip from the first scene's column)",
+        setup: |stage| moon_ground(stage, 1_836, 0),
+    },
+    Scene {
+        name: "space_moon_shaft",
+        summary: "A shaft dug toward the charted small moon's core: the rings narrowing round the rig",
+        setup: |stage| moon_ground(stage, 300, 420),
+    },
+    Scene {
+        name: "space_split_places",
+        summary: "Split screen, two places: one seat on the charted moon's round ground, one just past the Moon in space",
+        setup: split_places,
+    },
+    Scene {
+        name: "space_near_black_hole",
+        summary: "Flying near the black hole nearest home: its disc and the lens over the stars behind it",
+        setup: near_black_hole,
     },
     Scene {
         name: "space_split_screen",

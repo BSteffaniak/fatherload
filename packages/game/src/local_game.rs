@@ -2527,6 +2527,7 @@ mod tests {
     mod logistics_tests;
     mod pilot_tests;
     mod quest_tests;
+    mod space_seat_tests;
     mod split_seat_tests;
     mod test_mode_tests;
     mod tomb_tests;

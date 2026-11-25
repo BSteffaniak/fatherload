@@ -221,10 +221,6 @@ impl PolarGround {
     /// own). Its rows repaint on the next sync; a strip whose revision changes with no tile
     /// marked repaints everything over a few frames. Assumes `PolarStrip::tile_at` keeps rows
     /// (band columns may map anywhere).
-    #[allow(
-        dead_code,
-        reason = "TODO-SEAM: the integrator calls it from the seat's terrain changes"
-    )]
     pub fn mark_tile_dirty(&mut self, tile: TilePosition) {
         self.fine_art.mark_dirty(tile);
         let reach = tile_art::TELLTALE_RADIUS.max(1);

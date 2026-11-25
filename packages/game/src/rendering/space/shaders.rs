@@ -108,8 +108,9 @@ void main() {
         // Four light steps with a dithered terminator.
         float light = clamp(lambert * 1.3 + 0.12 + dither * 0.12, 0.0, 1.0);
         light = max(floor(light * 4.0 + 0.5) / 4.0, uSun.w);
-        // The night side keeps a cold trace of its colour.
-        vec3 colour = surface * (vec3(0.05, 0.06, 0.12) + vec3(0.95, 0.94, 0.88) * light);
+        // The night side keeps a cold trace of its colour (readable: a body seen from its dark
+        // side, the Moon from the departure point, still shows its face).
+        vec3 colour = surface * (vec3(0.17, 0.18, 0.27) + vec3(0.83, 0.82, 0.73) * light);
         // The atmosphere's rim, brighter on the day side.
         float rim = pow(1.0 - z, 3.0) * uKind.y;
         float day = clamp(dot(normalize(p + vec2(0.0001)), sun2) * 0.5 + 0.6, 0.0, 1.0);

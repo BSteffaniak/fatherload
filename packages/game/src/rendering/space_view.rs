@@ -118,12 +118,29 @@ pub fn zoom_for(gap: f32, visible: f32) -> f32 {
     (visible * 0.32 / gap.max(1.0)).clamp(1.0 / 6_000.0, 1.0)
 }
 
-/// The space frame for `view` (see the module docs).
+/// Distance from `at` to the nearest black hole's disc (space pixels), if one is near.
+fn black_hole_gap(seed: u64, at: WorldPos) -> Option<f32> {
+    let space = fatherload_simulation::space::Space::shared(seed);
+    let tile = fatherload_simulation::space::SpaceTile::of_pos(at);
+    space
+        .sectors_near(tile, fatherload_simulation::space::SPACE_SECTOR_TILES / 2)
+        .iter()
+        .flat_map(|sector| sector.black_holes.clone())
+        .map(|hole| {
+            let distance = hole.centre.distance(tile) as f32;
+            let disc = hole.horizon as f32 * 3.0;
+            (distance - disc).max(1.0) * TILE_SIZE
+        })
+        .min_by(f32::total_cmp)
+}
+
+/// The space frame for `view` (see the module docs) in the world seeded `seed`.
 pub(super) fn space_frame(
     shell: &ShellState,
     view: &ViewSnapshot<'_>,
     bodies: &[FlightBody],
     density: f32,
+    seed: u64,
 ) -> SpaceFrame {
     let flight = view.player.flight;
     let rect = Rectangle::new(
@@ -133,6 +150,8 @@ pub(super) fn space_frame(
         view.viewport.height as f32 * density,
     );
     let (gap, _) = nearest_surface(bodies, flight.pos);
+    // A black hole's disc frames the view as a body's surface would (Wave 11 integration).
+    let gap = black_hole_gap(seed, flight.pos).map_or(gap, |hole| gap.min(hole));
     let visible = view.viewport.height as f32 / view.world_scale.max(0.01);
     let zoom = zoom_for(gap, visible);
     SpaceFrame {
@@ -149,7 +168,10 @@ pub(super) fn space_frame(
 }
 
 /// Draws space for a seat whose rig is away (the world part, physical pixels), then returns
-/// the frame for the HUD.
+/// the frame for the HUD. With `backdrop` false the sky, the suns and the worlds are left to
+/// the space renderer (drawn first, from the real galaxy: Wave 11 integration) and this draws
+/// flight's own layer over it: stations with their ports, pings, crewmates, the warp tunnel
+/// and the rig.
 #[allow(clippy::too_many_arguments, reason = "one view's scene")]
 pub(super) fn draw_space_world(
     draw: &mut RaylibDrawHandle<'_>,
@@ -159,21 +181,27 @@ pub(super) fn draw_space_world(
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     density: f32,
+    backdrop: bool,
 ) -> SpaceFrame {
     let galaxy = snapshot.space.galaxy();
     let flight = view.player.flight;
     let bodies = galaxy.bodies_near(flight.pos);
-    let frame = space_frame(shell, view, &bodies, density);
+    let frame = space_frame(shell, view, &bodies, density, snapshot.space.seed);
     let strength = match snapshot.effects {
         crate::screen_fx::EffectsIntensity::Full => 1.0,
         crate::screen_fx::EffectsIntensity::Reduced => 0.5,
         crate::screen_fx::EffectsIntensity::Off => 0.25,
     };
     let ticks = shell.update_ticks;
-    draw.draw_rectangle_rec(frame.rect, SPACE);
-    draw_starfield(draw, &frame, &flight, ticks, strength);
+    if backdrop {
+        draw.draw_rectangle_rec(frame.rect, SPACE);
+        draw_starfield(draw, &frame, &flight, ticks, strength);
+    }
     // Biggest first: stars, then worlds, then stations on top.
-    let mut order: Vec<&FlightBody> = bodies.iter().collect();
+    let mut order: Vec<&FlightBody> = bodies
+        .iter()
+        .filter(|body| backdrop || body.kind == BodyKind::Station)
+        .collect();
     order.sort_by(|a, b| b.approach.total_cmp(&a.approach));
     for body in order {
         draw_body(draw, &frame, body, &bodies, ticks);
@@ -1137,9 +1165,17 @@ pub(super) fn draw_space_hud(
     } else {
         rect.x + (rect.width - plate_width) * 0.5
     };
+    // A split-screen seat too narrow for both: the plate goes under the meters instead of
+    // over them.
+    let beside = plate_x.min(rect.x + rect.width - plate_width - 4.0);
+    let clears = beside >= meters.x + meters.width + 4.0 || !narrow;
     let plate = Rectangle::new(
-        plate_x.min(rect.x + rect.width - plate_width - 4.0),
-        if touch { rect.y + 50.0 } else { rect.y + 4.0 },
+        if clears { beside } else { meters.x },
+        match (touch, clears) {
+            (_, false) => meters.y + meters.height + 4.0,
+            (true, true) => rect.y + 50.0,
+            (false, true) => rect.y + 4.0,
+        },
         plate_width,
         28.0,
     );

@@ -52,6 +52,7 @@ pub mod rig_art;
 mod screen;
 mod sky_hud;
 pub mod space;
+mod space_seat;
 mod space_view;
 mod story;
 pub mod terrain;
@@ -137,6 +138,8 @@ pub struct GameRenderer {
     post: post_process::PostProcess,
     /// Space and round bodies (Wave 11, F12).
     space: space::SpaceRenderer,
+    /// Each seat's gathering of the real galaxy round its camera (Wave 11 integration).
+    live: Vec<space::live::LiveSpace>,
 }
 
 /// Whose dialogs a [`layout::widgets::UiState`] tracks: the global screens (title, pause,
@@ -255,6 +258,7 @@ impl GameRenderer {
             explored_drawn: DiscoveredTiles::default(),
             post: post_process::PostProcess::new(raylib, thread),
             space: space::SpaceRenderer::new(raylib, thread),
+            live: Vec::new(),
         }
     }
 
@@ -386,6 +390,74 @@ impl GameRenderer {
             .sync(raylib, thread, snapshot.terrain, explored, &views);
         self.places
             .sync(raylib, thread, snapshot, &report.changed_store_tiles);
+        self.sync_space_seats(raylib, thread, snapshot, report);
+    }
+
+    /// Brings each seat's space view up to date (Wave 11 integration): the galaxy gathered
+    /// round its camera, the lens's target, and on a body its round ground's textures (with
+    /// the tiles its store changed this frame marked for repainting).
+    fn sync_space_seats(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        snapshot: &RenderSnapshot<'_>,
+        report: &FrameReport,
+    ) {
+        let size = (raylib.get_screen_width(), raylib.get_screen_height());
+        let density = raylib.get_window_scale_dpi().x.max(1.0);
+        let seconds = Self::space_seconds(snapshot);
+        for view in &snapshot.views {
+            let seat = view.seat_index;
+            if self.live.len() <= seat {
+                self.live
+                    .resize_with(seat + 1, space::live::LiveSpace::default);
+            }
+            if view.player.flight.away() {
+                self.live[seat].update(snapshot.space.seed, view.player.flight.pos);
+                let camera = space_seat::flight_camera(view, view.player.attitude.orientation, 1.0);
+                let live = &self.live[seat];
+                let picture = space_seat::flight_view(live, snapshot, view, camera, seconds);
+                self.space.sync_seat(raylib, thread, &picture, size, seat);
+                continue;
+            }
+            let Some(scene) = &view.place_scene else {
+                continue;
+            };
+            let (Some(body), Some(strip)) = (
+                scene.body.as_ref(),
+                space::live::LiveStrip::of(scene.terrain),
+            ) else {
+                continue;
+            };
+            for (store, tile) in &report.changed_store_tiles {
+                if *store == scene.store {
+                    self.space.mark_ground_tile(seat, *tile);
+                }
+            }
+            let centre = space_seat::body_camera_centre(view, scene, body);
+            self.live[seat].update(scene.seed, centre);
+            let things = space_seat::body_things(view, scene);
+            let px_per_tile = space_seat::ground_px_per_tile(view, density);
+            let live = &self.live[seat];
+            let picture = space_seat::body_view_of(
+                live,
+                snapshot,
+                view,
+                scene,
+                body,
+                &strip,
+                &things,
+                px_per_tile,
+                seconds,
+            );
+            self.space.sync_seat(raylib, thread, &picture, size, seat);
+        }
+    }
+
+    /// The space renderer's presentation clock (twinkles, spins, tails): world time, so a
+    /// scene draws the same every time.
+    fn space_seconds(snapshot: &RenderSnapshot<'_>) -> f32 {
+        (snapshot.tick as f64 / f64::from(snapshot.tick_rate.hz().max(1))) as f32
     }
 
     /// Applies menu input to the dialog UI states before the frame is drawn: scrolling (see
@@ -630,8 +702,31 @@ impl GameRenderer {
                 );
             }
         } else if view.player.flight.away() {
-            // Space flight (Wave 11): space instead of the home world.
+            // Space flight (Wave 11): the real galaxy round the rig (the space renderer), then
+            // flight's own layer and HUD over it.
             let density = render_scale_for_draw(draw);
+            let galaxy = snapshot.space.galaxy();
+            let bodies = fatherload_simulation::flight::SpaceQuery::bodies_near(
+                &galaxy,
+                view.player.flight.pos,
+            );
+            let frame = space_view::space_frame(shell, view, &bodies, density, snapshot.space.seed);
+            if let Some(live) = self.live.get(view.seat_index) {
+                let camera = space_seat::flight_camera(
+                    view,
+                    frame.roll,
+                    frame.scale * fatherload_simulation::TILE_SIZE,
+                );
+                let picture = space_seat::flight_view(
+                    live,
+                    snapshot,
+                    view,
+                    camera,
+                    Self::space_seconds(snapshot),
+                );
+                self.space
+                    .draw_seat(draw, &picture, frame.rect, view.seat_index);
+            }
             let frame = space_view::draw_space_world(
                 draw,
                 snapshot.terrain,
@@ -640,6 +735,7 @@ impl GameRenderer {
                 snapshot,
                 view,
                 density,
+                self.live.get(view.seat_index).is_none(),
             );
             let _canvas = UiCanvasScope::begin(draw);
             space_view::draw_space_hud(draw, shell, snapshot, view, &frame);
@@ -785,8 +881,38 @@ impl GameRenderer {
         view: &ViewSnapshot<'_>,
     ) {
         let viewport = view.viewport;
-        // A seat away from the home store (F11) sees its place (the space-render track's
-        // hook), with its usual HUD over it.
+        // A seat on a generated body sees its round ground (the polar renderer, the camera
+        // locked to the craft), the galaxy above, and its usual HUD over it (Wave 11).
+        if let Some(scene) = &view.place_scene
+            && let Some(body) = &scene.body
+            && let Some(strip) = space::live::LiveStrip::of(scene.terrain)
+            && let Some(live) = self.live.get(view.seat_index)
+        {
+            let density = render_scale_for_draw(draw);
+            let things = space_seat::body_things(view, scene);
+            let picture = space_seat::body_view_of(
+                live,
+                snapshot,
+                view,
+                scene,
+                body,
+                &strip,
+                &things,
+                space_seat::ground_px_per_tile(view, density),
+                Self::space_seconds(snapshot),
+            );
+            self.space.draw_seat(
+                draw,
+                &picture,
+                space_seat::physical_rect(view, density),
+                view.seat_index,
+            );
+            let _canvas = UiCanvasScope::begin(draw);
+            draw_view_hud(draw, shell, snapshot, view);
+            return;
+        }
+        // A seat away from the home store (F11) in free flight's store or on the flat test
+        // ground sees its place, with its usual HUD over it.
         if let Some(scene) = &view.place_scene {
             let density = render_scale_for_draw(draw);
             let camera = view_camera_2d(

@@ -641,6 +641,19 @@ pub struct PlaceScene<'w> {
     pub rigs: Vec<PlayerPresentation>,
     /// Every pilot on foot in the store.
     pub pilots: Vec<PilotPresentation>,
+    /// The generated body this store is the round ground of (`None` for free flight's store
+    /// and the flat test ground): where it is in space and what it looks like, for the polar
+    /// renderer (Wave 11 integration).
+    pub body: Option<PlaceBody>,
+    /// The world's seed (the space generator's galaxy round the body).
+    pub seed: u64,
+}
+
+/// A body store's place in space (see [`PlaceScene::body`]).
+#[derive(Clone, Debug)]
+pub struct PlaceBody {
+    pub ground: fatherload_simulation::world::BodyGroundInfo,
+    pub body: fatherload_simulation::space::SpaceBody,
 }
 
 impl<'w> PlaceScene<'w> {
@@ -661,6 +674,16 @@ impl<'w> PlaceScene<'w> {
                     .map(|player| PlayerPresentation::from_player(id, player, world))
             })
             .collect();
+        let body = match store {
+            fatherload_simulation::place::StoreKey::Body(id) => {
+                world.body_ground_of(id).and_then(|ground| {
+                    fatherload_simulation::space::Space::shared(world.world_seed())
+                        .body(id)
+                        .map(|body| PlaceBody { ground, body })
+                })
+            }
+            _ => None,
+        };
         Some(Self {
             place: world.place_of(player_id),
             store,
@@ -669,6 +692,8 @@ impl<'w> PlaceScene<'w> {
             frame: terrain.frame(),
             rigs,
             pilots: PilotPresentation::in_store(world, entities),
+            body,
+            seed: world.world_seed(),
         })
     }
 }

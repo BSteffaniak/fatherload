@@ -111,6 +111,16 @@ impl SeatUi {
             self.descent = SeatDescent::default();
             return;
         }
+        // Away from the home world (in space, or on another body's ground: Wave 11) there is no
+        // Descent to announce; the banner of the last stratum goes with the rig.
+        let away = ctx.player.is_some_and(|player| {
+            ctx.world.in_space(player) || !ctx.world.store_of(player).is_home()
+        });
+        if away {
+            self.descent.track(&descent::layout(settings), None, tick);
+            self.descent.banner = None;
+            return;
+        }
         let frame = ctx.world.frame();
         let row = ctx.player().map(|player| frame.row(player.y));
         self.descent.track(&descent::layout(settings), row, tick);
