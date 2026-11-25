@@ -219,13 +219,14 @@ impl WorldState {
                     self.tar_under(player.x, player.y),
                 )
             });
-        // A body's weather (Wave 12 bodylife): its wind carries an airborne rig under the open
-        // sky by the same rule as the Inner Sky's.
-        let wind = wind.or_else(|| {
+        // A body's weather (Wave 12 bodylife): an airborne rig under the open sky moves
+        // relative to its wind's air, so it coasts with the wind and steers across it.
+        let body_wind = wind.is_none().then(|| {
             self.players
                 .get(&player_id)
                 .and_then(|player| self.body_wind_at(player.x, player.y))
         });
+        let body_wind = body_wind.flatten();
         // Wave 9: an amber sloth's touch holds the rig in amber (slow motion, slow burn).
         let ambered = self.far_strange.is_ambered(player_id, self.simulation_tick);
         // Wave 10, the Heart: dark matter's negative mass (1000 with none aboard: the classic
@@ -522,7 +523,7 @@ impl WorldState {
                     .in_thin_air(environment.air_density, side_efficiency)
                     .step_tick(player.velocity_x - air, horizontal, timing.rate)
                     + air
-            } else if let Some(wind) = wind.filter(|_| !grounded) {
+            } else if let Some(wind) = wind.or(body_wind).filter(|_| !grounded) {
                 // The Inner Sky's wind (Wave 9): an airborne rig moves relative to the air,
                 // so it coasts with the wind and steers across it.
                 tuning.step_tick(player.velocity_x - wind, horizontal, timing.rate) + wind
@@ -591,8 +592,9 @@ impl WorldState {
                     )
             });
         } else {
+            let air = body_wind.filter(|_| !grounded).unwrap_or(0.0);
             let (velocity_x, velocity_y) = field_velocity(&FieldDriveInput {
-                velocity: (player.velocity_x, player.velocity_y),
+                velocity: (player.velocity_x - air, player.velocity_y),
                 level,
                 orientation,
                 horizontal,
@@ -606,7 +608,7 @@ impl WorldState {
                 climb,
                 seconds,
             });
-            player.velocity_x = quantize_simulation_scalar(velocity_x.clamp(
+            player.velocity_x = quantize_simulation_scalar((velocity_x + air).clamp(
                 -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
                 AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
             ));

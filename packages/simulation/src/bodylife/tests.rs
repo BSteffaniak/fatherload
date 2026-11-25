@@ -75,6 +75,12 @@ fn each_body_keeps_its_own_clock() {
     let dusk = a.column_at(now, 750);
     assert!((a.sun_angle(now, dusk) + std::f64::consts::FRAC_PI_2).abs() < 0.01);
     assert!(a.elevation(now, dusk).abs() < 0.01);
+    // The moment a column reaches an hour.
+    for (column, permille) in [(0, 250), (900, 0), (2_000, 777)] {
+        let when = a.millis_when(123_456, column, permille);
+        assert!((123_456..123_456 + 600_000).contains(&when));
+        assert_eq!(a.local_permille(when, column), permille);
+    }
     // The local day turns over at local midnight.
     let before = a.local_day(599_999 - a.phase_millis % 600_000, 0);
     assert!(a.local_day(1_200_000, 0) > before);

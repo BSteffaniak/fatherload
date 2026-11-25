@@ -174,6 +174,26 @@ impl BodyClock {
         light
     }
 
+    /// The first world time at or after `after` when the local time at strip `column` is
+    /// `permille` (`after` itself on a tidally locked body, whose hours stand still; scenes,
+    /// tests and the HUD's "dawn in ...").
+    #[must_use]
+    pub const fn millis_when(&self, after: u64, column: i64, permille: u32) -> u64 {
+        if self.day_millis == 0 {
+            return after;
+        }
+        let day = self.day_millis;
+        let columns = self.columns as i64;
+        let column = column.rem_euclid(columns) as u64;
+        let offset = (column as u128 * day as u128 / self.columns as u128) as u64;
+        // The day position wanted, rounded up so the reading is `permille`.
+        let want =
+            ((permille % DAY_PERMILLE) as u128 * day as u128).div_ceil(DAY_PERMILLE as u128) as u64;
+        let now = (after % day + self.phase_millis + offset) % day;
+        let ahead = (want + day - now) % day;
+        after + ahead
+    }
+
     /// The strip column whose local time is `permille` at world time `millis` (the nearest
     /// one; scenes and tests).
     #[must_use]
