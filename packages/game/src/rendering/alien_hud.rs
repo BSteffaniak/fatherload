@@ -148,6 +148,7 @@ fn draw_lines(
 }
 
 /// Draws seat `ui.seat`'s alien conversation.
+#[allow(clippy::too_many_lines, reason = "the panel's sections in one place")]
 pub(super) fn draw_alien_talk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let Some(talk) = &ui.seat.village.talk else {
         return;
@@ -241,13 +242,23 @@ pub(super) fn draw_alien_talk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         AlienPage::Gift => "A gift",
     };
     sections.push(Section::new(title, LIME, items));
+    // Docked like a counter: the resident, and what they say, beside the panel.
+    layout::set_modal_placement(layout::ModalPlacement::Counter);
     UiLayout::screen(draw).modal_with_render_plan(
         &talk.name,
         &talk.about,
-        &ModalContent::new(sections).compact().prompts(HELP),
+        &ModalContent::new(sections).prompts(HELP),
     );
-    draw_speech_card(draw, ui, &character, species, understanding);
-    draw_portrait(draw, &character, species);
+    layout::set_modal_placement(layout::ModalPlacement::Centred);
+    let portrait_bottom = draw_portrait(draw, &character, species);
+    draw_speech_card(
+        draw,
+        ui,
+        &character,
+        species,
+        understanding,
+        portrait_bottom,
+    );
 }
 
 /// The card of what the resident said, above the panel (or below it when there is no room).
@@ -257,6 +268,7 @@ fn draw_speech_card(
     character: &Character,
     species: AlienSpecies,
     understanding: u16,
+    below: Option<i32>,
 ) {
     let Some(panel) = layout::peek_last_dialog_rect() else {
         return;
@@ -265,7 +277,14 @@ fn draw_speech_card(
         return;
     };
     let canvas = ui_kit::canvas();
-    let width = (panel.width as i32).max(200).min(canvas.width - 16);
+    // Beside the docked panel when there is room, else across the top of the view.
+    let right = (panel.x + panel.width) as i32 + 8;
+    let beside = canvas.width - right - 8 >= 150;
+    let width = if beside {
+        canvas.width - right - 8
+    } else {
+        canvas.width - 16
+    };
     let inner = width - 16;
     let world = ui.snapshot.world;
     let player = ui.view.player_id;
@@ -317,17 +336,10 @@ fn draw_speech_card(
     let line_height = TextStyle::Body.line_height().max(9);
     let lines: i32 = laid.iter().map(|(_, lines)| lines.len() as i32).sum();
     let height = 22 + lines * line_height + laid.len() as i32 * 3;
-    let x = panel.x as i32 + (panel.width as i32 - width) / 2;
-    let above = panel.y as i32 - height - 4;
-    let y = if above >= 4 {
-        above
+    let (x, y) = if beside {
+        (right, below.map_or(panel.y as i32, |bottom| bottom + 6))
     } else {
-        let below = (panel.y + panel.height) as i32 + 4;
-        if below + height <= canvas.height - 4 {
-            below
-        } else {
-            4
-        }
+        (8, 4)
     };
     ui_kit::panel(
         draw,
@@ -362,25 +374,24 @@ fn plain(text: &str) -> Vec<SpeechToken> {
         .collect()
 }
 
-/// The resident's portrait beside the panel.
-fn draw_portrait(draw: &mut RaylibDrawHandle<'_>, character: &Character, species: AlienSpecies) {
+/// The resident's portrait beside the panel; returns the card's bottom (`None` if there was
+/// no room for it).
+fn draw_portrait(
+    draw: &mut RaylibDrawHandle<'_>,
+    character: &Character,
+    species: AlienSpecies,
+) -> Option<i32> {
     let canvas = ui_kit::canvas();
-    let Some(panel) = layout::peek_last_dialog_rect() else {
-        return;
-    };
+    let panel = layout::peek_last_dialog_rect()?;
     let scale = if canvas.height >= 300 { 3 } else { 2 };
     let art = people_art::PORTRAIT_SIZE * scale;
     let card_w = art + 16;
     let card_h = art + 30;
-    let right_x = canvas.width - card_w - 8;
     let free_left = (panel.x + panel.width) as i32 + 8;
-    let (x, y) = if right_x >= free_left {
-        (right_x, (panel.y as i32).max(8))
-    } else if (panel.x as i32) - card_w - 8 >= 8 {
-        (8, (panel.y as i32).max(8))
-    } else {
-        return;
-    };
+    if canvas.width - free_left - 8 < 150 || card_h + 90 > canvas.height {
+        return None;
+    }
+    let (x, y) = (free_left, (panel.y as i32).max(8));
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, card_w as f32, card_h as f32),
@@ -413,4 +424,5 @@ fn draw_portrait(draw: &mut RaylibDrawHandle<'_>, character: &Character, species
         ((seconds * 0.8) as i32) % 3 != 0,
         seconds,
     );
+    Some(y + card_h)
 }

@@ -135,6 +135,23 @@ impl ArtPen {
         }
     }
 
+    /// A filled ellipse that is its own light (not dimmed by the dark).
+    fn glow_ellipse(
+        self,
+        draw: &mut impl RaylibDraw,
+        cx: i32,
+        cy: i32,
+        rx: i32,
+        ry: i32,
+        colour: Color,
+    ) {
+        for dy in -ry..=ry {
+            let t = 1.0 - (dy as f32 / ry.max(1) as f32).powi(2);
+            let half = (rx as f32 * t.max(0.0).sqrt()).round() as i32;
+            self.glow(draw, cx - half, cy + dy, 2 * half + 1, 1, colour);
+        }
+    }
+
     /// The top half of an ellipse (a dome) standing on row `base`.
     fn dome(self, draw: &mut impl RaylibDraw, cx: i32, base: i32, rx: i32, ry: i32, colour: Color) {
         for dy in 0..=ry {
@@ -452,7 +469,7 @@ fn draw_siphra(
     } else {
         (seconds * 1.1 + phase).sin() * 0.25 + 0.5
     };
-    pen.glow(draw, -10, base - 20, 21, 22, alpha(glass, 26));
+    pen.glow_ellipse(draw, 0, base - 8, 12, 11, alpha(glass, 26));
     pen.dome(draw, 0, base, 9, 15, alpha(glass, 150));
     pen.dome(
         draw,
@@ -512,10 +529,12 @@ pub fn draw_alien_portrait(
         stride: None,
         talking,
     };
+    // Feet placed so the face fills the frame: the Vessi's head on its long neck, the
+    // Tokkari whole (they are small), the Siphra's bell.
     let (scale, x, y) = match species {
-        AlienSpecies::Vessi => (1.6, 4.0, 72.0),
-        AlienSpecies::Tokkari => (2.4, 14.0, 52.0),
-        AlienSpecies::Siphra => (1.5, 16.0, 60.0),
+        AlienSpecies::Vessi => (1.15, 2.0, 52.0),
+        AlienSpecies::Tokkari => (1.3, 15.0, 30.0),
+        AlienSpecies::Siphra => (1.0, 16.0, 36.0),
     };
     let mut art = ArtPen::new(
         pen.x + x * pen.pixel,
@@ -602,131 +621,158 @@ fn draw_vessi_building(
     look: BuildingLook,
     seconds: f32,
 ) {
-    let ice = Color::new(0xcc, 0xe6, 0xf2, 255);
-    let ice_shade = Color::new(0x98, 0xbe, 0xd6, 255);
-    let line = Color::new(0x7a, 0xa2, 0xbe, 255);
-    let warm = Color::new(0xff, 0xb8, 0x5c, 255);
+    let ice = Color::new(0xdc, 0xf0, 0xfb, 255);
+    let ice_shade = Color::new(0xa4, 0xcc, 0xe6, 255);
+    let seam = Color::new(0x7c, 0xa8, 0xcc, 255);
+    let snow = Color::new(0xf8, 0xfc, 0xff, 255);
+    let warm = Color::new(0xff, 0xbe, 0x62, 255);
+    let flicker = 0.85 + 0.15 * (seconds * 4.0 + f32::from(look.index)).sin();
     if kind == AlienBuildingKind::Landmark {
-        // The song spire: a slim shaft of frozen glass with rings and a bell lantern on top.
+        // The song spire: a slim shaft of frozen glass with rings, a bell lantern on top and
+        // frost pennants singing in the wind.
         let top = -h;
-        pen.rect(draw, -6, -6, 12, 6, ice_shade);
-        pen.rect(draw, -3, top + 14, 6, h - 20, alpha(ICE, 230));
-        pen.rect(draw, -1, top + 14, 1, h - 20, alpha(CREAM, 200));
-        for ring in 0..4 {
-            let y = top + 22 + ring * (h - 32) / 4;
-            pen.rect(draw, -5, y, 10, 2, line);
+        pen.dome(draw, 0, -1, 9, 6, ice_shade);
+        pen.rect(draw, -3, top + 14, 7, h - 18, alpha(ICE, 235));
+        pen.rect(draw, -1, top + 14, 2, h - 18, alpha(snow, 220));
+        pen.rect(draw, 2, top + 14, 1, h - 18, alpha(seam, 200));
+        for ring in 0..5 {
+            let y = top + 22 + ring * (h - 30) / 5;
+            pen.rect(draw, -5, y, 11, 2, seam);
+            pen.rect(draw, -5, y, 11, 1, snow);
         }
-        pen.dome(draw, 0, top + 14, 6, 8, alpha(ICE, 220));
+        pen.dome(draw, 0, top + 14, 7, 9, alpha(ICE, 230));
         let pulse = 0.6 + 0.4 * (seconds * 1.7).sin();
-        pen.glow(draw, -2, top + 6, 4, 5, alpha(warm, (pulse * 255.0) as u8));
-        pen.glow(draw, -6, top + 2, 12, 13, alpha(warm, (pulse * 60.0) as u8));
-        // Frost pennants singing in the wind.
+        pen.glow(draw, -2, top + 7, 5, 6, alpha(warm, (pulse * 255.0) as u8));
+        pen.glow(draw, -7, top + 2, 15, 15, alpha(warm, (pulse * 50.0) as u8));
+        pen.rect(draw, 0, top, 1, 6, snow);
         for i in 0..3 {
             let sway = ((seconds * 2.0 + i as f32).sin() * 2.0).round() as i32;
-            pen.rect(draw, 3, top + 24 + i * 10, 5 + sway, 1, alpha(ROSE, 200));
+            let y = top + 26 + i * 14;
+            pen.rect(draw, 4, y, 6 + sway, 2, if i % 2 == 0 { ROSE } else { SKY });
         }
         return;
     }
-    // A spiral snow-vault: a dome of packed ice blocks with a spiral seam, lit from inside.
-    let rx = w / 2 - 1;
-    let ry = h - 2;
+    // A spiral snow-vault: a low dome of packed ice blocks, a snow cap, a tunnel door glowing
+    // warm, round windows and icicles at the eaves.
+    let rx = (w * 2 / 5).max(18);
+    let ry = h.min(rx * 9 / 10).max(14);
     pen.dome(draw, 0, -1, rx, ry, ice);
-    // Shade on the right side.
+    // Shade toward the right.
     for dy in 0..ry {
         let t = 1.0 - (dy as f32 / ry as f32).powi(2);
         let half = (rx as f32 * t.max(0.0).sqrt()).round() as i32;
-        pen.rect(draw, half / 2, -1 - dy, half - half / 2 + 1, 1, ice_shade);
+        pen.rect(draw, half / 3, -1 - dy, half - half / 3 + 1, 1, ice_shade);
     }
-    // Block courses and the spiral seam.
-    for course in (4..ry).step_by(5) {
+    // Block courses, staggered joints.
+    for course in (6..ry - 2).step_by(7) {
         let t = 1.0 - (course as f32 / ry as f32).powi(2);
         let half = (rx as f32 * t.max(0.0).sqrt()).round() as i32;
-        pen.rect(draw, -half, -1 - course, 2 * half + 1, 1, line);
-        let stagger = if (course / 5) % 2 == 0 { 0 } else { 4 };
-        let mut x = -half + stagger;
-        while x < half {
-            pen.px(draw, x, -course, line);
-            x += 8;
+        pen.rect(draw, -half + 1, -1 - course, 2 * half - 1, 1, seam);
+        let stagger = if (course / 7) % 2 == 0 { 0 } else { 5 };
+        let mut x = -half + 3 + stagger;
+        while x < half - 2 {
+            pen.rect(draw, x, -course + 1, 1, 6, seam);
+            x += 10;
         }
     }
+    // The spiral seam rising round the vault.
     for i in 0..ry {
-        let angle = i as f32 * 0.35;
+        let angle = i as f32 * 0.32;
         let x = (angle.cos() * rx as f32 * (1.0 - i as f32 / ry as f32)).round() as i32;
-        pen.px(draw, x, -1 - i, alpha(CREAM, 220));
+        pen.px(draw, x, -1 - i, snow);
     }
-    // A round door glowing warm, an arch of blocks over it.
-    let door = (w / 6).clamp(5, 9);
-    pen.dome(draw, 0, -1, door / 2 + 1, door + 1, line);
-    let flicker = 0.85 + 0.15 * (seconds * 5.0 + f32::from(look.index)).sin();
-    pen.glow(
+    // The snow cap.
+    pen.dome(draw, 0, -ry + 4, rx / 3, 5, snow);
+    // Icicles along the lower eaves.
+    for x in (-rx + 4..rx - 3).step_by(5) {
+        let length = 2 + (x.rem_euclid(3));
+        pen.rect(draw, x, -3 - length, 1, length, alpha(ICE, 220));
+    }
+    // A short ice tunnel and its round door, glowing warm.
+    let door = (rx / 3).clamp(8, 14);
+    pen.rect(
         draw,
-        -door / 2,
-        -door,
-        door,
-        door,
-        alpha(warm, (flicker * 255.0) as u8),
+        -door / 2 - 3,
+        -door - 2,
+        door + 6,
+        door + 2,
+        ice_shade,
     );
+    pen.dome(draw, 0, -door - 2, door / 2 + 3, 4, ice);
     pen.dome(
         draw,
         0,
-        -door,
+        -1,
         door / 2,
-        door / 2,
+        door,
         alpha(warm, (flicker * 255.0) as u8),
+    );
+    pen.glow(
+        draw,
+        -door / 2 - 2,
+        -door - 3,
+        door + 4,
+        door + 3,
+        alpha(warm, 40),
     );
     // Round windows.
     for side in [-1, 1] {
-        pen.ellipse(draw, side * rx / 2, -ry / 2, 2, 2, line);
-        pen.glow(draw, side * rx / 2 - 1, -ry / 2 - 1, 3, 3, alpha(warm, 220));
+        let (x, y) = (side * rx * 3 / 5, -ry / 2);
+        pen.ellipse(draw, x, y, 3, 3, seam);
+        pen.ellipse(draw, x, y, 2, 2, alpha(warm, (flicker * 230.0) as u8));
     }
-    // What the building is.
     match kind {
         AlienBuildingKind::TradeHall => {
             // Frost-silk banners and a basket of glow pearls.
             for i in -2..=2 {
-                let sway = ((seconds * 1.5 + i as f32).sin()).round() as i32;
+                let sway = (seconds * 1.5 + i as f32).sin().round() as i32;
+                let x = i * (rx / 3);
+                let t = 1.0 - ((x as f32) / rx as f32).powi(2);
+                let top = -(ry as f32 * t.max(0.0).sqrt()) as i32;
                 pen.rect(
                     draw,
-                    i * 8 - 1,
-                    -ry - 3,
+                    x,
+                    top,
                     3,
-                    6 + sway,
+                    8 + sway,
                     if i % 2 == 0 { ROSE } else { SKY },
                 );
             }
-            pen.rect(draw, rx - 6, -5, 6, 4, CLAY);
-            pen.glow(draw, rx - 5, -7, 4, 2, alpha(PINK, 230));
+            pen.rect(draw, rx - 4, -6, 8, 5, CLAY);
+            pen.glow(draw, rx - 3, -8, 6, 2, alpha(PINK, 230));
         }
         AlienBuildingKind::ElderHouse => {
-            // A taller crown of frozen glass.
-            pen.rect(draw, -2, -ry - 8, 4, 8, alpha(ICE, 230));
-            pen.glow(draw, -1, -ry - 11, 2, 3, alpha(warm, 220));
+            // A crown of frozen glass and a lantern.
+            pen.rect(draw, -2, -ry - 10, 5, 10, alpha(ICE, 235));
+            pen.rect(draw, -4, -ry - 4, 9, 2, seam);
+            pen.glow(draw, -1, -ry - 14, 3, 4, alpha(warm, 230));
         }
         AlienBuildingKind::LexiconHouse => {
-            // A frieze of the Vessi's ring glyphs.
+            // A frieze of the Vessi's ring glyphs round the vault.
             for i in 0..5 {
                 draw_glyph_art(
                     draw,
                     pen,
-                    -12 + i * 6,
-                    -ry / 2 - 10,
+                    -16 + i * 7,
+                    -ry * 2 / 3 - 3,
                     AlienSpecies::Vessi,
                     i as u8 * 2,
-                    alpha(line, 255),
+                    seam,
                 );
             }
         }
         AlienBuildingKind::Workshop => {
             // A kiln vent breathing warm.
-            pen.rect(draw, rx - 8, -ry + 2, 4, 6, line);
+            pen.rect(draw, rx / 2, -ry + 2, 5, 7, seam);
+            pen.glow(draw, rx / 2 + 1, -ry + 3, 3, 2, alpha(warm, 230));
             let puff = (seconds * 1.3).fract();
             pen.glow(
                 draw,
-                rx - 8,
-                -ry - 2 - (puff * 8.0) as i32,
+                rx / 2,
+                -ry - 2 - (puff * 10.0) as i32,
+                5,
                 4,
-                3,
-                alpha(CREAM, ((1.0 - puff) * 160.0) as u8),
+                alpha(CREAM, ((1.0 - puff) * 150.0) as u8),
             );
         }
         _ => {}
@@ -742,92 +788,140 @@ fn draw_tokkari_building(
     look: BuildingLook,
     seconds: f32,
 ) {
-    let stone = Color::new(0x9a, 0x7c, 0x62, 255);
-    let stone_shade = Color::new(0x6e, 0x54, 0x40, 255);
-    let seam = Color::new(0x4c, 0x38, 0x2a, 255);
-    let forge = Color::new(0xff, 0x8a, 0x2c, 255);
+    let stone = Color::new(0xb6, 0x90, 0x6a, 255);
+    let stone_light = Color::new(0xd2, 0xae, 0x84, 255);
+    let stone_shade = Color::new(0x86, 0x64, 0x48, 255);
+    let seam = Color::new(0x56, 0x3e, 0x2c, 255);
+    let forge = Color::new(0xff, 0x8e, 0x30, 255);
+    let pulse = 0.65 + 0.35 * (seconds * 3.5 + f32::from(look.index)).sin();
     if kind == AlienBuildingKind::Landmark {
-        // The forge chimney: a tall brick stack with a glowing throat and smoke.
-        pen.rect(draw, -8, -10, 16, 10, stone_shade);
-        pen.rect(draw, -5, -h, 10, h - 8, stone);
-        for row in (-h..-10).step_by(4) {
-            pen.rect(draw, -5, row, 10, 1, seam);
-            let offset = if (row / 4) % 2 == 0 { -2 } else { 2 };
-            pen.px(draw, offset, row + 2, seam);
+        // The forge chimney: a tall stack of fused brick on a mound, its throat glowing, smoke
+        // rising.
+        pen.dome(draw, 0, -1, 12, 9, stone_shade);
+        pen.rect(draw, -5, -h, 11, h - 6, stone);
+        pen.rect(draw, 3, -h, 3, h - 6, stone_shade);
+        for row in (-h + 2..-8).step_by(5) {
+            pen.rect(draw, -5, row, 11, 1, seam);
+            let offset = if (row / 5) % 2 == 0 { -2 } else { 2 };
+            pen.rect(draw, offset, row + 1, 1, 4, seam);
         }
-        let pulse = 0.7 + 0.3 * (seconds * 3.0).sin();
-        pen.glow(draw, -3, -h - 2, 6, 3, alpha(forge, (pulse * 255.0) as u8));
-        pen.glow(draw, -6, -h - 5, 12, 6, alpha(forge, (pulse * 70.0) as u8));
+        pen.rect(draw, -7, -h - 2, 15, 3, stone_light);
+        pen.glow(draw, -4, -h - 4, 9, 3, alpha(forge, (pulse * 255.0) as u8));
+        pen.glow(draw, -8, -h - 9, 17, 8, alpha(forge, (pulse * 50.0) as u8));
         for i in 0..3 {
-            let t = (seconds * 0.4 + i as f32 / 3.0).fract();
-            let x = (t * 10.0).round() as i32 - 2;
+            let t = (seconds * 0.35 + i as f32 / 3.0).fract();
+            let x = (t * 12.0).round() as i32 - 3;
+            let size = 3 + (t * 5.0) as i32;
             pen.glow(
                 draw,
                 x,
-                -h - 6 - (t * 30.0) as i32,
-                4,
-                3,
-                alpha(STONE_LIGHT, ((1.0 - t) * 150.0) as u8),
+                -h - 8 - (t * 34.0) as i32,
+                size,
+                size,
+                alpha(STONE_LIGHT, ((1.0 - t) * 140.0) as u8),
             );
         }
-        pen.glow(draw, -2, -6, 4, 4, alpha(forge, 230));
+        // The forge mouth at its foot.
+        pen.dome(draw, 0, -1, 4, 6, seam);
+        pen.dome(draw, 0, -1, 3, 4, alpha(forge, (pulse * 255.0) as u8));
         return;
     }
-    // A terraced mound-hall of fused stone, half sunk into the ground.
-    let tiers = (h / 10).clamp(2, 4);
-    let tier_h = h / tiers;
+    // A terraced mound-hall of fused stone, half sunk into the ground: rounded tiers, a round
+    // door with a copper ring, glowing round windows and a forge chimney on top.
+    let tiers = (h / 14).clamp(2, 3);
+    let tier_h = (h / tiers).clamp(11, 16);
+    let base_half = (w * 2 / 5).max(16);
     for tier in 0..tiers {
-        let half = w / 2 - tier * (w / (2 * tiers + 2)) - 1;
+        let half = base_half - tier * (base_half / (tiers + 1));
         let y = -(tier + 1) * tier_h;
+        // Rounded shoulders: the tier's top rows step in.
+        pen.rect(draw, -half, y + 2, 2 * half + 1, tier_h - 2, stone);
+        pen.rect(draw, -half + 2, y, 2 * half - 3, 2, stone);
+        pen.rect(draw, -half + 1, y + 1, 2 * half - 1, 1, stone);
+        pen.rect(draw, -half + 2, y, 2 * half - 3, 1, stone_light);
         pen.rect(
             draw,
-            -half,
-            y,
-            2 * half,
-            tier_h,
-            if tier % 2 == 0 { stone } else { stone_shade },
+            half - half / 3,
+            y + 2,
+            half / 3 + 1,
+            tier_h - 2,
+            stone_shade,
         );
-        pen.rect(draw, -half, y, 2 * half, 1, seam);
-        // A rounded shoulder.
-        pen.px(draw, -half, y, alpha(stone, 0));
-        // Fused-stone seams.
-        let mut x = -half + 3 + tier;
-        while x < half - 2 {
-            pen.px(draw, x, y + tier_h / 2, seam);
-            x += 7;
+        // Fused seams.
+        let mut x = -half + 4 + tier * 2;
+        while x < half - 4 {
+            pen.rect(draw, x, y + tier_h / 2, 3, 1, seam);
+            x += 9;
+        }
+        // Round windows glowing forge-orange.
+        if tier > 0 {
+            for side in [-1, 1] {
+                let wx = side * half / 2;
+                pen.ellipse(draw, wx, y + tier_h / 2, 2, 2, seam);
+                pen.glow(
+                    draw,
+                    wx - 1,
+                    y + tier_h / 2 - 1,
+                    3,
+                    3,
+                    alpha(forge, (pulse * 220.0) as u8),
+                );
+            }
         }
     }
-    // A round door with a copper ring.
-    let door = (w / 6).clamp(4, 7);
-    pen.ellipse(draw, -w / 5, -door, door / 2 + 1, door / 2 + 1, COPPER);
-    pen.ellipse(draw, -w / 5, -door, door / 2, door / 2, seam);
-    pen.glow(draw, -w / 5 - 1, -door - 1, 2, 2, alpha(forge, 140));
-    // A small forge chimney on the top terrace.
+    // The round door on the ground tier, a copper ring round it.
+    let door = (base_half / 3).clamp(6, 9);
+    let door_x = -base_half / 3;
+    pen.ellipse(draw, door_x, -door, door + 1, door + 1, COPPER);
+    pen.ellipse(draw, door_x, -door, door, door, seam);
+    pen.ellipse(
+        draw,
+        door_x,
+        -door + 1,
+        door - 2,
+        door - 2,
+        alpha(forge, (pulse * 120.0) as u8),
+    );
+    pen.rect(draw, door_x - door - 1, -1, 2 * door + 3, 1, stone_shade);
+    // The forge chimney on the top tier.
     let top = -tiers * tier_h;
-    pen.rect(draw, w / 6, top - 5, 3, 5, stone_shade);
-    let pulse = 0.6 + 0.4 * (seconds * 4.0 + f32::from(look.index)).sin();
+    let chimney_x = base_half / 4;
+    pen.rect(draw, chimney_x, top - 7, 4, 7, stone_shade);
+    pen.rect(draw, chimney_x - 1, top - 8, 6, 1, stone_light);
     pen.glow(
         draw,
-        w / 6,
-        top - 6,
-        3,
+        chimney_x,
+        top - 9,
+        4,
         1,
         alpha(forge, (pulse * 255.0) as u8),
     );
+    let puff = (seconds * 0.6 + f32::from(look.index) * 0.3).fract();
+    pen.glow(
+        draw,
+        chimney_x + (puff * 4.0) as i32,
+        top - 12 - (puff * 14.0) as i32,
+        3,
+        3,
+        alpha(STONE_LIGHT, ((1.0 - puff) * 130.0) as u8),
+    );
     match kind {
         AlienBuildingKind::TradeHall => {
-            // A balance-scale sign: honest weight.
-            pen.rect(draw, w / 4, top - 10, 1, 8, STEEL);
-            pen.rect(draw, w / 4 - 4, top - 10, 9, 1, STEEL);
-            pen.rect(draw, w / 4 - 5, top - 8, 3, 1, GOLD);
-            pen.rect(draw, w / 4 + 3, top - 8, 3, 1, GOLD);
+            // A balance-scale sign over the door: honest weight.
+            let x = door_x;
+            let y = -2 * door - 8;
+            pen.rect(draw, x, y, 1, 6, STEEL);
+            pen.rect(draw, x - 5, y, 11, 1, STEEL);
+            pen.rect(draw, x - 6, y + 2, 4, 1, GOLD);
+            pen.rect(draw, x + 3, y + 2, 4, 1, GOLD);
         }
         AlienBuildingKind::ElderHouse => {
-            // Knotted cords of the debts hanging from the eaves.
-            for i in 0..6 {
-                let x = -w / 2 + 6 + i * 4;
-                pen.rect(draw, x, -tier_h - 1, 1, 6 + i % 3, CREAM);
-                pen.px(draw, x, -tier_h + 2 + i % 3, MAROON);
+            // The knotted cords of the hold's debts hanging from the eaves.
+            for i in 0..7 {
+                let x = -base_half + 5 + i * 4;
+                pen.rect(draw, x, -tier_h + 2, 1, 6 + i % 3, CREAM);
+                pen.px(draw, x, -tier_h + 4 + i % 3, MAROON);
+                pen.px(draw, x, -tier_h + 6 + i % 2, MAROON);
             }
         }
         AlienBuildingKind::LexiconHouse => {
@@ -835,7 +929,7 @@ fn draw_tokkari_building(
                 draw_glyph_art(
                     draw,
                     pen,
-                    -8 + i * 6,
+                    -12 + i * 7,
                     top + 4,
                     AlienSpecies::Tokkari,
                     i as u8 * 3,
@@ -844,23 +938,24 @@ fn draw_tokkari_building(
             }
         }
         AlienBuildingKind::Workshop => {
-            // An anvil by the door and sparks.
-            pen.rect(draw, w / 2 - 2, -3, 5, 3, STEEL_DARK);
-            pen.rect(draw, w / 2 - 3, -4, 7, 1, STEEL);
+            // An anvil by the door, and sparks.
+            let x = base_half - 6;
+            pen.rect(draw, x, -4, 6, 4, STEEL_DARK);
+            pen.rect(draw, x - 1, -5, 8, 1, STEEL);
             let spark = (seconds * 2.0).fract();
             if spark < 0.4 {
                 pen.glow(
                     draw,
-                    w / 2 + (spark * 10.0) as i32,
-                    -6 - (spark * 8.0) as i32,
+                    x + 3 + (spark * 10.0) as i32,
+                    -7 - (spark * 8.0) as i32,
                     1,
                     1,
                     GOLD,
                 );
                 pen.glow(
                     draw,
-                    w / 2 - (spark * 8.0) as i32,
-                    -5 - (spark * 6.0) as i32,
+                    x + 2 - (spark * 8.0) as i32,
+                    -6 - (spark * 6.0) as i32,
                     1,
                     1,
                     forge,
@@ -880,110 +975,139 @@ fn draw_siphra_building(
     look: BuildingLook,
     seconds: f32,
 ) {
-    let crystal = Color::new(0xb8, 0xc8, 0xf0, 255);
-    let crystal_shade = Color::new(0x7a, 0x88, 0xc0, 255);
+    let crystal = Color::new(0xc4, 0xd2, 0xf6, 255);
+    let crystal_shade = Color::new(0x84, 0x92, 0xcc, 255);
     let (glass, inner) = SIPHRA_GLASS[usize::from(look.index) % 3];
     if kind == AlienBuildingKind::Landmark {
-        // The memory pylon: a tall crystal with motes of memory circling it.
-        pen.rect(draw, -6, -4, 12, 4, crystal_shade);
+        // The memory pylon: a tall faceted crystal, light rising inside it, memories circling.
+        pen.dome(draw, 0, -1, 8, 4, crystal_shade);
         for dy in 0..h {
-            let half = (3 - dy * 3 / h).max(0) + 1;
+            let half = 4 - dy * 4 / h.max(1);
             pen.rect(
                 draw,
                 -half,
-                -dy - 4,
-                2 * half,
+                -dy - 3,
+                2 * half + 1,
                 1,
-                if dy % 9 == 0 { CREAM } else { crystal },
+                if dy % 11 == 0 { CREAM } else { crystal },
             );
+            pen.rect(draw, 1, -dy - 3, half.max(0), 1, crystal_shade);
         }
         let pulse = 0.5 + 0.5 * (seconds * 1.4).sin();
+        let rise = ((seconds * 0.5).fract() * h as f32) as i32;
         pen.glow(
             draw,
-            -2,
-            -h / 2,
-            4,
-            h / 3,
-            alpha(inner, (80.0 + pulse * 120.0) as u8),
+            -1,
+            -rise - 6,
+            3,
+            6,
+            alpha(inner, (120.0 + pulse * 120.0) as u8),
         );
         for i in 0..7 {
             let angle = seconds * 0.9 + i as f32 * 0.9;
-            let x = (angle.cos() * 9.0).round() as i32;
-            let y = -h / 2 - 10 + (angle.sin() * 3.0).round() as i32 + i * 4;
+            let x = (angle.cos() * 10.0).round() as i32;
+            let y = -h / 2 - 12 + (angle.sin() * 3.0).round() as i32 + i * 4;
             pen.glow(draw, x, y, 1, 1, if i % 2 == 0 { CREAM } else { GOLD });
         }
         return;
     }
-    // A lantern-pod hung from a crystal pylon, tethered over the ground.
-    let pylon_x = -w / 2 + 2;
-    pen.rect(draw, pylon_x - 1, -h, 3, h, crystal);
-    pen.rect(draw, pylon_x, -h, 1, h, crystal_shade);
-    pen.rect(draw, pylon_x - 1, -h - 3, 3, 3, CREAM);
-    // The arm and the tether.
-    pen.rect(draw, pylon_x, -h + 2, w / 2, 1, crystal_shade);
+    // A lantern-pod of grown glass hung from a crystal pylon and tethered over the ground.
+    let pod_rx = (w / 3).clamp(10, 22);
+    let pod_ry = pod_rx * 4 / 5;
+    let pylon_h = h.clamp(48, 110);
+    let pylon_x = -pod_rx - 5;
+    for dy in 0..pylon_h {
+        let half = if dy > pylon_h - 6 {
+            (pylon_h - dy) / 3
+        } else {
+            1
+        };
+        pen.rect(draw, pylon_x - half, -dy - 1, 2 * half + 2, 1, crystal);
+        pen.px(draw, pylon_x + 1, -dy - 1, crystal_shade);
+    }
+    pen.glow(draw, pylon_x - 1, -pylon_h - 2, 4, 3, alpha(CREAM, 230));
     let sway = ((seconds * 0.8 + f32::from(look.index)).sin() * 1.5).round() as i32;
-    let pod_y = -h / 2 - 2;
-    pen.rect(draw, sway / 2, -h + 2, 1, h / 2 - 8, alpha(CREAM, 160));
-    // The pod: a glowing glass bulb.
-    let rx = w / 2 - 3;
-    let ry = h / 3;
-    pen.glow(
+    let pod_y = -pylon_h + pod_ry + 8;
+    // The arm and the hanger.
+    pen.rect(
         draw,
-        sway - rx - 2,
-        pod_y - ry - 2,
-        2 * rx + 5,
-        2 * ry + 5,
-        alpha(glass, 30),
-    );
-    pen.ellipse(draw, sway, pod_y, rx, ry, alpha(glass, 170));
-    let pulse = 0.5 + 0.5 * (seconds * 1.2 + f32::from(look.index)).sin();
-    pen.ellipse(
-        draw,
-        sway,
-        pod_y,
-        rx - 3,
-        ry - 3,
-        alpha(inner, (100.0 + 100.0 * pulse) as u8),
+        pylon_x,
+        -pylon_h + 3,
+        -pylon_x + sway + 1,
+        1,
+        crystal_shade,
     );
     pen.rect(
         draw,
-        sway - rx + 2,
-        pod_y - 1,
-        2 * rx - 3,
+        sway,
+        -pylon_h + 3,
         1,
-        alpha(CREAM, 120),
+        pod_y - pod_ry + pylon_h - 3,
+        alpha(CREAM, 180),
     );
-    // A slit door on its underside and the ground tether.
-    pen.rect(draw, sway - 1, pod_y + ry - 2, 3, 2, alpha(NIGHT, 200));
-    pen.rect(draw, sway, pod_y + ry, 1, -pod_y - ry, alpha(crystal, 150));
+    // The pod: an outer glow, the glass, its inner light and a highlight.
+    let pulse = 0.5 + 0.5 * (seconds * 1.2 + f32::from(look.index)).sin();
+    pen.glow_ellipse(draw, sway, pod_y, pod_rx + 4, pod_ry + 4, alpha(glass, 40));
+    pen.ellipse(draw, sway, pod_y, pod_rx, pod_ry, alpha(glass, 200));
+    pen.glow_ellipse(
+        draw,
+        sway,
+        pod_y + 1,
+        pod_rx - 3,
+        pod_ry - 3,
+        alpha(inner, (120.0 + 110.0 * pulse) as u8),
+    );
+    pen.rect(
+        draw,
+        sway - pod_rx / 2,
+        pod_y - pod_ry + 3,
+        pod_rx / 2,
+        2,
+        alpha(CREAM, 170),
+    );
+    // Window-dots round its waist.
+    for i in -2..=2 {
+        pen.glow(draw, sway + i * pod_rx / 3, pod_y + 1, 1, 1, CREAM);
+    }
+    // A slit door underneath and a ladder of light down to the ground.
+    pen.rect(draw, sway - 2, pod_y + pod_ry - 2, 5, 2, alpha(NIGHT, 210));
+    let ladder_top = pod_y + pod_ry;
+    let mut y = ladder_top;
+    while y < -1 {
+        pen.glow(draw, sway, y, 1, 2, alpha(inner, 170));
+        y += 4;
+    }
     match kind {
         AlienBuildingKind::TradeHall => {
-            // Three small pods of goods hanging alongside.
+            // Small pods of goods hanging alongside.
             for i in 0..3 {
-                let x = sway - rx + 3 + i * rx;
-                pen.ellipse(draw, x, pod_y + ry + 4, 2, 2, alpha(GOLD, 220));
+                let x = sway + pod_rx + 4 + i * 6;
+                pen.rect(draw, x, pod_y - pod_ry, 1, 6 + i * 3, alpha(CREAM, 160));
+                pen.ellipse(draw, x, pod_y - pod_ry + 8 + i * 3, 2, 2, alpha(GOLD, 230));
             }
         }
         AlienBuildingKind::ElderHouse => {
-            pen.glow(draw, sway - 1, pod_y - ry - 5, 3, 3, alpha(GOLD, 230));
+            pen.glow(draw, sway - 1, pod_y - pod_ry - 6, 3, 3, alpha(GOLD, 230));
+            pen.glow(draw, sway - 4, pod_y - pod_ry - 9, 9, 9, alpha(GOLD, 40));
         }
         AlienBuildingKind::LexiconHouse => {
             for i in 0..3 {
                 draw_glyph_art(
                     draw,
                     pen,
-                    sway - 9 + i * 6,
-                    pod_y - 2,
+                    sway - 10 + i * 7,
+                    pod_y - 3,
                     AlienSpecies::Siphra,
                     i as u8 * 4,
-                    alpha(CREAM, 230),
+                    alpha(CREAM, 235),
                 );
             }
         }
         AlienBuildingKind::Workshop => {
-            // A half-grown pod on a second pylon.
-            pen.rect(draw, w / 2 - 3, -h / 2, 2, h / 2, crystal);
-            pen.ellipse(draw, w / 2 - 2, -h / 2 - 3, 3, 3, alpha(glass, 120));
+            // A half-grown pod on a second, shorter pylon.
+            let x = pod_rx + 8;
+            pen.rect(draw, x, -pylon_h / 2, 2, pylon_h / 2, crystal);
+            pen.ellipse(draw, x + 1, -pylon_h / 2 - 4, 5, 4, alpha(glass, 140));
         }
         _ => {}
     }

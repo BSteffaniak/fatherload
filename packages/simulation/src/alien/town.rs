@@ -419,9 +419,9 @@ pub const fn span_half(species: AlienSpecies) -> i32 {
 /// Heights (tiles) of a town's buildings for `species`: (dwelling, hall, landmark).
 const fn heights(species: AlienSpecies) -> (i32, i32, i32) {
     match species {
-        AlienSpecies::Vessi => (6, 8, 15),
-        AlienSpecies::Tokkari => (4, 5, 11),
-        AlienSpecies::Siphra => (7, 8, 14),
+        AlienSpecies::Vessi => (3, 4, 11),
+        AlienSpecies::Tokkari => (3, 4, 8),
+        AlienSpecies::Siphra => (5, 6, 10),
     }
 }
 

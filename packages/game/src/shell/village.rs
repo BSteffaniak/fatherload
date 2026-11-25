@@ -537,6 +537,8 @@ impl SeatUi {
         {
             let title = species.def().trade_title(character.role);
             talk.about = format!("{}, {title}", species.def().name);
+            // Their given name (family names run long: "who Remembers the Long Ships").
+            character.name.given.clone_into(&mut talk.name);
             self.open_alien_talk();
         }
         self.send_people(

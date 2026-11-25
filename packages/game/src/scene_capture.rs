@@ -21,6 +21,7 @@
 //! [`SCENES`]. `SceneStage` starts on the title screen; `play` enters a staged world, `hold` runs
 //! frames with held input, and `shell` exposes the menu state to open screens directly.
 
+mod alien_scenes;
 mod clock_scenes;
 mod crew_scenes;
 mod enemy_scenes;
@@ -644,6 +645,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(bodylife_scenes::BODYLIFE_SCENES)
         .chain(wilds_scenes::WILDS_SCENES)
         .chain(frontier_scenes::FRONTIER_SCENES)
+        .chain(alien_scenes::ALIEN_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
