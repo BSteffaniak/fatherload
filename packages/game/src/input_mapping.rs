@@ -226,6 +226,14 @@ pub fn space_actions(input: &PlayerInput, actions: &mut Vec<PlayerCommand>) {
     if input.interact {
         actions.push(PlayerCommand::Flight(FlightCommand::Use));
     }
+    // Space combat (Wave 12 hostiles): the next-weapon button fires a missile. (The warp
+    // button in a fight spools the escape jump and the use button pays a pirate demand: the
+    // simulation reads those from the flight commands above.)
+    if input.cycle_weapon {
+        actions.push(PlayerCommand::Combat(
+            fatherload_simulation::hostiles::CombatCommand::FireMissile,
+        ));
+    }
 }
 
 /// A seat's full gameplay input with plain bombs selected.

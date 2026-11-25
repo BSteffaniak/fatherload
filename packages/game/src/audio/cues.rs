@@ -2733,6 +2733,12 @@ mod tests {
                     x: 0,
                     y: 0,
                 },
+                // A hit on the rig in space is `PlayerDamaged`'s hull hit (Wave 12).
+                GameplayEventKind::Hostile {
+                    what: fatherload_simulation::hostiles::HostileEvent::RigHit,
+                    player_id: Some(PlayerId::new(1)),
+                    detail: 0,
+                },
                 GameplayEventKind::PeopleInteraction {
                     player_id: PlayerId::new(1)
                 },

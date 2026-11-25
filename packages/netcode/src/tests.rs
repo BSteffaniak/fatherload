@@ -8,6 +8,7 @@ mod units;
 mod world_aliens;
 mod world_e2e;
 mod world_far;
+mod world_hostiles;
 mod world_keyframes;
 mod world_places;
 mod world_planet;

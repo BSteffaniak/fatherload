@@ -466,6 +466,10 @@ fn alien_town_things(
 /// Things on a body's ground for the polar renderer: the alien towns' buildings (Wave 12), then
 /// rigs, pilots, drops and alien residents of its store.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one block per kind of thing on the ground, each track's"
+)]
 pub fn ground_things(
     scene: &crate::render_snapshot::PlaceScene<'_>,
     skip_rig: Option<fatherload_simulation::PlayerId>,
@@ -505,6 +509,35 @@ pub fn ground_things(
         });
     }
     for entity in scene.entities.iter() {
+        // Raid troopers (Wave 12 hostiles): creatures standing against the body's gravity.
+        if let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state
+            && fatherload_simulation::hostiles::raid::is_trooper(state.kind)
+        {
+            let feet = entity.body.y + state.kind.contact_half().1;
+            let (column, row) = strip(entity.body.x, feet);
+            let attacking = matches!(
+                state.mode,
+                fatherload_simulation::enemy::EnemyMode::Windup
+                    | fatherload_simulation::enemy::EnemyMode::Strike
+            );
+            let moving = entity.body.velocity_x.abs() > 4.0;
+            // A stride by where it is (no clock here): it walks as it moves.
+            let stride = (entity.body.x / 10.0).floor() as i64;
+            things.push(GroundThing {
+                column,
+                row,
+                kind: GroundThingKind::Raider {
+                    kind: state.kind,
+                    frame: if attacking {
+                        2
+                    } else {
+                        u8::from(moving && stride.rem_euclid(2) == 1)
+                    },
+                    left: state.facing < 0,
+                },
+            });
+            continue;
+        }
         // The body's creatures (Wave 12 planets-a): their sprites, standing in the local up.
         if let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state {
             let feet = crate::rendering::world::enemy_feet_offset(state.kind);

@@ -39,6 +39,7 @@ pub mod garrison_hud;
 pub mod heart_hud;
 pub mod hollow_hud;
 mod homes;
+pub mod hostiles_view;
 mod interior;
 mod layout;
 mod logistics_hud;

@@ -260,14 +260,15 @@ const fn face(lit: bool) -> Color {
 /// The ring colour says what kind of button it is.
 const fn rim(control: TouchControl) -> Color {
     let color = match control {
-        TouchControl::Fire | TouchControl::CycleWeapon => palette::RED,
+        TouchControl::Fire | TouchControl::CycleWeapon | TouchControl::Missile => palette::RED,
         TouchControl::Bomb | TouchControl::CycleExplosive | TouchControl::Detonate => {
             palette::ORANGE
         }
         TouchControl::Scan | TouchControl::Rope | TouchControl::Anchor => palette::MINT,
-        TouchControl::Cruise | TouchControl::Warp => palette::SKY_LIGHT,
+        TouchControl::Cruise | TouchControl::Warp | TouchControl::Escape => palette::SKY_LIGHT,
         TouchControl::Dock => palette::LIME,
         TouchControl::Use
+        | TouchControl::Pay
         | TouchControl::BuildPlace
         | TouchControl::Build
         | TouchControl::Kit(_) => palette::GOLD,
@@ -330,6 +331,9 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Cruise => "CRUISE",
         TouchControl::Warp => "WARP",
         TouchControl::Dock => "DOCK",
+        TouchControl::Missile => "MSL",
+        TouchControl::Escape => "ESCAPE",
+        TouchControl::Pay => "PAY",
         TouchControl::TabPrevious | TouchControl::BuildPrevious => "<",
         TouchControl::TabNext | TouchControl::BuildNext => ">",
         TouchControl::BuildPlace => "PLACE",

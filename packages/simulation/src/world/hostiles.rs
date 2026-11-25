@@ -489,12 +489,28 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
+    /// Stages an encounter of `ships` on `player_id`'s rig in space now (scenes, tools and
+    /// tests outside the tick; gameplay finds encounters by itself).
+    #[doc(hidden)]
+    pub fn stage_encounter(
+        &mut self,
+        player_id: PlayerId,
+        faction: Faction,
+        kind: EncounterKind,
+        ships: &[ShipClass],
+        danger: u8,
+    ) -> Option<u32> {
+        let step = self.combat_step_now();
+        let mut output = TickOutput::default();
+        self.start_encounter(player_id, faction, kind, ships, danger, step, &mut output)
+    }
+
     // --- Encounters ---------------------------------------------------------------------------
 
     /// Starts an encounter of `ships` against `player_id`'s rig, just off its screen (ahead
     /// and to one side). A cruising rig is pulled out of cruise.
     #[allow(clippy::too_many_arguments, reason = "an encounter's whole make-up")]
-    fn start_encounter(
+    pub(crate) fn start_encounter(
         &mut self,
         player_id: PlayerId,
         faction: Faction,
@@ -635,9 +651,8 @@ impl WorldState {
         next_tick: SimulationTick,
         output: &mut TickOutput,
     ) {
-        if !self.space_enabled() {
-            return;
-        }
+        // Only rigs away in space find or fight anything (a world without space never has
+        // one: nothing here runs, and nothing hashes, for older worlds).
         let rigs = self.rig_snaps(inputs);
         if rigs.is_empty() && self.hostiles.ships.is_empty() && self.hostiles.shots.is_empty() {
             return;
@@ -671,7 +686,10 @@ impl WorldState {
     }
 
     /// Rolls for new encounters, and meets lairs, bounties and patrols.
-    #[allow(clippy::too_many_lines, reason = "lairs, bounties, patrols and rolls in order")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "lairs, bounties, patrols and rolls in order"
+    )]
     fn find_encounters(
         &mut self,
         rigs: &[RigSnap],
@@ -688,6 +706,10 @@ impl WorldState {
         let place_step = on(PLACE_CHECK_STEPS);
         let roll_step = on(ROLL_STEPS);
         if place_step.is_none() && roll_step.is_none() {
+            return;
+        }
+        // A peaceful world's space is calm (the enemy setting covers hostiles too).
+        if !self.enemy_difficulty().hostile() {
             return;
         }
         let space = self.space();
@@ -1866,6 +1888,9 @@ impl WorldState {
             return;
         }
         let code = store.code();
+        if !self.enemy_difficulty().hostile() {
+            return;
+        }
         let ready = self.hostiles.raid_ready.get(&code).copied().unwrap_or(0);
         if step < ready {
             return;
@@ -1888,7 +1913,9 @@ impl WorldState {
             return;
         }
         let faction = raid::raiders_of(body.theme, roll >> 16);
-        self.land_raid(faction, ring, roll, step, output);
+        if let Some(site) = self.raid_sites().into_iter().next() {
+            self.land_raid(store, site, faction, ring, roll, step, output);
+        }
     }
 
     /// Test mode: land `faction`'s raid by `player_id`'s rig (on a body's ground only).
@@ -1904,34 +1931,59 @@ impl WorldState {
         }
         let step = self.combat_step_now();
         let mut output = TickOutput::default();
-        if self.land_raid(
-            faction,
-            4,
-            hash64(self.world_seed(), 0x7A1D, step as i64, 0),
-            step,
-            &mut output,
-        ) {
-            PlayerScopedCommandOutcome::Applied
-        } else {
-            PlayerScopedCommandOutcome::IgnoredUnavailable
-        }
+        let store = self.active_store();
+        let Some(site) = self.raid_site_of(player_id) else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
+        let roll = hash64(self.world_seed(), 0x7A1D, step as i64, 0);
+        self.land_raid(store, site, faction, 4, roll, step, &mut output);
+        PlayerScopedCommandOutcome::Applied
     }
 
-    /// Lands a raid of `faction` beside the first rig on this ground. Returns whether it
-    /// landed.
+    /// Stages `faction`'s raid by `player_id`'s rig on the body it stands on, now (scenes,
+    /// tools and tests outside the tick). Returns whether it landed.
+    #[doc(hidden)]
+    pub fn stage_raid(&mut self, player_id: PlayerId, faction: Faction) -> bool {
+        let store = self.store_of(player_id);
+        if !matches!(store, crate::place::StoreKey::Body(_)) {
+            return false;
+        }
+        let step = self.combat_step_now();
+        let roll = hash64(self.world_seed(), 0x57A6, step as i64, 0);
+        self.with_store_ground(store, |world| {
+            let Some(site) = world.raid_site_of(player_id) else {
+                return false;
+            };
+            let mut output = TickOutput::default();
+            world.land_raid(store, site, faction, 4, roll, step, &mut output);
+            true
+        })
+        .unwrap_or(false)
+    }
+
+    /// The raid site at `player_id`'s rig (its tile in this ground's frame).
+    fn raid_site_of(&self, player_id: PlayerId) -> Option<raid::RaidSite> {
+        let player = self.players.get(&player_id)?;
+        let tile = self.frame().tile_at(player.x, player.y);
+        Some(raid::RaidSite {
+            column: tile.x,
+            row: tile.y,
+        })
+    }
+
+    /// Lands a raid of `faction` on `store`'s ground (swapped in) beside `site`.
+    #[allow(clippy::too_many_arguments, reason = "a raid's whole make-up")]
     fn land_raid(
         &mut self,
+        store: crate::place::StoreKey,
+        site: raid::RaidSite,
         faction: Faction,
         ring: u8,
         roll: u64,
         step: u64,
         output: &mut TickOutput,
-    ) -> bool {
-        let store = self.active_store();
+    ) {
         let frame = self.frame();
-        let Some(site) = self.raid_sites().into_iter().next() else {
-            return false;
-        };
         let way = if roll & 1 == 0 { 1 } else { -1 };
         let column = site.column + way * raid::LANDING_OFFSET;
         // The ground under the landing column: the first solid tile below the site's row.
@@ -1970,7 +2022,6 @@ impl WorldState {
             None,
             faction.code(),
         ));
-        true
     }
 
     /// Where raiders come for on this ground: every rig on it (TODO-SEAM w12-aliens: alien

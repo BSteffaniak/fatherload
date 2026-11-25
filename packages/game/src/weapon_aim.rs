@@ -194,6 +194,36 @@ pub fn pilot_aim(
     })
 }
 
+/// The control a seat sends in space (Wave 12 hostiles): the trigger always fires the ship's
+/// guns (the cannon down the nose, which the player aims by turning the craft), and the
+/// turret's aim is where the seat points on screen from the craft at the view's middle (the
+/// pointer, else the right stick). The camera is locked to the craft, so a screen direction is
+/// craft-relative (the screen-relative scheme keeps the chart up, and the simulation reads the
+/// aim against the chart then). Never auto-aim; no aim fires the turret forward.
+#[must_use]
+#[allow(clippy::cast_precision_loss, reason = "viewport coordinates are small")]
+pub fn space_aim(input: &PlayerInput, anchor: Option<&ViewAnchor>) -> WeaponControl {
+    let aim = input
+        .pointer
+        .zip(anchor)
+        .filter(|((x, y), anchor)| anchor.contains(*x, *y))
+        .and_then(|((x, y), anchor)| {
+            let viewport = anchor.viewport;
+            quantize_aim(
+                x - (viewport.width as f32).mul_add(0.5, viewport.x as f32),
+                y - (viewport.height as f32).mul_add(0.5, viewport.y as f32),
+            )
+        })
+        .or_else(|| quantize_aim(input.aim_x, input.aim_y))
+        .unwrap_or((0, 0));
+    WeaponControl {
+        fire: input.fire,
+        auto_aim: false,
+        aim_x: aim.0,
+        aim_y: aim.1,
+    }
+}
+
 /// How far out the right stick fires on its own in a top-down crypt (twin-stick).
 pub const TWIN_STICK_FIRE: f32 = 0.6;
 

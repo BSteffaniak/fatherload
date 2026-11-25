@@ -341,6 +341,7 @@ impl LocalGame {
                         .with_rotation(frame.controls.rotation())
                         .with_assists(frame.controls.assists());
                     }
+                    let away = player.is_some_and(|player| player.flight.away());
                     // Wave 12 systems: in space the Mining Beam is the trigger (armed or not).
                     let beam = !on_foot
                         && player.is_some_and(|player| {
@@ -348,8 +349,17 @@ impl LocalGame {
                         });
                     if beam && sampled.fire {
                         frame.controls.weapon.fire = true;
-                    } else if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
+                    } else if !on_foot && !away && crate::weapon_aim::trigger_thrusts(sampled, player)
+                    {
                         frame.controls.thrust = true;
+                    }
+                    // Space combat (Wave 12 hostiles): the trigger always fires the ship's
+                    // guns, and the turret aims where the seat points on screen (the camera
+                    // is locked to the craft, so that is craft-relative). Never auto-aim.
+                    if away {
+                        frame.controls = frame
+                            .controls
+                            .with_weapon(crate::weapon_aim::space_aim(sampled, anchor.as_ref()));
                     }
                     // Space flight (Wave 11): the seat's flight switches, and the rig's
                     // buttons fly the Star Drive while it is away.
@@ -357,9 +367,11 @@ impl LocalGame {
                     if player.is_some_and(|player| player.flight.away()) {
                         crate::input_mapping::space_actions(sampled, &mut frame.actions);
                     }
-                    frame
-                        .actions
-                        .extend(crate::weapon_aim::cycle_command(sampled, player, on_foot));
+                    if !away {
+                        frame
+                            .actions
+                            .extend(crate::weapon_aim::cycle_command(sampled, player, on_foot));
+                    }
                     // WP-PILOT: the rope button on foot (grapple, winch, let go).
                     frame
                         .actions
@@ -588,6 +600,7 @@ impl LocalGame {
         self.announce_systems(&players);
         self.announce_aliens(&players);
         self.announce_stations(&players);
+        self.announce_hostiles(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1987,6 +2000,79 @@ impl LocalGame {
         }
         for (seat, message) in news {
             self.shell.seat_mut(seat).message = message;
+        }
+    }
+
+    /// Space combat for local seats (Wave 12 hostiles): who found them and what they want, the
+    /// fight's turns, salvage, a boss's arrival and defeat, raids on a body.
+    fn announce_hostiles(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::hostiles::{
+            Faction, HostileEvent as E, ShipClass, ShipGearKind,
+        };
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut news: Vec<(Option<usize>, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Hostile {
+                what,
+                player_id,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let seat = player_id.and_then(seat_of);
+            if player_id.is_some() && seat.is_none() {
+                continue;
+            }
+            let faction = Faction::from_code(detail).map_or("Hostiles", Faction::name);
+            let message = match what {
+                E::EncounterStarted => format!("Contact: {faction} on the scanner."),
+                E::Hailed => format!(
+                    "The corsairs hail: \"{detail} credits, or we open fire.\" Use pays; the \
+                     warp button jumps clear."
+                ),
+                E::TributePaid => format!("Paid {detail} credits. The corsairs peel away."),
+                E::TurnedHostile => "They open fire! Turn your nose onto them to aim.".to_owned(),
+                E::Interdicted => "Interdicted: pulled out of cruise.".to_owned(),
+                E::BossAppeared => format!(
+                    "{} is here. Watch its warnings; the warp button escapes.",
+                    ShipClass::from_code(detail).map_or("A capital ship", ShipClass::name)
+                ),
+                E::BossDefeated => format!(
+                    "{faction}'s champion is destroyed. Fly through its wreck to salvage its \
+                     tech."
+                ),
+                E::WreckLooted => format!("Salvaged {detail} credits."),
+                E::Escaped => "Escape jump: clear of the fight.".to_owned(),
+                E::EncounterOver => "All clear.".to_owned(),
+                E::BountyClaimed => format!("Bounty claimed: {detail} credits."),
+                E::RaidLanded => format!("{faction} raiders landed nearby!"),
+                E::GearBought => format!(
+                    "Fitted: {}.",
+                    ShipGearKind::ALL
+                        .iter()
+                        .find(|kind| kind.code() == detail)
+                        .map_or("ship gear", |kind| kind.name())
+                ),
+                E::ShieldDown => "Deflector down!".to_owned(),
+                E::EscapeSpooling => "Escape jump spooling: hold on.".to_owned(),
+                E::ShipDestroyed | E::RigHit | E::Fired | E::ShipHit | E::BossTelegraph => continue,
+            };
+            news.push((seat, message));
+        }
+        let seats = players.len();
+        for (seat, message) in news {
+            match seat {
+                Some(seat) => self.shell.seat_mut(seat).message = message,
+                None => {
+                    for seat in 0..seats {
+                        self.shell.seat_mut(seat).message.clone_from(&message);
+                    }
+                }
+            }
         }
     }
 

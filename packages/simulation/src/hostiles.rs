@@ -1098,10 +1098,11 @@ pub struct Encounter {
 }
 
 impl Encounter {
-    /// Damage scale of its ships' shots (danger 1: x1; +12 % a ring).
+    /// Damage scale of its ships' shots and bodies: [`HOSTILE_DAMAGE`] at danger 1, +12 % a
+    /// ring.
     #[must_use]
     pub fn damage_scale(&self) -> f32 {
-        f32::from(self.danger.saturating_sub(1)).mul_add(0.12, 1.0)
+        f32::from(self.danger.saturating_sub(1)).mul_add(0.12, 1.0) * HOSTILE_DAMAGE
     }
 }
 
@@ -1204,6 +1205,13 @@ impl ShipGearKind {
     }
 }
 
+/// Hostiles' damage over the base numbers of shots and bodies.
+///
+/// Applied over [`ShotKind::damage`] and [`ShipStats::contact_damage`]: space is late game, and
+/// a rig that reached it carries a deep hull (the numbers are tuned so a boss fight costs a
+/// well-kept rig a good share of it).
+pub const HOSTILE_DAMAGE: f32 = 3.0;
+
 /// A rig's live combat state (in [`HostileSpace::rigs`]).
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct RigCombat {
@@ -1230,10 +1238,10 @@ pub struct RigCombat {
 /// Steps between missile reloads (20 s).
 pub const MISSILE_RELOAD_STEPS: u64 = 2_400;
 /// Base deflector charge, and per upgrade.
-pub const SHIELD_BASE: f32 = 30.0;
-pub const SHIELD_PER_TIER: f32 = 35.0;
+pub const SHIELD_BASE: f32 = 120.0;
+pub const SHIELD_PER_TIER: f32 = 110.0;
 /// Deflector regained a second once [`SHIELD_REGEN_DELAY_STEPS`] passed since a hit.
-pub const SHIELD_REGEN: f32 = 9.0;
+pub const SHIELD_REGEN: f32 = 24.0;
 
 /// A rig's deflector capacity.
 #[must_use]

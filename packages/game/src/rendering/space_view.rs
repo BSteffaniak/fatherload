@@ -101,6 +101,9 @@ pub(super) struct SpaceFrame {
     pub roll: f32,
     /// The physical viewport.
     pub rect: Rectangle,
+    /// Physical pixels per space pixel the rig (and other rigs) are drawn at: one to one, or
+    /// in a fight the view's own scale, so rigs and hostile ships share one scale (Wave 12).
+    pub rig_zoom: f32,
 }
 
 impl SpaceFrame {
@@ -183,6 +186,20 @@ pub(super) fn space_frame(
         .fold(gap, f32::min);
     let visible = view.viewport.height as f32 / view.world_scale.max(0.01);
     let zoom = zoom_for(gap, visible);
+    // In a fight (Wave 12 hostiles) the view closes in on it, easing in as hostiles near; the
+    // rig is then drawn at the view's own scale, like the ships round it.
+    let in_fight = super::hostiles_view::combat_share(view.space_combat.nearest);
+    // A boss is framed whole (its far end inside the view's short half).
+    let short = view.viewport.width.min(view.viewport.height) as f32 / view.world_scale.max(0.01);
+    let fit = view
+        .space_combat
+        .boss_reach
+        .map_or(super::hostiles_view::COMBAT_ZOOM, |reach| {
+            (short * 0.5 * 0.9 / reach.max(1.0)).clamp(0.3, super::hostiles_view::COMBAT_ZOOM)
+        });
+    let combat = zoom.max(fit);
+    let zoom = (combat.ln() - zoom.ln()).mul_add(in_fight, zoom.ln()).exp();
+    let rig_zoom = view.world_scale * density * (zoom.min(1.0) - 1.0).mul_add(in_fight, 1.0);
     SpaceFrame {
         origin: flight.pos,
         centre: Vector2::new(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5),
@@ -193,6 +210,7 @@ pub(super) fn space_frame(
             view.player.attitude.orientation
         },
         rect,
+        rig_zoom,
     }
 }
 
@@ -256,6 +274,8 @@ pub(super) fn draw_space_world(
     // the rig, so it always reads).
     let reading = super::space_systems_view::read(snapshot, view);
     super::space_systems_view::draw_world(draw, &frame, snapshot, view, &reading, ticks);
+    // Hostile ships, their shots, warnings and wrecks (Wave 12).
+    super::hostiles_view::draw_hostiles(draw, &frame, snapshot, view, ticks);
     draw_own_rig(draw, terrain, facings, &frame, snapshot, view, ticks);
     frame
 }
@@ -1108,7 +1128,6 @@ fn draw_flyer(
     let Some(presentation) = presentation_of(snapshot, view, flyer.player_id) else {
         return;
     };
-    let density = frame.rect.height / view.viewport.height.max(1) as f32;
     let roll = frame.roll;
     draw_rig_at(
         draw,
@@ -1117,7 +1136,7 @@ fn draw_flyer(
         presentation,
         at,
         flyer.orientation - roll,
-        view.world_scale * density,
+        frame.rig_zoom,
         ticks,
     );
 }
@@ -1137,8 +1156,7 @@ fn draw_own_rig(
     view: &ViewSnapshot<'_>,
     ticks: u64,
 ) {
-    let density = frame.rect.height / view.viewport.height.max(1) as f32;
-    let zoom = view.world_scale * density;
+    let zoom = frame.rig_zoom;
     let flight = view.player.flight;
     let turn = view.player.attitude.orientation - frame.roll;
     // The drive's glow behind the rig (cruise) and its spool's ring.
@@ -1544,6 +1562,17 @@ pub(super) fn draw_space_hud(
     top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, rect, top);
     let seen = super::space_systems_view::marker_alpha(&reading);
     let faded = |colour: Color| with_alpha(colour, (f32::from(colour.a) * seen) as u8);
+    // The fight (Wave 12 hostiles): the deflector and rack under the meters, the encounter's
+    // and a boss's banners under the plate, arrows to ships off screen.
+    let top = super::hostiles_view::draw_hostile_hud(
+        draw,
+        snapshot,
+        view,
+        frame,
+        rect,
+        meters.y + meters.height + 2.0,
+        top,
+    );
     let galaxy = snapshot.space.galaxy();
     let bodies = galaxy.bodies_near(flight.pos);
     draw_docking_guide(draw, rect, meters, view, &bodies);
@@ -1623,8 +1652,8 @@ pub(super) fn draw_space_hud(
             FOG,
         );
     }
-    // The buttons that mean something out here.
-    let mut hints = Vec::new();
+    // The buttons that mean something out here (a fight's first).
+    let mut hints = super::hostiles_view::combat_hints(view);
     match flight.drive {
         StarDrive::Off => hints.push(hint(Prompt::Anchor, "cruise")),
         StarDrive::Cruise { .. } | StarDrive::Spool { .. } => {
@@ -1819,7 +1848,7 @@ fn draw_docking_guide(
 /// An arrow at the edge of `lanes` toward `to` (or a ring on it when it is in view), with a
 /// name and distance beside it, inside the view.
 #[allow(clippy::too_many_arguments, reason = "one marker")]
-fn edge_marker(
+pub(super) fn edge_marker(
     draw: &mut RaylibDrawHandle<'_>,
     rect: Rectangle,
     lanes: Rectangle,

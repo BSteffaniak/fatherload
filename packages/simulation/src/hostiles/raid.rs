@@ -23,7 +23,7 @@ pub const RAID_REST_STEPS: u64 = steps(360.0);
 /// Most troopers in one raid.
 pub const MAX_TROOPERS: u32 = 6;
 /// Troopers land this many columns from the site (either side).
-pub const LANDING_OFFSET: i32 = 26;
+pub const LANDING_OFFSET: i32 = 15;
 /// Troopers drop from this many rows above the ground.
 pub const DROP_ROWS: i32 = 10;
 
@@ -83,4 +83,13 @@ pub const fn trooper_count(ring: u8) -> u32 {
     } else {
         count
     }
+}
+
+/// Whether `kind` is a raid trooper.
+#[must_use]
+pub const fn is_trooper(kind: EnemyKind) -> bool {
+    matches!(
+        kind,
+        EnemyKind::RaidCorsair | EnemyKind::SwarmSkitter | EnemyKind::MachineTrooper
+    )
 }

@@ -1088,6 +1088,22 @@ fn draw_thing(
                 draw, pen, species, kind, width, height, look, seconds,
             );
         }
+        GroundThingKind::Raider { kind, frame, left } => {
+            let Some(sprite) = crate::rendering::hostiles_view::trooper_sprite(kind) else {
+                return;
+            };
+            let (w, h) = (sprite.width() as f32 * art, sprite.height() as f32 * art);
+            let tint = shade(Color::WHITE, light);
+            sprite::draw_sprite_flipped(
+                draw,
+                sprite,
+                usize::from(frame),
+                Vector2::new(-w * 0.5, -h),
+                art,
+                left,
+                tint,
+            );
+        }
         GroundThingKind::ParkedRig => {
             let look = crate::rendering::rig_art::RigLook {
                 player_id: fatherload_simulation::PlayerId::new(2),

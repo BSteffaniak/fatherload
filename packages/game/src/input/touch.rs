@@ -212,6 +212,10 @@ pub struct TouchContext {
     pub warp: bool,
     /// In space at a station's port, or docked: DOCK shows.
     pub dock: bool,
+    /// In space in a fight (Wave 12 hostiles): FIRE under the thumb, MISSILE and ESCAPE show.
+    pub combat: bool,
+    /// Pirates demand tribute: PAY shows.
+    pub pay: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -336,6 +340,12 @@ pub enum TouchControl {
     Warp,
     /// In space: dock at the station's port in reach, or undock.
     Dock,
+    /// In a fight in space (Wave 12): fire a missile (it locks onto a ship off the nose).
+    Missile,
+    /// In a fight in space: spool the escape jump.
+    Escape,
+    /// Pirates hail: pay their demand.
+    Pay,
 }
 
 /// Where the controls are this frame.
@@ -600,6 +610,20 @@ impl TouchLayout {
     /// (up forward, down back, sideways strafes); the rotation pair turns the rig.
     fn push_space(&mut self, cluster: Cluster, context: TouchContext) {
         let mut push = |control, slot| self.controls.push((control, cluster.place(slot)));
+        if context.combat {
+            // A fight (Wave 12 hostiles): FIRE under the thumb (aim by turning the craft),
+            // MISSILE beside it, ESCAPE above, PAY on the diagonal while pirates hail.
+            push(TouchControl::Fire, PRIMARY);
+            push(TouchControl::Missile, SIDE);
+            push(TouchControl::Escape, UPPER);
+            if context.pay {
+                push(TouchControl::Pay, DIAGONAL);
+            } else if context.dock {
+                push(TouchControl::Dock, DIAGONAL);
+            }
+            push(TouchControl::Cruise, FAR_SIDE);
+            return;
+        }
         push(TouchControl::Cruise, PRIMARY);
         push(TouchControl::Scan, SIDE);
         if context.warp {
@@ -1010,12 +1034,14 @@ impl TouchInput {
     /// A control was pressed: everything that acts on the way down.
     const fn press(&mut self, control: TouchControl, input: &mut PlayerInput) {
         match control {
-            TouchControl::CycleWeapon => input.cycle_weapon = true,
+            // In space the next-weapon button fires a missile (Wave 12 hostiles).
+            TouchControl::CycleWeapon | TouchControl::Missile => input.cycle_weapon = true,
             TouchControl::CycleExplosive => input.cycle_explosive = true,
             TouchControl::Scan => input.scan = true,
             TouchControl::Anchor | TouchControl::Cruise => input.anchor = true,
-            TouchControl::Warp => input.bomb = true,
-            TouchControl::Dock => input.interact = true,
+            // In a fight the warp button spools the escape jump (Wave 12 hostiles).
+            TouchControl::Warp | TouchControl::Escape => input.bomb = true,
+            TouchControl::Dock | TouchControl::Pay => input.interact = true,
             TouchControl::Tools => self.tools_open = !self.tools_open,
             TouchControl::Kit(slot) => {
                 self.tools_open = false;

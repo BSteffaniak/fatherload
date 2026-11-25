@@ -10007,6 +10007,218 @@ the worlds' hazard tags ask for.
   space prices and pay home ore at stations far under its home value. The model and its
   30-60 minute test then measure from a late rig's purse, not from nothing.
 
+## Wave 12 hostiles: pirates, swarms and the machine fleet; space combat (`src/hostiles.rs`, `src/hostiles/{ai,boss,combat,encounter,raid}.rs`, `src/world/hostiles.rs`)
+
+Expansion plan §16 WP-SPACE "Hostile factions: pirates, swarms, a machine fleet". Space now
+fights back, and the flying rig can fight it: ship guns, a deflector, missiles, three factions
+with their own AI and looks, a boss each, encounter pacing by distance and tier, bounties for the
+stations track's board, and ground raids on bodies.
+
+### The factions
+
+| Faction | Ships (hull/shield) | How they fight | Where |
+|---|---|---|---|
+| **Rustwake Corsairs** (`Faction::Pirates`) | Cutter (60), Marauder (140/40) | close to 430 px and **hail**: a demand of a quarter of the cargo's worth plus a twentieth of the credits (150-5,000) for 12 s; paid (`CombatCommand::PayTribute`, or the use button) they leave; refused, ignored, fled or shot, they fight: cutters circle at 300 px (each its own way round) and strafe, marauders hold 520 px and fire three-round bursts; a cutter below a quarter of its hull runs | everywhere, more in nebulae (+10) and asteroid belts (+8) |
+| **the Bloom** (`Faction::Swarm`) | Mite (18), Stinger (48) | **flocking** (separation 52 px, alignment and cohesion within 260 px, plus the pull of the prey); mites circle at 240 px and take turns **diving** (1.25 s, a bite, then they peel off); stingers hold 430 px and spit | round jungle, fungal and ocean worlds |
+| **the Concord** (`Faction::Machine`) | Drone (50/20), Lancer (160/60) | **formations**: drones keep V slots off their lancer (`ai::slot_offset`) and fire their volleys on **one shared beat**; a lancer **telegraphs** its lance (1.2 s, its nose locked on the line), then fires down it; **patrol routes**: low orbits 60 tiles over machine worlds (and every system's first world from ring 4), met within 600 tiles of the route (`encounter::patrols_near`), flown until the patrol sees a rig (1,500 px, halved in a nebula's fog); a formation that loses every lancer breaks | machine worlds, and more far out |
+
+Ships fly a simple physical model (thrust capped per class, turn rate capped: they aim by
+turning their noses, never instantly) in fixed **combat steps** of 1/120 s (`COMBAT_STEP_HZ`;
+a tick runs `step_at_tick(t + 1) - step_at_tick(t)` of them, so every tick rate plays the same
+steps). Rolls are hashes of the world seed, ids and steps; trigonometry is `field::trig`'s;
+lengths are plain IEEE (`combat::length`, no platform `hypot`).
+
+### Combat
+
+* **The rig's guns** (`ShipGear` in `HazardGear::ship`, sold at a docked station with
+  `CombatCommand::BuyGear`): the **cannon** fires down the nose while the trigger is held (tiers
+  1-3: 10/13/16 damage every 26/22/18 steps); the **turret** (0-2) fires along the seat's aim
+  *relative to the craft* (the camera is locked to it; the screen-relative scheme reads it
+  against the chart), forward with no aim; **missiles** (rack 2/4/6, one reloads every 20 s,
+  `CombatCommand::FireMissile`, the next-weapon button) lock only onto a ship inside 18° of the
+  nose within 1,600 px **at the moment of firing**, and fly straight otherwise. There is **no
+  auto-aim in space**: `WeaponControl::auto_aim` is ignored
+  (`aiming_is_always_the_players`).
+* **The deflector** soaks hits before the hull (120 + 110 a tier), regrowing 24 a second three
+  seconds after the last hit. Hostile shots and bodies hit for their base numbers times
+  `HOSTILE_DAMAGE` (3: space is late game and its rigs carry deep hulls) times the encounter's
+  danger (+12 % a ring).
+* **Hit areas match the drawn bodies**: `ShipClass::hits` are circles fitted to the ships'
+  sprites by the art generator (inscribed, greedy, covering 84-94 % of each body); shots are
+  swept segments against them (`combat::hits_ship`), bodies touching a rig bite or ram
+  (`combat::body_touches`, half a second apart). The game's
+  `every_ships_hit_circles_match_its_drawn_body` checks the art and the circles still agree.
+* **Wrecks** (`Wreck`): a destroyed ship leaves its credits (more farther out) and ore, drifting
+  and slowing, for 5 minutes; flying within 56 px collects it. A boss's wreck carries its
+  **tech** (granted to the crew): the Pirate King's **Corsair Twin Turret** (a twin-linked
+  turret, fitted even without the upgrade), the Swarm Queen's **Living Shield** (the deflector
+  regrows twice as fast), the Arbiter's **Lance Missiles** (+50 % damage, two more in the rack).
+
+### Fair rules
+
+* **Every boss attack is telegraphed** for at least `MIN_TELEGRAPH_STEPS` (0.9 s) and locked when
+  the warning begins (a line, a mark, a flank, a ring with a gap), so it is dodged by moving.
+  Nothing is an unwinnable countdown.
+* **Escape is always possible**: in a fight the warp button (`FlightCommand::Warp`, answered by
+  `combat_command` before flight's own) spools an **escape jump** (2.5 s; no waypoint, fuel or
+  alignment needed; incoming damage halved while it spools), then the rig is 30,000 tiles away
+  along its heading (turned aside if that would end in a body's reach) and the fight is over
+  (`an_escape_jump_always_gets_away`, with an empty tank).
+* **Death**: a rig wrecked in a fight leaves a **pod** with half of every cargo stack where it fell
+  (only it can collect it, for 20 minutes) and the emergency beacon tows it home as anywhere in
+  space; its encounters end.
+* **Pirates can be paid** (credits first, then the dearest cargo for the rest) and leave.
+* **Calm**: the home sector never rolls encounters, nor does the space within 9,000 tiles of a
+  station; after an encounter a rig rests 60 s.
+
+### Bosses (`hostiles::boss`)
+
+| Boss | Hull/shield | Moves | Attacks (cycle; phase 2 below half hull) |
+|---|---|---|---|
+| **The Gilded Maw** (Pirate King) | 1,500/250 | holds 560 px with its **flank** to the rig | *Broadside* (gun ports glow 1.25 s, then 9 shells fan off the facing flank; 13 in phase 2), *Escorts* (two cutters, at most three), *Ram* (engines flare 1.6 s down its nose's line, then it charges) |
+| **The Swarm Queen** | 1,400 | hovers 520 px, facing the rig | *Spore ring* (she swells 1.1 s, then 20 slow spores with a gap of 5, 4 in phase 2), *Brood* (four mites, at most eight), *Lunge* (marks the rig's spot 1.3 s, then lunges there) |
+| **The Arbiter** (Concord capital) | 1,700/450 | holds 660 px, slow to turn | *Volley* (turrets glow 0.9 s, then 8 aimed pulses), *Lance* (a red line locks from the prow 1.5 s, then the lance; three in a fan in phase 2, which starts when its shield first breaks), *Launch* (two drones, at most four) |
+
+Bosses wait in **lairs** (`hostiles::boss_lair`, cached per seed): the first nebula system from
+ring 2 out (pirates), the first jungle or fungal system from ring 3 (the swarm), the first machine
+world from ring 4 (the machines), else the first system on that ring; the lair sits 80,000 tiles
+from its star toward home, and a rig within 45,000 tiles of it (in free flight) meets the boss,
+pulled out of cruise. A beaten boss stays beaten (`HostileSpace::bosses_beaten`).
+`WorldState::boss_lair(faction)` is for the nav chart, rumours and the stations' boards.
+
+**Beatable by a bot**: `the_pirate_king_is_beaten_by_a_bot`, `the_swarm_queen_...`,
+`the_arbiter_...`: a bot with the player's controls only (rotation thrusters to face the boss,
+main/retro/side thrust to hold 520 px and slide off any telegraphed line, the trigger when lined
+up, missiles) beats each in about 40-60 s with a well-kept rig (middling ship gear) and keeps
+over a fifth of its hull, then flies to the wreck for the tech.
+
+### Pacing (`hostiles::encounter`)
+
+* **Ring** = the Chebyshev distance in galactic sectors from home (`danger_ring`).
+* Every 5 s (`ROLL_STEPS`, on fixed steps so every tick rate rolls alike) a rig in free flight
+  (not warping or spooling, not docked) rolls `chance_permille(ring, tier)`: 0 at home, 3 % at
+  ring 1, +3.5 % a ring, a little more for well-armed rigs, capped at 22 %.
+* The faction by `faction_weights` (location), the ships by `compose(faction, budget)` with
+  `budget = 2 + ring + tier / 2` (capped at 14), where the tier is the ship gear plus a third
+  of the hull and engine upgrades. A cruising rig is **interdicted** (dropped out of cruise to
+  its impulse top speed).
+* Encounters end when their ships are all gone, when the rig docks, lands, warps, jumps or
+  goes home, or when every ship is 4,000 px off.
+
+### Bounties (the mission-target API for the stations track)
+
+* `hostiles::bounty_targets(seed, system, day) -> Vec<BountyTarget>` (pure): three named elite
+  ships a day (a marauder, stinger or lancer with escorts) lurking 60,000 tiles from a star of a
+  system within two sectors (never home's), with a reward.
+* `WorldState::bounty_board(system, day)` lists those not yet posted or claimed;
+  `post_bounty(hunter, target)` posts one (TODO-SEAM w12-stations: the board calls it);
+  `bounty_status(id)` answers `Unknown`, `Posted` or `Claimed`. A posted target is met by any
+  rig within 30,000 tiles of its point; destroying it pays the hunter (`BountyClaimed`).
+
+### Ground raids (`hostiles::raid`)
+
+On a body's ground pass (`advance_raids`), an occupied body rolls every 20 s once its store's
+rest (6 minutes) is over: never at rings 0-1, 6 % at ring 2, +4 % a ring (to 30 %). The faction
+by theme (`raiders_of`: the swarm on jungle, fungal and ocean worlds; the machines on machine and
+dead worlds; else mostly corsairs). 2 + ring / 2 troopers (at most 6) drop from 10 rows above
+the ground 15 columns from the site: new creatures appended to `EnemyKind` (`RaidCorsair`, a
+ranged gunman; `SwarmSkitter`, a lunging biter; `MachineTrooper`, a ranged walker) with stats,
+contact boxes matching their sprites and loot, under the generic enemy body rules in the body's
+frame (gravity toward its core). Sites: every rig on the ground (`raid_sites`; TODO-SEAM
+w12-aliens: alien towns; w12-bodylife / bases: player bases on bodies). A raid ends when its
+troopers are gone.
+
+### State, formats and codes
+
+* World field `hostiles: HostileSpace` (serde default; hashed only once non-empty, so older
+  worlds hash as before) in the appended shared section **`SectionKey::Hostiles`**: ships,
+  shots, wrecks, encounters, each rig's combat state (guns' cooldowns, rack, deflector, escape
+  spool, next roll), bosses beaten, tech, kills by faction, bounties, raids, patrols met.
+  Positions are exact `WorldPos`es in space (never `f32` absolutes); clients predict it like
+  the rest of the world.
+* `HazardGear::ship: ShipGear` (serde default), `PlayerCommand::Combat(CombatCommand)`,
+  `TestModeAction::{SpawnHostiles, SpawnBoss, SpawnRaid}(Faction)` (test-mode spawns emit no
+  events), `GameplayEventKind::Hostile { what: HostileEvent, player_id, detail }` with **event
+  codes 980-999**, `EnemyKind::{RaidCorsair, SwarmSkitter, MachineTrooper}` appended.
+* **`PROTOCOL_VERSION` 20** (this track's one bump). **Save format: no bump** (every new field
+  has a serde default).
+* No golden digest changed: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are untouched
+  (space generation is read, never changed).
+* Doc-hidden staging helpers: `stage_encounter`, `stage_raid` (scenes and tools).
+
+### Game side
+
+* **Art** (`rendering/pixel_art/sprites/hostiles.rs`): the nine ships (cutters, marauders and
+  the copper galleon *Gilded Maw* with red solar sails and gun decks; the green mite and stinger
+  and the horned, violet-winged Swarm Queen with her glowing brood sacs; the steel drone, lancer
+  and the wedge-hulled Arbiter with its teal eye, turret sponsons and prow emitter), generated
+  from shapes (three-step rounded shading, INK outline) with wind-up frames, and the three raid
+  troopers hand drawn.
+* **The view** (`rendering/hostiles_view.rs`, called from flight's space view): ships turned to
+  their headings at true scale; the view **eases in to 0.55 x** as hostiles come within 3,400 px
+  (the rig is drawn at the same scale then); shots by kind; **warnings** for every telegraph (a
+  lance's and a ram's dashed line, a lunge's mark, a broadside's, spore ring's and volley's
+  shell paths previewed from the simulation's own `boss::unleash`, bays glowing), brightening
+  steadily and never flashing; shield shimmers and hull sparks; hull bars; wrecks darkened with
+  a slow salvage glint (a boss's brighter), a rig's own pod as a crate. Raid troopers stand on a
+  body's round ground (`GroundThingKind::Raider`).
+* **The HUD**: the deflector bar and missile pips under the meters; banners for a pirate demand
+  (with its seconds), the faction and ship count, a boss's name, hull and shield bar (ENRAGED in
+  phase 2) and its current warning; the escape jump's spool; arrows to ships and salvage off
+  screen; combat hints (pay, fire, missile, escape jump). Announcements for contact, hails,
+  tribute, interdiction, bosses, salvage, escapes, bounties and raids.
+* **Controls**: in space the trigger always fires (the hardpoint's thrust-when-unarmed rule is
+  off), the turret's aim is the pointer or right stick from the craft at the view's middle
+  (`weapon_aim::space_aim`), the next-weapon button fires a missile, the warp button escapes
+  in a fight and the use button pays. **Touch**: in a fight the cluster becomes FIRE (under the
+  thumb), MSL, ESCAPE, PAY (while pirates hail) and CRUISE (`TouchContext::{combat, pay}`,
+  `TouchControl::{Missile, Escape, Pay}` appended).
+* **Audio** (patches appended at the end of `patches!`): `hx_cannon`, `hx_missile`,
+  `hx_ship_hit`, `hx_ship_boom`, `hx_shield_down`, `hx_hail`, `hx_boss_warn`, `hx_boss_appear`,
+  `hx_enemy_shot`, and two music loops: `loop_hx_combat` (the dogfight's D-minor pulse) and
+  `loop_hx_boss` (the bosses' brass and war drums), played by the director while the seat's rig
+  is in a fight or near a boss.
+* **Scenes** (`scene_capture/hostile_scenes.rs`): `space_pirates_hail`, `space_swarm_flock`,
+  `space_machine_formation`, `space_dogfight`, `space_boss_pirate_king`,
+  `space_boss_swarm_queen`, `space_boss_arbiter`, `space_salvage`, `space_ground_raid`,
+  `touch_space_combat`.
+
+### Tests
+
+* `hostiles::combat::tests`: the ship frame, swept hits against the drawn body, shields.
+* `world::hostile_tests`: home is calm and encounters find rigs four sectors out; encounters
+  scale with distance and tier (and compositions fit their budgets); pirates hail and leave once
+  paid (the use button pays); pirates turn hostile when shot; aiming is always the player's
+  (the cannon down the nose, the turret along the craft-relative aim, `auto_aim` ignored); the
+  swarm flocks round its prey; machines keep formation and telegraph their lances; combat is
+  deterministic (bit-identical hostiles and state hash) and agrees at 30, 60 and 120 Hz; an escape
+  jump always gets away (no fuel, under a boss); a wrecked rig leaves its pod and is towed home;
+  a bot beats each boss; every boss attack is telegraphed long enough; hostiles survive a save
+  and replicate as a section; a missile locks only inside the nose's cone; a raid lands troopers
+  on a body by the rig, out of the rock.
+* netcode `tests::world_hostiles`: two clients in space, corsairs on one and a swarm on the
+  other, over 60 ms / 2 % loss: every client converges with no hash mismatch, holds the host's
+  ships and encounters, and sees the shots fly.
+* game: `every_ships_hit_circles_match_its_drawn_body`, troopers' art, the fight zoom's ease,
+  every patch renders (`Patch::ALL`), every event has a sound, the touch cluster.
+
+### Seams (TODO-SEAM) and known limits
+
+* **w12-stations**: the bounty board (`bounty_board`, `post_bounty`, `bounty_status`) and the
+  shipyard (`ShipGearKind`, `CombatCommand::BuyGear`, docked only) want the station's counter;
+  `HostileSpace::kills` is there for a station's standing. Until then the docked station's
+  counter lists the ship gear in a Shipyard section (`StationRow::Shipyard`).
+* **w12-aliens / w12-bodylife**: `raid_sites` should add alien towns and player bases on bodies;
+  raids could pick their faction from the town's enemies.
+* **w12-systems / planets**: lairs and patrols read the generator's themes (`Theme::MachineWorld`,
+  `Jungle`, `Fungal`, `OceanArchipelago`) and nebulae; new themes can weigh factions in
+  `faction_weights` and `raiders_of`.
+* Encounters follow their own rig only (co-op crewmates can join the fight and be shot, but the
+  encounter ends with its rig's); encounters in free flight between two far-apart crewmates are
+  independent.
+* Boss lairs are found by scanning rings of sectors once per seed (cached in-process) the
+  first time a rig is far enough out.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

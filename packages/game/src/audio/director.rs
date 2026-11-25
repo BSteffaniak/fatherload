@@ -423,6 +423,9 @@ enum SeatLoop {
     // The wild worlds (Wave 12 planets-a): the theme's bed, and the storm.
     WildWorldBed,
     WildStormBed,
+    // Space combat (Wave 12 hostiles): the dogfight's music and the bosses' theme.
+    CombatMusic,
+    BossMusic,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -1200,6 +1203,8 @@ impl Director {
             }
         }
 
+        // Space combat (Wave 12 hostiles): a fight's music wherever the seat flies.
+        self.hostile_music(live, listener, snapshot);
         if let Some(scene) = away {
             // Away from home the home world's hazards, ambience and music are not this seat's:
             // its place's own sound (a body's low wind, free flight's suit hum; Waves 12-13 give
@@ -2452,6 +2457,42 @@ impl Director {
             SeatLoop::EndingMusic,
             Patch::EndingLoop,
             (if ending { 0.6 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// Space combat's music (Wave 12 hostiles): the dogfight's pulse while hostiles are after
+    /// the seat's rig, the bosses' theme while a boss is near it (instead).
+    fn hostile_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        let hostiles = snapshot.space.hostiles;
+        let flyer = snapshot
+            .space
+            .flyers
+            .iter()
+            .find(|flyer| flyer.player_id == listener.player_id);
+        let boss = flyer.is_some_and(|flyer| {
+            hostiles
+                .boss()
+                .is_some_and(|boss| boss.pos.distance(flyer.flight.pos) < 6_000.0)
+        });
+        let fighting = !boss && flyer.is_some() && hostiles.engaged(listener.player_id).is_some();
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::CombatMusic,
+            Patch::HxCombatLoop,
+            (if fighting { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::BossMusic,
+            Patch::HxBossLoop,
+            (if boss { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 

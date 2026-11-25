@@ -368,6 +368,8 @@ pub fn touch_context(
         space: player.flight.away(),
         warp: space_warp_ready(view),
         dock: space_dock_ready(view),
+        combat: player.flight.away() && view.space_combat.engaged,
+        pay: view.space_combat.demand.is_some(),
     }
 }
 

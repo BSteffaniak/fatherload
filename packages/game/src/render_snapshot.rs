@@ -585,6 +585,9 @@ pub struct ViewSnapshot<'w> {
     pub space_waypoint: Option<fatherload_simulation::flight::nav::NavTarget>,
     /// In space: the rig is within reach of a station's port (the touch DOCK button).
     pub near_port: bool,
+    /// In space (Wave 12 hostiles): the seat's fight, if any (the touch combat buttons, the
+    /// HUD and the combat zoom).
+    pub space_combat: SpaceCombatView,
     /// The use prompt at a depth logistics stop the rig stands at (an outpost, a lift station,
     /// its own beacon; Part III F10).
     pub logistics_stop: Option<String>,
@@ -1024,6 +1027,47 @@ pub struct RenderSnapshot<'w> {
     pub space: SpaceSnapshot<'w>,
 }
 
+/// A seat's fight in space (Wave 12 hostiles).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SpaceCombatView {
+    /// Hostiles are after the seat's rig.
+    pub engaged: bool,
+    /// Pirates demand this many credits of it.
+    pub demand: Option<u32>,
+    /// The nearest hostile ship (px), if any is near.
+    pub nearest: Option<f32>,
+    /// A boss near the rig: its distance plus its size (px), so the view can frame it.
+    pub boss_reach: Option<f32>,
+}
+
+impl SpaceCombatView {
+    /// `player_id`'s fight in `world`.
+    #[must_use]
+    pub fn of(world: &WorldState, player_id: PlayerId) -> Self {
+        let hostiles = world.hostiles();
+        let Some(flight) = world.rig_flight(player_id).filter(|flight| flight.away()) else {
+            return Self::default();
+        };
+        let nearest = hostiles
+            .ships
+            .iter()
+            .map(|ship| flight.pos.distance(ship.pos))
+            .fold(None, |best: Option<f32>, distance| {
+                Some(best.map_or(distance, |best| best.min(distance)))
+            });
+        let boss_reach = hostiles
+            .boss()
+            .map(|boss| flight.pos.distance(boss.pos) + boss.class.reach())
+            .filter(|reach| *reach < 3_500.0);
+        Self {
+            engaged: hostiles.engaged(player_id).is_some(),
+            demand: hostiles.demand_for(player_id),
+            nearest,
+            boss_reach,
+        }
+    }
+}
+
 /// One rig away in space, as drawn.
 #[derive(Clone, Copy, Debug)]
 pub struct Flyer {
@@ -1052,6 +1096,9 @@ pub struct SpaceSnapshot<'w> {
     /// The world (Wave 12: a docked station's hub reads its board, bar, prices and the crew's
     /// station state).
     pub world: &'w fatherload_simulation::WorldState,
+    /// Everything hostile in space (Wave 12): ships, shots, wrecks, encounters, each rig's
+    /// deflector and rack.
+    pub hostiles: &'w fatherload_simulation::hostiles::HostileSpace,
 }
 
 impl SpaceSnapshot<'_> {
@@ -1260,6 +1307,7 @@ impl<'w> RenderSnapshot<'w> {
                 millis: world.millis_at(world.simulation_tick()),
                 systems: world.space_systems(),
                 world,
+                hostiles: world.hostiles(),
             },
             cable_rows: world.world_settings().generator.has_descents().then(|| {
                 let layout =
@@ -1642,6 +1690,7 @@ fn view_snapshot(
                     })
                 })
         }),
+        space_combat: SpaceCombatView::of(world, player_id),
         // A deep hall's resident in reach takes the use prompt from its counter (Wave 9).
         logistics_stop: crate::shell::logistics::stop_prompt(world, player_id)
             .filter(|_| crate::shell::deep_resident_in_reach(world, player_id).is_none()),

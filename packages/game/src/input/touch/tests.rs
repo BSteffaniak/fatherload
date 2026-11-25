@@ -26,6 +26,8 @@ const PLAY: TouchContext = TouchContext {
     space: false,
     warp: false,
     dock: false,
+    combat: false,
+    pay: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -566,6 +568,8 @@ fn contexts() -> Vec<TouchContext> {
                     space: false,
                     warp: false,
                     dock: false,
+                    combat: false,
+                    pay: false,
                 });
                 if !pilot.on_foot() && mode == TouchMode::Play {
                     // Space flight (Wave 11): the Star Drive's cluster.
@@ -584,6 +588,8 @@ fn contexts() -> Vec<TouchContext> {
                         space: true,
                         warp: bits & 2 != 0,
                         dock: bits & 4 != 0,
+                        combat: false,
+                        pay: false,
                     });
                 }
                 if pilot.on_foot() && mode == TouchMode::Play {
@@ -602,6 +608,8 @@ fn contexts() -> Vec<TouchContext> {
                         space: false,
                         warp: false,
                         dock: false,
+                        combat: false,
+                        pay: false,
                     });
                 }
             }
@@ -928,6 +936,8 @@ fn in_space_the_cluster_flies_the_star_drive() {
         space: true,
         warp: true,
         dock: true,
+        combat: false,
+        pay: false,
         anchor: true,
         ..PLAY
     };

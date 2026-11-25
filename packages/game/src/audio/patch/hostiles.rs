@@ -58,13 +58,23 @@ pub(super) fn hx_ship_hit(rng: &mut Rng) -> Vec<f32> {
 
 /// A ship breaking up in vacuum: a muffled thud felt through the hull, crackle and debris.
 pub(super) fn hx_ship_boom(rng: &mut Rng) -> Vec<f32> {
-    let mut out = thump(90.0, 30.0, 0.7, 2.4);
+    let mut out = thump(140.0, 45.0, 0.5, 2.4);
     let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
     let mut low = Svf::new(FilterMode::LowPass, 700.0, 0.7);
     let rumble = render(1.1, |t| {
         low.run(noise.next(), 900.0 - 600.0 * (t / 1.1), 0.7) * perc(t, 0.004, 0.9)
     });
-    mix_into(&mut out, &rumble, 0.0, 0.8);
+    mix_into(&mut out, &rumble, 0.0, 0.45);
+    // The hull shattering: a bright burst of metal over the thud.
+    let shatter = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        2_200.0,
+        0.7,
+        0.35,
+    );
+    mix_into(&mut out, &shatter, 0.0, 0.7);
     for index in 0..6_u8 {
         let at = 0.05 + f32::from(index) * rng.range(0.05, 0.09);
         let crackle = burst(
@@ -75,7 +85,7 @@ pub(super) fn hx_ship_boom(rng: &mut Rng) -> Vec<f32> {
             0.8,
             0.03,
         );
-        mix_into(&mut out, &crackle, at, 0.2);
+        mix_into(&mut out, &crackle, at, 0.45);
     }
     out
 }
@@ -134,11 +144,12 @@ pub(super) fn hx_boss_warn(rng: &mut Rng) -> Vec<f32> {
 
 /// A boss arriving: a deep horn under a falling sub swell and a struck bell.
 pub(super) fn hx_boss_appear(rng: &mut Rng) -> Vec<f32> {
-    let mut out = thump(70.0, 32.0, 1.6, 1.8);
-    for (start, note) in [(0.0_f32, 110.0_f32), (0.5, 103.83), (1.0, 98.0)] {
-        mix_into(&mut out, &brass(rng, note, 0.6, 0.6), start, 0.35);
+    let mut out = thump(110.0, 55.0, 1.0, 1.6);
+    for (start, note) in [(0.0_f32, 220.0_f32), (0.5, 207.65), (1.0, 196.0)] {
+        mix_into(&mut out, &brass(rng, note, 0.6, 0.9), start, 0.4);
     }
-    mix_into(&mut out, &bell(220.0, 1.41, 1.6, 2.0), 0.0, 0.25);
+    mix_into(&mut out, &bell(440.0, 1.41, 1.6, 2.0), 0.0, 0.35);
+    mix_into(&mut out, &bell(880.0, 2.0, 1.2, 1.6), 0.05, 0.2);
     out
 }
 

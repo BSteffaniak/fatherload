@@ -195,6 +195,8 @@ pub use body_flight::{
 };
 #[cfg(test)]
 mod frontier_tests;
+#[cfg(test)]
+mod hostile_tests;
 pub mod planet;
 #[cfg(test)]
 mod planet_tests;

@@ -1310,6 +1310,38 @@ homes for sale.
   `alien_first_contact`, `alien_talk_glyphs`, `alien_talk_fragments`, `alien_talk_fluent`,
   `alien_trade`, `alien_home_and_monument`.
 
+### Hostile space (wave 12)
+
+Beyond the home sector, space fights back. Three factions fly it, each with its own look,
+tactics and boss:
+
+- **The Rustwake Corsairs** lurk in nebulae and asteroid belts. They close in and **hail**:
+  pay their demand (`E`) and they leave; refuse, run or shoot and they fight. Cutters circle and
+  strafe, marauders hang back and fire bursts. Their king flies the flagship **Gilded Maw**.
+- **The Bloom** swarms round living worlds: mites flock and dive to bite, stingers spit. The
+  **Swarm Queen** broods them.
+- **The Concord** is a machine fleet: drones fly in V formations behind lancers, fire in
+  volleys and charge lances down a warning line. Patrols orbit machine worlds. Their capital
+  ship is the **Arbiter**.
+- **Fighting**: the trigger fires the **cannon** down your nose, so you aim by turning the
+  craft with its rotation thrusters (no auto-aim). A **turret** fires where you point the mouse
+  or right stick. **Missiles** (`X`, the next-weapon button) lock onto a ship close to your
+  nose when fired. The **deflector** soaks hits and recharges. Buy them at a station's
+  Shipyard.
+- **Every boss attack is telegraphed**: a red line for a lance or a ram, a mark for a lunge, the
+  shells' paths for a broadside or a spore ring (look for its gap). Move off the line.
+- **You can always escape**: in a fight the warp button (`B`) spools an escape jump that needs
+  no waypoint or fuel. Wrecked, the beacon tows you home and half your cargo waits in a pod
+  where you fell.
+- **Salvage**: fly through wrecks for credits and ore. A boss's wreck holds its tech for the
+  whole crew.
+- The farther from home, the more often and the harder they come; the home sector and the
+  space round stations are calm. On worlds a few sectors out, raiders sometimes land nearby.
+- Touch: in a fight the buttons become FIRE, MSL, ESCAPE and PAY.
+- Scenes: `space_pirates_hail`, `space_swarm_flock`, `space_machine_formation`,
+  `space_dogfight`, `space_boss_pirate_king`, `space_boss_swarm_queen`, `space_boss_arbiter`,
+  `space_salvage`, `space_ground_raid`, `touch_space_combat`.
+
 ### The Fathers' expedition (wave 8 story)
 
 A generation ago six people from the town went down the builders' cable to find out what hums.

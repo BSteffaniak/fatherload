@@ -501,6 +501,13 @@ pub enum GroundThingKind {
         height: i32,
         look: crate::rendering::alien_art::BuildingLook,
     },
+    /// A raid trooper a hostile dropship set down (Wave 12 hostiles): its kind, the sprite
+    /// frame and whether it faces left.
+    Raider {
+        kind: fatherload_simulation::enemy::EnemyKind,
+        frame: u8,
+        left: bool,
+    },
 }
 
 /// What a frontier world shows on its round ground (Wave 12 planets-b): every one a pure

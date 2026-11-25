@@ -359,6 +359,34 @@ pub fn draw_sprite_rotated(
     }
 }
 
+/// [`draw_sprite_rotated`] tinted `tint` (Wave 12: wrecks drawn darkened).
+pub fn draw_sprite_rotated_tinted(
+    _draw: &mut impl RaylibDraw,
+    sprite: &SpriteDef,
+    frame: usize,
+    center: Vector2,
+    scale: f32,
+    degrees: f32,
+    tint: Color,
+) {
+    let (Some(texture), Some(rect)) = (current_atlas(), layout().frame(sprite.name, frame)) else {
+        return;
+    };
+    let width = rect.width as f32 * scale;
+    let height = rect.height as f32 * scale;
+    // SAFETY: like blit, the current atlas lives throughout the renderer's draw scope.
+    unsafe {
+        ffi::DrawTexturePro(
+            texture,
+            rect.source(),
+            Rectangle::new(center.x, center.y, width, height),
+            Vector2::new(width * 0.5, height * 0.5),
+            degrees,
+            tint,
+        );
+    }
+}
+
 /// [`draw_sprite_rotated`], optionally mirrored vertically first (a side-on weapon pointing
 /// left stays the right way up).
 pub fn draw_sprite_rotated_flipped(

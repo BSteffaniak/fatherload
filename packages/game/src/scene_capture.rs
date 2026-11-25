@@ -460,6 +460,7 @@ mod garrison_scenes;
 mod heart_scenes;
 mod hollow_scenes;
 mod home_scenes;
+mod hostile_scenes;
 mod living_dark_scenes;
 mod logistics_scenes;
 mod old_deep_scenes;
@@ -642,6 +643,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(planet_scenes::PLANET_SCENES)
         .chain(flight_scenes::FLIGHT_SCENES)
         .chain(systems_scenes::SYSTEMS_SCENES)
+        .chain(hostile_scenes::HOSTILE_SCENES)
         .chain(space_scenes::SPACE_SCENES)
         .chain(bodylife_scenes::BODYLIFE_SCENES)
         .chain(wilds_scenes::WILDS_SCENES)
