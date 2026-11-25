@@ -7277,6 +7277,15 @@ stacking decided and the seams wired on top (`world/wave10_integration_tests.rs`
 - **The codex's page cycle**: codex -> Descent progress -> star charts (Deep Descent worlds
   only) -> map. Tab-back reverses it. Each page's "Turn the page" row names the page it
   goes to.
+- **The Heart Seal stays whole**: the Heart's own pass had cut weightless halls and veins
+  into the seal band over Descent VIII, opening a way round the Heart Key in places.
+  - Halls now keep off the seal's rows, and the pass never overwrites a seal tile.
+  - `the_heart_seal_is_whole_over_the_hearts_own_halls` checks three seeds. The only
+    other kinds in the band are bedrock and the cable's lift shaft.
+- **The browser build**: the Heart's ending wraps its credits with `ui_kit::paragraph`,
+  which is no longer desktop-only. With the GPU, the Heart's fight, the lensing wells, the
+  garrison's defence and the Engine Halls all hold 60 fps in the browser, with 2-4 ms of
+  frame work.
 - **The probe**: each authored Descent's mechanics and set pieces are counted once
   (`living_dark_content`, `ancient_city::authored_content`, `garrison::authored_content`,
   `heart::authored_content`).
