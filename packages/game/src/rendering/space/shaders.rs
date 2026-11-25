@@ -104,10 +104,6 @@ void main() {
         }
         h += dither * 0.05;
         vec3 surface = h < 0.42 ? uDark : (h < 0.62 ? uMid : uLight);
-        // Polar caps on rocky worlds read as rounder.
-        if (uKind.x < 0.5 && abs(n.y) > 0.86 + dither * 0.05) {
-            surface = mix(surface, vec3(0.93, 0.95, 0.98), 0.75);
-        }
         float lambert = dot(n, sun);
         // Four light steps with a dithered terminator.
         float light = clamp(lambert * 1.3 + 0.12 + dither * 0.12, 0.0, 1.0);

@@ -312,7 +312,10 @@ fn requested_space_view() -> Option<crate::rendering::space::fixtures::SpaceFixt
     let name = name?;
     let fixture = fixtures::build(&name);
     if fixture.is_none() {
-        eprintln!("unknown space view {name}; try one of {:?}", fixtures::NAMES);
+        eprintln!(
+            "unknown space view {name}; try one of {:?}",
+            fixtures::NAMES
+        );
     }
     fixture
 }

@@ -143,16 +143,15 @@ pub fn draw_sky(
                     continue;
                 }
                 let tint = STAR_TINTS[(h >> 48) as usize % STAR_TINTS.len()];
-                let twinkle =
-                    0.88 + 0.12 * (view.seconds * (0.6 + unit(h, 40) * 1.4) + unit(h, 24) * 6.3).sin();
-                let bright = (layer.bright.0
-                    + (layer.bright.1 - layer.bright.0) * unit(h, 52))
-                    * twinkle;
+                let twinkle = 0.88
+                    + 0.12 * (view.seconds * (0.6 + unit(h, 40) * 1.4) + unit(h, 24) * 6.3).sin();
+                let bright =
+                    (layer.bright.0 + (layer.bright.1 - layer.bright.0) * unit(h, 52)) * twinkle;
                 let colour = fade(tint, bright);
                 let x = point.0.round();
                 let y = point.1.round();
                 if let Some(((dx, dy), length)) = streaks {
-                    let length = length * depth * depth;
+                    let length = length * depth * depth * depth;
                     if length > 1.5 {
                         draw.draw_line_ex(
                             Vector2::new(x, y),
@@ -165,9 +164,18 @@ pub fn draw_sky(
                 }
                 let big = unit(h, 8) < layer.big;
                 if big {
-                    draw.draw_rectangle_rec(Rectangle::new(x - 1.0, y - 1.0, 3.0, 3.0), fade(tint, bright * 0.45));
-                    draw.draw_rectangle_rec(Rectangle::new(x - 2.0, y, 5.0, 1.0), fade(tint, bright * 0.6));
-                    draw.draw_rectangle_rec(Rectangle::new(x, y - 2.0, 1.0, 5.0), fade(tint, bright * 0.6));
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(x - 1.0, y - 1.0, 3.0, 3.0),
+                        fade(tint, bright * 0.45),
+                    );
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(x - 2.0, y, 5.0, 1.0),
+                        fade(tint, bright * 0.6),
+                    );
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(x, y - 2.0, 1.0, 5.0),
+                        fade(tint, bright * 0.6),
+                    );
                     draw.draw_rectangle_rec(Rectangle::new(x, y, 1.0, 1.0), palette::BONE);
                 } else if index == 2 {
                     draw.draw_rectangle_rec(Rectangle::new(x, y, 2.0, 2.0), colour);
@@ -242,8 +250,20 @@ fn draw_galaxy(art: &SpaceArt, point: (f32, f32), h: u64, roll: f32) {
     } else {
         palette::PINK
     };
-    draw_centred(glow, point, (size * 2.2, size * 0.7), turn, fade(tint, 0.45));
-    draw_centred(glow, point, (size * 0.8, size * 0.4), turn, fade(palette::CREAM, 0.5));
+    draw_centred(
+        glow,
+        point,
+        (size * 2.2, size * 0.7),
+        turn,
+        fade(tint, 0.45),
+    );
+    draw_centred(
+        glow,
+        point,
+        (size * 0.8, size * 0.4),
+        turn,
+        fade(palette::CREAM, 0.5),
+    );
 }
 
 /// A soft round glow in five hard steps (a pixel-art halo): white, alpha falling outward.
@@ -295,7 +315,10 @@ pub fn cloud_pixels(size: i32, seed: u32) -> Vec<u8> {
             let d = (fx + 0.5 - centre).hypot(fy + 0.5 - centre) / centre;
             let falloff = (1.0 - d * d).max(0.0);
             let dither = ((x + y * 2) % 4) as f32 * 0.06 - 0.09;
-            let level = ((value * falloff * 1.6 + dither) * 4.0).floor().clamp(0.0, 4.0) / 4.0;
+            let level = ((value * falloff * 1.6 + dither) * 4.0)
+                .floor()
+                .clamp(0.0, 4.0)
+                / 4.0;
             let at = ((y * size + x) * 4) as usize;
             pixels[at..at + 4].copy_from_slice(&[255, 255, 255, (level * 255.0) as u8]);
         }
@@ -310,7 +333,8 @@ mod tests {
     #[test]
     fn glows_fall_off_in_steps_and_clouds_fade_at_the_edges() {
         let glow = glow_pixels(32);
-        let alpha = |pixels: &[u8], size: i32, x: i32, y: i32| pixels[((y * size + x) * 4 + 3) as usize];
+        let alpha =
+            |pixels: &[u8], size: i32, x: i32, y: i32| pixels[((y * size + x) * 4 + 3) as usize];
         assert!(alpha(&glow, 32, 16, 16) > 200);
         assert_eq!(alpha(&glow, 32, 0, 0), 0);
         let steps: std::collections::BTreeSet<u8> = glow.chunks(4).map(|px| px[3]).collect();

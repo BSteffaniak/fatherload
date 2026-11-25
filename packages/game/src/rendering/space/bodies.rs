@@ -48,9 +48,7 @@ fn rgb(colour: Color) -> [f32; 3] {
 
 impl PlanetShader {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread) -> Self {
-        let mut source = shaders::fragment_source(cfg!(target_os = "emscripten"), shaders::PLANET_BODY);
-        if let Ok(path) = std::env::var("PLANET_SRC") { source = std::fs::read_to_string(path).unwrap(); }
-        if std::env::var("PLANET_DUMP").is_ok() { std::fs::write("/private/tmp/claude-501/-Volumes-ehdd-GitHub-drillgame/5f697626-c304-4d9a-bd61-7ff8a8b0fdd2/scratchpad/planet.glsl", &source).unwrap(); }
+        let source = shaders::fragment_source(cfg!(target_os = "emscripten"), shaders::PLANET_BODY);
         let shader = super::load_shader(raylib, thread, &source, "planet");
         let locations = shader.as_ref().map_or_else(Locations::default, |shader| {
             let at = |name: &str| shader.get_shader_location(name);
@@ -116,7 +114,7 @@ impl PlanetShader {
             }
             match (self.shader.as_ref(), art.white.as_ref()) {
                 (Some(shader), Some(white)) => {
-                    self.draw_shaded(shader, white, body, point, radius, sun, projection);
+                    self.draw_shaded(shader, white, body, point, radius, toward, projection);
                 }
                 _ => draw_plain(draw, art, body, point, radius, sun),
             }
@@ -144,7 +142,9 @@ impl PlanetShader {
         // About one art pixel per two points: the disc is pixel art like the ground, but a
         // small moon still shows a few dozen pixels across.
         let art_pixel = (radius / 48.0).clamp(1.0, 3.0);
-        let spin = body.spin - projection.roll;
+        // The quad turns with the view, so the disc's bands, caps and light stay the body's
+        // own; the light is given in the space frame.
+        let spin = body.spin;
         let seed = (body.seed % 997) as f32 / 997.0;
         let vec4 = |values: [f32; 4]| values;
         let uniforms: [(i32, [f32; 4]); 3] = [
@@ -189,7 +189,13 @@ impl PlanetShader {
             }
             ffi::BeginShaderMode(**shader);
         }
-        draw_centred(white, point, (side, side), 0.0, Color::WHITE);
+        draw_centred(
+            white,
+            point,
+            (side, side),
+            -projection.roll.to_degrees(),
+            Color::WHITE,
+        );
         // SAFETY: closes the shader mode above.
         unsafe { ffi::EndShaderMode() };
     }
@@ -219,7 +225,14 @@ fn draw_plain(
     // raylib's sector angles start at the right and turn clockwise on screen.
     let facing = sun.1.atan2(sun.0).to_degrees();
     draw.draw_circle_sector(centre, radius, facing - 90.0, facing + 90.0, 32, colours[1]);
-    draw.draw_circle_sector(centre, radius * 0.8, facing - 60.0, facing + 60.0, 24, colours[2]);
+    draw.draw_circle_sector(
+        centre,
+        radius * 0.8,
+        facing - 60.0,
+        facing + 60.0,
+        24,
+        colours[2],
+    );
 }
 
 #[cfg(test)]

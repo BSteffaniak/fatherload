@@ -27,7 +27,11 @@ fn motion_share(view: &SpaceRenderView<'_>) -> f32 {
 }
 
 /// Draws cruise lines or warp streaks over the view.
-pub fn draw_motion(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, projection: &Projection) {
+pub fn draw_motion(
+    draw: &mut impl RaylibDraw,
+    view: &SpaceRenderView<'_>,
+    projection: &Projection,
+) {
     let share = motion_share(view);
     match view.motion {
         FlightMotion::Coasting => {}
@@ -37,8 +41,15 @@ pub fn draw_motion(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, proje
         }
         FlightMotion::Warp { charge, heading } => {
             let charge = charge.clamp(0.0, 1.0);
-            tunnel(draw, projection, heading, charge * share);
-            lines(draw, view, projection, heading, (0.4 + 0.6 * charge) * share, true);
+            tunnel(draw, projection, charge * share);
+            lines(
+                draw,
+                view,
+                projection,
+                heading,
+                (0.4 + 0.6 * charge) * share,
+                true,
+            );
         }
     }
 }
@@ -61,7 +72,11 @@ fn lines(
     additive(|| {
         for index in 0..shown {
             let h = hash64(&[0x5eed, index as i64]);
-            let rate = if warp { 0.9 + unit(h, 8) * 0.8 } else { 0.35 + unit(h, 8) * 0.4 };
+            let rate = if warp {
+                0.9 + unit(h, 8) * 0.8
+            } else {
+                0.35 + unit(h, 8) * 0.4
+            };
             let along = (1.0 - (unit(h, 0) + view.seconds * rate).fract()) * 2.0 * reach - reach;
             let across = (unit(h, 16) * 2.0 - 1.0) * reach;
             if across.abs() < 34.0 && along.abs() < 60.0 {
@@ -85,13 +100,18 @@ fn lines(
                 palette::MIST
             };
             let alpha = if warp { 0.55 } else { 0.28 } * intensity.min(1.0);
-            draw.draw_line_ex(start, end, if warp && index % 5 == 0 { 2.0 } else { 1.0 }, fade(colour, alpha));
+            draw.draw_line_ex(
+                start,
+                end,
+                if warp && index % 5 == 0 { 2.0 } else { 1.0 },
+                fade(colour, alpha),
+            );
         }
     });
 }
 
-/// The warp tunnel: blue at the view's edges and a glow ahead of the craft.
-fn tunnel(draw: &mut impl RaylibDraw, projection: &Projection, heading: f32, level: f32) {
+/// The warp tunnel: blue at the view's edges.
+fn tunnel(draw: &mut impl RaylibDraw, projection: &Projection, level: f32) {
     if level <= 0.0 {
         return;
     }
@@ -109,14 +129,4 @@ fn tunnel(draw: &mut impl RaylibDraw, projection: &Projection, heading: f32, lev
     draw.draw_rectangle_gradient_v(x, y + h - edge, w, edge, clear, tint);
     draw.draw_rectangle_gradient_h(x, y, edge, h, tint, clear);
     draw.draw_rectangle_gradient_h(x + w - edge, y, edge, h, clear, tint);
-    let angle = projection.screen_angle(heading);
-    let ahead = Vector2::new(
-        projection.pivot.0 + angle.cos() * projection.reach() * 0.55,
-        projection.pivot.1 + angle.sin() * projection.reach() * 0.55,
-    );
-    additive(|| {
-        for (radius, alpha) in [(150.0, 0.08), (90.0, 0.12), (40.0, 0.2)] {
-            draw.draw_circle_v(ahead, radius, fade(palette::ICE, alpha * level));
-        }
-    });
 }

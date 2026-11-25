@@ -72,15 +72,33 @@ pub fn draw_stars(
             let turn = view.seconds * 0.04 + unit(u64::from(star.seed), 0) * TAU;
             let gap = (radius * 1.6).max(5.0);
             let a = toward(point, turn - projection.roll, gap);
-            let b = toward(point, turn - projection.roll + std::f32::consts::PI, gap * 1.3);
-            draw_star(draw, art, b, radius * 0.6, star_colours(StarClass::Red), star.seed ^ 7, view.seconds);
+            let b = toward(
+                point,
+                turn - projection.roll + std::f32::consts::PI,
+                gap * 1.3,
+            );
+            draw_star(
+                draw,
+                art,
+                b,
+                radius * 0.6,
+                star_colours(StarClass::Red),
+                star.seed ^ 7,
+                view.seconds,
+            );
             draw_star(draw, art, a, radius, colours, star.seed, view.seconds);
         } else {
             if star.class == StarClass::Nebula
                 && let Some(cloud) = art.clouds[(star.seed % 3) as usize].as_ref()
             {
                 let size = (radius * 16.0).max(120.0);
-                draw_centred(cloud, point, (size, size), star.seed as f32 % 360.0, fade(palette::VIOLET, 0.35));
+                draw_centred(
+                    cloud,
+                    point,
+                    (size, size),
+                    star.seed as f32 % 360.0,
+                    fade(palette::VIOLET, 0.35),
+                );
             }
             draw_star(draw, art, point, radius, colours, star.seed, view.seconds);
         }
@@ -134,7 +152,11 @@ fn draw_star(
             let angle = unit(hs, 0) * TAU + seconds * 0.01;
             let distance = radius * (0.2 + 0.5 * unit(hs, 16));
             let spot = toward(point, angle, distance);
-            draw.draw_circle_v(v(spot), radius * (0.05 + 0.05 * unit(hs, 32)), fade(corona, 0.7));
+            draw.draw_circle_v(
+                v(spot),
+                radius * (0.05 + 0.05 * unit(hs, 32)),
+                fade(corona, 0.7),
+            );
         }
         // Prominences: slow loops on the rim, rising and falling over many seconds.
         additive(|| {
@@ -202,8 +224,20 @@ pub fn draw_nebulae(
                 let (dx, dy) = projection.turn((angle.cos() * distance, angle.sin() * distance));
                 if let Some(glow) = art.glow.as_ref() {
                     let size = 10.0 + 14.0 * unit(h, 32);
-                    draw_centred(glow, (point.0 + dx, point.1 + dy), (size, size), 0.0, fade(palette::BONE, 0.7));
-                    draw_centred(glow, (point.0 + dx, point.1 + dy), (size * 3.0, size * 3.0), 0.0, fade(nebula.colours[0], 0.3));
+                    draw_centred(
+                        glow,
+                        (point.0 + dx, point.1 + dy),
+                        (size, size),
+                        0.0,
+                        fade(palette::BONE, 0.7),
+                    );
+                    draw_centred(
+                        glow,
+                        (point.0 + dx, point.1 + dy),
+                        (size * 3.0, size * 3.0),
+                        0.0,
+                        fade(nebula.colours[0], 0.3),
+                    );
                 }
             }
         });
@@ -211,12 +245,19 @@ pub fn draw_nebulae(
 }
 
 /// Inside a nebula the view takes on its colour (its sensor fog, as the eye sees it).
-pub fn draw_nebula_fog(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, projection: &Projection) {
+pub fn draw_nebula_fog(
+    draw: &mut impl RaylibDraw,
+    view: &SpaceRenderView<'_>,
+    projection: &Projection,
+) {
     for nebula in view.nebulae {
         let distance = projection.camera.distance(nebula.centre) / TILE_SIZE;
         let inside = 1.0 - distance / nebula.radius_tiles.max(1.0);
         if inside > 0.0 {
-            draw.draw_rectangle_rec(projection.bounds, fade(nebula.colours[1], 0.22 * (inside * 2.0).min(1.0)));
+            draw.draw_rectangle_rec(
+                projection.bounds,
+                fade(nebula.colours[1], 0.22 * (inside * 2.0).min(1.0)),
+            );
         }
     }
 }
@@ -236,7 +277,15 @@ pub fn draw_wormholes(
         }
         let spin = view.seconds * 0.3;
         if let Some(glow) = art.glow.as_ref() {
-            additive(|| draw_centred(glow, point, (radius * 6.0, radius * 6.0), 0.0, fade(hole.tint, 0.35)));
+            additive(|| {
+                draw_centred(
+                    glow,
+                    point,
+                    (radius * 6.0, radius * 6.0),
+                    0.0,
+                    fade(hole.tint, 0.35),
+                )
+            });
         }
         let dark = Color::new(hole.tint.r / 8, hole.tint.g / 8, hole.tint.b / 6 + 8, 255);
         draw.draw_circle_v(v(point), radius, dark);
@@ -246,25 +295,45 @@ pub fn draw_wormholes(
             let angle = unit(h, 0) * TAU - spin * 0.4;
             let distance = radius * 0.85 * unit(h, 16).sqrt();
             let star = toward(point, angle, distance);
-            let colour = if index % 4 == 0 { hole.tint } else { palette::BONE };
-            draw.draw_rectangle_rec(Rectangle::new(star.0.round(), star.1.round(), 1.0, 1.0), fade(colour, 0.5 + 0.5 * unit(h, 32)));
+            let colour = if index % 4 == 0 {
+                hole.tint
+            } else {
+                palette::BONE
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(star.0.round(), star.1.round(), 1.0, 1.0),
+                fade(colour, 0.5 + 0.5 * unit(h, 32)),
+            );
         }
         additive(|| {
-            for arm in 0..3 {
-                for step in 0..30 {
+            for arm in 0..4 {
+                for step in 0..64 {
                     let k = step as f32;
-                    let angle = arm as f32 * TAU / 3.0 + k * 0.2 + spin / (1.0 + k * 0.08);
-                    let distance = radius * (1.0 + k * 0.05);
+                    let angle = arm as f32 * TAU / 4.0 + k * 0.09 + spin / (1.0 + k * 0.04);
+                    let distance = radius * (1.0 + k * 0.022);
                     let dot = toward(point, angle, distance);
-                    let size = (radius * 0.12 * (1.0 - k / 34.0)).max(1.0);
-                    let colour = if step < 8 { palette::BONE } else { hole.tint };
+                    let size = (radius * 0.11 * (1.0 - k / 70.0)).max(1.5).round();
+                    let colour = if step < 14 { palette::BONE } else { hole.tint };
                     draw.draw_rectangle_rec(
-                        Rectangle::new(dot.0 - size * 0.5, dot.1 - size * 0.5, size, size),
-                        fade(colour, 0.8 * (1.0 - k / 30.0)),
+                        Rectangle::new(
+                            (dot.0 - size * 0.5).round(),
+                            (dot.1 - size * 0.5).round(),
+                            size,
+                            size,
+                        ),
+                        fade(colour, 0.75 * (1.0 - k / 64.0)),
                     );
                 }
             }
-            draw.draw_ring(v(point), radius * 0.94, radius * 1.05, 0.0, 360.0, 48, fade(palette::BONE, 0.7));
+            draw.draw_ring(
+                v(point),
+                radius * 0.94,
+                radius * 1.05,
+                0.0,
+                360.0,
+                48,
+                fade(palette::BONE, 0.7),
+            );
         });
     }
 }
@@ -283,7 +352,13 @@ fn disc_colour(t: f32) -> Color {
 /// One half (or all) of a black hole's disc: ellipse rings, brighter on the side turning
 /// toward the viewer, streaked, turning slowly (faster inside). `front` picks the near half
 /// (drawn again over the shadow), `None` the whole disc.
-fn draw_disc(hole: &BlackHoleView, point: (f32, f32), projection: &Projection, seconds: f32, front: Option<bool>) {
+fn draw_disc(
+    hole: &BlackHoleView,
+    point: (f32, f32),
+    projection: &Projection,
+    seconds: f32,
+    front: Option<bool>,
+) {
     let horizon = projection.tiles(hole.horizon_tiles).max(3.0);
     let outer = projection.tiles(hole.disc_tiles).max(horizon * 3.0);
     let inner = horizon * 1.6;
@@ -311,7 +386,10 @@ fn draw_disc(hole: &BlackHoleView, point: (f32, f32), projection: &Projection, s
             if front.is_some_and(|want| want != near) {
                 continue;
             }
-            let h = hash64(&[ring as i64, ((middle / 360.0 + turn).rem_euclid(1.0) * 24.0) as i64]);
+            let h = hash64(&[
+                ring as i64,
+                ((middle / 360.0 + turn).rem_euclid(1.0) * 24.0) as i64,
+            ]);
             let streak = 0.55 + 0.45 * unit(h, 0);
             // The side coming toward the viewer is brighter (beaming).
             let beam = 0.55 + 0.45 * (middle.to_radians()).cos();
@@ -354,7 +432,15 @@ pub fn draw_black_hole_discs(
             continue;
         }
         if let Some(glow) = art.glow.as_ref() {
-            additive(|| draw_centred(glow, point, (outer * 4.0, outer * 1.6), (hole.tilt - projection.roll).to_degrees(), fade(palette::ORANGE, 0.3)));
+            additive(|| {
+                draw_centred(
+                    glow,
+                    point,
+                    (outer * 4.0, outer * 1.6),
+                    (hole.tilt - projection.roll).to_degrees(),
+                    fade(palette::ORANGE, 0.3),
+                )
+            });
         }
         additive(|| draw_disc(hole, point, projection, view.seconds, None));
     }
@@ -390,67 +476,100 @@ pub fn draw_belts(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, projec
     }
 }
 
-fn draw_belt(draw: &mut impl RaylibDraw, belt: &BeltView, view: &SpaceRenderView<'_>, projection: &Projection) {
-    let (cx, cy) = belt.centre.delta_f64(projection.camera);
+fn draw_belt(
+    draw: &mut impl RaylibDraw,
+    belt: &BeltView,
+    view: &SpaceRenderView<'_>,
+    projection: &Projection,
+) {
     let tile = f64::from(TILE_SIZE);
-    let distance = cx.hypot(cy) / tile;
+    // The camera relative to the belt's centre (tiles), and the belt's centre relative to the
+    // camera (world pixels).
+    let (cx, cy) = belt.centre.delta_f64(projection.camera);
+    let (cx, cy) = (cx / tile, cy / tile);
+    let centre = projection.camera.delta_f64(belt.centre);
+    let distance = cx.hypot(cy);
     let reach = f64::from(projection.reach() / projection.px_per_tile);
     let radius = f64::from(belt.radius_tiles);
     let half_width = f64::from(belt.width_tiles) * 0.5;
     if (distance - radius).abs() > half_width + reach {
         return;
     }
+    // Cells about square, a few hundred on screen at any zoom (rocks smaller than a point
+    // become dust specks).
+    let cell = (reach / 14.0).max(36.0);
+    let inner = (distance - reach).max(radius - half_width);
+    let outer = (distance + reach).min(radius + half_width);
     let camera_angle = cy.atan2(cx);
-    let half_arc = ((reach + half_width) / radius.max(1.0)).min(std::f64::consts::PI);
-    let mut cell = 48.0_f64;
-    let mut level = 0;
-    while half_arc * 2.0 * radius / cell > 1_400.0 {
-        cell *= 4.0;
-        level += 1;
-    }
-    let first = ((camera_angle - half_arc) * radius / cell).floor() as i64;
-    let last = ((camera_angle + half_arc) * radius / cell).ceil() as i64;
-    let ring_cells = (std::f64::consts::TAU * radius / cell).round().max(1.0) as i64;
-    // The belt centre relative to the camera, in world pixels.
-    let centre = projection.camera.delta_f64(belt.centre);
+    let half_arc = if distance > reach {
+        (reach / distance).asin() * 1.1
+    } else {
+        std::f64::consts::PI
+    };
+    let level = cell.log2().floor() as i64;
+    let cell = 2_f64.powi(level as i32);
+    let ring_cells = |r: f64| (std::f64::consts::TAU * r / cell).round().max(1.0) as i64;
     let scale = f64::from(projection.scale);
-    let light = view.light_toward(projection.camera);
-    let light = projection.turn(light);
-    for index in first..=last {
-        let wrapped = index.rem_euclid(ring_cells);
-        let h = hash64(&[i64::from(belt.seed), level, wrapped]);
-        let count = (belt.density * (0.5 + unit(h, 0))).floor() as i64 + i64::from(level > 0) * 2;
-        for rock in 0..count {
-            let hr = hash64(&[h as i64, rock]);
-            let along = (index as f64 + f64::from(unit(hr, 0))) * cell / radius;
-            let across = (f64::from(unit(hr, 16)) + f64::from(unit(hr, 32)) - 1.0) * half_width;
-            let r = (radius + across) * tile;
-            let (x, y) = (
-                (centre.0 + along.cos() * r) * scale,
-                (centre.1 + along.sin() * r) * scale,
-            );
-            if x.abs() > f64::from(projection.reach()) * 1.2 || y.abs() > f64::from(projection.reach()) * 1.2 {
-                continue;
-            }
-            let (sx, sy) = projection.turn((x as f32, y as f32));
-            let point = (projection.pivot.0 + sx, projection.pivot.1 + sy);
-            let size_tiles = 0.6 + 16.0 * unit(hr, 48).powi(5);
-            let size = size_tiles * projection.px_per_tile;
-            if !projection.visible(point, size + 2.0) {
-                continue;
-            }
-            if size < 1.4 {
-                let tone = [palette::STONE, palette::STONE_LIGHT, palette::SLATE_LIGHT][(hr >> 60) as usize % 3];
-                draw.draw_rectangle_rec(Rectangle::new(point.0.round(), point.1.round(), 1.0 + f32::from(u8::from(size > 0.8)), 1.0), fade(tone, 0.85));
-            } else {
-                draw_rock(draw, point, size, hr, light);
+    let light = projection.turn(view.light_toward(projection.camera));
+    let reach_points = f64::from(projection.reach()) * 1.1;
+    let first_ring = ((inner - (radius - half_width)) / cell).floor() as i64;
+    let last_ring = ((outer - (radius - half_width)) / cell).ceil() as i64;
+    for ring in first_ring..=last_ring {
+        let r0 = radius - half_width + ring as f64 * cell;
+        let count = ring_cells(r0 + cell * 0.5);
+        let step = std::f64::consts::TAU / count as f64;
+        let first = ((camera_angle - half_arc) / step).floor() as i64;
+        let last = ((camera_angle + half_arc) / step).ceil() as i64;
+        for index in first..=last {
+            let wrapped = index.rem_euclid(count);
+            let h = hash64(&[i64::from(belt.seed), level, ring, wrapped]);
+            // Denser along the belt's middle, in clumps.
+            let across_mid = ((r0 + cell * 0.5 - radius) / half_width).abs();
+            let clump = 0.4 + 0.9 * f64::from(unit(h, 0));
+            let rocks = (f64::from(belt.density) * clump * (1.0 - across_mid * across_mid) * 0.8
+                + f64::from(unit(h, 16)))
+            .floor() as i64;
+            for rock in 0..rocks.max(0) {
+                let hr = hash64(&[h as i64, rock]);
+                let angle = (index as f64 + f64::from(unit(hr, 0))) * step;
+                let r = (r0 + f64::from(unit(hr, 16)) * cell) * tile;
+                let (x, y) = (
+                    (centre.0 + angle.cos() * r) * scale,
+                    (centre.1 + angle.sin() * r) * scale,
+                );
+                if x.abs() > reach_points || y.abs() > reach_points {
+                    continue;
+                }
+                let (sx, sy) = projection.turn((x as f32, y as f32));
+                let point = (projection.pivot.0 + sx, projection.pivot.1 + sy);
+                // Mostly gravel, a few boulders, now and then a big one (radius, tiles).
+                let size_tiles = 0.3 + 9.0 * unit(hr, 48).powi(7);
+                let size = size_tiles * projection.px_per_tile;
+                if !projection.visible(point, size + 2.0) {
+                    continue;
+                }
+                if size < 1.4 {
+                    let tone = [palette::STONE, palette::STONE_LIGHT, palette::SLATE_LIGHT]
+                        [(hr >> 60) as usize % 3];
+                    let speck = if size > 0.7 { 2.0 } else { 1.0 };
+                    draw.draw_rectangle_rec(
+                        Rectangle::new(point.0.round(), point.1.round(), speck, speck),
+                        fade(tone, 0.55 + 0.4 * unit(hr, 32)),
+                    );
+                } else {
+                    draw_rock(draw, point, size, hr, light);
+                }
             }
         }
     }
 }
 
 /// Draws the loose asteroids.
-pub fn draw_asteroids(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, projection: &Projection) {
+pub fn draw_asteroids(
+    draw: &mut impl RaylibDraw,
+    view: &SpaceRenderView<'_>,
+    projection: &Projection,
+) {
     for rock in view.asteroids {
         let point = projection.project(rock.centre);
         let size = projection.tiles(rock.radius_tiles);
@@ -459,7 +578,10 @@ pub fn draw_asteroids(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, pr
         }
         let light = projection.turn(view.light_toward(rock.centre));
         if size < 1.4 {
-            draw.draw_rectangle_rec(Rectangle::new(point.0.round(), point.1.round(), 2.0, 2.0), palette::STONE_LIGHT);
+            draw.draw_rectangle_rec(
+                Rectangle::new(point.0.round(), point.1.round(), 2.0, 2.0),
+                palette::STONE_LIGHT,
+            );
         } else {
             draw_rock(draw, point, size, u64::from(rock.seed), light);
         }
@@ -468,7 +590,13 @@ pub fn draw_asteroids(draw: &mut impl RaylibDraw, view: &SpaceRenderView<'_>, pr
 
 /// One rock: a lumpy polygon in three light steps toward `light`, a crater or two and, on
 /// some, glints of ore.
-pub fn draw_rock(draw: &mut impl RaylibDraw, point: (f32, f32), radius: f32, h: u64, light: (f32, f32)) {
+pub fn draw_rock(
+    draw: &mut impl RaylibDraw,
+    point: (f32, f32),
+    radius: f32,
+    h: u64,
+    light: (f32, f32),
+) {
     const SIDES: usize = 10;
     let tones = match (h >> 56) % 5 {
         0 => [palette::RUST, palette::COPPER, palette::SAND],
@@ -493,11 +621,23 @@ pub fn draw_rock(draw: &mut impl RaylibDraw, point: (f32, f32), radius: f32, h: 
         }
     };
     let mut paint = |colour: Color, scale: f32, shift: (f32, f32)| {
-        fan(&mut |a, b, c| draw.draw_triangle(a, b, c, colour), scale, shift);
+        fan(
+            &mut |a, b, c| draw.draw_triangle(a, b, c, colour),
+            scale,
+            shift,
+        );
     };
     paint(tones[0], 1.0, (0.0, 0.0));
-    paint(tones[1], 0.78, (light.0 * radius * 0.16, light.1 * radius * 0.16));
-    paint(tones[2], 0.38, (light.0 * radius * 0.4, light.1 * radius * 0.4));
+    paint(
+        tones[1],
+        0.78,
+        (light.0 * radius * 0.16, light.1 * radius * 0.16),
+    );
+    paint(
+        tones[2],
+        0.38,
+        (light.0 * radius * 0.4, light.1 * radius * 0.4),
+    );
     drop(paint);
     if radius > 4.0 {
         for crater in 0..2 {
@@ -506,16 +646,27 @@ pub fn draw_rock(draw: &mut impl RaylibDraw, point: (f32, f32), radius: f32, h: 
             let at = toward(point, angle, radius * 0.4 * unit(hc, 16));
             let size = radius * (0.12 + 0.1 * unit(hc, 32));
             draw.draw_circle_v(v(at), size, fade(tones[0], 0.9));
-            draw.draw_circle_v(v((at.0 + light.0 * size * 0.3, at.1 + light.1 * size * 0.3)), size * 0.6, fade(tones[1], 0.9));
+            draw.draw_circle_v(
+                v((at.0 + light.0 * size * 0.3, at.1 + light.1 * size * 0.3)),
+                size * 0.6,
+                fade(tones[1], 0.9),
+            );
         }
     }
     if (h >> 40) % 3 == 0 {
         for glint in 0..3 {
             let hg = hash64(&[h as i64, 80 + glint]);
             let at = toward(point, unit(hg, 0) * TAU, radius * 0.55 * unit(hg, 16));
-            let colour = if glint == 0 { palette::GOLD } else { palette::MINT };
+            let colour = if glint == 0 {
+                palette::GOLD
+            } else {
+                palette::MINT
+            };
             let size = (radius * 0.12).clamp(1.0, 3.0);
-            draw.draw_rectangle_rec(Rectangle::new(at.0.round(), at.1.round(), size, size), colour);
+            draw.draw_rectangle_rec(
+                Rectangle::new(at.0.round(), at.1.round(), size, size),
+                colour,
+            );
         }
     }
 }
@@ -533,7 +684,13 @@ pub fn draw_comets(
     }
 }
 
-fn draw_comet(draw: &mut impl RaylibDraw, art: &SpaceArt, comet: &CometView, view: &SpaceRenderView<'_>, projection: &Projection) {
+fn draw_comet(
+    draw: &mut impl RaylibDraw,
+    art: &SpaceArt,
+    comet: &CometView,
+    view: &SpaceRenderView<'_>,
+    projection: &Projection,
+) {
     let point = projection.project(comet.centre);
     let length = projection.tiles(comet.tail_tiles).max(40.0);
     if !projection.visible(point, length) {
@@ -544,8 +701,43 @@ fn draw_comet(draw: &mut impl RaylibDraw, art: &SpaceArt, comet: &CometView, vie
     let (dx, dy) = (angle.cos(), angle.sin());
     let (nx, ny) = (-dy, dx);
     additive(|| {
+        // The tails' glow: soft blobs along each path, widening and fading.
+        if let Some(glow) = art.glow.as_ref() {
+            for index in 0..32 {
+                let t = index as f32 / 32.0;
+                let along = length * t;
+                let bend = length * 0.14 * t * t;
+                let dust = (
+                    point.0 + dx * along + nx * bend,
+                    point.1 + dy * along + ny * bend,
+                );
+                let size = radius * 4.0 + length * 0.2 * t;
+                let colour = if t < 0.3 {
+                    palette::CREAM
+                } else {
+                    palette::AMBER
+                };
+                draw_centred(
+                    glow,
+                    dust,
+                    (size, size),
+                    0.0,
+                    fade(colour, 0.32 * (1.0 - t).powf(1.4)),
+                );
+                let ion_along = length * 1.25 * t;
+                let ion = (point.0 + dx * ion_along, point.1 + dy * ion_along);
+                let width = radius * 2.5 + length * 0.04 * t;
+                draw_centred(
+                    glow,
+                    ion,
+                    (width, width),
+                    0.0,
+                    fade(palette::SKY, 0.3 * (1.0 - t)),
+                );
+            }
+        }
         // Dust tail: broad, curving, cream to amber.
-        for index in 0..140 {
+        for index in 0..260 {
             let h = hash64(&[i64::from(comet.seed), index]);
             let t = (unit(h, 0) + view.seconds * 0.02).fract();
             let width = radius * 1.5 + length * 0.1 * t;
@@ -554,9 +746,16 @@ fn draw_comet(draw: &mut impl RaylibDraw, art: &SpaceArt, comet: &CometView, vie
             let along = length * t;
             let x = point.0 + dx * along + nx * (bend + side);
             let y = point.1 + dy * along + ny * (bend + side);
-            let colour = if t < 0.35 { palette::CREAM } else { palette::AMBER };
+            let colour = if t < 0.35 {
+                palette::CREAM
+            } else {
+                palette::AMBER
+            };
             let size = if t < 0.2 { 3.0 } else { 2.0 };
-            draw.draw_rectangle_rec(Rectangle::new(x.round(), y.round(), size, size), fade(colour, (1.0 - t).powf(1.6) * 0.55));
+            draw.draw_rectangle_rec(
+                Rectangle::new(x.round(), y.round(), size, size),
+                fade(colour, (1.0 - t).powf(1.6) * 0.75),
+            );
         }
         // Ion tail: straight, thin, blue, dashes streaming outward.
         for index in 0..60 {
@@ -564,7 +763,10 @@ fn draw_comet(draw: &mut impl RaylibDraw, art: &SpaceArt, comet: &CometView, vie
             let t = (unit(h, 0) + view.seconds * 0.05).fract();
             let along = length * 1.25 * t;
             let side = (unit(h, 16) * 2.0 - 1.0) * radius * 0.6;
-            let start = Vector2::new(point.0 + dx * along + nx * side, point.1 + dy * along + ny * side);
+            let start = Vector2::new(
+                point.0 + dx * along + nx * side,
+                point.1 + dy * along + ny * side,
+            );
             let dash = length * 0.05;
             draw.draw_line_ex(
                 start,
@@ -576,7 +778,13 @@ fn draw_comet(draw: &mut impl RaylibDraw, art: &SpaceArt, comet: &CometView, vie
         if let Some(glow) = art.glow.as_ref() {
             let coma = (radius * 9.0).max(22.0);
             draw_centred(glow, point, (coma, coma), 0.0, fade(palette::MINT, 0.5));
-            draw_centred(glow, point, (coma * 0.4, coma * 0.4), 0.0, fade(palette::BONE, 0.7));
+            draw_centred(
+                glow,
+                point,
+                (coma * 0.4, coma * 0.4),
+                0.0,
+                fade(palette::BONE, 0.7),
+            );
         }
     });
     draw_rock(draw, point, radius * 0.6, u64::from(comet.seed), (-dx, -dy));
@@ -598,14 +806,22 @@ pub fn draw_structures(
         // One art pixel: the structure is 64 across.
         let px = size / 64.0;
         if px < 0.2 {
-            draw.draw_rectangle_rec(Rectangle::new(point.0.round(), point.1.round(), 2.0, 2.0), palette::STEEL_LIGHT);
+            draw.draw_rectangle_rec(
+                Rectangle::new(point.0.round(), point.1.round(), 2.0, 2.0),
+                palette::STEEL_LIGHT,
+            );
             continue;
         }
         // SAFETY: a matrix push balanced by the pop below.
         unsafe {
             ffi::rlPushMatrix();
             ffi::rlTranslatef(point.0, point.1, 0.0);
-            ffi::rlRotatef(projection.screen_angle(structure.angle).to_degrees(), 0.0, 0.0, 1.0);
+            ffi::rlRotatef(
+                projection.screen_angle(structure.angle).to_degrees(),
+                0.0,
+                0.0,
+                1.0,
+            );
             ffi::rlScalef(px, px, 1.0);
         }
         match structure.kind {
@@ -624,7 +840,12 @@ fn block(draw: &mut impl RaylibDraw, x: f32, y: f32, w: f32, h: f32, colour: Col
 
 /// A station hub: a ring with modules, a truss, two solar wings, docking arms with slow
 /// lights and an antenna. 64 art pixels across, centred.
-fn draw_station(draw: &mut impl RaylibDraw, art: &SpaceArt, structure: &StructureView, seconds: f32) {
+fn draw_station(
+    draw: &mut impl RaylibDraw,
+    art: &SpaceArt,
+    structure: &StructureView,
+    seconds: f32,
+) {
     use palette::{
         DEEP_BLUE, GOLD, INK, MINT, OCEAN, RED, SKY, STEEL, STEEL_DARK, STEEL_LIGHT, TEAL,
     };
@@ -640,17 +861,51 @@ fn draw_station(draw: &mut impl RaylibDraw, art: &SpaceArt, structure: &Structur
         block(draw, x0, -9.0, 14.0, 18.0, STEEL_DARK);
         for row in 0..4 {
             for column in 0..3 {
-                let colour = if (row + column) % 2 == 0 { OCEAN } else { DEEP_BLUE };
-                block(draw, x0 + 1.0 + column as f32 * 4.3, -8.0 + row as f32 * 4.2, 3.6, 3.6, colour);
-                block(draw, x0 + 1.0 + column as f32 * 4.3, -8.0 + row as f32 * 4.2, 1.0, 1.0, SKY);
+                let colour = if (row + column) % 2 == 0 {
+                    OCEAN
+                } else {
+                    DEEP_BLUE
+                };
+                block(
+                    draw,
+                    x0 + 1.0 + column as f32 * 4.3,
+                    -8.0 + row as f32 * 4.2,
+                    3.6,
+                    3.6,
+                    colour,
+                );
+                block(
+                    draw,
+                    x0 + 1.0 + column as f32 * 4.3,
+                    -8.0 + row as f32 * 4.2,
+                    1.0,
+                    1.0,
+                    SKY,
+                );
             }
         }
     }
     // Hub ring and core.
     // SAFETY: rings under the caller's matrix.
     unsafe {
-        ffi::DrawRing(ffi::Vector2 { x: 0.0, y: 0.0 }, 9.0, 13.0, 0.0, 360.0, 28, STEEL.into());
-        ffi::DrawRing(ffi::Vector2 { x: 0.0, y: 0.0 }, 12.0, 13.0, 200.0, 340.0, 12, STEEL_LIGHT.into());
+        ffi::DrawRing(
+            ffi::Vector2 { x: 0.0, y: 0.0 },
+            9.0,
+            13.0,
+            0.0,
+            360.0,
+            28,
+            STEEL.into(),
+        );
+        ffi::DrawRing(
+            ffi::Vector2 { x: 0.0, y: 0.0 },
+            12.0,
+            13.0,
+            200.0,
+            340.0,
+            12,
+            STEEL_LIGHT.into(),
+        );
         ffi::DrawCircle(0, 0, 6.5, STEEL_DARK.into());
         ffi::DrawCircle(0, 0, 4.5, TEAL.into());
         ffi::DrawCircle(-1, -1, 2.0, MINT.into());
@@ -659,17 +914,45 @@ fn draw_station(draw: &mut impl RaylibDraw, art: &SpaceArt, structure: &Structur
     for index in 0..8 {
         let angle = index as f32 / 8.0 * TAU;
         let (x, y) = (angle.cos() * 11.0, angle.sin() * 11.0);
-        block(draw, x - 0.5, y - 0.5, 1.0, 1.0, if index % 3 == 0 { INK } else { GOLD });
+        block(
+            draw,
+            x - 0.5,
+            y - 0.5,
+            1.0,
+            1.0,
+            if index % 3 == 0 { INK } else { GOLD },
+        );
     }
     // Docking arms, their lights blinking once a second.
     let lit = (seconds as i64) % 2 == 0;
     for side in [-1.0_f32, 1.0] {
         let y0 = if side < 0.0 { -24.0 } else { 13.0 };
         block(draw, -2.0, y0, 4.0, 11.0, STEEL_DARK);
-        block(draw, -4.0, if side < 0.0 { y0 } else { y0 + 9.0 }, 8.0, 2.0, STEEL_LIGHT);
+        block(
+            draw,
+            -4.0,
+            if side < 0.0 { y0 } else { y0 + 9.0 },
+            8.0,
+            2.0,
+            STEEL_LIGHT,
+        );
         let light = if lit == (side < 0.0) { MINT } else { TEAL };
-        block(draw, -4.0, if side < 0.0 { y0 - 1.0 } else { y0 + 11.0 }, 1.0, 1.0, light);
-        block(draw, 3.0, if side < 0.0 { y0 - 1.0 } else { y0 + 11.0 }, 1.0, 1.0, light);
+        block(
+            draw,
+            -4.0,
+            if side < 0.0 { y0 - 1.0 } else { y0 + 11.0 },
+            1.0,
+            1.0,
+            light,
+        );
+        block(
+            draw,
+            3.0,
+            if side < 0.0 { y0 - 1.0 } else { y0 + 11.0 },
+            1.0,
+            1.0,
+            light,
+        );
     }
     // Antenna.
     block(draw, 9.0, -20.0, 1.0, 9.0, STEEL_LIGHT);
@@ -697,7 +980,14 @@ fn draw_derelict(draw: &mut impl RaylibDraw, structure: &StructureView, seconds:
     // The broken edge: jagged steps.
     for step in 0..6 {
         let jag = (unit(hash64(&[h as i64, step]), 0) * 3.0).floor();
-        block(draw, -4.0, -6.0 + step as f32 * 2.0, jag + 1.0, 2.0, STEEL_DARK);
+        block(
+            draw,
+            -4.0,
+            -6.0 + step as f32 * 2.0,
+            jag + 1.0,
+            2.0,
+            STEEL_DARK,
+        );
     }
     // Ribs across the gap.
     for rib in 0..3 {
@@ -729,12 +1019,24 @@ fn draw_derelict(draw: &mut impl RaylibDraw, structure: &StructureView, seconds:
         let distance = 20.0 + 16.0 * unit(hb, 16);
         let (x, y) = (angle.cos() * distance, angle.sin() * distance * 0.6);
         let size = 1.0 + (unit(hb, 32) * 2.0).floor();
-        block(draw, x, y, size, size, if bit % 2 == 0 { STEEL } else { RUST });
+        block(
+            draw,
+            x,
+            y,
+            size,
+            size,
+            if bit % 2 == 0 { STEEL } else { RUST },
+        );
     }
 }
 
 /// The craft at the pivot, upright (the camera is locked to it).
-pub fn draw_craft(draw: &mut impl RaylibDraw, craft: CraftView, projection: &Projection, seconds: f32) {
+pub fn draw_craft(
+    draw: &mut impl RaylibDraw,
+    craft: CraftView,
+    projection: &Projection,
+    seconds: f32,
+) {
     let ticks = (seconds * 60.0) as u64;
     let look = rig_art::RigLook {
         player_id: PlayerId::new(1),

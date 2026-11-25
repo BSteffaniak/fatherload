@@ -104,7 +104,10 @@ impl PolarStrip for FixtureStrip {
         let x = i64::from(column) - self.base;
         (0..i64::from(self.terrain.width()))
             .contains(&x)
-            .then_some(TilePosition { x: x as i32, y: row })
+            .then_some(TilePosition {
+                x: x as i32,
+                y: row,
+            })
     }
 
     fn revision(&self) -> u64 {
@@ -515,7 +518,10 @@ pub const NAMES: [&str; 19] = [
 
 /// The fixture named `name` (see [`NAMES`]; also `space_cruise`).
 #[must_use]
-#[allow(clippy::too_many_lines, reason = "one staged view per scene, in one table")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one staged view per scene, in one table"
+)]
 pub fn build(name: &str) -> Option<SpaceFixture> {
     let camera = |x: f64, y: f64, roll: f32, px_per_tile: f32| SpaceCamera {
         centre: at(x, y),
@@ -550,7 +556,11 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                     centre: at(-4_400.0 + column * 1_800.0, -900.0 + row * 2_000.0),
                     radius_tiles: 650.0,
                     theme,
-                    atmosphere: if theme == BodyTheme::Barren { 0.0 } else { 0.12 },
+                    atmosphere: if theme == BodyTheme::Barren {
+                        0.0
+                    } else {
+                        0.12
+                    },
                     spin: index as f32 * 0.7,
                     seed: 300 + index as u32,
                 });
@@ -563,7 +573,9 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             let strip = moon(false);
             let ground_row = strip.geometry().surface_row as f32;
             let (altitude, zoom) = match name {
-                "space_approach_moon" => (600.0, SpaceCamera::zoom_for_altitude(600.0, 400.0, 720.0)),
+                "space_approach_moon" => {
+                    (600.0, SpaceCamera::zoom_for_altitude(600.0, 400.0, 720.0))
+                }
                 _ => (36.0, 7.0),
             };
             fixture.stand_on(
@@ -739,15 +751,16 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             fixture.motion = if name == "space_warp" {
                 FlightMotion::Warp {
                     charge: 0.85,
-                    heading: -0.35,
+                    heading: -0.2,
                 }
             } else {
                 FlightMotion::Cruise {
                     speed: 520.0,
-                    heading: -0.35,
+                    heading: -0.2,
                 }
             };
-            fixture.camera.roll = 0.35 + std::f32::consts::FRAC_PI_2;
+            // Nose first (the rig's nose is its right): the craft points where it flies.
+            fixture.camera.roll = -0.35;
             fixture.craft = Some(CraftView { thrusting: true });
             if name == "space_cruise" {
                 fixture.bodies.push(BodyView {
@@ -802,7 +815,10 @@ mod tests {
                 // The camera stands over the body's centre at its row's radius.
                 let distance = view.camera.centre.distance(ground.body.centre) / TILE_SIZE;
                 let expected = geometry.radius_of_row(ground.row);
-                assert!((distance - expected).abs() < 0.05, "{name}: {distance} vs {expected}");
+                assert!(
+                    (distance - expected).abs() < 0.05,
+                    "{name}: {distance} vs {expected}"
+                );
             }
         }
         assert!(build("space_cruise").is_some());

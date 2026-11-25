@@ -138,10 +138,7 @@ impl RingCamera {
         let (x, y) = (x as f32 * self.px_per_tile, y as f32 * self.px_per_tile);
         let (s, c) = (-self.roll).sin_cos();
         (
-            (
-                self.pivot.0 + c * x - s * y,
-                self.pivot.1 + s * x + c * y,
-            ),
+            (self.pivot.0 + c * x - s * y, self.pivot.1 + s * x + c * y),
             phi as f32 - self.roll,
         )
     }
@@ -292,7 +289,7 @@ impl PolarGround {
             *slot = *row as f32 - camera.row;
         }
         let (body_atmosphere, atmos) = atmosphere(ground);
-        let lamp = (7.0 * camera.px_per_tile).max(60.0);
+        let lamp = lamp_radius(camera.px_per_tile);
         let uniforms: [(i32, [f32; 4]); 12] = [
             (
                 self.locations.view,
@@ -444,7 +441,11 @@ impl PolarGround {
                     let light = daylight + (0.26 - daylight) * buried;
                     let shade = (light * 255.0) as u8;
                     ffi::rlColor4ub(shade, shade, shade, alpha);
-                    for ((sx, sy), (u, v)) in corners.into_iter().zip([(u0, v0), (u0, v1), (u1, v1), (u1, v0)]) {
+                    for ((sx, sy), (u, v)) in
+                        corners
+                            .into_iter()
+                            .zip([(u0, v0), (u0, v1), (u1, v1), (u1, v0)])
+                    {
                         ffi::rlTexCoord2f(u, v);
                         ffi::rlVertex2f(sx, sy);
                     }
@@ -455,23 +456,44 @@ impl PolarGround {
         }
     }
 
-    /// Draws what stands on the ground, each in the local up frame of where it is.
+    /// Draws what stands on the ground, each in the local up frame of where it is and lit
+    /// like the ground there (`sun` as for [`Self::draw`]).
     pub fn draw_things(
         draw: &mut impl RaylibDraw,
         ground: &GroundView<'_>,
         camera: &RingCamera,
+        sun: f32,
         seconds: f32,
     ) {
         let geometry = ground.strip.geometry();
         for thing in ground.things {
             let ((x, y), turn) = camera.place(geometry, thing.column, thing.row);
+            let lamp_reach = lamp_radius(camera.px_per_tile);
+            let lamp = 1.0
+                - smoothstep(
+                    lamp_reach * 0.45,
+                    lamp_reach,
+                    (x - camera.pivot.0).hypot(y - camera.pivot.1),
+                );
+            let phi = turn + camera.roll;
+            let daylight = ground.night_light
+                + (1.0 - ground.night_light) * smoothstep(-0.14, 0.2, (phi - sun).cos());
+            let depth = thing.row - geometry.surface_row as f32;
+            let buried = smoothstep(1.5, 9.0, depth);
+            let light = (daylight + (0.26 - daylight) * buried).max(lamp * 0.95);
             // SAFETY: a matrix push balanced by the pop below.
             unsafe {
                 ffi::rlPushMatrix();
                 ffi::rlTranslatef(x, y, 0.0);
                 ffi::rlRotatef(turn.to_degrees(), 0.0, 0.0, 1.0);
             }
-            draw_thing(draw, thing, camera.px_per_tile, seconds);
+            draw_thing(
+                draw,
+                thing,
+                camera.px_per_tile,
+                seconds,
+                light.clamp(0.0, 1.0),
+            );
             // SAFETY: closes the push above.
             unsafe { ffi::rlPopMatrix() };
         }
@@ -484,9 +506,20 @@ impl PolarGround {
 pub fn sun_angle(ground: &GroundView<'_>, toward: (f32, f32)) -> f32 {
     let geometry = ground.strip.geometry();
     let star = toward.0.atan2(-toward.1);
-    let camera_angle = (ground.column / f64::from(geometry.surface_columns) * TAU) as f32
-        + ground.body.spin;
+    let camera_angle =
+        (ground.column / f64::from(geometry.surface_columns) * TAU) as f32 + ground.body.spin;
     star - camera_angle
+}
+
+/// The craft's lamp's reach on screen (points).
+fn lamp_radius(px_per_tile: f32) -> f32 {
+    (7.0 * px_per_tile).max(60.0)
+}
+
+/// `colour` dimmed to `light`.
+fn shade(colour: Color, light: f32) -> Color {
+    let scale = |channel: u8| (f32::from(channel) * light) as u8;
+    Color::new(scale(colour.r), scale(colour.g), scale(colour.b), colour.a)
 }
 
 fn quad(values: &[f32; 8], start: usize) -> [f32; 4] {
@@ -703,7 +736,13 @@ fn upload(
 }
 
 /// One thing on the ground, drawn with its feet at the origin, upright in its own frame.
-fn draw_thing(draw: &mut impl RaylibDraw, thing: &GroundThing, px_per_tile: f32, seconds: f32) {
+fn draw_thing(
+    draw: &mut impl RaylibDraw,
+    thing: &GroundThing,
+    px_per_tile: f32,
+    seconds: f32,
+    light: f32,
+) {
     use crate::rendering::pixel_art::sprites;
     // One art pixel: a sixteenth of a tile.
     let art = px_per_tile / TILE_ART as f32;
@@ -723,13 +762,13 @@ fn draw_thing(draw: &mut impl RaylibDraw, thing: &GroundThing, px_per_tile: f32,
                 low_gravity: true,
                 downed: false,
             };
-            crate::rendering::pilot_art::paint_pilot(&look, frame).draw(
-                draw,
-                Vector2::zero(),
-                art,
-                false,
-                None,
-            );
+            let canvas = crate::rendering::pilot_art::paint_pilot(&look, frame);
+            canvas.draw(draw, Vector2::zero(), art, false, None);
+            if light < 0.98 {
+                // The dark laid over the suit (the canvas tints every colour but its ink).
+                let dark = Color::new(4, 4, 12, ((1.0 - light) * 255.0) as u8);
+                canvas.draw(draw, Vector2::zero(), art, false, Some(dark));
+            }
         }
         GroundThingKind::Creature(index) => {
             let list = [
@@ -740,21 +779,22 @@ fn draw_thing(draw: &mut impl RaylibDraw, thing: &GroundThing, px_per_tile: f32,
             let sprite = list[usize::from(index) % list.len()];
             let frame = sprite.frame_at(seconds);
             let (w, h) = (sprite.width() as f32 * art, sprite.height() as f32 * art);
-            sprite::draw_sprite(draw, sprite, frame, Vector2::new(-w * 0.5, -h), art, Color::WHITE);
+            let tint = shade(Color::WHITE, light);
+            sprite::draw_sprite(draw, sprite, frame, Vector2::new(-w * 0.5, -h), art, tint);
         }
         GroundThingKind::Drop => {
             let size = 6.0 * art;
             draw.draw_rectangle_rec(
                 Rectangle::new(-size * 0.5, -size, size, size),
-                palette::GOLD,
+                shade(palette::GOLD, light),
             );
             draw.draw_rectangle_rec(
                 Rectangle::new(-size * 0.5, -size, size * 0.5, size * 0.5),
-                palette::CREAM,
+                shade(palette::CREAM, light),
             );
             draw.draw_rectangle_rec(
                 Rectangle::new(0.0, -size * 0.5, size * 0.5, size * 0.5),
-                palette::AMBER,
+                shade(palette::AMBER, light),
             );
         }
         GroundThingKind::ParkedRig => {
@@ -773,7 +813,28 @@ fn draw_thing(draw: &mut impl RaylibDraw, thing: &GroundThing, px_per_tile: f32,
                 crate::rendering::rig_art::BODY_WIDTH as f32 * art,
                 crate::rendering::rig_art::BODY_HEIGHT as f32 * art,
             );
-            canvas.draw(draw, Vector2::new(-w * 0.5, -h), art, true);
+            let origin = Vector2::new(-w * 0.5, -h);
+            if light >= 0.98 {
+                canvas.draw(draw, origin, art, true);
+            } else if let Some((x0, y0, x1, y1)) = canvas.bounds() {
+                // Lit cell by cell (mirrored: it faces left).
+                let flip = crate::rendering::rig_art::BODY_WIDTH - 1;
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        if let Some(colour) = canvas.get(x, y) {
+                            draw.draw_rectangle_rec(
+                                Rectangle::new(
+                                    origin.x + (flip - x) as f32 * art,
+                                    origin.y + y as f32 * art,
+                                    art,
+                                    art,
+                                ),
+                                shade(colour, light),
+                            );
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -30,8 +30,8 @@ mod planet_scenes;
 mod reward_scenes;
 mod rig_scenes;
 mod sky_isle_scenes;
-mod space_scenes;
 mod sky_scenes;
+mod space_scenes;
 mod surface_scenes;
 mod village_scenes;
 

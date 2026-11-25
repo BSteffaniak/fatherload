@@ -276,7 +276,9 @@ impl SpaceRenderer {
             .black_holes
             .iter()
             .map(|hole| (hole, projection.project(hole.centre)))
-            .find(|(hole, point)| projection.visible(*point, projection.tiles(hole.disc_tiles * 3.0)));
+            .find(|(hole, point)| {
+                projection.visible(*point, projection.tiles(hole.disc_tiles * 3.0))
+            });
         let lens_strength = view.effects.scale(ScreenEffect::Lensing);
         match (lensed, self.lens.as_ref(), self.behind.as_ref()) {
             (Some((hole, point)), Some((shader, lens_at, size_at)), Some(target))
@@ -351,14 +353,15 @@ impl SpaceRenderer {
             objects::draw_black_hole_front(view, &projection);
         }
         if let Some(ground) = &view.ground {
-            let camera = polar::PolarGround::ring_camera(ground, projection.px_per_tile, projection.pivot);
+            let camera =
+                polar::PolarGround::ring_camera(ground, projection.px_per_tile, projection.pivot);
             let toward = view.light_toward(ground.body.centre);
             let sun = polar::sun_angle(ground, toward);
             let blend = bodies::ground_blend(projection.px_per_tile);
             self.polar
                 .draw(ground, &camera, viewport, sun, blend, view.seconds);
             if blend > 0.5 {
-                polar::PolarGround::draw_things(draw, ground, &camera, view.seconds);
+                polar::PolarGround::draw_things(draw, ground, &camera, sun, view.seconds);
             }
         }
         motion::draw_motion(draw, view, &projection);
@@ -474,7 +477,10 @@ mod tests {
         // so it shows above the craft.
         let right = camera.centre.offset(32.0, 0.0);
         let (x, y) = projection.project(right);
-        assert!((x - 640.0).abs() < 1e-3 && (y - 328.0).abs() < 1e-3, "{x} {y}");
+        assert!(
+            (x - 640.0).abs() < 1e-3 && (y - 328.0).abs() < 1e-3,
+            "{x} {y}"
+        );
         // A point a light year away stays finite.
         let far = WorldPos::new(i64::MAX / 4, 0, 0.0, 0.0);
         let (x, y) = projection.project(far);

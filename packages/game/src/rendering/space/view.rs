@@ -115,8 +115,8 @@ impl BodyTheme {
         use palette::{
             AMBER, CLAY, COPPER, CREAM, DEEP_BLUE, FOG, GOLD, ICE, LAVENDER, LEAF, LIME, LOAM,
             MAROON, MINT, MIST, MOSS, OCEAN, ORANGE, PINE, PINK, PLUM, ROSE, RUST, SAND, SKY,
-            SKY_LIGHT, SLATE, SLATE_LIGHT, SOIL, STEEL, STEEL_DARK, STEEL_LIGHT,
-            STONE, STONE_DARK, STONE_LIGHT, TEAL, VIOLET,
+            SKY_LIGHT, SLATE, SLATE_LIGHT, SOIL, STEEL, STEEL_DARK, STEEL_LIGHT, STONE, STONE_DARK,
+            STONE_LIGHT, TEAL, VIOLET,
         };
         match self {
             Self::Barren => ([STONE_DARK, STONE, STONE_LIGHT], FOG),
@@ -469,7 +469,8 @@ mod tests {
 
     #[test]
     fn the_zoom_eases_from_the_ground_to_the_system() {
-        let zoom = |altitude: f32, radius: f32| SpaceCamera::zoom_for_altitude(altitude, radius, 720.0);
+        let zoom =
+            |altitude: f32, radius: f32| SpaceCamera::zoom_for_altitude(altitude, radius, 720.0);
         assert!((zoom(0.0, 400.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
         assert!((zoom(4.0, 5_000.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
         assert!((zoom(1e9, 400.0) - SYSTEM_PX_PER_TILE).abs() < 1e-6);
