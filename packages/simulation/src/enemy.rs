@@ -3901,7 +3901,7 @@ impl EnemyKind {
                 ..stats("Shellstrider", Creature, Flying, AttackStyle::Lunge)
             },
             Self::Glimmerfin => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 10.0,
                 speed: 90.0,
                 sight_tiles: 6.0,
@@ -4261,7 +4261,7 @@ impl EnemyKind {
             Self::Mossprowler => (17.0, 9.0),
             Self::Sporewing => (11.0, 7.0),
             Self::Shellstrider => (36.0, 18.0),
-            Self::Glimmerfin => (9.0, 5.0),
+            Self::Glimmerfin => (9.0, 6.0),
             Self::Sawjaw => (22.0, 9.0),
             Self::Tidesnapper => (14.0, 9.0),
             Self::Woolhorn => (38.0, 25.0),
