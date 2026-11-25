@@ -7821,6 +7821,12 @@ pilot code.
   only by the nearest copy of the target round the strip (`nearest_lap_frame`). Relabelling a
   frame by a lap moves no position at all, so a rig drives round forever with bit-exact local
   positions; replicas that receive a relabelled frame shift by the same nearest copy.
+- **Everything else stays on the nearest lap** (review fix): the frame follows only its anchor,
+  so after the anchor drove once round, every other local position (a drop left on the ground,
+  a creature, another player's rig) used to sit a lap away in local pixels, out of sight and
+  reach. `tick_planet` now calls `wrap_to_nearest_lap`, which moves every rig, lost-cargo site
+  and entity more than half a lap from the frame's origin by whole laps (exact: a lap is whole
+  sectors). Entities that move get a new revision so replicas receive them.
 - `WorldState::planet()`; the home town's doors are closed on a planet
   (`player_surface_zone` is `None`).
 
@@ -7912,6 +7918,14 @@ On a round body nothing turns the craft but the player (gravity never rotates it
   or features of the planet's own (the classic band rosters stand in).
 - A remote rig's netcode pose jumps by a lap when the host relabels its frame (interpolation
   sees a lap-long move once per lap); poses could compare modulo the lap.
+- **Tile-keyed state is not lap-aware yet** (found in review): drill targets, bases, ladders
+  and lifts, scan markers and the other maps keyed by absolute tile store the label the tile
+  had when they were made. A frame labelled within `0..lap_sectors` gives the sector just
+  before the seam two labels (about `-512..0` or `W0 - 512..W0`, depending on which way the
+  anchor came), so a structure built there can be missed when the rig comes back the other
+  way round. The terrain itself is unaffected (`slot()` wraps). The fix belongs with F11's
+  per-body regions: wrap tile keys into `0..W0` where they are stored and compare tiles
+  modulo the lap. Parked crew rigs are not lap-wrapped either.
 
 ## Replication
 
