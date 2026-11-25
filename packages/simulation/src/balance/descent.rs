@@ -1107,6 +1107,29 @@ struct Trip {
     layer_units: f64,
 }
 
+/// The share of the tank the supply line's strain costs a rig climbing `rows` back up to its
+/// stop at `climb` rows a second, after `linger` seconds of thrust at the bottom (Wave 11
+/// carryover, [`crate::depth_progression::supply_strain`], integrated in ten-row steps).
+fn supply_strain_share(rows: f64, climb: f64, descent: u8, linger: f64) -> f64 {
+    const STEP: f64 = 10.0;
+    let strain = |at: f64| {
+        #[allow(clippy::cast_possible_truncation, reason = "rows of a world")]
+        let rows = at.round() as i32;
+        f64::from(crate::depth_progression::supply_strain(rows, descent))
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a few hundred ten-row steps"
+    )]
+    let steps = (rows.max(0.0) / STEP).ceil() as u32;
+    (0..steps).fold(linger * strain(rows), |share, index| {
+        let at = f64::from(index) * STEP;
+        let step = STEP.min(rows - at);
+        strain(step.mul_add(0.5, at)).mul_add(step / climb.max(0.1), share)
+    })
+}
+
 fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overhead: f64) -> Trip {
     let distance = f64::from((face_row - base_row).max(0));
     let climb = STOCK_CLIMB_ROWS_PER_SECOND
@@ -1125,11 +1148,19 @@ fn trip(rig: &Rig, stratum: &DescentStratum, base_row: i32, face_row: i32, overh
         tiles * tile_seconds(stratum, rig.drill, overhead) * mechanics.dig_factor(rig.systems);
     let burn = fuel_burn_efficiency(rig.tank);
     // Below its Pressure Rating the thrusters burn more (Wave 8).
+    // Wave 11 carryover: far below the trip's stop, thrust also costs a share of the tank.
+    let strain = supply_strain_share(
+        distance - open,
+        climb,
+        stratum.descent,
+        dig_seconds * THRUST_SHARE_MINING,
+    ) * f64::from(fuel_capacity_for_level(rig.tank));
     let fuel = tiles * DIG_FUEL_PER_TILE
         + ((distance - open) / climb + flight + dig_seconds * THRUST_SHARE_MINING)
             * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
             * f64::from(burn)
-            * pressure_factor(rig.pressure, stratum.descent);
+            * pressure_factor(rig.pressure, stratum.descent)
+        + strain;
     let mining_minutes = dig_seconds / 60.0;
     let guard = 0.88_f64.powi(i32::from(rig.hull) - i32::from(stratum.rock_tier));
     Trip {
@@ -1507,6 +1538,21 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         let leaving_descent = strata
             .get(index + 1)
             .is_none_or(|next| next.descent != descent);
+        // Wave 11 carryover: the last stratum ends with the final fight (the Heart, which
+        // rewards no rig system, so the gate loop above never fought it): modelled from its bot
+        // fight like every gate boss.
+        if strata.get(index + 1).is_none()
+            && usize::from(descent) == crate::descent::Descent::Heart.index()
+        {
+            let fight = boss_fight(crate::descent::DescentBoss::TheHeart, rig.hull);
+            minutes += fight.minutes;
+            deaths += fight.deaths;
+            events.push((
+                minutes,
+                NoveltyKind::Gate,
+                crate::descent::DescentBoss::TheHeart.name().to_owned(),
+            ));
+        }
         if leaving_descent {
             events.push((minutes, NoveltyKind::Gate, "gate".to_owned()));
         }
@@ -1550,11 +1596,16 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 let rows = f64::from(span.rows() - 40);
                 let climb = STOCK_CLIMB_ROWS_PER_SECOND
                     * f64::from(engine_power(rig.engine).min(crate::player::ENGINE_CLIMB_CAP));
+                // Wave 11 carryover: the climb home from the bottom, far below every stop
+                // (no beacon in a new Descent yet), strains the tank.
+                let strain = supply_strain_share(rows, climb / pace, descent, 120.0)
+                    * f64::from(fuel_capacity_for_level(rig.tank));
                 let fuel = ((rows / climb).mul_add(pace, flight) + 120.0)
                     * f64::from(AUTHORITATIVE_FUEL_BURN_PER_SECOND)
                     * f64::from(fuel_burn_efficiency(rig.tank))
                     * pressure_factor(rig.pressure, descent)
-                    + 300.0 * DIG_FUEL_PER_TILE;
+                    + 300.0 * DIG_FUEL_PER_TILE
+                    + strain;
                 expedition[usize::from(descent)] =
                     fuel / f64::from(fuel_capacity_for_level(rig.tank)) * 100.0;
             }
@@ -2197,7 +2248,19 @@ mod tests {
         let run = run_descent(&RegistryStrata::default_world(), &DescentConfig::default());
         let misses = run.balance_misses(BALANCE_PASS_DESCENTS);
         for (index, hours) in run.descent_hours.iter().enumerate() {
-            println!("Descent {}: ends at {hours:.1} h", index + 1);
+            // Wave 11 carryover: the fuel of an expedition and of the worst everyday trip too.
+            let everyday = run
+                .strata
+                .iter()
+                .filter(|stratum| usize::from(stratum.stratum.descent) == index)
+                .map(|stratum| stratum.everyday_fuel_percent)
+                .fold(0.0_f64, f64::max);
+            println!(
+                "Descent {}: ends at {hours:.1} h, everyday fuel {everyday:.0} %, expedition fuel \
+                 {:.0} %",
+                index + 1,
+                run.expedition_fuel_percent[index]
+            );
         }
         println!(
             "Whole run: {:.1} h, {} deaths",

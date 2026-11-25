@@ -689,6 +689,37 @@ pub const fn pressure_deficit(rating: u8, descent: u8) -> u8 {
     }
 }
 
+/// Rows below its nearest supply stop a rig flies free of the supply line's strain (Wave 11
+/// carryover; [`supply_strain`]). Everyday trips start at a beacon, an outpost or a lift station
+/// within this.
+pub const SUPPLY_FREE_ROWS: i32 = 450;
+/// Rows past [`SUPPLY_FREE_ROWS`] over which the strain grows to [`SUPPLY_STRAIN_MAX`].
+pub const SUPPLY_RAMP_ROWS: i32 = 1_000;
+/// The most a second of thrust costs beyond the supply line on top of its burn: this share of
+/// the tank (0.16 %: a minute of thrust far below every stop costs a tenth of any tank).
+pub const SUPPLY_STRAIN_MAX: f32 = 0.0016;
+
+/// The supply line's strain on a rig `rows_below` its nearest supply stop in Descent `descent`.
+///
+/// A stop is the surface, an outpost, a restored lift's station or a depth beacon. The strain
+/// is the share of the tank each second of thrust costs on top of its burn (Wave 11 carryover,
+/// expansion plan §13 "Making a long dig fun": everyday trips stay calm, deep expeditions get
+/// stressful).
+///
+/// None in the Crust (it teaches the game) or within [`SUPPLY_FREE_ROWS`] of a stop; it grows
+/// over [`SUPPLY_RAMP_ROWS`] to [`SUPPLY_STRAIN_MAX`]. A share of the tank, not fuel units, so a
+/// deep tank does not dwarf it: the long climb home from far beyond the last beacon is what
+/// costs, whatever the tier.
+#[must_use]
+pub fn supply_strain(rows_below: i32, descent: u8) -> f32 {
+    if descent == 0 || rows_below <= SUPPLY_FREE_ROWS {
+        return 0.0;
+    }
+    #[allow(clippy::cast_precision_loss, reason = "rows of a world")]
+    let share = ((rows_below - SUPPLY_FREE_ROWS) as f32 / SUPPLY_RAMP_ROWS as f32).min(1.0);
+    SUPPLY_STRAIN_MAX * share
+}
+
 /// Thruster fuel burn in percent of normal for a rig with Pressure Rating `rating` in Descent
 /// `descent` (100 when rated).
 #[must_use]

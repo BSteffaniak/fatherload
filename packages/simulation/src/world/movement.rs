@@ -205,6 +205,8 @@ impl WorldState {
         let drilling = self.active_drills.contains_key(&player_id);
         // Wave 8, Descent worlds: thrusters below the rig's Pressure Rating burn more.
         let pressure_burn = self.pressure_burn_factor(player_id);
+        // Wave 11 carryover: far below every supply stop, thrust also costs a share of the tank.
+        let supply_strain = self.supply_strain_for(player_id);
         // The Hollow World (Wave 9): the Gravity Anchor's pull, the Inner Sky's wind and tar.
         let anchor = self.anchor_quarter_for(player_id);
         let (wind, tar) = self
@@ -661,6 +663,13 @@ impl WorldState {
                     .mul_add(-seconds, player.fuel)
                     .max(0.0),
             );
+            if supply_strain > 0.0 && !god_mode {
+                player.fuel = quantize_simulation_scalar(
+                    (supply_strain * player.fuel_capacity)
+                        .mul_add(-seconds, player.fuel)
+                        .max(0.0),
+                );
+            }
         }
 
         let mut mitigation = (f32::from(mechanic_level) * 0.08).min(0.32);

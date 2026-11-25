@@ -418,6 +418,38 @@ pub struct Logistics {
 }
 
 impl Logistics {
+    /// The deepest supply stop at or above `row` (Wave 11 carryover, the supply line): an
+    /// outpost, a restored lift's station or a depth beacon (anyone's: the crew shares the
+    /// network), else the surface (row 0).
+    #[must_use]
+    pub fn supply_row_above(&self, row: i32) -> i32 {
+        let outposts = self.outposts.values().map(|outpost| outpost.floor_row);
+        let beacons = self.beacons.values().map(|beacon| beacon.at.y);
+        let stations = self
+            .lifts
+            .values()
+            .filter(|lift| lift.restored)
+            .flat_map(|lift| lift.stations.iter().copied());
+        outposts
+            .chain(beacons)
+            .chain(stations)
+            .filter(|stop| *stop <= row)
+            .max()
+            .unwrap_or(0)
+            .max(0)
+    }
+
+    /// The supply line's strain at `row` on a world with `settings` (Deep Descent rules only;
+    /// [`crate::depth_progression::supply_strain`]).
+    #[must_use]
+    pub fn supply_strain_at(&self, settings: &crate::worldgen::WorldSettings, row: i32) -> f32 {
+        if !self.rules.is_descent() || row <= 0 {
+            return 0.0;
+        }
+        let descent = crate::depth_progression::descent_index_at_row(settings, row);
+        crate::depth_progression::supply_strain(row - self.supply_row_above(row), descent)
+    }
+
     /// Percent of the ore price buyers pay `player_id` for the haul aboard (Wave 8, Descent
     /// worlds: the deepest Descent it came from,
     /// [`crate::depth_progression::descent_value_percent`]; 100 elsewhere). The sale counters

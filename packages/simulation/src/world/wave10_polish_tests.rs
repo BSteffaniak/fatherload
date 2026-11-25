@@ -980,3 +980,95 @@ fn a_walkers_hit_area_rises_over_its_feet_as_it_is_drawn() {
     }
     assert!(checked >= 5, "only {checked} tall walkers");
 }
+
+// --- Wave 11 carryover: the supply line (deep expeditions strain the tank) ---------------------
+
+/// The fuel a rig at `tile` burns thrusting up for a second, its tank full.
+fn thrust_a_second(world: &mut WorldState, tile: TilePosition) -> f32 {
+    room(world, tile, (3, 6), false);
+    let rig = world.player_mut(PLAYER).expect("rig");
+    rig.fuel = rig.fuel_capacity;
+    let before = rig.fuel;
+    for _ in 0..30 {
+        let _ = step(world, ControlState::new(0.0, true, false));
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.velocity_y = 0.0;
+    }
+    before - world.player(PLAYER).expect("rig").fuel
+}
+
+/// Wave 11 carryover (§13 "Making a long dig fun"): far below every supply stop a second of
+/// thrust also costs a share of the tank, so the long climb home from a new Descent's bottom is
+/// stressful whatever the tier; a beacon planted above (an everyday trip's stop) takes the
+/// strain away. The Crust and older worlds never feel it.
+#[test]
+fn far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it() {
+    use crate::depth_progression::{SUPPLY_FREE_ROWS, SUPPLY_STRAIN_MAX, supply_strain};
+    let mut world = deep_world(30);
+    let settings = settings();
+    // The spot of the Deep Descent furthest below every stop (no beacons planted yet).
+    let top = layout(&settings).rows(Stratum::CrystalFaults).0;
+    let bottom = layout(&settings).rows(Stratum::TheHeart).1;
+    let row = (top..bottom)
+        .step_by(4)
+        .max_by(|a, b| {
+            let strain = |row: i32| world.logistics().supply_strain_at(&settings, row);
+            strain(*a).total_cmp(&strain(*b))
+        })
+        .expect("rows");
+    assert!(
+        world.logistics().supply_strain_at(&settings, row) > SUPPLY_STRAIN_MAX * 0.5,
+        "somewhere far below the stops"
+    );
+    let tile = TilePosition { x: FAR, y: row };
+    let strain = world.logistics().supply_strain_at(&settings, row);
+    assert!(strain > 0.0);
+    let strained = thrust_a_second(&mut world, tile);
+    let at = world.player(PLAYER).expect("rig").tile_in(world.frame());
+    assert!(
+        world.supply_strain_for(PLAYER) > 0.0,
+        "row {row} rig {at:?} stop {} strain {strain}",
+        world.logistics().supply_row_above(at.y)
+    );
+    // A beacon a few rows over the rig: the stop is right here now.
+    let _ = world.logistics.beacons.insert(
+        9_999,
+        crate::logistics::DepthBeacon {
+            id: 9_999,
+            owner: PLAYER,
+            at: TilePosition {
+                x: FAR,
+                y: row - 20,
+            },
+        },
+    );
+    assert!(world.supply_strain_for(PLAYER).abs() < f32::EPSILON);
+    let calm = thrust_a_second(&mut world, tile);
+    let capacity = world.player(PLAYER).expect("rig").fuel_capacity;
+    let extra = strained - calm;
+    assert!(
+        (extra - strain * capacity).abs() <= (strain * capacity).mul_add(0.1, 0.5),
+        "a second far out costs {extra} more (strain {strain} of {capacity})"
+    );
+    // Calm within reach of a stop, none in the Crust.
+    assert!(supply_strain(SUPPLY_FREE_ROWS, 3).abs() < f32::EPSILON);
+    assert!(supply_strain(5_000, 0).abs() < f32::EPSILON);
+    assert!(supply_strain(SUPPLY_FREE_ROWS + 500, 4) < supply_strain(SUPPLY_FREE_ROWS + 900, 4));
+    assert!((supply_strain(50_000, 6) - SUPPLY_STRAIN_MAX).abs() < f32::EPSILON);
+    // Older worlds keep their fuel rules.
+    let classic = WorldState::new_game_with_settings(
+        PLAYER,
+        &WorldSettings {
+            generator: GeneratorVersion::V10,
+            ..WorldSettings::new(SEED)
+        },
+        SimulationParams::new(30),
+    );
+    assert!(
+        classic
+            .logistics()
+            .supply_strain_at(classic.terrain().settings(), 4_000)
+            .abs()
+            < f32::EPSILON
+    );
+}

@@ -1526,6 +1526,19 @@ impl WorldState {
         self.logistics.haul_premium_percent(player_id)
     }
 
+    /// The supply line's strain on `player_id`'s rig where it is now (Wave 11 carryover): the
+    /// share of its tank each second of thrust costs on top of its burn, 0 within reach of a
+    /// supply stop ([`crate::depth_progression::supply_strain`]).
+    #[must_use]
+    pub fn supply_strain_for(&self, player_id: PlayerId) -> f32 {
+        let Some(player) = self.players.get(&player_id) else {
+            return 0.0;
+        };
+        let row = player.tile_in(self.frame()).y;
+        self.logistics
+            .supply_strain_at(self.terrain.settings(), row)
+    }
+
     /// Wave 8, Descent worlds: the thruster fuel factor for `player_id`'s rig at its depth (1
     /// where its Pressure Rating covers the Descent it is in, and on every older world).
     #[must_use]
