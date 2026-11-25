@@ -99,6 +99,9 @@ pub enum PlayerCommand {
     /// A depth logistics action (Part III F10, see [`crate::logistics::LogisticsCommand`]):
     /// lifts, beacons and travel, an outpost's counter, dive charges.
     Logistics(crate::logistics::LogisticsCommand),
+    /// A space flight action (Wave 11, see [`crate::flight::FlightCommand`]): the Star Drive,
+    /// docking, the beacon, waypoints and a station's services.
+    Flight(crate::flight::FlightCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

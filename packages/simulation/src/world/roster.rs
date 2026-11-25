@@ -144,12 +144,15 @@ impl WorldState {
             heart,
             places,
             place_pass: _,
+            // A leaving player's waypoint and ping go with them; the crew's finds stay (Wave 11).
+            flight,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).
         if disarm_charges {
             places.forget(player_id);
         }
+        flight.forget(player_id);
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
         heart.forget(player_id);

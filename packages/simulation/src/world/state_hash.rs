@@ -264,6 +264,10 @@ impl WorldState {
         if !self.heart.is_empty() {
             hash.write_serialized(&self.heart);
         }
+        // Absent until someone flies in space (Wave 11), so older worlds keep their hashes.
+        if !self.flight.is_empty() {
+            hash.write_serialized(&self.flight);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

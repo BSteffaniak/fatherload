@@ -1340,6 +1340,14 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // Space flight (Wave 11 flight; netcode codes 800-819).
+    /// Something happened to `player_id`'s rig in flight; `detail` is the event's number (air
+    /// percent, a refused warp's [`crate::flight::WarpRefusal`] code, damage, ...).
+    Flight {
+        what: crate::flight::FlightEvent,
+        player_id: PlayerId,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1429,7 +1437,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::Moon(_)
         | PlayerCommand::Pilot(_)
         | PlayerCommand::Tomb(_)
-        | PlayerCommand::Logistics(_) => {
+        | PlayerCommand::Logistics(_)
+        | PlayerCommand::Flight(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

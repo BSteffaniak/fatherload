@@ -268,6 +268,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * Polar (round bodies): `TerrainSnapshot::planet` (a round body's `PlanetParams`) in
 ///   keyframes, `AttitudeGear::landing_legs` in the rig's loadout, and the round-body events
 ///   780-799 (`GameplayEventKind::Planet` with `planet::landing::PlanetEvent`).
+/// * Space flight (w11-flight): `ControlState` gains a `flight` byte (auto-land and the
+///   screen-relative thrust scheme), `Player::flight` / `PlayerTickState::flight` (per tick:
+///   place, space position and velocity, the Star Drive's mode and warp, heat, air), the
+///   appended `HazardGear::flight` (nav suite, re-entry shield, auto-land),
+///   `PlayerCommand::Flight`, `TestModeAction::GrantStarDrive`, the `Flight` world field and
+///   `SectionKey::Flight` section (waypoints, the crew's waypoint, systems found, scanner
+///   pings), and the flight events 800-819 (`GameplayEventKind::Flight`). A rig away in
+///   space poses at the shared park spot over the Moon (`SPACE_POSE_MODE`), so co-op flyers
+///   stay relevant to each other and see each other fly and streak.
 pub const PROTOCOL_VERSION: u8 = 19;
 
 /// One client input frame: the controls and actions for exactly one tick.

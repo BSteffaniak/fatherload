@@ -91,6 +91,7 @@ impl WorldState {
                 return self.place_dev_field_zone(player_id, preset);
             }
             TestModeAction::ClearFieldZones => self.fields.clear(),
+            TestModeAction::GrantStarDrive => return self.grant_star_drive(player_id),
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players

@@ -470,7 +470,9 @@ impl WorldState {
             | PlayerCommand::Moon(_)
             | PlayerCommand::Home(_)
             | PlayerCommand::Tomb(_)
-            | PlayerCommand::Logistics(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Logistics(_)
+            // Space flight (Wave 11): `apply_flight_command` (`world/flight.rs`).
+            | PlayerCommand::Flight(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

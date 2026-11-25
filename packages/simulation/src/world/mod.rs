@@ -98,6 +98,7 @@ mod far_strange_tests;
 #[cfg(test)]
 mod field_tests;
 mod fields;
+mod flight;
 #[cfg(test)]
 mod flight_tests;
 #[cfg(test)]
@@ -118,6 +119,8 @@ mod hazards;
 mod heart;
 #[cfg(test)]
 mod heart_tests;
+#[cfg(test)]
+mod star_flight_tests;
 pub use heart::CablePath;
 mod hollow;
 #[cfg(test)]
@@ -582,6 +585,11 @@ pub struct WorldState {
     /// The running pass of the tick (never saved, hashed or replicated).
     #[serde(skip)]
     place_pass: places::PlacePass,
+    /// Space flight's shared state (Wave 11, see [`crate::flight`]): waypoints, the crew's
+    /// waypoint, systems found and scanner pings. Each rig's own flight is per tick
+    /// ([`crate::Player::flight`]).
+    #[serde(default)]
+    flight: crate::flight::FlightShared,
 }
 
 impl WorldState {

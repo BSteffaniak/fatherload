@@ -65,6 +65,9 @@ pub struct PlayerTickState {
     /// Ballast trim and hull frost (Wave 9, the Drowned and Frozen).
     #[serde(default)]
     pub water: crate::drowned::RigWater,
+    /// Space flight (Wave 11): place, space position, drive, heat and air.
+    #[serde(default)]
+    pub flight: crate::flight::RigFlight,
     pub fuel: f32,
     pub hull: f32,
     pub drill: Option<DrillState>,
@@ -261,6 +264,9 @@ pub enum SectionKey {
     /// Descent VIII (Wave 10): floating rigs, wells, landmarks, the Heart's fight,
     /// `space_unlocked`, the Star Drives and the ending's start.
     Heart,
+    /// Space flight's shared state (Wave 11): waypoints, the crew's waypoint, systems found
+    /// and scanner pings (each rig's flight is per tick).
+    Flight,
 }
 
 impl SectionKey {
@@ -280,7 +286,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 31] = [
+    pub const SHARED: [Self; 32] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -317,6 +323,8 @@ impl SectionKey {
         Self::Garrison,
         // The Heart (Wave 10).
         Self::Heart,
+        // Space flight (Wave 11 flight).
+        Self::Flight,
     ];
 }
 
@@ -356,6 +364,7 @@ pub enum SectionPayload {
     AncientCity(Box<crate::ancient_city::AncientCity>),
     Garrison(Box<crate::garrison::Garrison>),
     Heart(Box<crate::heart::Heart>),
+    Flight(Box<crate::flight::FlightShared>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -381,6 +390,7 @@ impl WorldState {
             attitude: rig.attitude,
             cart: rig.cart,
             water: rig.water,
+            flight: rig.flight,
             fuel: rig.fuel,
             hull: rig.hull,
             drill: self.active_drills.get(&player_id).copied(),
@@ -405,6 +415,7 @@ impl WorldState {
             attitude,
             cart,
             water,
+            flight,
             fuel,
             hull,
             drill,
@@ -428,6 +439,7 @@ impl WorldState {
             player.attitude = attitude;
             player.cart = cart;
             player.water = water;
+            player.flight = flight;
             player.fuel = fuel;
             player.hull = hull;
         }
@@ -582,6 +594,7 @@ impl WorldState {
             // ops, entity deltas and the live section's frames (F11).
             places: _,
             place_pass: _,
+            flight,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -691,6 +704,7 @@ impl WorldState {
             SectionKey::AncientCity => SectionPayload::AncientCity(Box::new(ancient_city.clone())),
             SectionKey::Garrison => SectionPayload::Garrison(Box::new(garrison.clone())),
             SectionKey::Heart => SectionPayload::Heart(Box::new(heart.clone())),
+            SectionKey::Flight => SectionPayload::Flight(Box::new(flight.clone())),
         })
     }
 
@@ -883,6 +897,9 @@ impl WorldState {
             }
             (SectionKey::Garrison, SectionPayload::Garrison(garrison)) => {
                 self.garrison = *garrison;
+            }
+            (SectionKey::Flight, SectionPayload::Flight(flight)) => {
+                self.flight = *flight;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

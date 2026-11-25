@@ -233,6 +233,7 @@ impl WorldState {
             heart: crate::heart::Heart::default(),
             places: super::places::Places::default(),
             place_pass: super::places::PlacePass::default(),
+            flight: crate::flight::FlightShared::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

@@ -53,4 +53,7 @@ pub enum TestModeAction {
     /// Move the submitting rig to another place (F11): over a space body's arrival point,
     /// into free flight, onto the Moon or back to the spawn point at home.
     WarpToPlace(crate::place::Place),
+    /// Fit the submitting rig with the Star Drive and open space (Wave 11's debug grant; on
+    /// Deep Descent worlds only).
+    GrantStarDrive,
 }

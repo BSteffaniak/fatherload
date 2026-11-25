@@ -72,6 +72,12 @@ impl WorldState {
             self.far_schedule.thrusting.clear();
         }
         for (&player_id, input) in &inputs.players {
+            // Space flight (Wave 11): a rig away from home flies instead of the classic
+            // movement below.
+            let away = self.in_space(player_id);
+            if away && let Some(controls) = input.controls {
+                self.step_star_flight(player_id, controls, tick.next(), &mut output);
+            }
             // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
             // gets neutral ones.
             let on_foot = self.is_on_foot(player_id);
@@ -81,7 +87,7 @@ impl WorldState {
             } else {
                 None
             };
-            if let Some(controls) = input.controls.map(|controls| {
+            if let Some(controls) = input.controls.filter(|_| !away).map(|controls| {
                 if on_foot {
                     ControlState::default().with_weapon(sentry.unwrap_or_default())
                 } else if self.rig_controls_mirrored(player_id) {
@@ -233,6 +239,11 @@ impl WorldState {
                     // authoritative tick, so it holds for remote clients too).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else if let Some(outcome) =
+                    self.flight_command(player_id, &action.command, &mut output)
+                {
+                    // Space flight (Wave 11, `world/flight.rs`): its own events.
+                    outcome
+                } else if let Some(outcome) =
                     self.pilot_command(player_id, &action.command, &mut output)
                 {
                     outcome
@@ -308,6 +319,8 @@ impl WorldState {
             self.advance_plates(next_tick, &mut output);
             // Tomb runs (WP-TOMBS): ambushes, the guardian, traps, revives, picks, wipes.
             self.advance_tombs(next_tick, &mut output);
+            // Space flight (Wave 11): leaving home over the Moon, life support, the beacon.
+            self.advance_star_flight(&mut output);
             let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
             for player_id in recovery_player_ids {
                 if self.recover_lost_cargo_for_player(player_id) {
@@ -350,6 +363,11 @@ impl WorldState {
 
         let player_ids = self.players.keys().copied().collect::<Vec<_>>();
         for player_id in player_ids {
+            // A rig away in space is parked over the Moon: the home world's hazards do not
+            // reach it (Wave 11; flight has its own heat and air).
+            if self.in_space(player_id) {
+                continue;
+            }
             let (player_x, player_y, radiator_level, gear) = self
                 .players
                 .get(&player_id)

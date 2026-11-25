@@ -503,9 +503,6 @@ fn heat(
         outcome.hull_damage =
             ((flight.heat - HEAT_BURN) * HEAT_HULL_DAMAGE).mul_add(dt, outcome.hull_damage);
     }
-    if flight.heat > super::HEAT_WARNING {
-        outcome.push(FlightEvent::HeatWarning, 0);
-    }
 }
 
 /// Which body's approach sphere the rig is in, after the tick's moves.

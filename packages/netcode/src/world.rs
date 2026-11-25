@@ -438,6 +438,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Planet {
             what, player_id, ..
         } => (780 + what.code() as u32, player_id),
+        // Space flight (wave 11 flight): 800-819.
+        GameplayEventKind::Flight {
+            what, player_id, ..
+        } => (800 + what.code() as u32, Some(player_id)),
     }
 }
 
@@ -468,6 +472,9 @@ pub fn region_origin(world: &WorldState, region: u64) -> Option<[i64; 2]> {
 /// [`Pose::mode`] of a player on foot (drill modes are `(y << 16 ^ x) + 1`; this high bit
 /// pattern is never one of theirs in practice).
 pub const ON_FOOT_POSE_MODE: u32 = 0xF00F_0001;
+/// The pose mode of a rig away in space (Wave 11): its home position is the shared park spot
+/// over the Moon, so every flyer stays relevant to the others; leaving and coming home snap.
+pub const SPACE_POSE_MODE: u32 = 0xF00F_0002;
 
 const fn drill_mode(target: fatherload_simulation::terrain::TilePosition) -> u32 {
     // Distinct non-zero code per target tile (zero means "not drilling").
@@ -719,9 +726,12 @@ impl NetSimulation for WorldState {
             ));
         }
         let player = self.player(sim_id)?;
-        let mode = self
-            .active_drill(sim_id)
-            .map_or(0, |drill| drill_mode(drill.target));
+        let mode = if player.flight.away() {
+            SPACE_POSE_MODE
+        } else {
+            self.active_drill(sim_id)
+                .map_or(0, |drill| drill_mode(drill.target))
+        };
         Some(Pose::at(
             origin,
             player.x / TILE_SIZE,

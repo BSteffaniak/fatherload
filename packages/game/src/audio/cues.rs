@@ -656,6 +656,31 @@ pub const fn planet_cue(
     }
 }
 
+/// What each flight event sounds like (Wave 11; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn flight_cue(what: fatherload_simulation::flight::FlightEvent) -> SoundCue {
+    use fatherload_simulation::flight::FlightEvent as E;
+    match what {
+        E::EnteredSpace | E::ReturnedHome | E::ApproachBody | E::WarpArrived => SoundCue::SkyBand,
+        E::CruiseEngaged => SoundCue::JetStream,
+        E::CruiseDropped => SoundCue::UiBack,
+        E::WarpSpooling => SoundCue::MachineCharge,
+        E::WarpEngaged => SoundCue::UplinkWarp,
+        E::WarpInterrupted => SoundCue::GravityHum,
+        E::WarpRefused => SoundCue::UiError,
+        E::Landed => SoundCue::MoonLanding,
+        E::TookOff => SoundCue::JetpackBurst,
+        E::HeatWarning => SoundCue::StormSiren,
+        E::HullScraped => SoundCue::ImpactRock,
+        E::AirLow => SoundCue::OxygenAlarm,
+        E::BeaconReturn => SoundCue::Rescue,
+        E::Docked => SoundCue::HatchClose,
+        E::Undocked => SoundCue::HatchOpen,
+        E::ScannerPing => SoundCue::Scanner,
+        E::NavUpdated => SoundCue::UiMove,
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -1184,6 +1209,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::HeartLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
         // Round bodies (Wave 11): a bad touchdown scrapes or knocks the hull; righting clunks.
         GameplayEventKind::Planet { what, .. } => planet_cue(*what),
+        // Space flight (Wave 11).
+        GameplayEventKind::Flight { what, .. } => Some(flight_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1534,7 +1561,8 @@ mod tests {
             | GameplayEventKind::HeartLandmarkFound { .. }
             | GameplayEventKind::Story { .. }
             | GameplayEventKind::PlaceChanged { .. }
-            | GameplayEventKind::Planet { .. } => {}
+            | GameplayEventKind::Planet { .. }
+            | GameplayEventKind::Flight { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1984,6 +2012,13 @@ mod tests {
                 player_id: Some(player_id),
                 x: 0,
                 y: 0,
+            });
+        }
+        for what in fatherload_simulation::flight::FlightEvent::ALL {
+            events.push(GameplayEventKind::Flight {
+                what,
+                player_id,
+                detail: 0,
             });
         }
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {

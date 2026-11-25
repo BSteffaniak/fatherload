@@ -40,6 +40,10 @@ pub struct Player {
     /// [`crate::drowned::RigWater`]). Per tick, predicted and reconciled like the pose.
     #[serde(default)]
     pub water: crate::drowned::RigWater,
+    /// Space flight (Wave 11, see [`crate::flight::RigFlight`]): where the rig is beyond the
+    /// Moon, its drive, heat and air. Per tick, predicted and reconciled like the pose.
+    #[serde(default)]
+    pub flight: crate::flight::RigFlight,
     pub fuel: f32,
     pub fuel_capacity: f32,
     pub hull: f32,
@@ -174,6 +178,7 @@ impl Player {
             attitude: crate::attitude::RigAttitude::LEVEL,
             cart: None,
             water: crate::drowned::RigWater::default(),
+            flight: crate::flight::RigFlight::default(),
             fuel: fuel_capacity_for_level(1),
             fuel_capacity: fuel_capacity_for_level(1),
             hull: 100.0,

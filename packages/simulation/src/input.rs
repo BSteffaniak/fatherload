@@ -29,6 +29,10 @@ pub struct ControlState {
     /// bits; they work only when fitted).
     #[serde(default)]
     assists: u8,
+    /// The seat's flight switches ([`crate::flight::FlightControls`] bits: auto-land, the
+    /// screen-relative thrust scheme; Wave 11).
+    #[serde(default)]
+    flight: u8,
 }
 
 /// A seat's weapon trigger and aim for one tick (held, so firing is predicted like movement).
@@ -64,6 +68,7 @@ impl ControlState {
             jump: false,
             rotate_centi: 0,
             assists: 0,
+            flight: 0,
         }
     }
 
@@ -97,6 +102,19 @@ impl ControlState {
     #[must_use]
     pub const fn assists(self) -> crate::attitude::AttitudeAssists {
         crate::attitude::AttitudeAssists::from_bits(self.assists)
+    }
+
+    /// The same controls with the flight switches `flight` (Wave 11).
+    #[must_use]
+    pub const fn with_flight(mut self, flight: crate::flight::FlightControls) -> Self {
+        self.flight = flight.bits();
+        self
+    }
+
+    /// The seat's flight switches.
+    #[must_use]
+    pub const fn flight(self) -> crate::flight::FlightControls {
+        crate::flight::FlightControls::from_bits(self.flight)
     }
 
     /// These controls with left and right swapped (a mirror field): the stick and the

@@ -1173,7 +1173,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::StarCoreBeaten { player_id }
         | GameplayEventKind::GlowmotherDefeated { player_id }
         | GameplayEventKind::HeartLandmarkFound { player_id, .. }
-        | GameplayEventKind::PlaceChanged { player_id, .. } => Some(player_id),
+        | GameplayEventKind::PlaceChanged { player_id, .. }
+        | GameplayEventKind::Flight { player_id, .. } => Some(player_id),
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }
