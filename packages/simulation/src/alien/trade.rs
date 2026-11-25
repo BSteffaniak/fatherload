@@ -3,9 +3,9 @@
 //! Each buys the ores it prizes and sells its own goods, priced from the home market, the
 //! species' tastes, the speaker's understanding of the tongue and the body's own economy.
 //!
-//! TODO-SEAM(w12-bodylife): the per-body economy. [`body_price_permille`] is this track's
-//! local hook (every body pays the plain price until bodylife's economy answers for it);
-//! the integrator points it at the bodylife track's per-body market.
+//! The body's economy is the bodylife track's per-body market ([`body_price_permille`], wired
+//! on integration): a town on a world rich in an ore pays less for it, one far from home or
+//! short of it pays more.
 
 use serde::{Deserialize, Serialize};
 
@@ -136,11 +136,16 @@ impl AlienGood {
 
 /// The per-body economy's price factor (per mille) for alien trade on `body`.
 ///
-/// TODO-SEAM(w12-bodylife): the bodylife track's per-body economy answers here (scarcity,
-/// the body's own market days); until it is wired every body pays the plain price.
+/// The bodylife market's price of `mineral` there in the world of `seed` (its common ores
+/// cheap, scarce ones dear, dearer far from home); goods (`None`) trade at the plain price.
 #[must_use]
-pub const fn body_price_permille(_body: SpaceBodyKey, _mineral: Option<MineralKind>) -> u32 {
-    1_000
+pub fn body_price_permille(seed: u64, body: SpaceBodyKey, mineral: Option<MineralKind>) -> u32 {
+    let Some(mineral) = mineral else {
+        return 1_000;
+    };
+    crate::place::planet_params_for(seed, body)
+        .and_then(|params| crate::world::body_life_of(seed, Some(body), params))
+        .map_or(1_000, |life| life.prices.mineral_permille(mineral))
 }
 
 /// Understanding's discount on what you buy and bonus on what you sell (per mille): a
@@ -164,20 +169,21 @@ pub fn ore_price(
     species: AlienSpecies,
     mineral: MineralKind,
     market: u32,
-    body: SpaceBodyKey,
+    economy_permille: u32,
     fluency: Fluency,
 ) -> Option<u32> {
     let taste = u64::from(species.def().values_ore(mineral)?);
-    let economy = u64::from(body_price_permille(body, Some(mineral)));
+    let economy = u64::from(economy_permille);
     let (_, sell) = fluency_permille(fluency);
     let price = u64::from(market) * taste / 1_000 * economy / 1_000 * u64::from(sell) / 1_000;
     Some(u32::try_from(price.max(1)).unwrap_or(u32::MAX))
 }
 
-/// What `good` costs on `body` for a speaker of `fluency`.
+/// What `good` costs where the economy is `economy_permille` ([`body_price_permille`]) for a
+/// speaker of `fluency`.
 #[must_use]
-pub fn good_price(good: AlienGood, body: SpaceBodyKey, fluency: Fluency) -> u32 {
-    let economy = u64::from(body_price_permille(body, None));
+pub fn good_price(good: AlienGood, economy_permille: u32, fluency: Fluency) -> u32 {
+    let economy = u64::from(economy_permille);
     let (buy, _) = fluency_permille(fluency);
     let price = u64::from(good.base_price()) * economy / 1_000 * u64::from(buy) / 1_000;
     u32::try_from(price.max(1)).unwrap_or(u32::MAX)

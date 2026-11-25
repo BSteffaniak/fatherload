@@ -1093,6 +1093,9 @@ impl WorldState {
             })
         };
         let mut best: Option<(f32, PlayerId)> = None;
+        // A body's weather shortens sight (a blizzard, a downpour, a sandstorm; Wave 12
+        // integration with bodylife): read once, only when prey is near.
+        let mut visibility: Option<f32> = None;
         // Rigs (parked ones too) and pilots on foot (Part II F5) are both prey.
         let bodies = self
             .players
@@ -1116,7 +1119,9 @@ impl WorldState {
             if self.hostile_safe_zone(Some(state.kind), self.frame().tile_at(x, y)) {
                 continue;
             }
-            let seen = distance <= sight
+            let weather =
+                *visibility.get_or_insert_with(|| self.body_visibility_at(body.x, body.y));
+            let seen = distance <= sight * weather
                 && !hidden(x, y)
                 && physics::sight_clear(&self.terrain, (body.x, body.y), (x, y));
             // A dune stalker hears footsteps around corners (WP-NIGHT), never through rock.

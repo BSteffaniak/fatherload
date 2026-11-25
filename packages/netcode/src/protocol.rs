@@ -283,7 +283,7 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   home again), Heart's Edge's residents (a fourth deep settlement) in NPC entities, and the
 ///   Heart's longer fight (more fields in the `Heart` section).
 ///
-/// 20 (expansion wave 12; one bump per track, collapsed by the integrator):
+/// 20 (expansion wave 12: every track's bump collapsed into this one by the integrator):
 ///
 /// * Systems (Wave 12 systems: what space's things do): `RigFlight::{lag_seconds, mining,
 ///   gathering, marks}` (per tick), `StarDrive::Transit` (a wormhole's tunnel),
@@ -302,7 +302,7 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   wild world events 900-919 (`GameplayEventKind::Wilds` with `planet::wilds::WildsEvent`).
 /// * Planets-b (the dune, volcanic and crystal worlds): `TileKind::Frontier(FrontierTile)`
 ///   tiles (kind codes `0x2400..=0x26FF`) in terrain ops, store tile ops, chunk refreshes and
-///   keyframes; three appended planet themes (ids 3-5) in `PlanetParams`; twelve appended
+///   keyframes; three appended planet themes (ids 6-8, after planets-a's 3-5) in `PlanetParams`; twelve appended
 ///   `EnemyKind`s (`DuneSkipper` .. `GeodeMimic`) in entity records; the frontier events
 ///   920-939 (`GameplayEventKind::Frontier` with `frontier::FrontierEvent`). No world field or
 ///   section: the frontier rules keep no state of their own (the weather and the eruptions are

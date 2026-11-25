@@ -251,8 +251,8 @@ impl WorldState {
     }
 
     /// How far a creature sees at `(x, y)` of the body swapped in, as a share of a clear
-    /// day's reach (1 off a body, under cover or in clear air): the weather's visibility. The
-    /// fauna and aliens tracks scale line-of-sight noticing by it (TODO-SEAM w12-aliens).
+    /// day's reach (1 off a body, under cover or in clear air): the weather's visibility. Every
+    /// creature's line-of-sight noticing scales by it (`perceive`, Wave 12 integration).
     #[must_use]
     pub fn body_visibility_at(&self, x: f32, y: f32) -> f32 {
         f32::from(self.body_weather_at(x, y).visibility_permille.min(1_000)) / 1_000.0

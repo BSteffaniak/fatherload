@@ -220,18 +220,18 @@ fn speech_starts_as_glyphs_and_reads_as_understanding_grows() {
 
 #[test]
 fn each_species_buys_its_ores_and_sells_its_goods_better_to_good_speakers() {
-    let body = crate::place::SpaceBodyKey::default();
     for species in AlienSpecies::ALL {
         let def = species.def();
         for (ore, _) in def.valued_ores {
-            let stranger = ore_price(species, *ore, 100, body, Fluency::Glyphs).expect("buys");
-            let fluent = ore_price(species, *ore, 100, body, Fluency::Fluent).expect("buys");
+            let stranger = ore_price(species, *ore, 100, 1_000, Fluency::Glyphs).expect("buys");
+            let fluent = ore_price(species, *ore, 100, 1_000, Fluency::Fluent).expect("buys");
             assert!(fluent > stranger);
             assert!(stranger >= 100, "a prized ore pays at least the market");
         }
         for good in def.goods {
             assert!(
-                good_price(*good, body, Fluency::Native) < good_price(*good, body, Fluency::Glyphs)
+                good_price(*good, 1_000, Fluency::Native)
+                    < good_price(*good, 1_000, Fluency::Glyphs)
             );
         }
         // A primer of their own tongue is always on sale.
@@ -249,7 +249,7 @@ fn each_species_buys_its_ores_and_sells_its_goods_better_to_good_speakers() {
             AlienSpecies::Vessi,
             MineralKind::Iron,
             100,
-            body,
+            1_000,
             Fluency::Native
         )
         .is_none()
@@ -259,7 +259,7 @@ fn each_species_buys_its_ores_and_sells_its_goods_better_to_good_speakers() {
             AlienSpecies::Tokkari,
             MineralKind::Iron,
             100,
-            body,
+            1_000,
             Fluency::Native
         )
         .is_some()

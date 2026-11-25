@@ -39,21 +39,25 @@ const SALT_KIN: u64 = 0x57A7_0003;
 
 /// An alien people that runs stations.
 ///
-/// TODO-SEAM(w12-aliens): the aliens track's species registry replaces these placeholders
-/// (the id is an index into it; [`Self::name`] reads it).
+/// An index into the aliens track's species registry ([`crate::alien::AlienSpecies::ALL`],
+/// wired on integration), so an alien-run station's crew, tech and trade are one of the
+/// peoples a player meets on their worlds.
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
 pub struct AlienKin(pub u8);
 
 impl AlienKin {
-    /// Placeholder peoples (until the aliens track's registry is wired).
-    pub const PLACEHOLDERS: [&'static str; 3] = ["the Veth", "the Orrun", "the Sillae"];
-
-    /// Their name ("the Veth").
+    /// The species that runs the station.
     #[must_use]
-    pub fn name(self) -> &'static str {
-        Self::PLACEHOLDERS[usize::from(self.0) % Self::PLACEHOLDERS.len()]
+    pub const fn species(self) -> crate::alien::AlienSpecies {
+        crate::alien::AlienSpecies::ALL[self.0 as usize % crate::alien::AlienSpecies::ALL.len()]
+    }
+
+    /// Their name ("the Vessi").
+    #[must_use]
+    pub fn name(self) -> String {
+        format!("the {}", self.species().def().name)
     }
 }
 
@@ -189,7 +193,8 @@ pub fn profile_of(seed: u64, system: &StarSystem, station: &Station) -> StationP
         if derelict {
             StationOwner::Derelict
         } else if owner_roll >= 70 {
-            let kin = station_hash(seed, id, SALT_KIN) % AlienKin::PLACEHOLDERS.len() as u64;
+            let kin =
+                station_hash(seed, id, SALT_KIN) % crate::alien::AlienSpecies::ALL.len() as u64;
             StationOwner::Alien(AlienKin(kin as u8))
         } else {
             StationOwner::Human

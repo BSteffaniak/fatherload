@@ -114,7 +114,9 @@ impl WorldState {
     ) -> Option<u32> {
         let fluency = Fluency::of(self.understanding(player, species));
         let market = self.canonical_mineral_market_value(mineral);
-        trade::ore_price(species, mineral, market, self.body_of(player), fluency)
+        let economy =
+            trade::body_price_permille(self.world_seed(), self.body_of(player), Some(mineral));
+        trade::ore_price(species, mineral, market, economy, fluency)
     }
 
     /// What `good` of `species` costs `player` where the player is.
@@ -126,7 +128,7 @@ impl WorldState {
         good: AlienGood,
     ) -> u32 {
         let fluency = Fluency::of(self.understanding(player, species));
-        trade::good_price(good, self.body_of(player), fluency)
+        trade::good_price(good, 1_000, fluency)
     }
 
     /// The space body `player` is on (the default key off a body).
@@ -457,13 +459,13 @@ impl WorldState {
                 }
                 let fluency = Fluency::of(self.understanding(player, species));
                 let market = self.canonical_mineral_market_value(mineral);
-                let Some(unit) = trade::ore_price(
-                    species,
-                    mineral,
-                    market,
+                let economy = trade::body_price_permille(
+                    self.world_seed(),
                     self.body_here().unwrap_or_default(),
-                    fluency,
-                ) else {
+                    Some(mineral),
+                );
+                let Some(unit) = trade::ore_price(species, mineral, market, economy, fluency)
+                else {
                     return Self::refuse(player, species, AlienRefusal::DoNotBuy, events);
                 };
                 let count = count.max(1);
@@ -504,7 +506,7 @@ impl WorldState {
                     return Self::refuse(player, species, AlienRefusal::NotTheirTrade, events);
                 }
                 let fluency = Fluency::of(self.understanding(player, species));
-                let price = trade::good_price(good, self.body_here().unwrap_or_default(), fluency);
+                let price = trade::good_price(good, 1_000, fluency);
                 if !self.charge(player, price) {
                     return Self::refuse(player, species, AlienRefusal::NotEnoughCredits, events);
                 }
