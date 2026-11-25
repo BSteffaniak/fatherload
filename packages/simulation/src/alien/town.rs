@@ -6,9 +6,10 @@
 //!   level ground at the raw surface's height at its centre: the planet generator flattens the
 //!   span ([`flattened_row`], easing back to the hills over [`FADE_COLUMNS`]), paves its top
 //!   ([`town_tile`]), keeps caves out from under it and buries three lexicon stones beneath it.
-//!   TODO-SEAM(w12-planets): the planet theme tracks' settlement site-finder answers here for
-//!   their themes (a theme that wants towns on its islands or in its craters); until then the
-//!   even spread works on every theme, the barren, rocky and icy grounds included.
+//!   A theme that levels its own settlement site (the wild and frontier worlds,
+//!   [`crate::planet::PlanetThemeHooks::settlement_site`]) holds one town there instead, on its
+//!   own ground: the jungle's clearing, the archipelago's island, the oasis rim (Wave 12
+//!   integration). The even spread serves the barren, rocky and icy grounds.
 //! * **Layout** ([`AlienTown`]): the species' own buildings ([`AlienBuildingKind`]): the
 //!   landmark at the middle (a Vessi song spire, a Tokkari forge chimney, a Siphra memory
 //!   pylon), the elder's house and the trade hall beside it, the lexicon house and the
@@ -137,6 +138,45 @@ pub fn sites(ground: &PlanetGround) -> [Option<TownSite>; 3] {
         return out;
     }
     let base_half = span_half(species);
+    // A theme that levels its own settlement site (the wild and frontier worlds) holds its
+    // first town there, on the theme's own ground (Wave 12 integration: the theme's
+    // site-finder). A wild world builds its whole ground itself, so that is its one town (an
+    // escort there runs to the far side of the body); a frontier world's others spread round
+    // the rest of the lap on ground the generator levels for them, as anywhere.
+    if let Some((centre, _)) = ground.hooks().settlement_site(ground) {
+        let centre = centre.rem_euclid(width);
+        let roll = mix(params.seed ^ 0x544F_574E_5300_0010);
+        let ground_row = ground.raw_surface_row(i64::from(centre));
+        out[0] = Some(TownSite {
+            index: 0,
+            species,
+            centre,
+            half_width: base_half,
+            ground_row,
+            stones: stones_under(roll, centre, base_half, ground_row),
+        });
+        if ground.hooks().world().is_some() {
+            return out;
+        }
+        for index in 1..count {
+            let roll = mix(params.seed ^ 0x544F_574E_5300_0010 ^ (index as u64) << 32);
+            let half = base_half + (roll % 7) as i32;
+            let margin = half + FADE_COLUMNS + 4;
+            let other = (centre + width * index / count)
+                .rem_euclid(width)
+                .clamp(margin, (width - margin).max(margin));
+            let ground_row = ground.raw_surface_row(i64::from(other));
+            out[usize::try_from(index).unwrap_or(0)] = Some(TownSite {
+                index: u8::try_from(index).unwrap_or(0),
+                species,
+                centre: other,
+                half_width: half,
+                ground_row,
+                stones: stones_under(roll, other, half, ground_row),
+            });
+        }
+        return out;
+    }
     for index in 0..count {
         let roll = mix(params.seed ^ 0x544F_574E_5300_0010 ^ (index as u64) << 32);
         let half = base_half + (roll % 7) as i32;
@@ -146,23 +186,34 @@ pub fn sites(ground: &PlanetGround) -> [Option<TownSite>; 3] {
         let margin = half + FADE_COLUMNS + 4;
         let centre = (slot * index + slot / 2 + jitter).clamp(margin, (width - margin).max(margin));
         let ground_row = ground.raw_surface_row(i64::from(centre));
-        let mut stones = [(0, 0); LEXICON_STONES];
-        for (stone, slot_stone) in (0_i32..).zip(stones.iter_mut()) {
-            let stone_roll = mix(roll ^ (stone as u64 + 1));
-            let column = centre + (stone - 1) * half * 2 / 3 + (stone_roll % 9) as i32 - 4;
-            let row = ground_row + 7 + ((stone_roll >> 8) % 20) as i32;
-            *slot_stone = (column, row);
-        }
         out[usize::try_from(index).unwrap_or(0)] = Some(TownSite {
             index: u8::try_from(index).unwrap_or(0),
             species,
             centre,
             half_width: half,
             ground_row,
-            stones,
+            stones: stones_under(roll, centre, half, ground_row),
         });
     }
     out
+}
+
+/// The lexicon stones buried under a town centred on `centre` (`half` columns either side)
+/// whose ground is `ground_row`.
+fn stones_under(
+    roll: u64,
+    centre: i32,
+    half: i32,
+    ground_row: i32,
+) -> [(i32, i32); LEXICON_STONES] {
+    let mut stones = [(0, 0); LEXICON_STONES];
+    for (stone, slot_stone) in (0_i32..).zip(stones.iter_mut()) {
+        let stone_roll = mix(roll ^ (stone as u64 + 1));
+        let column = centre + (stone - 1) * half * 2 / 3 + (stone_roll % 9) as i32 - 4;
+        let row = ground_row + 7 + ((stone_roll >> 8) % 20) as i32;
+        *slot_stone = (column, row);
+    }
+    stones
 }
 
 /// Distance (columns) from `column` to `centre` round a strip `width` wide.

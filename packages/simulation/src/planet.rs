@@ -470,6 +470,28 @@ impl PlanetGround {
         crate::alien::town::town_tile(&self.towns, self.strip_width(), column, row, surface)
     }
 
+    /// Lays the alien towns' tiles over a theme world's chunk `chunk` (row-major `tiles`).
+    fn overlay_towns(&self, chunk: ChunkPosition, tiles: &mut [Tile]) {
+        let origin = chunk.origin();
+        let width = self.strip_width();
+        for (index, tile) in tiles.iter_mut().enumerate() {
+            let index = i32::try_from(index).unwrap_or(0);
+            let x = origin.x + index % CHUNK_SIZE_TILES;
+            let y = origin.y + index / CHUNK_SIZE_TILES;
+            let near = self.towns.iter().flatten().any(|site| {
+                crate::alien::town::wrapped_distance(i64::from(x), site.centre, width)
+                    <= i64::from(site.half_width)
+            });
+            if !near {
+                continue;
+            }
+            let surface = BodyGround::surface_row(self, x);
+            if let Some(kind) = self.town_tile(i64::from(x), y, surface) {
+                *tile = Self::tile_of_kind(kind);
+            }
+        }
+    }
+
     /// Whether caves keep clear of `(column, row)` (under an alien town).
     fn keeps_caves_out(&self, column: i64, row: i32) -> bool {
         self.params.folk != 0
@@ -521,6 +543,14 @@ impl PlanetGround {
         if let Some(kind) = hooks.feature_tile(self, first_column, row, row - surface) {
             return Self::tile_of_kind(kind);
         }
+        // An alien town's paving and lexicon stones stand over a frontier world's features
+        // (its town is on the frontier's settlement site, Wave 12 integration).
+        if row >= surface
+            && crate::frontier::style_of(self.params.theme).is_some()
+            && let Some(kind) = self.town_tile(first, row, surface)
+        {
+            return Self::tile_of_kind(kind);
+        }
         // A frontier world's own features (Wave 12 planets-b): oases, lava seas, spires,
         // landmarks, ruins, tubes, geodes, light wells.
         if let Some(style) = crate::frontier::style_of(self.params.theme)
@@ -561,7 +591,13 @@ impl PlanetGround {
     #[must_use]
     pub fn chunk_tiles(&self, chunk: ChunkPosition) -> Vec<Tile> {
         if let Some(world) = world_of(self.params.theme) {
-            return world.chunk_tiles(self, chunk);
+            let mut tiles = world.chunk_tiles(self, chunk);
+            // An alien town on a theme world's settlement site (Wave 12 integration): its
+            // paving and lexicon stones over the theme's own ground.
+            if self.params.folk != 0 {
+                self.overlay_towns(chunk, &mut tiles);
+            }
+            return tiles;
         }
         let caves = self.caves();
         let origin = chunk.origin();

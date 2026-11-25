@@ -44,8 +44,11 @@ fn every_species_has_a_first_home_near_home_on_a_planet_it_likes() {
             // The body's params (what the store generates) name the species.
             let params = crate::place::planet_params_for(seed, id).expect("landable");
             assert_eq!(AlienSpecies::from_folk(params.folk), Some(species));
+            // A wild world (its own whole ground) holds one town on its settlement site; every
+            // other planet two or more.
+            let wild = crate::planet::hooks::hooks(params.theme).world().is_some();
             assert!(
-                towns_of(&params).len() >= 2,
+                towns_of(&params).len() >= if wild { 1 } else { 2 },
                 "a first home has two towns or more"
             );
         }

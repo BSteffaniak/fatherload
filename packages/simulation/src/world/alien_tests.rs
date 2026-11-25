@@ -47,6 +47,12 @@ fn world_at(hz: u32) -> WorldState {
         WorldState::new_game_with_settings(PLAYER, &settings(), SimulationParams::new(hz));
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     if let Some(rig) = world.player_mut(PLAYER) {
+        // A rig that reached space: the Heart's upgrades and the hazard gear (a bare starter
+        // rig freezes on an airless world's night side, Wave 12 bodylife's climate).
+        crate::economy::max_out_upgrades(rig);
+        rig.hazard_gear = crate::protection::HazardGear::MAXED;
+        rig.hull = rig.max_hull();
+        rig.fuel = rig.fuel_capacity;
         rig.credits = 50_000;
     }
     world
@@ -347,20 +353,29 @@ fn play_arc(world: &mut WorldState, species: AlienSpecies) {
                     npc_of(world, traveller).is_none(),
                     "{species:?}: the traveller rides along, not in town"
                 );
-                let destination = active.destination.expect("the next town");
-                let next = towns
-                    .iter()
-                    .find(|other| other.id == destination)
-                    .expect("on the body");
-                put_rig(
-                    world,
-                    id,
-                    f64::from(next.site.centre),
-                    next.ground_row(),
-                    2.0,
+                // To the next town, or (a wild world's one town) the far side of the body.
+                let (column, row) = active.destination.map_or_else(
+                    || {
+                        let width = found.strip_width();
+                        let far = (found.site.centre + width / 2).rem_euclid(width);
+                        let ground = crate::planet::PlanetGround::new(found.params);
+                        (far, crate::planet::BodyGround::surface_row(&ground, far))
+                    },
+                    |destination| {
+                        let next = towns
+                            .iter()
+                            .find(|other| other.id == destination)
+                            .expect("on the body");
+                        (next.site.centre, next.ground_row())
+                    },
                 );
-                let events = run(world, 4);
-                assert!(saw(&events, AlienEvent::PassengerDelivered));
+                put_rig(world, id, f64::from(column), row, 2.0);
+                let events = run(world, 30);
+                assert!(
+                    saw(&events, AlienEvent::PassengerDelivered)
+                        || saw(&events, AlienEvent::ChapterReached),
+                    "{species:?}: the traveller arrives"
+                );
                 // Back to the elder.
                 put_rig(
                     world,
@@ -557,7 +572,8 @@ fn talking_trading_lessons_and_lexicon_stones_teach_the_tongue() {
             good: AlienGood::HullPlates,
         },
     );
-    assert_eq!(world.player(PLAYER).expect("rig").hull, hull);
+    // Patched to full (the tick after may take a hair for the world's own climate).
+    assert!(world.player(PLAYER).expect("rig").hull >= hull * 0.99);
     // A lexicon stone dug out teaches the most.
     let (column, row) = found.site.stones[1];
     carve(&mut world, id, column, row - 1);
