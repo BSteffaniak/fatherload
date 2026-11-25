@@ -291,6 +291,16 @@ impl SeatUi {
             return;
         }
         match rows.get(self.selected_menu_item) {
+            // Once the cable is lit, the Heart's row reads the ending again (it plays once
+            // on its own; the page keeps it).
+            Some(ProgressRow::Descent(index))
+                if world.expedition().cable_lit
+                    && fatherload_simulation::descent::Descent::ALL.get(*index)
+                        == Some(&fatherload_simulation::descent::Descent::Heart) =>
+            {
+                self.open_modal(ModalScreen::Ending);
+                cues.push(SoundCue::Ui);
+            }
             Some(ProgressRow::Descent(_)) => cues.push(SoundCue::UiMove),
             Some(ProgressRow::TurnPage) | None => self.open_modal(next),
         }

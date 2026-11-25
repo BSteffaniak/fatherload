@@ -348,4 +348,10 @@ fn waking_the_heart_opens_the_ending_on_every_seat_and_taps_turn_its_pages() {
     // It plays once: more ticks never reopen it.
     idle(&mut game, 5);
     assert_eq!(game.shell.seat(0).modal, None);
+    // The progress page keeps it: the Heart's row reads it again.
+    game.shell.seat_mut(0).modal = Some(ModalScreen::DescentProgress);
+    game.shell.seat_mut(0).selected_menu_item = 7;
+    let _ = press(&mut game, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Ending));
+    assert_eq!(game.shell.seat(0).selected_menu_item, 0);
 }

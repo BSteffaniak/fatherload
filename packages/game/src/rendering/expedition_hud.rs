@@ -364,6 +364,12 @@ pub(super) fn draw_descent_progress(draw: &mut RaylibDrawHandle<'_>, ui: &UiFram
         Some(ProgressRow::Descent(index)) => descents.get(*index).map(|row| {
             if !row.reached {
                 "Somewhere below. The Fathers' trail goes on down the cable.".to_owned()
+            } else if state.cable_lit
+                && row.descent == fatherload_simulation::descent::Descent::Heart
+            {
+                "The Heart is awake and the cable is lit to the Moon. Choose this row to read \
+                 the ending again."
+                    .to_owned()
             } else if let Some(chapter) = row.chapter {
                 format!(
                     "Chapter {}: {chapter}. {}",
