@@ -463,6 +463,21 @@ impl WorldState {
             .entry(player_id)
             .or_default()
             .push(mission);
+        // The nav waypoint goes on the new job's target (and its system is charted), so the
+        // player can fly it straight from the board.
+        let galaxy = self.space();
+        let target = match mission.kind {
+            MissionKind::Scan { body } | MissionKind::Mine { body, .. } => galaxy.body_ref(body),
+            MissionKind::Deliver { to, .. } => crate::station::profile::station_ref(&galaxy, to),
+        };
+        if let Some(target) = target {
+            if !target.system.is_home() {
+                self.flight.found(target.system);
+            }
+            self.flight
+                .waypoints
+                .insert(player_id, NavTarget::Body(target));
+        }
         output.push_event(station_event(
             StationEvent::MissionAccepted,
             player_id,

@@ -9854,7 +9854,8 @@ the lens, or the scanner used on its ground), **Mine** a quota of ore on a body'
 (`ItemsCollected` minerals in that body store's ground pass). Targets come from the station's
 system and systems within 6 million tiles (`board_context`, memoised per seed and station).
 Rewards: a base plus distance pay (a credit per 600 tiles, at most 1,200, plus 900 for another
-system), the quota (45 a unit) and the body's gravity; outposts pay a fifth more. At most three
+system), the quota (45 a unit) and the body's gravity; outposts pay a fifth more. Accepting a mission puts the player's nav waypoint on its target (a body, or the
+delivery's station) and charts its system. At most three
 missions under way (`MAX_ACTIVE`); no deadlines (never an unwinnable countdown); abandoning
 costs nothing but the consignment. Finished work is paid at any crewed station's board
 (`TurnIn`). **Halcyon Dock's first board is a starter set**: slot 0 a scan of the nearest

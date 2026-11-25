@@ -291,6 +291,14 @@ fn docking_opens_the_hub_and_every_service_works() {
     let events = hub(&mut world, StationAction::Accept(0));
     assert!(events.contains(&(StationEvent::MissionAccepted, first.reward)));
     assert_eq!(world.station_ledger().missions_of(PLAYER), &[first]);
+    // The waypoint goes on the job's target (slot 0 of Halcyon's first board: a scan).
+    let MissionKind::Scan { body } = first.kind else {
+        panic!("Halcyon's slot 0 starts with a scan: {first:?}");
+    };
+    assert_eq!(
+        world.waypoint_of(PLAYER),
+        Some(NavTarget::Body(world.space().body_ref(body).expect("ref")))
+    );
     assert_ne!(
         world.station_board(HALCYON)[0],
         Some(first),
