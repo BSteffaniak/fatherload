@@ -1036,11 +1036,11 @@ pub fn draw_craft(
     seconds: f32,
 ) {
     let ticks = (seconds * 60.0) as u64;
-    let look = rig_art::RigLook {
+    let look = craft.look.unwrap_or_else(|| rig_art::RigLook {
         player_id: PlayerId::new(1),
         cosmetics: RigCosmetics::default_for(PlayerId::new(1)),
         tiers: rig_art::RigTiers::all(6),
-    };
+    });
     let mut pose = rig_art::RigPose::idle(ticks);
     if craft.thrusting {
         pose.thrust = rig_art::Thrust::Climb;

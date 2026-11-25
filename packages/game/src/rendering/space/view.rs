@@ -254,6 +254,9 @@ pub enum FlightMotion {
 pub struct CraftView {
     /// Thrusters burning (flames).
     pub thrusting: bool,
+    /// The seat's own rig (`RigLook::from_player`: its paint job and tiers), so split-screen
+    /// seats tell their craft apart; `None` draws the first player's default (the fixtures).
+    pub look: Option<crate::rendering::rig_art::RigLook>,
 }
 
 /// Everything one seat sees of space this frame.

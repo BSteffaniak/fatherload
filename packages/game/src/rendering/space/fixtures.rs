@@ -299,7 +299,10 @@ impl SpaceFixture {
             black_holes: Vec::new(),
             wormholes: Vec::new(),
             motion: FlightMotion::Coasting,
-            craft: Some(CraftView { thrusting: false }),
+            craft: Some(CraftView {
+                thrusting: false,
+                look: None,
+            }),
             ground: None,
             seconds: 12.0,
             effects: EffectsIntensity::Full,
@@ -600,7 +603,10 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 surface_things(strip, MOON_COLUMN),
             );
             fixture.force_quads = name == "space_polar_quads";
-            fixture.craft = Some(CraftView { thrusting: true });
+            fixture.craft = Some(CraftView {
+                thrusting: true,
+                look: None,
+            });
         }
         "space_moon_surface" | "space_moon_night" | "space_moon_rolled" => {
             moon_sky(&mut fixture);
@@ -622,6 +628,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             fixture.stand_on(moon_body(), strip, (column, row, roll), 32.0, things);
             fixture.craft = Some(CraftView {
                 thrusting: name == "space_moon_rolled",
+                look: None,
             });
         }
         "space_planet_surface" | "space_approach_planet" => {
@@ -654,7 +661,10 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                     SpaceCamera::zoom_for_altitude(2_000.0, 5_000.0, 720.0),
                     Vec::new(),
                 );
-                fixture.craft = Some(CraftView { thrusting: true });
+                fixture.craft = Some(CraftView {
+                    thrusting: true,
+                    look: None,
+                });
             }
         }
         "space_core_shaft" => {
@@ -710,7 +720,10 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             let angle = 0.8_f64;
             fixture.camera = camera(angle.cos() * 63_200.0, angle.sin() * 63_200.0, 0.0, 1.6);
             fixture.asteroids = loose_rocks(fixture.camera.centre, 5);
-            fixture.craft = Some(CraftView { thrusting: true });
+            fixture.craft = Some(CraftView {
+                thrusting: true,
+                look: None,
+            });
         }
         "space_comet" => {
             fixture.stars.push(StarView {
@@ -765,17 +778,20 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             fixture.motion = if name == "space_warp" {
                 FlightMotion::Warp {
                     charge: 0.85,
-                    heading: -0.2,
+                    heading: -0.35,
                 }
             } else {
                 FlightMotion::Cruise {
                     speed: 520.0,
-                    heading: -0.2,
+                    heading: -0.35,
                 }
             };
             // Nose first (the rig's nose is its right): the craft points where it flies.
             fixture.camera.roll = -0.35;
-            fixture.craft = Some(CraftView { thrusting: true });
+            fixture.craft = Some(CraftView {
+                thrusting: true,
+                look: None,
+            });
             if name == "space_cruise" {
                 fixture.bodies.push(BodyView {
                     centre: at(-141_400.0, 160_700.0),
