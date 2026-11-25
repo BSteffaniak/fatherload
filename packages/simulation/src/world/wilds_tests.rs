@@ -968,3 +968,145 @@ fn wild_world_tour() {
         eprintln!("  events {events:?}; damaged {damaged}; refills {refills}");
     }
 }
+
+/// The nearest generated planet tagged `theme` to the home sector (a real body of the galaxy).
+fn real_body(seed: u64, theme: crate::space::Theme) -> crate::place::SpaceBodyKey {
+    use crate::space::{BodyKind, HOME_SECTOR, SpaceSector, generate_sector};
+    for ring in 0..8_i32 {
+        for y in -ring..=ring {
+            for x in -ring..=ring {
+                if x.abs().max(y.abs()) != ring {
+                    continue;
+                }
+                let sector =
+                    generate_sector(seed, SpaceSector::new(HOME_SECTOR.x + x, HOME_SECTOR.y + y));
+                for system in &sector.systems {
+                    for body in &system.bodies {
+                        let key = crate::place::SpaceBodyKey {
+                            sector: sector.coords,
+                            system: system.index,
+                            body: body.index,
+                        };
+                        if body.theme == theme
+                            && body.kind == BodyKind::Planet
+                            && body.radius <= 4_000
+                            && crate::place::planet_params_for(seed, key).is_some()
+                        {
+                            return key;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    panic!("no {theme:?} planet near home");
+}
+
+#[test]
+#[allow(clippy::too_many_lines, reason = "one journey, read top to bottom")]
+fn a_real_glacier_body_plays_its_rules_for_its_rig_only_while_the_crew_is_split() {
+    use crate::{
+        place::{BodyId, Place, StoreKey},
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+    const SEED: u64 = 0x0012_A11E;
+    const ONE: PlayerId = PlayerId::new(1);
+    const TWO: PlayerId = PlayerId::new(2);
+    let key = real_body(SEED, crate::space::Theme::Ice);
+    let params = crate::place::planet_params_for(SEED, key).expect("a body");
+    assert_eq!(params.theme, PlanetThemeId::GLACIER);
+    let settings = WorldSettings {
+        generator: GeneratorVersion::V11,
+        ..WorldSettings::new(SEED)
+    };
+    let mut world = WorldState::new_game_with_settings(ONE, &settings, SimulationParams::new(30));
+    world.add_player(TWO);
+    // Two lands on open glacier away from the settlement; one stays home.
+    let planet = crate::planet::PlanetGround::new(params);
+    let site = world_of(params.theme)
+        .and_then(|theme| theme.settlement_site(&planet))
+        .expect("a site");
+    let column = (site.centre() + 200..site.centre() + 3_000)
+        .find(|column| {
+            let floor = planet.surface_row(*column);
+            (-3..=3).all(|dx| planet.surface_row(column + dx) == floor)
+                && (1..=6).all(|up| planet.generated_tile(*column, floor - up).kind.is_open())
+        })
+        .expect("open ice");
+    let floor = planet.surface_row(column);
+    world
+        .move_to_place(
+            TWO,
+            Place::OnBody(BodyId::Space(key)),
+            crate::world::strip_position(f64::from(column) + 0.5, f64::from(floor - 2)),
+        )
+        .expect("lands");
+    // Landed (the flight's own say), fitted for space but without the Cryo Hull.
+    let body = world.space().body_ref(key).expect("a body ref");
+    if let Some(rig) = world.player_mut(TWO) {
+        rig.flight.place = crate::flight::FlightPlace::Landed(body);
+        rig.flight.air = crate::flight::air_capacity(rig.hazard_gear.life_support);
+        crate::economy::max_out_upgrades(rig);
+        rig.hazard_gear = crate::protection::HazardGear::MAXED;
+        rig.hazard_gear.rig_systems &= !crate::depth_progression::RigSystem::CryoHull.bit();
+        rig.flight.air = crate::flight::air_capacity(rig.hazard_gear.life_support);
+        rig.hull = rig.max_hull();
+        rig.fuel = rig.fuel_capacity;
+        rig.velocity_x = 0.0;
+        rig.velocity_y = 0.0;
+    }
+    let store = StoreKey::Body(key);
+    let mut home_heard = 0;
+    let mut body_heard = Vec::new();
+    for _ in 0..30 * 60 {
+        let tick = world.simulation_tick();
+        let output = world.simulate_tick(tick, &TickInputs::default());
+        for event in output.events {
+            if let GameplayEventKind::Wilds {
+                what, player_id, ..
+            } = event.kind
+            {
+                if player_id == Some(ONE) || player_id.is_none() {
+                    home_heard += 1;
+                }
+                if player_id == Some(TWO) {
+                    body_heard.push(what);
+                }
+            }
+        }
+    }
+    assert_eq!(world.store_of(TWO), store, "two is still on the glacier");
+    assert_eq!(
+        home_heard, 0,
+        "nothing of the glacier reaches the seat at home"
+    );
+    assert!(
+        body_heard.contains(&WildsEvent::ColdBite),
+        "the glacier's cold bites its own rig: {body_heard:?}"
+    );
+    let natives = world
+        .with_store_ground(store, |world| {
+            world
+                .enemies()
+                .map(|(_, state)| state.kind)
+                .collect::<Vec<_>>()
+        })
+        .expect("the body's ground");
+    let roster = life::wild_theme(PlanetThemeId::GLACIER)
+        .expect("glacier life")
+        .creatures;
+    assert!(
+        !natives.is_empty(),
+        "the glacier's creatures came round the rig"
+    );
+    assert!(
+        natives
+            .iter()
+            .all(|kind| roster.iter().any(|creature| creature.kind == *kind)),
+        "only the glacier's own creatures live there: {natives:?}"
+    );
+    assert!(
+        world.enemies().all(|(_, state)| !state.kind.is_wilds()),
+        "no wild creature at home"
+    );
+}
