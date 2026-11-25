@@ -85,6 +85,12 @@ pub struct GeneratedChunk {
 }
 
 impl GeneratedChunk {
+    /// A chunk of explicit tiles (a body generator's, Wave 11 F11 `crate::place`).
+    #[must_use]
+    pub const fn from_tiles(tiles: Vec<Tile>) -> Self {
+        Self { tiles }
+    }
+
     #[must_use]
     pub fn tiles(&self) -> &[Tile] {
         &self.tiles

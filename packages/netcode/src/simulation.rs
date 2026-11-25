@@ -65,6 +65,11 @@ pub struct Pose {
     pub mode: u32,
     /// Whole-unit offset of `(x, y)`: horizontal, vertical.
     pub origin: [i64; 2],
+    /// Which separate space the pose is in (F11: the simulation's store, 0 for the main one).
+    /// Poses in different regions are never near each other: their coordinates measure
+    /// different grounds.
+    #[serde(default)]
+    pub region: u64,
 }
 
 impl Pose {
@@ -76,13 +81,27 @@ impl Pose {
             y,
             mode,
             origin: [0, 0],
+            region: 0,
         }
     }
 
     /// Creates a pose `(x, y)` units from `origin`.
     #[must_use]
     pub const fn at(origin: [i64; 2], x: f32, y: f32, mode: u32) -> Self {
-        Self { x, y, mode, origin }
+        Self {
+            x,
+            y,
+            mode,
+            origin,
+            region: 0,
+        }
+    }
+
+    /// This pose in `region` (see [`Self::region`]).
+    #[must_use]
+    pub const fn in_region(mut self, region: u64) -> Self {
+        self.region = region;
+        self
     }
 
     /// `other - self` in units (origins subtracted exactly first).
@@ -108,7 +127,7 @@ impl Pose {
             return *self;
         }
         let (dx, dy) = Self::at(origin, 0.0, 0.0, self.mode).delta(self);
-        Self::at(origin, dx, dy, self.mode)
+        Self::at(origin, dx, dy, self.mode).in_region(self.region)
     }
 
     /// Euclidean distance between the positions (ignores `mode`).
@@ -127,6 +146,7 @@ impl Pose {
             y: (other.y - self.y).mul_add(t, self.y),
             mode: if t < 0.5 { self.mode } else { other.mode },
             origin: self.origin,
+            region: if t < 0.5 { self.region } else { other.region },
         }
     }
 
@@ -138,6 +158,7 @@ impl Pose {
             y: self.y + dy,
             mode: self.mode,
             origin: self.origin,
+            region: self.region,
         }
     }
 }
@@ -232,6 +253,10 @@ pub struct Relevance {
     pub radius: Option<f32>,
     /// Whole-unit offset of `center` and of every query's coordinates.
     pub origin: [i64; 2],
+    /// The viewer's region ([`Pose::region`]): with a finite radius, poses in other regions
+    /// are out of relevance.
+    #[serde(default)]
+    pub region: u64,
 }
 
 impl Relevance {
@@ -243,6 +268,7 @@ impl Relevance {
             center: None,
             radius: None,
             origin: [0, 0],
+            region: 0,
         }
     }
 
@@ -280,6 +306,7 @@ impl Relevance {
     pub fn contains_pose(&self, pose: &Pose) -> bool {
         match (self.radius, self.center) {
             (None, _) | (Some(_), None) => true,
+            (Some(_), Some(_)) if pose.region != self.region => false,
             (Some(radius), Some((cx, cy))) => {
                 let (dx, dy) = Pose::at(self.origin, cx, cy, 0).delta(pose);
                 dx.hypot(dy) <= radius

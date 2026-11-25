@@ -189,9 +189,14 @@ impl WorldState {
         // Drops merged away during this phase (never merged into again).
         let mut merged = std::collections::BTreeSet::new();
         for id in self.entities.awake_in_phase(phase) {
-            let Some(kind) = self.entities.get(id).map(Entity::kind) else {
+            let Some(entity) = self.entities.get(id) else {
                 continue;
             };
+            let kind = entity.kind();
+            // F11: outside every awake region the entity is frozen (kept, not ticked).
+            if self.frozen_at(entity.body.x, entity.body.y) {
+                continue;
+            }
             match kind {
                 EntityKind::GasCloud => self.advance_gas_cloud(id),
                 EntityKind::Boulder => self.advance_boulder(id, next_tick, output),

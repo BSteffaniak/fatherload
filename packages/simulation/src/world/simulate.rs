@@ -29,11 +29,32 @@ impl WorldState {
     ///
     /// Panics only if internal player bookkeeping is inconsistent (a player id collected from the
     /// world during this tick disappears before it is processed), which would be a simulation bug.
+    pub fn simulate_tick(&mut self, tick: SimulationTick, inputs: &TickInputs) -> TickOutput {
+        // Many places at once (Part III F11, `world/places.rs`): a world that never left the
+        // home store and does not tick by region runs the one pass it always did.
+        let output = if self.places.is_empty() && !self.ticks_by_region() {
+            self.simulate_pass(tick, inputs)
+        } else {
+            self.simulate_places(tick, inputs)
+        };
+        self.set_simulation_tick(tick.next());
+        output
+    }
+
+    /// One pass of the tick over the ground swapped into the world: the home store's (the
+    /// world pass, every system), or another store's (a ground pass: only the systems of the
+    /// ground itself, see [`Self::in_ground_pass`]). The world's tick advances after the last
+    /// pass.
     #[allow(
         clippy::too_many_lines,
         reason = "canonical transition keeps tick ordering explicit while gameplay domains are extracted"
     )]
-    pub fn simulate_tick(&mut self, tick: SimulationTick, inputs: &TickInputs) -> TickOutput {
+    pub(super) fn simulate_pass(
+        &mut self,
+        tick: SimulationTick,
+        inputs: &TickInputs,
+    ) -> TickOutput {
+        let ground_only = self.in_ground_pass();
         let mut output = TickOutput {
             tick,
             ..TickOutput::default()
@@ -194,6 +215,11 @@ impl WorldState {
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {
                     PlayerScopedCommandOutcome::UnknownPlayer
+                } else if ground_only && crate::place::home_only_command(&action.command) {
+                    // Building, infrastructure, rescue, the Moon, lifts, homes, tombs and
+                    // beds belong to the home world (F11; TODO-SEAM w11-flight: a stranded
+                    // rig away from home is the flight track's life support and rescue).
+                    PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else if !self.command_allowed_here(player_id, &action.command)
                     || ((self.logistics.is_riding(player_id)
                         || self.ancient_city.is_riding(player_id))
@@ -273,14 +299,16 @@ impl WorldState {
         let next_tick = tick.next();
         // Pilots on foot (Part II F5) move with their owners' held controls.
         self.advance_pilots(inputs, next_tick, &mut output);
-        // Ruin pressure plates under their feet (WP-PILOT).
-        self.advance_plates(next_tick, &mut output);
-        // Tomb runs (WP-TOMBS): ambushes, the guardian, traps, revives, picks, wipes.
-        self.advance_tombs(next_tick, &mut output);
-        let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
-        for player_id in recovery_player_ids {
-            if self.recover_lost_cargo_for_player(player_id) {
-                output.push_event(GameplayEventKind::CargoChanged { player_id });
+        if !ground_only {
+            // Ruin pressure plates under their feet (WP-PILOT).
+            self.advance_plates(next_tick, &mut output);
+            // Tomb runs (WP-TOMBS): ambushes, the guardian, traps, revives, picks, wipes.
+            self.advance_tombs(next_tick, &mut output);
+            let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
+            for player_id in recovery_player_ids {
+                if self.recover_lost_cargo_for_player(player_id) {
+                    output.push_event(GameplayEventKind::CargoChanged { player_id });
+                }
             }
         }
         for (player_id, deadline) in &self.scanner_cooldown_deadlines {
@@ -549,6 +577,19 @@ impl WorldState {
                 MineResult::Blocked | MineResult::Chipped | MineResult::Mined(_) => {}
             }
         }
+        if ground_only {
+            // Another store's ground (F11): its entities, pickups and fluids only; the world's
+            // clock, economy, Descents, people and quests run in the world pass.
+            self.advance_entities(EntityPhase::Late, next_tick, &mut output);
+            self.advance_pilot_pickups(&mut output);
+            self.apply_test_mode_refills();
+            self.advance_fluids(next_tick, &mut output);
+            output.terrain_ops = self.terrain.finish_journal();
+            self.wake_entities_near(&output.terrain_ops);
+            self.stream_ground_near_players();
+            self.recentre_ground_frame();
+            return output;
+        }
         self.advance_canonical_day_if_due(next_tick, &mut output);
         let clock_before = self.clock();
         self.advance_clock(clock_before, next_tick, &mut output);
@@ -620,7 +661,6 @@ impl WorldState {
         self.stream_terrain_near_players();
         // F7: a floating frame follows its anchor rig (nothing moves in absolute terms).
         self.recentre_frame();
-        self.set_simulation_tick(next_tick);
         output
     }
 

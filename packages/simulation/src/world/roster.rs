@@ -63,6 +63,10 @@ impl WorldState {
 
     /// [`Self::remove_player`], optionally keeping the player's armed remote charges (parking
     /// keeps them for when the player returns, WP-PERSIST).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "names every world field so per-player state cannot be forgotten"
+    )]
     pub(super) fn remove_player_with(&mut self, player_id: PlayerId, disarm_charges: bool) {
         // Leaving mid-run abandons it (WP-TOMBS): the unbanked loot is lost.
         let mut scratch = crate::event::TickOutput::default();
@@ -138,7 +142,11 @@ impl WorldState {
             // A leaving rig's float and well go with it; the Star Drive and the fight are the
             // crew's (Wave 10).
             heart,
+            places,
+            place_pass: _,
         } = self;
+        // A removed player's place goes with it; a parked one keeps it (F11).
+        places.forget(player_id);
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
         heart.forget(player_id);

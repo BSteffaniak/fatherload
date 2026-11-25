@@ -1323,6 +1323,14 @@ pub enum GameplayEventKind {
         what: crate::expedition::progress::StoryEvent,
         player_id: Option<PlayerId>,
     },
+    // Places (Wave 11 regions; netcode code 740).
+    /// A player arrived in another place (F11, `WorldState::move_to_place`): landed on a body,
+    /// took off into space, or came home.
+    PlaceChanged {
+        player_id: PlayerId,
+        from: crate::place::Place,
+        to: crate::place::Place,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1362,9 +1370,32 @@ pub struct TickOutput {
     pub terrain_ops: Vec<crate::terrain::TileChange>,
     /// Tiles each player newly discovered this tick (op log, private to that player).
     pub discoveries: Vec<crate::world::Discovery>,
+    /// Every tile write this tick in a store other than the home world's, tagged with its
+    /// store (F11; the op log of bodies' ground).
+    pub store_terrain_ops: Vec<(crate::place::StoreKey, crate::terrain::TileChange)>,
 }
 
 impl TickOutput {
+    /// Appends a later pass's output (F11: one pass per store): events keep their order and
+    /// are numbered on from this output's.
+    pub(crate) fn merge_pass(&mut self, other: Self) {
+        let Self {
+            tick: _,
+            events,
+            action_outcomes,
+            terrain_ops,
+            discoveries,
+            store_terrain_ops,
+        } = other;
+        for event in events {
+            self.push_event(event.kind);
+        }
+        self.action_outcomes.extend(action_outcomes);
+        self.terrain_ops.extend(terrain_ops);
+        self.discoveries.extend(discoveries);
+        self.store_terrain_ops.extend(store_terrain_ops);
+    }
+
     pub(crate) fn push_event(&mut self, kind: GameplayEventKind) {
         let ordinal = u32::try_from(self.events.len()).unwrap_or(u32::MAX);
         self.events.push(GameplayEvent {

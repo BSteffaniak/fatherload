@@ -24,7 +24,11 @@ impl WorldState {
     /// Hash of the state a client playing `viewer` holds (`None`: no private state at all).
     #[must_use]
     pub fn visible_state_hash(&self, viewer: Option<PlayerId>) -> SimulationStateHash {
-        self.hash_visible(|player_id| Some(player_id) == viewer)
+        let store = viewer.map(|viewer| self.store_of(viewer));
+        self.hash_visible(
+            |player_id| Some(player_id) == viewer,
+            |key| store.is_none_or(|store| store == key),
+        )
     }
 
     /// A copy of the world with every other player's private state reset to the defaults a
@@ -114,6 +118,8 @@ impl WorldState {
             garrison: _,
             garrison_schedule: _,
             heart: _,
+            places: _,
+            place_pass: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

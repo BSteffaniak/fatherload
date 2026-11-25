@@ -1597,6 +1597,7 @@ fn relevance_for<S: NetSimulation>(world: &S, remote: &RemoteClient<S>) -> Relev
         center: pose.map(|pose| (pose.x, pose.y)),
         radius: remote.tuning.relevance_radius,
         origin: pose.map_or([0, 0], |pose| pose.origin),
+        region: pose.map_or(0, |pose| pose.region),
     }
 }
 
@@ -1774,8 +1775,9 @@ fn relevant_ops<S: NetSimulation>(
         if !world.op_relevant(&op, relevance) {
             continue;
         }
-        if !relevance.is_infinite()
-            && let Some(chunk) = world.op_chunk(&op)
+        // Asked even with an infinite radius: a simulation with separate regions (F11) keeps
+        // other regions' chunks from a client regardless of distance.
+        if let Some(chunk) = world.op_chunk(&op)
             && !world.chunk_relevant(&chunk, relevance)
         {
             remote.stale_chunks.insert(chunk);
@@ -1788,7 +1790,7 @@ fn relevant_ops<S: NetSimulation>(
         let due: Vec<S::Chunk> = remote
             .stale_chunks
             .iter()
-            .filter(|chunk| relevance.is_infinite() || world.chunk_relevant(chunk, relevance))
+            .filter(|chunk| world.chunk_relevant(chunk, relevance))
             .cloned()
             .collect();
         for chunk in due {

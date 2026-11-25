@@ -191,12 +191,20 @@ impl WorldState {
             garrison_schedule: _,
             // Descent VIII's state is player ids, entity ids and world times (Wave 10).
             heart: _,
+            // Other stores keep their own frames (F11); a player away from the home store is
+            // in its store's frame and stays put.
+            places,
+            place_pass: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);
         ancient_city.reframe(shift);
         player_template.reframe(shift);
-        players.reframe(shift);
+        for (id, player) in players.iter_mut() {
+            if places.is_home(*id) {
+                player.reframe(shift);
+            }
+        }
         lost_cargo_sites.reframe(shift);
         entities.reframe_all(shift);
         for parked in crew.parked.values_mut() {

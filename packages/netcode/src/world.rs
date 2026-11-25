@@ -30,6 +30,7 @@ use fatherload_simulation::{
     SectionPayload, SimulationTick, TILE_SIZE, TickAction, TileChange, WorldState,
     entity::{Entity, EntityDelta, EntityId},
     input,
+    place::StoreKey,
     terrain::{CHUNK_SIZE_TILES, ChunkPosition, TileDiffs},
 };
 use serde::{Deserialize, Serialize};
@@ -77,6 +78,45 @@ pub enum WorldOp {
     Tile(TileChange),
     /// Tiles one player newly discovered (only that player's map).
     Discovery(Discovery),
+    /// A tile write in a store other than the home world's (F11: a space body's ground).
+    StoreTile(StoreKey, TileChange),
+}
+
+/// A terrain chunk of one store (F11): the unit of op relevance and of chunk refreshes. A
+/// client holds the chunks of its own player's store.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct StoreChunk {
+    /// Whose ground.
+    pub store: StoreKey,
+    /// Which chunk of it.
+    pub chunk: ChunkPosition,
+}
+
+impl StoreChunk {
+    /// A chunk of the home world's ground.
+    #[must_use]
+    pub const fn home(chunk: ChunkPosition) -> Self {
+        Self {
+            store: StoreKey::Home,
+            chunk,
+        }
+    }
+}
+
+/// An entity record with the store it lives in (F11; entity ids are unique across stores).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlacedEntity {
+    /// The store holding the entity.
+    pub store: StoreKey,
+    /// The entity.
+    pub entity: Entity,
+}
+
+/// The store a relevance set's viewer is in (`None`: a spectator, who sees every store).
+fn viewer_store(world: &WorldState, relevance: &Relevance) -> Option<StoreKey> {
+    relevance
+        .viewer
+        .map(|viewer| world.store_of(to_sim_player(viewer)))
 }
 
 /// Converts a netcode player id to the simulation's.
@@ -392,6 +432,8 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::HeartLandmarkFound { player_id, .. } => (699, Some(player_id)),
         // The story's finale (wave 10 story): 700-719.
         GameplayEventKind::Story { what, player_id } => (700 + what.code() as u32, player_id),
+        // Places (wave 11 regions): 740-759.
+        GameplayEventKind::PlaceChanged { player_id, .. } => (740, Some(player_id)),
     }
 }
 
@@ -418,9 +460,9 @@ impl NetSimulation for WorldState {
     type PlayerState = PlayerTickState;
     type Entities = LiveEntities;
     type EntityKey = EntityId;
-    type EntityRecord = Entity;
+    type EntityRecord = PlacedEntity;
     type Op = WorldOp;
-    type Chunk = ChunkPosition;
+    type Chunk = StoreChunk;
     type ChunkSnapshot = TileDiffs;
     type SectionKey = SectionKey;
     type Section = SectionPayload;
@@ -597,6 +639,12 @@ impl NetSimulation for WorldState {
             });
         }
         let mut ops: Vec<WorldOp> = output.terrain_ops.into_iter().map(WorldOp::Tile).collect();
+        ops.extend(
+            output
+                .store_terrain_ops
+                .into_iter()
+                .map(|(store, change)| WorldOp::StoreTile(store, change)),
+        );
         ops.extend(output.discoveries.into_iter().map(WorldOp::Discovery));
         TickOutput { events, ops }
     }
@@ -620,6 +668,25 @@ impl NetSimulation for WorldState {
         // in or out changes the mode, so the client snaps instead of smoothing across bodies.
         // The mode is one constant (not the entity id: a predicted pilot may get a different id
         // than the host's until the authority arrives, and that is no reason to snap).
+        // F11: a player away from the home store is in its store's frame and region; a change
+        // of place changes the mode too, so the client snaps instead of smoothing across.
+        let store = self.store_of(sim_id);
+        if !store.is_home() {
+            let frame = self.store_frame(store)?;
+            let origin = [frame.origin_col(), frame.origin_row()];
+            let region = store.code();
+            let salt = u32::try_from(region & 0x7FFF_FFFF).unwrap_or(0) | 1;
+            let (x, y, on_foot) = self.store_actor_position(sim_id)?;
+            let mode = if on_foot {
+                ON_FOOT_POSE_MODE
+            } else {
+                self.active_drill(sim_id)
+                    .map_or(0, |drill| drill_mode(drill.target))
+            };
+            return Some(
+                Pose::at(origin, x / TILE_SIZE, y / TILE_SIZE, mode ^ salt).in_region(region),
+            );
+        }
         let origin = frame_origin(self);
         if self.is_on_foot(sim_id) {
             let (x, y) = self.actor_position(sim_id)?;
@@ -652,7 +719,7 @@ impl NetSimulation for WorldState {
 
     fn op_relevant(&self, op: &WorldOp, relevance: &Relevance) -> bool {
         match op {
-            WorldOp::Tile(_) => true,
+            WorldOp::Tile(_) | WorldOp::StoreTile(..) => true,
             // Discovery is private to its player.
             WorldOp::Discovery(discovery) => relevance
                 .viewer
@@ -660,9 +727,10 @@ impl NetSimulation for WorldState {
         }
     }
 
-    fn entities(&self, _relevance: &Relevance) -> LiveEntities {
-        // Charges are entities now (relevance-filtered entity deltas); only counters remain.
-        self.live_entities()
+    fn entities(&self, relevance: &Relevance) -> LiveEntities {
+        // Charges are entities now (relevance-filtered entity deltas); only counters and
+        // frames remain (the viewer's own store's, F11).
+        self.live_entities_for(viewer_store(self, relevance))
     }
 
     fn apply_entities(&mut self, entities: LiveEntities) {
@@ -670,34 +738,73 @@ impl NetSimulation for WorldState {
     }
 
     fn entity_revisions(&self, relevance: &Relevance) -> Vec<(EntityId, u64)> {
+        // F11: a client sees the entities of its own player's store (a spectator: every
+        // store's).
+        let Some(store) = viewer_store(self, relevance) else {
+            let mut all = Self::entity_revisions(self, None, None);
+            for (store, _) in self.places().stores() {
+                all.extend(self.store_entity_revisions(store, None, None));
+            }
+            all.sort_unstable_by_key(|(id, _)| *id);
+            return all;
+        };
         if relevance.is_infinite() {
-            return Self::entity_revisions(self, None, None);
+            return self.store_entity_revisions(store, None, None);
         }
-        // The centre in this world's frame (tiles from the frame origin).
+        // The centre in the store's frame (tiles from the frame origin).
+        let origin = self.store_frame(store).map_or_else(
+            || frame_origin(self),
+            |frame| [frame.origin_col(), frame.origin_row()],
+        );
         let center = relevance.center.map(|(x, y)| {
-            let local = Pose::at(relevance.origin, x, y, 0).rebased(frame_origin(self));
+            let local = Pose::at(relevance.origin, x, y, 0).rebased(origin);
             (local.x, local.y)
         });
-        Self::entity_revisions(self, center, relevance.radius)
+        self.store_entity_revisions(store, center, relevance.radius)
     }
 
-    fn entity_record(&self, key: &EntityId) -> Option<Entity> {
-        Self::entity_record(self, *key)
+    fn entity_record(&self, key: &EntityId) -> Option<PlacedEntity> {
+        self.placed_entity_record(*key)
+            .map(|(store, entity)| PlacedEntity { store, entity })
     }
 
-    fn apply_entity_delta(&mut self, updates: Vec<Entity>, despawned: Vec<EntityId>) {
-        Self::apply_entity_delta(self, EntityDelta { updates, despawned });
+    fn apply_entity_delta(&mut self, updates: Vec<PlacedEntity>, despawned: Vec<EntityId>) {
+        if updates.iter().all(|record| record.store.is_home())
+            && self.places().stores().next().is_none()
+        {
+            let updates = updates.into_iter().map(|record| record.entity).collect();
+            Self::apply_entity_delta(self, EntityDelta { updates, despawned });
+            return;
+        }
+        self.apply_placed_entity_delta(
+            updates
+                .into_iter()
+                .map(|record| (record.store, record.entity))
+                .collect(),
+            despawned,
+        );
     }
 
-    fn op_chunk(&self, op: &WorldOp) -> Option<ChunkPosition> {
+    fn op_chunk(&self, op: &WorldOp) -> Option<StoreChunk> {
         match op {
-            WorldOp::Tile(change) => Some(ChunkPosition::of(change.position)),
+            WorldOp::Tile(change) => Some(StoreChunk::home(ChunkPosition::of(change.position))),
+            WorldOp::StoreTile(store, change) => Some(StoreChunk {
+                store: *store,
+                chunk: ChunkPosition::of(change.position),
+            }),
             WorldOp::Discovery(_) => None,
         }
     }
 
-    fn chunk_relevant(&self, chunk: &ChunkPosition, relevance: &Relevance) -> bool {
-        let origin = chunk.origin();
+    fn chunk_relevant(&self, chunk: &StoreChunk, relevance: &Relevance) -> bool {
+        // F11: only the chunks of the viewer's own store (a spectator: every store's).
+        if viewer_store(self, relevance).is_some_and(|store| store != chunk.store) {
+            return false;
+        }
+        if relevance.is_infinite() {
+            return true;
+        }
+        let origin = chunk.chunk.origin();
         // Relative to the relevance origin, exactly (players far from the world origin).
         #[allow(
             clippy::cast_precision_loss,
@@ -711,18 +818,21 @@ impl NetSimulation for WorldState {
         relevance.touches_box(left, top, left + size, top + size)
     }
 
-    fn chunk_snapshot(&self, chunk: &ChunkPosition) -> Option<TileDiffs> {
-        Some(self.terrain_chunk(*chunk))
+    fn chunk_snapshot(&self, chunk: &StoreChunk) -> Option<TileDiffs> {
+        Some(self.store_chunk(chunk.store, chunk.chunk))
     }
 
-    fn apply_chunk_snapshot(&mut self, chunk: &ChunkPosition, snapshot: TileDiffs) {
-        self.apply_terrain_chunk(*chunk, &snapshot);
+    fn apply_chunk_snapshot(&mut self, chunk: &StoreChunk, snapshot: TileDiffs) {
+        self.apply_store_chunk(chunk.store, chunk.chunk, &snapshot);
     }
 
     fn apply_op(&mut self, op: &WorldOp) {
         match op {
             WorldOp::Tile(change) => {
                 let _applied = self.apply_tile_change(change);
+            }
+            WorldOp::StoreTile(store, change) => {
+                let _applied = self.apply_store_tile_change(*store, change);
             }
             WorldOp::Discovery(discovery) => self.apply_discovery(discovery),
         }

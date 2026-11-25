@@ -727,7 +727,9 @@ impl LocalHost {
                 .iter()
                 .filter_map(|(_, op)| match op {
                     WorldOp::Tile(change) => Some(change.position),
-                    WorldOp::Discovery(_) => None,
+                    // Other stores' ground is drawn by the place view (F11), not the home
+                    // world's tile caches.
+                    WorldOp::Discovery(_) | WorldOp::StoreTile(..) => None,
                 })
                 .collect(),
             world_replaced: false,

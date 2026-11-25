@@ -158,6 +158,9 @@ mod pilot_gear;
 #[cfg(test)]
 mod pilot_tests;
 mod pilot_weather;
+pub(crate) mod places;
+#[cfg(test)]
+mod places_tests;
 mod player_sections;
 #[cfg(test)]
 mod poi_tests;
@@ -568,6 +571,14 @@ pub struct WorldState {
     /// start.
     #[serde(default)]
     heart: crate::heart::Heart,
+    /// Every player's place and the ground of every store other than the home world's (Part
+    /// III F11, see `world/places.rs`): space bodies' terrain, entities and fluids, kept while
+    /// nobody is there. Empty (and not hashed) until someone leaves the home store.
+    #[serde(default)]
+    places: places::Places,
+    /// The running pass of the tick (never saved, hashed or replicated).
+    #[serde(skip)]
+    place_pass: places::PlacePass,
 }
 
 impl WorldState {

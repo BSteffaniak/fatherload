@@ -197,7 +197,7 @@ fn world_client_converges_on_far_terrain_when_it_moves_close() {
         pair.step(&idle);
     }
     pair.host.submit_local_input(digger, idle, Vec::new());
-    let dig_chunk = ChunkPosition { x: 2, y: 0 };
+    let dig_chunk = crate::world::StoreChunk::home(ChunkPosition { x: 2, y: 0 });
     assert!(
         !pair
             .host
@@ -470,10 +470,16 @@ fn streamed_world_streams_far_chunk_diffs_to_clients() {
     for _ in 0..10 {
         pair.step(&idle);
     }
-    let dug: Vec<ChunkPosition> = pair.host.world().terrain().edited_chunks().collect();
+    let dug: Vec<crate::world::StoreChunk> = pair
+        .host
+        .world()
+        .terrain()
+        .edited_chunks()
+        .map(crate::world::StoreChunk::home)
+        .collect();
     assert!(
         dug.iter()
-            .any(|chunk| chunk.x * 16 < i32::from(far_column) + 32),
+            .any(|chunk| chunk.chunk.x * 16 < i32::from(far_column) + 32),
         "the digger dug far out: {dug:?}"
     );
     assert!(

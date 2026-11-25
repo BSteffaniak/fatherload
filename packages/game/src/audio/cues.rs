@@ -1141,6 +1141,9 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
                 Some(SoundCue::StoryCableLit)
             }
         },
+        // Arriving in another place (F11: landed, took off, came home): the warp hum the
+        // beacons use, until the flight track gives arrivals their own sounds.
+        GameplayEventKind::PlaceChanged { .. } => Some(SoundCue::UplinkWarp),
         GameplayEventKind::ExpeditionLogSealed { .. } => Some(SoundCue::LeverClunk),
         GameplayEventKind::ExpeditionEcho { echo, .. } => {
             let index = echo.saturating_sub(1) as usize;
@@ -1512,7 +1515,8 @@ mod tests {
             | GameplayEventKind::Garrison { .. }
             | GameplayEventKind::Heart { .. }
             | GameplayEventKind::HeartLandmarkFound { .. }
-            | GameplayEventKind::Story { .. } => {}
+            | GameplayEventKind::Story { .. }
+            | GameplayEventKind::PlaceChanged { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1944,6 +1948,11 @@ mod tests {
             GameplayEventKind::ExpeditionLogSealed { player_id, log: 3 },
             GameplayEventKind::ExpeditionEcho { player_id, echo: 1 },
             GameplayEventKind::ExpeditionEcho { player_id, echo: 7 },
+            GameplayEventKind::PlaceChanged {
+                player_id,
+                from: fatherload_simulation::place::Place::HOME,
+                to: fatherload_simulation::place::Place::Space,
+            },
         ]);
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {
             events.push(GameplayEventKind::AnomalyEntered {

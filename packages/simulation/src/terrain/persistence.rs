@@ -705,7 +705,10 @@ impl Terrain {
             Slot::Bounded(index) => self.base().tiles[index],
             Slot::Streamed(chunk, local) => match &self.storage {
                 Storage::Streamed(streamed) => streamed.loaded.get(&chunk).map_or_else(
-                    || worldgen::streamed::generated_chunk(&self.settings, chunk).tile(local),
+                    || {
+                        super::generated_chunk_of(&self.settings, self.body.as_deref(), chunk)
+                            .tile(local)
+                    },
                     |loaded| loaded.base.tile(local),
                 ),
                 Storage::Bounded(_) => Tile {

@@ -58,6 +58,7 @@ pub mod pair_list;
 pub mod people;
 pub mod physics;
 pub mod pilot;
+pub mod place;
 pub mod player;
 pub mod poi;
 pub mod position;

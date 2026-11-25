@@ -21,7 +21,7 @@ impl WorldState {
     /// Hash of the whole world (determinism checks, local replays).
     #[must_use]
     pub fn simulation_state_hash(&self) -> SimulationStateHash {
-        self.hash_visible(|_| true)
+        self.hash_visible(|_| true, |_| true)
     }
 
     /// Hash of the world with private per-player state included only where `sees_private`
@@ -34,7 +34,10 @@ impl WorldState {
     pub(super) fn hash_visible(
         &self,
         sees_private: impl Fn(PlayerId) -> bool,
+        sees_store: impl Fn(crate::place::StoreKey) -> bool,
     ) -> SimulationStateHash {
+        // F11: a client holds the ground (tiles and entities) of its own store only.
+        let sees_home = sees_store(crate::place::StoreKey::Home);
         let mut hash = StateHasher::new();
         hash.write_serialized(&self.timing);
         hash.write_serialized(&self.player_template);
@@ -131,13 +134,17 @@ impl WorldState {
         if self.terrain.frame() != crate::position::Frame::FIXED {
             hash.write_serialized(&self.terrain.frame());
         }
-        hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
-        hash.write_u64(self.terrain.digest());
+        if sees_home {
+            hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
+            hash.write_u64(self.terrain.digest());
+        }
         hash.write_u64(self.entities.next_id());
         hash.write_u64(self.entities.next_revision());
-        hash.write_u64(u64::try_from(self.entities.len()).unwrap_or(u64::MAX));
-        for entity in self.entities.iter() {
-            hash.write_serialized(entity);
+        if sees_home {
+            hash.write_u64(u64::try_from(self.entities.len()).unwrap_or(u64::MAX));
+            for entity in self.entities.iter() {
+                hash.write_serialized(entity);
+            }
         }
         hash.write_u64(u64::try_from(self.infrastructure.len()).unwrap_or(u64::MAX));
         for infrastructure in &self.infrastructure {
@@ -278,6 +285,9 @@ impl WorldState {
                 hash.write_u64(u64::from(transaction.cargo_after));
             }
         }
+        // Every player's place and the ground of the stores this view holds (F11; absent
+        // until someone leaves the home store, so older worlds keep their hashes).
+        self.hash_places(&mut hash, &sees_store);
         hash.finish()
     }
 }

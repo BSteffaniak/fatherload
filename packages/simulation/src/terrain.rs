@@ -24,7 +24,8 @@ use crate::{
 };
 
 pub use persistence::{
-    FullTerrain, MAX_TERRAIN_SIDE_TILES, TerrainRestoreError, TerrainSnapshot, TileDiffs,
+    FullTerrain, MAX_TERRAIN_SIDE_TILES, PackedChunks, TerrainRestoreError, TerrainSnapshot,
+    TileDiffs,
 };
 use persistence::{GeneratedBase, generated_base};
 
@@ -642,6 +643,13 @@ pub struct Terrain {
     /// A streamed world's column limit raised past its generator's (test and tool worlds far
     /// from the origin). Carried by the terrain snapshot (saves and keyframes), not hashed.
     column_limit_override: Option<i32>,
+    /// A body's ground (Wave 11 F11, [`crate::place`]): its chunks come from the body's
+    /// generator instead of the world settings, and its extent is the body's. `None` for the
+    /// home world. Body terrain is saved by its [`crate::place::BodyWorld`], never as a
+    /// [`TerrainSnapshot`].
+    body: Option<Arc<crate::place::BodySource>>,
+    /// The body's extent (copied out of `body` for the `const` queries).
+    body_extent: Option<crate::place::BodyExtent>,
 }
 
 #[derive(Clone, Debug)]
@@ -701,6 +709,19 @@ impl LoadedChunk {
 enum Slot {
     Bounded(usize),
     Streamed(ChunkPosition, usize),
+}
+
+/// The generated tiles of `chunk`: from the body's generator for a body's ground (Wave 11
+/// F11), else from the world settings.
+fn generated_chunk_of(
+    settings: &WorldSettings,
+    body: Option<&crate::place::BodySource>,
+    chunk: ChunkPosition,
+) -> Arc<worldgen::streamed::GeneratedChunk> {
+    body.map_or_else(
+        || worldgen::streamed::generated_chunk(settings, chunk),
+        |body| body.chunk(chunk),
+    )
 }
 
 /// The heap the browser build budgets for a streamed world's terrain and the generator's
@@ -766,6 +787,8 @@ impl Terrain {
             journal_before: Vec::new(),
             frame: Frame::for_generator(settings.generator),
             column_limit_override: None,
+            body: None,
+            body_extent: None,
         }
     }
 
@@ -801,6 +824,8 @@ impl Terrain {
             journal_before: Vec::new(),
             frame: Frame::for_generator(settings.generator),
             column_limit_override: None,
+            body: None,
+            body_extent: None,
         }
     }
 
@@ -829,6 +854,73 @@ impl Terrain {
         }
     }
 
+    /// The ground of a body (Wave 11 F11): a streamed terrain whose chunks come from `source`
+    /// (its extent and surface too), with `edits` applied, in `frame`. The settings record is
+    /// the legacy generator's for `seed`, which switches every settings-driven content system
+    /// (villages, sky, Moon, Descents, tombs) off on the body; its band and heat rules are the
+    /// classic ones until the planet track gives bodies their own (TODO-SEAM w11-polar).
+    #[must_use]
+    pub fn for_body(
+        source: Arc<crate::place::BodySource>,
+        frame: Frame,
+        edits: Vec<(ChunkPosition, TileDiffs)>,
+    ) -> Self {
+        let extent = source.extent();
+        let settings = WorldSettings::legacy(source.seed());
+        let mut terrain = Self {
+            height: extent.bottom_row,
+            settings,
+            storage: Storage::Streamed(StreamedTiles::default()),
+            digest: 0,
+            journal: None,
+            journal_before: Vec::new(),
+            frame,
+            column_limit_override: None,
+            body: Some(source),
+            body_extent: Some(extent),
+        };
+        for (chunk, diffs) in edits {
+            let origin = chunk.origin();
+            for (local, tile) in diffs.iter() {
+                let Ok(local) = i32::try_from(local) else {
+                    continue;
+                };
+                let position = TilePosition {
+                    x: origin.x + local % CHUNK_SIZE_TILES,
+                    y: origin.y + local / CHUNK_SIZE_TILES,
+                };
+                if let Some(slot) = terrain.slot(position) {
+                    terrain.write_tile(slot, position, tile);
+                }
+            }
+        }
+        terrain
+    }
+
+    /// The body this terrain is the ground of (`None` for the home world).
+    #[must_use]
+    pub const fn body_source(&self) -> Option<&Arc<crate::place::BodySource>> {
+        self.body.as_ref()
+    }
+
+    /// A body's edited chunks and their diffs from generation (saved packed with the body).
+    #[must_use]
+    pub fn edited_chunk_diffs(&self) -> Vec<(ChunkPosition, TileDiffs)> {
+        let Storage::Streamed(streamed) = &self.storage else {
+            return Vec::new();
+        };
+        streamed
+            .edits
+            .iter()
+            .map(|(chunk, edits)| {
+                (
+                    *chunk,
+                    TileDiffs::new(edits.iter().map(|(local, tile)| (u32::from(*local), *tile))),
+                )
+            })
+            .collect()
+    }
+
     /// Whether this terrain is streamed (unbounded columns, generated on demand).
     #[must_use]
     pub const fn is_streamed(&self) -> bool {
@@ -838,6 +930,9 @@ impl Terrain {
     /// The first column of the world (0 for bounded terrain).
     #[must_use]
     pub const fn min_x(&self) -> i32 {
+        if let Some(extent) = self.body_extent {
+            return extent.min_col;
+        }
         match &self.storage {
             Storage::Bounded(_) => 0,
             Storage::Streamed(_) => -self.column_limit(),
@@ -847,6 +942,9 @@ impl Terrain {
     /// The last column of the world.
     #[must_use]
     pub const fn max_x(&self) -> i32 {
+        if let Some(extent) = self.body_extent {
+            return extent.max_col;
+        }
         match &self.storage {
             Storage::Bounded(bounded) => bounded.width - 1,
             Storage::Streamed(_) => self.column_limit() - 1,
@@ -896,6 +994,9 @@ impl Terrain {
     /// tiles), which rigs may fly through without limit.
     #[must_use]
     pub const fn min_y(&self) -> i32 {
+        if let Some(extent) = self.body_extent {
+            return extent.top_row;
+        }
         match &self.storage {
             Storage::Bounded(_) => 0,
             Storage::Streamed(_) => worldgen::streamed::top_row(&self.settings),
@@ -912,6 +1013,9 @@ impl Terrain {
     /// [`worldgen::surface_row`]).
     #[must_use]
     pub fn surface_row(&self, x: i32) -> i32 {
+        if let Some(body) = &self.body {
+            return body.generator().surface_row(x);
+        }
         worldgen::surface_row(&self.settings, x)
     }
 
@@ -998,6 +1102,10 @@ impl Terrain {
     /// The feature with id `id`, in any world.
     #[must_use]
     pub fn feature(&self, id: FeatureId) -> Option<WorldFeature> {
+        if self.body.is_some() {
+            // A body's ground has no world features (its generator owns its places).
+            return None;
+        }
         if self.is_streamed() {
             worldgen::streamed::feature(&self.settings, id)
         } else {
@@ -1008,6 +1116,9 @@ impl Terrain {
     /// Every feature (of `kinds`, or every kind) whose centre lies in `rect`, in id order.
     #[must_use]
     pub fn features_in(&self, rect: &TileRect, kinds: Option<&[FeatureKind]>) -> Vec<WorldFeature> {
+        if self.body.is_some() {
+            return Vec::new();
+        }
         if self.is_streamed() {
             return worldgen::streamed::features_in(&self.settings, rect, kinds);
         }
@@ -1025,7 +1136,7 @@ impl Terrain {
     /// The points of interest whose bounds overlap `rect`, in id order.
     #[must_use]
     pub fn pois_touching(&self, rect: &TileRect) -> Vec<WorldFeature> {
-        if !self.settings.generator.has_points_of_interest() {
+        if self.body.is_some() || !self.settings.generator.has_points_of_interest() {
             return Vec::new();
         }
         if self.is_streamed() {
@@ -1043,6 +1154,9 @@ impl Terrain {
     /// worlds without cave ecosystems (generators before V6). A pure function of the settings.
     #[must_use]
     pub fn cave_at(&self, position: TilePosition) -> Option<crate::cave::CaveSample> {
+        if self.body.is_some() {
+            return None;
+        }
         // The run vault of a tomb world (WP-TOMBS) is no cave: no water, critters or tags.
         if worldgen::tomb_sites::in_vault(&self.settings, position) {
             return None;
@@ -1061,6 +1175,9 @@ impl Terrain {
     /// wall cells; empty on worlds without cave ecosystems).
     #[must_use]
     pub fn caves_touching(&self, rect: &TileRect) -> Vec<Arc<worldgen::streamed::CaveRegion>> {
+        if self.body.is_some() {
+            return Vec::new();
+        }
         worldgen::streamed::caves_touching(&self.settings, rect)
     }
 
@@ -1068,6 +1185,9 @@ impl Terrain {
     /// continent's lake) over an open tile.
     #[must_use]
     pub fn water_at(&self, position: TilePosition) -> bool {
+        if self.body.is_some() {
+            return false;
+        }
         (self.cave_at(position).is_some_and(|sample| sample.water)
             || worldgen::sky::continent::lake_water_at(&self.settings, position))
             && self
@@ -1100,6 +1220,9 @@ impl Terrain {
         max_columns: i32,
         mut accept: impl FnMut(&WorldFeature) -> bool,
     ) -> Option<WorldFeature> {
+        if self.body.is_some() {
+            return None;
+        }
         if self.is_streamed() {
             return worldgen::streamed::nearest_feature(
                 &self.settings,
@@ -1181,8 +1304,21 @@ impl Terrain {
     /// Purely a performance and memory measure: tiles read the same loaded or not.
     pub fn stream_around(&mut self, centers: &[TilePosition]) -> usize {
         let settings = self.settings;
-        let chunk_rows = worldgen::streamed::chunk_rows(&settings);
-        let first_chunk_row = worldgen::streamed::first_chunk_row(&settings);
+        let body = self.body.clone();
+        let (first_chunk_row, chunk_rows) = self.body_extent.map_or_else(
+            || {
+                (
+                    worldgen::streamed::first_chunk_row(&settings),
+                    worldgen::streamed::chunk_rows(&settings),
+                )
+            },
+            |extent| {
+                (
+                    extent.top_row.div_euclid(CHUNK_SIZE_TILES),
+                    (extent.bottom_row - 1).div_euclid(CHUNK_SIZE_TILES) + 1,
+                )
+            },
+        );
         let (min_x, max_x) = (self.min_x(), self.max_x());
         let Storage::Streamed(streamed) = &mut self.storage else {
             return 0;
@@ -1220,13 +1356,84 @@ impl Terrain {
                     if streamed.loaded.contains_key(&chunk) {
                         continue;
                     }
-                    let base = worldgen::streamed::generated_chunk(&settings, chunk);
+                    let base = generated_chunk_of(&settings, body.as_deref(), chunk);
                     streamed
                         .loaded
                         .insert(chunk, LoadedChunk::new(base, streamed.edits.get(&chunk)));
                     loaded += 1;
                 }
             }
+        }
+        loaded
+    }
+
+    /// [`Self::stream_around`] generating at most `budget` new chunks (the per-tick budget of
+    /// a body's ground, F11); the nearest centres' chunks come first, the rest load on later
+    /// calls. Unloading is as [`Self::stream_around`]'s.
+    pub fn stream_around_budgeted(&mut self, centers: &[TilePosition], budget: usize) -> usize {
+        let body = self.body.clone();
+        let settings = self.settings;
+        let Some(extent) = self.body_extent else {
+            return self.stream_around(centers);
+        };
+        let Storage::Streamed(streamed) = &mut self.storage else {
+            return 0;
+        };
+        let centers: Vec<ChunkPosition> = centers
+            .iter()
+            .map(|position| {
+                ChunkPosition::of(TilePosition {
+                    x: position.x.clamp(extent.min_col, extent.max_col),
+                    y: position.y.clamp(extent.top_row, extent.bottom_row - 1),
+                })
+            })
+            .collect();
+        let near = |chunk: &ChunkPosition, (radius_x, radius_y): (i32, i32)| {
+            centers.iter().any(|center| {
+                (chunk.x - center.x).abs() <= radius_x && (chunk.y - center.y).abs() <= radius_y
+            })
+        };
+        streamed
+            .loaded
+            .retain(|chunk, _| near(chunk, STREAM_KEEP_RADIUS_CHUNKS));
+        let (min_chunk, max_chunk) = (
+            extent.min_col.div_euclid(CHUNK_SIZE_TILES),
+            extent.max_col.div_euclid(CHUNK_SIZE_TILES),
+        );
+        let (first_row, last_row) = (
+            extent.top_row.div_euclid(CHUNK_SIZE_TILES),
+            (extent.bottom_row - 1).div_euclid(CHUNK_SIZE_TILES),
+        );
+        let (radius_x, radius_y) = STREAM_LOAD_RADIUS_CHUNKS;
+        // Rings outward from every centre, so the chunks nearest a rig load first.
+        let mut wanted: Vec<(i32, ChunkPosition)> = Vec::new();
+        for center in &centers {
+            for y in (center.y - radius_y).max(first_row)..=(center.y + radius_y).min(last_row) {
+                for x in (center.x - radius_x).max(min_chunk)..=(center.x + radius_x).min(max_chunk)
+                {
+                    let chunk = ChunkPosition { x, y };
+                    if !streamed.loaded.contains_key(&chunk) {
+                        let ring = (x - center.x).abs().max((y - center.y).abs());
+                        wanted.push((ring, chunk));
+                    }
+                }
+            }
+        }
+        wanted.sort_unstable();
+        wanted.dedup_by_key(|(_, chunk)| *chunk);
+        let mut loaded = 0;
+        for (_, chunk) in wanted {
+            if loaded >= budget {
+                break;
+            }
+            if streamed.loaded.contains_key(&chunk) {
+                continue;
+            }
+            let base = generated_chunk_of(&settings, body.as_deref(), chunk);
+            streamed
+                .loaded
+                .insert(chunk, LoadedChunk::new(base, streamed.edits.get(&chunk)));
+            loaded += 1;
         }
         loaded
     }
@@ -1249,13 +1456,14 @@ impl Terrain {
             }
             Slot::Streamed(chunk, local) => {
                 let settings = self.settings;
+                let body = self.body.clone();
                 let Storage::Streamed(streamed) = &mut self.storage else {
                     return;
                 };
                 let edits = &mut streamed.edits;
                 let loaded = streamed.loaded.entry(chunk).or_insert_with(|| {
                     LoadedChunk::new(
-                        worldgen::streamed::generated_chunk(&settings, chunk),
+                        generated_chunk_of(&settings, body.as_deref(), chunk),
                         edits.get(&chunk),
                     )
                 });
@@ -1406,7 +1614,7 @@ impl Terrain {
                     .and_then(|edits| edits.get(&key))
                     .copied()
                     .unwrap_or_else(|| {
-                        worldgen::streamed::generated_chunk(&self.settings, chunk).tile(local)
+                        generated_chunk_of(&self.settings, self.body.as_deref(), chunk).tile(local)
                     })
             }
             _ => Tile {
@@ -1649,8 +1857,7 @@ impl Terrain {
                 ))
             }
             Storage::Streamed(_) => {
-                let limit = self.column_limit();
-                if position.x < -limit || position.x >= limit {
+                if position.x < self.min_x() || position.x > self.max_x() {
                     return None;
                 }
                 Some(Slot::Streamed(

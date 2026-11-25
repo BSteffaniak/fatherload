@@ -255,7 +255,17 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `PaintColor` rewards, the appended deep-settlement story places
 ///   (`StoryPlace::{FathersSite, DeepSeam}`), `ArcKind::Deep` and the deep settlements' arcs
 ///   in the arc log; the appended `memories::Settlement::{ArchivePost, HeartCamp}`.
-pub const PROTOCOL_VERSION: u8 = 18;
+///
+/// 19 (expansion wave 11; one bump per track, collapsed by the integrator):
+///
+/// * Regions (F11, many places at once): `Pose::region` and `Relevance::region` (the store a
+///   pose is in; poses in other stores are out of a finite relevance); the world's chunk is
+///   `world::StoreChunk` (store + chunk) and its entity record `world::PlacedEntity` (store +
+///   entity); `WorldOp::StoreTile` (tile writes in a space body's ground);
+///   `PlayerTickState::place`, `LiveEntities::store_frames`, the `places` world field in
+///   keyframes (every store's ground) and the place event 740
+///   (`GameplayEventKind::PlaceChanged`).
+pub const PROTOCOL_VERSION: u8 = 19;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

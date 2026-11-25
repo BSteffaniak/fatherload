@@ -75,6 +75,9 @@ pub struct PlayerTickState {
     /// Capacitor energy, weapon cooldown, aim and trigger.
     #[serde(default)]
     pub weapon: crate::weapon::RigWeaponState,
+    /// Where the rig is (F11): its position is in this place's store's frame.
+    #[serde(default)]
+    pub place: crate::place::Place,
 }
 
 /// Per-tick live state sent whole every frame: the id counters.
@@ -98,6 +101,10 @@ pub struct LiveEntities {
     /// of the frame (netcode applies this section first).
     #[serde(default)]
     pub frame: crate::position::Frame,
+    /// The frames of the other stores the receiver holds (F11; applied before anything else
+    /// of the frame, like `frame`).
+    #[serde(default)]
+    pub store_frames: Vec<(crate::place::StoreKey, crate::position::Frame)>,
 }
 
 /// One player's on-change section.
@@ -382,6 +389,7 @@ impl WorldState {
             scanner_deadline: self.scanner_cooldown_deadlines.get(&player_id).copied(),
             deep_run: self.deep_run_states.get(&player_id).copied(),
             weapon: rig.weapon,
+            place: self.recorded_place(player_id),
         })
     }
 
@@ -405,7 +413,11 @@ impl WorldState {
             scanner_deadline,
             deep_run,
             weapon,
+            place,
         } = state;
+        if self.recorded_place(player_id) != place {
+            self.set_place_record(player_id, place);
+        }
         if let Some(player) = self.players.get_mut(&player_id) {
             player.weapon = weapon;
             player.x = x;
@@ -430,14 +442,22 @@ impl WorldState {
         set_or_remove(&mut self.deep_run_states, player_id, deep_run);
     }
 
-    /// The charge serial and entity counters.
+    /// The charge serial, entity counters and every store's frame.
     #[must_use]
-    pub const fn live_entities(&self) -> LiveEntities {
+    pub fn live_entities(&self) -> LiveEntities {
+        self.live_entities_for(None)
+    }
+
+    /// [`Self::live_entities`] with only the frame of `store` among the other stores' (`None`:
+    /// every store's), for a client whose player is there (F11).
+    #[must_use]
+    pub fn live_entities_for(&self, store: Option<crate::place::StoreKey>) -> LiveEntities {
         LiveEntities {
             next_bomb_id: self.next_bomb_id,
             next_entity_id: self.entities.next_id(),
             next_entity_revision: self.entities.next_revision(),
             frame: self.terrain.frame(),
+            store_frames: self.store_frames(store),
         }
     }
 
@@ -452,10 +472,12 @@ impl WorldState {
             next_entity_id,
             next_entity_revision,
             frame,
+            store_frames,
         } = entities;
         if frame != self.terrain.frame() {
             self.move_frame(frame);
         }
+        self.apply_store_frames(&store_frames);
         self.next_bomb_id = next_bomb_id;
         self.entities
             .set_counters(next_entity_id, next_entity_revision);
@@ -556,6 +578,10 @@ impl WorldState {
             garrison,
             garrison_schedule: _,
             heart,
+            // Places travel with each rig's per-tick state, other stores' ground as tagged
+            // ops, entity deltas and the live section's frames (F11).
+            places: _,
+            place_pass: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
