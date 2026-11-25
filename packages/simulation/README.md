@@ -6836,6 +6836,182 @@ so. The Seal Gate (Wave 9's open item) now passes.
   the hall's back wall reads near black (gold pilasters on dark bronze); scene captures of the
   forts show the milestone and tip toasts over the fort.
 
+## Wave 10 heart: Descent VIII, the Heart, the final boss and the ending (`src/heart.rs`, `src/heart/{fields,ending}.rs`, `src/world/heart.rs`, `src/world/enemies/heart.rs`, `src/worldgen/descent/heart.rs`)
+
+The last chapter of the Descent (rows about 11,400-13,000 of a V11 world, §14 Descent VIII)
+stops being a placeholder. The planet's core is a sleeping **Star Drive** and the builders'
+cable runs from it to the Moon. Every stratum has a signature rule introduced gently and pushed
+deeper, its own rock (a `TileKind::Core` family), palette, ores and layer resource, native
+creatures, set pieces, a music bed and an ambience bed, and a story beat; the Descent ends at
+the Heart, the game's last fight, and the **ending**: the cable lights, the Star Drive becomes
+the crew's engine and space past the Moon opens. The game keeps going afterwards (§18
+decision 5).
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (pushed deeper) | Creatures | Set pieces | Rock, ores, layer resource | Music, ambience |
+|---|---|---|---|---|---|
+| Dark Matter Veins | **negative-mass ore**: every lump of dark matter in the bay takes 12.5 % of the rig's weight away (`heart::cargo_mass_permille`; eight lumps make an empty rig weightless, more and it **falls up** onto the ceilings); ordinary cargo adds 2.5 % back each once dark matter is aboard, so the load is planned; below a quarter of its weight the rig turns freely and the player rolls it over to thrust "down" (nothing turns it for them); dark matter weighs nothing on the drive | null moth (drawn to the rig carrying the most dark matter; its touch drinks a lump, `MothDrank`), upfall beetle (full of dark matter: hangs on roofs, drops on a rig straight below, floats back up), vein gnawer (burrower) | veins denser deeper, **weightless halls** with dark matter hanging from their roofs ("Weightless Halls" bigger and more of them), **the Upfall** (a shaft crusted with dark matter, a builder hauler stuck to its roof), Heart's Edge (the last outpost) | vein shale, null stone; mythril, uranium, diamond; Dark Matter | `DarkMatterVeins` (a weightless waltz, reversed celesta) / `VoidHum` |
+| Singularity Fields | **gravity wells** (`heart::fields::well_field_source`, a field source): round caverns with a singularity at the middle; gravity turns toward the point and grows to 1.85 g there, so rigs, pilots, creatures, drops and charges all fall in; rotation is free in the strong pull; inside 2.6 tiles the **horizon** crushes a hull; light bends: **lensing** grows toward the point (a point-lens pass in the post-process, both GLSL variants) | orbiter (circles its well, slings itself out at a rig), accretion mote (swirls in a well's disc), horizon lurker (rooted on rims, fires bolts) | wells on a seeded grid, bigger deeper ("Lens Fields" fewer and bigger), event glass round each rim, **the Lens** (the greatest well) | event shale, horizon rock; mythril, diamond; Event Glass | `SingularityFields` (a bending drone, stretched bells) / `Gravity` |
+| Core Ocean | **a liquid metal sea** (Wave 7 fluids, generated full and at rest) in basins between rock pillars under a rock sky, crossed on **magnetic rails** (`heart::MAG_RAIL`: the Crust's cart code with magnetic tuning, top speed 19 tiles/s): an upper line across the whole sea (tunnelled through the pillars, **boosters** early in each basin throw a rig to 17.5 tiles/s), a lower line in every basin reached by **switches** (hold down at the junction) with a **jump** over a gap onto a line one row lower, and the **magnetic catch** that grabs a rig touching down on a rail at speed; pylons stand in the metal; molten metal burns a rig that falls in | mercury eel (swims in the metal, leaps at a rig above; spawns only in metal), rail leech (crawls the rails), slag skimmer (low over the metal, spits slag) | the sea and its rails, ore islands near each basin's east end, **the Ferry Terminal** at the cable | core basalt, iron crust; platinum, mythril; Core Metal | `CoreOcean` (a rolling barcarolle over the rails' hum) / `MetalSea` |
+| The Heart | **the sleeping Star Drive** at the root of the builders' cable (which runs indestructible through the rock from Heart's Edge down to the chamber, hanging free over the open places): the **Heart Key's seal** in the chamber's three doors (`WorldState::heart_seal_refuses`: only a rig with the Heart Key drills it), the final fight and the ending | corona wisp (a burning wisp of the drive's light), cable warden (builder guard machine, elite) | **the Heart's chamber** (radius 24 tiles at the cable's column near the world's bottom, a shell nothing breaks, a bowl floor, four ledges), star shards thick round it | star rock, drive alloy; mythril, diamond; Star Shard | `TheHeart` (a slow, enormous heartbeat under choir pads) / `StarDrive` |
+
+`MusicCue::{DarkMatterVeins, SingularityFields, CoreOcean, TheHeart, HeartAwakening, Ending}`,
+`AmbienceCue::{VoidHum, Gravity, MetalSea, StarDrive}` and `LandmarkKind::Heart` (generator
+`LandmarkGenerator::Heart`) are appended.
+
+### Generation (V11 only; `worldgen/descent/heart.rs`)
+
+One pass in `streamed::assemble` after the far Strange Layers' (pure functions of the settings
+and the tile): halls, veins and the Upfall; wells, their rims and the Lens; the metal sea, its
+pillars, rails, ramps, boosters, pylons, islands and the Ferry Terminal; the cable; the Heart's
+chamber and its star shards. It never carves the outposts or anomaly rooms. The registry's rock
+for each stratum is a `CoreTile` (`TileKind::Core`, codes **`0x1A00`**), counted as plain rock
+by the deposit, cave and hazard passes (`CoreTile::plain_rock`). The story's camps and rooms keep
+off the set pieces and the sea's band (`heart::crosses_set_pieces`, appended to
+`expedition::sites::DEEPER_SET_PIECES`). **`GOLDEN_V11_DIGEST` changed**; the V1-V10 digests are
+unchanged.
+
+### The Heart's fight (`world/enemies/heart.rs`)
+
+Wakes when a living rig enters the chamber: the core (`EnemyKind::StarHeart`, its hit area its
+drawn body: radius 72 px, contact 76 px) and six drive coils (`DriveCoil`). Every timing is a pure
+function of world time since the phase began (`heart::pulse_at`, `breath_at`, `beam_angle`,
+`coil_angle`), so hosts and clients agree and the section only changes on the fight's beats.
+
+1. **The coils**: the six coils orbit the sealed core (it ignores every hit) and fire slow plasma
+   bolts in turn round the ring; every 11 s the drive **pulls** (a contracting ring of light for
+   1.8 s first, `PulseTell`, then 2.2 s of pull toward the core). Break all six.
+2. **Ignition**: the core opens; two beams sweep the chamber (fading in for 2.4 s before they
+   burn) and sparks fly (`HeartSpark`). Strike the core.
+3. **Collapse** (below 52 %): the core becomes a singularity, pulls steadily and is armoured
+   except while it **exhales** (it brightens for 1.6 s, `ExhaleTell`, then 3.9 s open, pushing
+   out).
+
+The core's touch burns. No countdown: with no rig in the chamber for 20 s it sinks back to sleep
+and heals. When it falls it **wakes for good** (`heart_wakes`): `space_unlocked` is set, every
+rig of the crew gets the **Star Drive** (later joiners too), and the cable lights
+(`cable_lit_millis`, the ending's clock). On a Peaceful world the chamber yields unfought. The
+gate (`GateDef`) still rewards `DescentKey::StarDrive`.
+
+### Space and the Star Drive (the seam Wave 11 reads)
+
+- `WorldState::space_unlocked()` (the world flag), `WorldState::has_star_drive(player)` (per
+  player, every rig of the crew) and `WorldState::space_access(player) -> SpaceAccess {
+  unlocked, star_drive, cable_lit_millis }` with `SpaceAccess::may_leave`. Saved and replicated
+  in the shared `Heart` section. (The Star Drive is a set in that section, not a `RigSystem`
+  bit: `rig_systems` is a full `u8`.)
+- In the sky (above the ground line) a rig with the Star Drive gets `STAR_DRIVE_SKY_BOOST` (2.2x)
+  on its engine's push, top speed and climb cap (`WorldState::star_drive_boost`, in the movement
+  step; 1 everywhere else, so the classic physics stay exact).
+- Flying more than 20 rows above the Moon after the ending fires `StarsOpen` once per rig and the
+  HUD shows "THE STARS ARE OPEN".
+- `WorldState::cable_path() -> CablePath { column, heart, surface_row, moon, moon_top }` for
+  drawing the cable's light.
+
+### The ending (`heart::ending`)
+
+The simulation records one fact, `Heart::cable_lit_millis`; each seat plays the sequence for
+itself from then (`EndingView`, a pure state machine of the time since the cable lit and the
+seat's own skips): **Awakening** (0-8 s, in the world: the camera pulls back, the light leaves
+the Heart and climbs the cable), **Ascent** (8-22 s: the planet in cutaway, the light climbing
+ring by ring through all eight Descents, out of the ground and across the sky to the Moon, which
+lights up), **Credits** (22-84 s, original names), **Epilogue** (16 s or until dismissed), then
+back to play. Confirm, use, back, cancel or pause skips the seat's own view (to the epilogue,
+then closes it), never before 1.2 s into a phase; on touch the pause button does. Split-screen
+seats and online players each skip their own. Every rig is shielded from harm while it plays
+(`Heart::ending_shields`, `ENDING_SHIELD_MILLIS`), then hulls take damage again.
+
+### State, formats and events
+
+- `Heart` (world field, appended shared `SectionKey::Heart`, saved with serde defaults, hashed
+  once non-empty): floating rigs, rigs in a well, landmarks found, the fight, `space_unlocked`,
+  the Star Drives, `cable_lit_millis`, rigs that saw the stars.
+- Events: `GameplayEventKind::Heart { what, player_id, x, y }` (netcode `670 + HeartEvent::code`,
+  670-694 used) and `HeartLandmarkFound { player_id, landmark }` (699).
+- **`PROTOCOL_VERSION` 18** (this track's one bump; the integrator collapses). No save format
+  bump (every new field has a serde default).
+- The Crust's carts gained `crust::CartTuning` / `step_cart_tuned` (mine carts keep `MINE_CART`,
+  bit for bit).
+
+### Game side
+
+- Tile art for every Core tile (`tile_art/heart_art.rs`): layered violet shale, dark matter as
+  violet shards growing upward, banded event shale and pink event glass, rusty basalt columns,
+  the rails' steel beam with its teal magnet strip on a see-through truss (ramps drawn slanted),
+  boosters' lime strip, riveted pylons, warm star rock, drive alloy with gold seams, the
+  chamber's circuit-lined shell, the seal's keyhole, the braided cable; each stratum's back wall.
+  Liquid metal now glows molten (amber over rust).
+- World (`rendering/world/heart.rs`): halos round glowing Core tiles; each well's horizon and
+  turning accretion disc; the cable's dark line through the open deep and, after the ending, its
+  light climbing from the Heart up the cable, out of the ground at its column and across the sky
+  to the Moon's underside (drawn over the dark; seen from the Heart, the surface and the Moon);
+  the Star Drive in its chamber with each phase's tell (the pulse's contracting ring, infall
+  streaks, the two beams, the dark core brightening and the exhale's ring), awake and turning
+  after.
+- Lensing (`rendering/post_process.rs`): `uLens` (the well's point on the view, its reach and
+  strength): a point lens with an Einstein ring and the horizon's shadow, in both GLSL variants,
+  its strength the eased Lensing level (so the accessibility setting governs it); elsewhere the
+  old centred bulge.
+- HUD (`rendering/heart_hud.rs`): the weight meter with dark matter aboard, a well's pull, the
+  rail ride, the Heart's fight (coils, health, the pulse, the beams, the breath), "the stars are
+  open"; the camera pulls back and leans toward the Star Drive in its chamber and during the
+  awakening. Story cards for the four landmarks (`StoryMomentKind::HeartPlace`) and news lines.
+- The ending's screens (`rendering/ending.rs`): the awakening's title, the cutaway, the credits
+  over the stars with the lit cable, the epilogue card; they cover the seat's view and cards.
+- Sprites (`pixel_art/sprites/heart.rs`) for the fourteen kinds (the Heart itself is drawn at full
+  size by the world renderer).
+- Audio: twenty patches appended at the end of `patches!` (`audio/patch/heart.rs`: four music
+  beds, the Heart's fight theme, the ending's theme, four ambience beds, the cable's light, the
+  drive's inhale, pull, ignition and exhale, a coil breaking, dark matter's inverted chime, the
+  rails' zap, a well's groan, the metal's splash), `heart_cue`; the director's `heart_music`
+  plays each stratum's piece and bed, the fight's theme in the chamber, the ending's theme over
+  everything while the seat's ending plays.
+- Scenes: `heart_dark_matter_veins`, `heart_falling_up`, `heart_upfall`,
+  `heart_singularity_fields`, `heart_lens`, `heart_core_ocean`, `heart_rail_switch`,
+  `heart_ferry_terminal`, `heart_approach`, `heart_phase_coils`, `heart_phase_ignition`,
+  `heart_phase_collapse`, `heart_awakening`, `heart_cable_surface`, `heart_cable_moon`,
+  `heart_ending_ascent`, `heart_ending_moon`, `heart_credits`, `heart_epilogue`,
+  `heart_stars_open`.
+
+### Tests
+
+`world/heart_tests.rs`: dark matter lightening a rig until it falls up, ore bringing it down,
+alike at 30 and 60 Hz; a light rig turning freely and settling; a well pulling a rig in, bit for
+bit twice and alike at 30/60 Hz, bending the light; the horizon crushing a hull; a mag-rail ride
+that boards, boosts, switches to the low line, jumps and is caught; the Heart waking and sleeping;
+**a bot with full kit waking the Heart through all three phases** (every pull told first, struck
+while it exhales, more than 20 % of its hull left); a Peaceful world's open chamber;
+`space_unlocked` and the Star Drive saved (JSON), replicated (the section) and reaching a later
+joiner; the ending's shield; the Star Drive's sky boost and the stars over the Moon; the Heart
+Key's seal; older worlds untouched; the creatures keeping the body rules; a null moth drinking.
+`heart::ending` tests the state machine (phases in order, a skip to the epilogue and a close,
+each seat skipping only its own, the light's climb). `heart::tests`, `heart::fields::tests`,
+`worldgen/descent/heart/tests.rs` (the sea and rails, wells, the chamber and cable, veins and
+halls, story rooms kept off).
+
+### Seams and known limits
+
+- Fluids are not pulled by the wells (a fluid cell has no position to move; the wells act on
+  every body).
+- The probe models the magnetic rails as ordinary travel and the Heart as fixed minutes
+  (`boss_pattern`); its markers count the Heart's novelties and set pieces.
+- The ending's camera does not travel up the cable: the awakening is in the world and the
+  climb is the cutaway (the terrain far up is not streamed for a seat).
+- Logs 73-80 (Amos alone in Descent VIII) are the story track's; the landmark cards here are
+  written to agree with them.
+- Wave 11 reads `space_access`; "the stars are open" is a message and the Star Drive a boost
+  until space flight exists.
+
+### The probe (Wave 10 heart)
+
+`fatherload --balance-report --only descent` on this branch: Descent VII ends at 69.6 h,
+Dark Matter Veins at 72.3 h, Singularity Fields at 74.7 h, Core Ocean at 77.3 h and the Heart at
+**80.1 h** (target 75-90 h), whole run 80.1 h; Descent VIII's strata wait at most 15-17 minutes
+between new things (the over-40-minute gaps the probe still reports are Descent VII's, the
+ancients tracks' placeholders on this branch). The Heart's fight scenes and the ending's scenes
+start with the stratum banner and tips already read, so the captures show the fight.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

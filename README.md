@@ -489,7 +489,7 @@ classic ladder exactly. Beacons, built lifts and dive charges work in every worl
   its gate system; the Bio-Filter halves gas damage, the Sonar Suite reaches further, Lamp II
   lights wider.
 - **The descent probe.** `fatherload --balance-report --only descent` has a bot play all 41
-  strata on these curves; its first run estimates 76.5 hours to the Heart (target 60-90), with
+  strata on these curves; its first run estimates 80.1 hours to the Heart (target 60-90), with
   something new at least every 30 minutes (details and the full table in
   [packages/simulation/README.md](packages/simulation/README.md)).
 
