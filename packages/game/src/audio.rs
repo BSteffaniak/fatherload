@@ -287,7 +287,18 @@ mod tests {
                 | Patch::CityPistonThump
                 | Patch::CityCrusherSlam
                 | Patch::CityHumLoop
-                | Patch::CityEngineBedLoop => (40.0, 3_000.0),
+                | Patch::CityEngineBedLoop
+                // Descent VII part B (wave 10): the Colossus's fist and theme, the hall
+                // coming down, the door's grind, the tremors and the garrison's low beds.
+                | Patch::AbFistSlam
+                | Patch::AbHallCollapse
+                | Patch::AbDoorGrind
+                | Patch::AbTremor
+                | Patch::AbGarrisonLoop
+                | Patch::AbBarracksLoop
+                | Patch::AbSealGateLoop
+                | Patch::AbSealHallLoop
+                | Patch::AbColossusLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

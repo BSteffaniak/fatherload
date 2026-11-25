@@ -971,13 +971,13 @@ impl Patch {
                 .instances(2)
                 .send(0.45)
                 .jitter(0.0, 0.3),
-            Self::AbBayOpen | Self::AbDefenceBreak | Self::AbTremor | Self::AbDoorGrind => {
+            Self::AbBayOpen | Self::AbDefenceBreak | Self::AbTremor => {
                 PatchInfo::new(Impact)
                     .instances(2)
                     .send(0.35)
                     .jitter(0.05, 1.0)
             }
-            Self::AbFistSlam | Self::AbHallCollapse => PatchInfo::new(Big)
+            Self::AbFistSlam | Self::AbHallCollapse | Self::AbDoorGrind => PatchInfo::new(Big)
                 .instances(2)
                 .send(0.45)
                 .jitter(0.03, 0.5)

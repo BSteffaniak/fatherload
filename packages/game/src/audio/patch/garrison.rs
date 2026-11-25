@@ -143,9 +143,11 @@ pub(super) fn door_grind(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn tremor(rng: &mut Rng) -> Vec<f32> {
     let mut rumble = Noise::new(NoiseColor::Brown, rng.next_u64());
     let mut low = Svf::new(FilterMode::LowPass, 140.0, 0.9);
+    // Keep the rumble's weight above the infrasound (brown noise drifts below 30 Hz).
+    let mut floor = Svf::new(FilterMode::HighPass, 48.0, 0.7);
     let mut out = render(2.0, |t| {
         let shape = segments(t, &[(0.0, 0.0), (0.4, 1.0), (1.2, 0.7), (2.0, 0.0)]);
-        low.process(rumble.next()) * shape * (0.8 + 0.2 * sine(t, 5.0))
+        floor.process(low.process(rumble.next())) * shape * (0.8 + 0.2 * sine(t, 5.0))
     });
     grains(rng, &mut out, 24, (0.3, 1.9), (1_000.0, 5_000.0), 0.2);
     out
@@ -222,7 +224,8 @@ pub(super) fn colossus_loop(rng: &mut Rng) -> Vec<f32> {
     let mut grind = Osc::new(Wave::Saw).with_phase(rng.unit());
     let mut filter = Svf::new(FilterMode::LowPass, 300.0, 1.3);
     let mut out = render(loop_length(), |t| {
-        let gate = if (t * 2.0).fract() < 0.5 { 1.0 } else { 0.6 };
+        // A pulsing grind, smooth so the loop has no hard edges (nor a click at its seam).
+        let gate = 0.8 + 0.2 * sine(t, 2.0);
         filter.run(grind.next(55.0), 260.0 + 120.0 * sine(t, 0.5), 1.3) * gate * 0.3
     });
     let step = LOOP_SECONDS / 16.0;
