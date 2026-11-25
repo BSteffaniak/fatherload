@@ -8074,6 +8074,11 @@ at stations and lands on worlds. Life support and the nav HUD come with it.
 - `FlightCommand::Station(StationService)` sells fuel (2 credits a unit), repairs (4 a hull
   point) and flight gear: the Nav Suite (3 tiers), the Re-entry Shield (3), the Gyro
   Stabiliser, Horizon Hold and Auto-Land.
+- The home system's station (Halcyon Dock) sits 7,000 tiles across and 10,500 tiles up from
+  the home world's centre, so the straight line from the launch point clears the home
+  world's 8,500-tile approach sphere (flying through it hands the rig back to the home sky).
+  Test: `a_bot_flies_from_home_to_the_station_and_docks_by_hand`, a bot with only the
+  player's controls and no assists, cruises there, lines up and docks in about 65 s.
 
 ### Assists (all off by default)
 
