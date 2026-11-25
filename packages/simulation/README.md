@@ -6626,6 +6626,197 @@ wait 38, for part B). The Heart Key lands at 69.6 h. No retune was needed.
   Megacity 163 min / 62.6 h, Engine Halls 148 / 65.1, Archive 148 / 67.6, Descent VII
   71.4 h, whole run 79.8 h, 7 deaths, longest gap 39 min (the part-B placeholders).
 
+## Wave 10 ancients-b: Descent VII part B, the Sleeping Garrison, the Seal Gate and the Gatekeeper Colossus (`src/garrison.rs`, `src/world/garrison.rs`, `src/world/enemies/garrison.rs`, `src/worldgen/descent/garrison.rs`)
+
+Expansion plan §14, Descent VII strata 4-5 and its gate. Everything is V11 only
+(`has_descents()`); V1-V10 digests, hashes and replays are unchanged.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (gently, then pushed) | Creatures | Set pieces | Ores, resource | Music / ambience |
+|---|---|---|---|---|---|
+| Sleeping Garrison | **the garrison wakes in waves**: a rig walking into a fort stirs it; after an 18 s build window (`STIR_MILLIS`) machines climb out of its bays wave after wave (`wave_roster`: more and heavier waves deeper, half as many again per extra rig, at most twelve out), each wave telegraphed by its bays pulsing red for `WAVE_TELL_MILLIS` (5 s), a 9 s breather between; the last wave beaten, **the garrison sleeps again** and its armoury pays every rig holding the fort (credits at the Descent's price, war plate, ancient alloy). Nobody holding the fort for `ABANDON_MILLIS` (15 s): it **stands down** (its machines go back in, the waves start over; no other penalty). **Base defence** with the build kit (below) | war sentry (walks, red visor bolt), lancer drone (hangs, then dives with its lance), siege walker (four legs; a long crouch and a glowing mortar before a lobbed shell that breaks defences) | barracks forts (`FORT_REGION` 120x80, a third of the cells at the top to most at the bottom; three waves) and the **Grand Bastion** (one per world, five waves, the biggest armoury, racks of sleeping machines, its story card) | mythril, uranium; War Plate | `SleepingGarrison` (martial snare, low brass ostinato) / `Barracks` (dormant hum, a ratchet) |
+| The Seal Gate | **tremors** (`tremor_period`: every 42 s at the top to 20 s at the bottom): the stratum shakes and stones fall from the ceilings over every rig in it (2-4 a rig, `tremor_stones`), each marked by dust pouring and a red mark where it lands for `TREMOR_TELL_MILLIS` (1.4 s); none in a peaceful world | seal warden (hovering gilded sentinel; its ring flares before a slow orb), gilded crawler (rears and lunges) | the **Seal Court** (six key altars before the door) and the **Processional Way** (a pillared tunnel at the court's floor, 46 columns, that a rig digging down near it hits); the **Seal Gate** | mythril, platinum; Seal Gold (veins in the rock) | `SealGate` (gilded pads, a deep bell) / `SealHall` (resonance, trickling dust) |
+| Gate | **the Seal Gate** opens to the keys of every Descent (`SealKey`: Deep Claim, Pressure Hull, Bio-Filter, Sonar Suite and Cryo Hull, Gravity Anchor, Phase Drill): six sockets on the door light for the keys the seat's rig carries; a rig carrying them all at the door lights them one by one (`SOCKET_MILLIS`) and the door sinks into the floor row by row (`DOOR_ROW_MILLIS`); a rig missing one is told which, once. Behind it the **Gatekeeper Colossus** (`EnemyKind::GatekeeperColossus`, three stages, `ColossusStage`) across a **collapsing hall** | the Colossus and its head, fists and legs (each a hit area drawn where it is), stage three's war sentries | the Gatekeeper's hall (88x34, seal stone nothing digs) | | `GatekeeperColossus` (huge drums, brass, a grinding ostinato) |
+
+Reward: the **Heart Key** (`RigSystem::boss_reward` is the Colossus; never sold,
+`UpgradeLock::Boss`), fitted to every rig of the crew (and rigs that join later). Only a rig
+carrying it drills the **Heart Seal** (`CaveTile::HeartSeal`, blast-proof): three ragged rows
+across every column under the Seal Gate's boundary zone (`heart_seal`) seal Descent VIII.
+
+### The Gatekeeper Colossus (`world/enemies/garrison.rs`)
+
+- **Body**: the core (the torso, hit radius 48, the most `MAX_HIT_RADIUS` allows) with four
+  part entities (`ColossusPart`: head r33, two fists r30, legs r45) placed every tick at fixed
+  offsets from the core (`rest_offset`) or where a fist's attack has it, so every hit area is
+  where its sprite is drawn (the game draws each part at 1.5x art scale: the sprite's half size
+  is its hit radius). A hit on a part passes to the core (`garrison_damage`: the head x1.6, the
+  fists x0.4 armour and x1 while they rest after striking, the legs x0.7); parts never die.
+- **Stage one, the Guard**: it stands on the hall's far floor, swaying four tiles towards the
+  middle and back; every 4.2 s a fist rises over the nearest rig's column (a red mark and a
+  column of red light on the floor, `FIST_TELL_MILLIS` 1.3 s) and slams (a shockwave 2.4 tiles
+  each side, `SLAM_WAVE`); its eye fires fans of teal bolts.
+- **The first collapse** (at 66 %): telegraphed for `COLLAPSE_TELL_MILLIS` (4 s: it roars, its
+  core flares, the cracks glow and dust pours; it cannot attack or be hurt), then the **cracked
+  floor** falls into the crypt (`collapse_writes`) with rubble ramps at both ends.
+- **Stage two, the Fall**: it stands in the crypt; its fists sweep the crypt floor end to end
+  (a glowing line first; rise over them) while the vault sheds stones over the rigs (dust and a
+  mark first, `RUBBLE_VOLLEY`).
+- **The second collapse** (at 33 %): the **cracked vault** comes down, leaving three rubble
+  platforms in the air; its legs fall away.
+- **Stage three, Unbound**: the bare core (x1.3 damage) hovers after the rigs, slamming faster
+  (1 s tells) and calling up to two war sentries every 14 s.
+- No solid tile is ever written onto a body (`tile_occupied`); no countdown fails the fight.
+  With nobody in the hall for 30 s it sleeps and heals to its stage's top; **the hall keeps its
+  collapses** and it wakes at that stage. Its death fits the Heart Key and opens the crypt's
+  floor (`victory_shaft`) on the way down. A peaceful world yields the gate at once.
+
+### The build kit's defences (`base::Buildable::Defence`, `garrison::DefenceKind`)
+
+A fourth build group, **Defences** (number key 4), in the palette with everything else, so
+keyboard, pad, touch and every seat build them with the existing build mode:
+
+| Defence | Footprint | Hit points | What it does |
+|---|---|---|---|
+| Auto-Turret | 1x2, on a floor | 160 | shoots the nearest hostile it sees within 11 tiles every 0.6 s (14 kinetic, kill credit to its builder); its tracer is in the state (`Defence::fired`) |
+| War-Plate Barricade | 1x1 solid (`CaveTile::WarBarricade`, unbreakable and blast-proof) | 240 | a wall machines must batter down |
+| Shock Trap | 1x1, on a floor | 90 | zaps what walks over it (26, EMP on machines: they are stunned), re-arms in 2.5 s |
+
+- They go up **in any claim** the builder may build in (base defence against night raids too)
+  and **inside a garrison fort's walls without a claim** (field works). No claim may be staked
+  over a fort (`BuildRefusal::InFort`: a claim's safe zone would turn the waves' blows).
+  Locked until a crew reaches the Sleeping Garrison (`BuildRefusal::NeedsGarrison`; test mode:
+  always). Credits scale with the Descent (`WorldState::defence_cost`), blocks from the hopper.
+- Garrison machines batter the defences they reach every second (`batter_damage`: sentry 14,
+  walker 34, drone 8); a siege shell breaks those it lands among (`SHELL_BLAST`). Taking one
+  down with the build kit refunds half its credits. Barricades are terrain tiles (terrain ops);
+  turrets and traps live in the `Garrison` section.
+
+### Generation (`worldgen/descent/garrison.rs`, a pass of `streamed::assemble` after the far Strange Layers' and before the story)
+
+Forts (`forts_with`, `fort_tile`: war-plate walls two thick, gates four rows tall in both side
+walls, war bays every ninth column of the ceiling and one in each wall, two ledges, the hold
+pylon), the Grand Bastion (`grand_bastion`), the Gatekeeper's hall (`colossus_hall`, on the
+side of the spawn away from the outposts' lift so the cable never crosses it; `hall_tile`
+clears everything but bedrock), the Seal Court and the Processional Way (`court_tile`), the
+Heart Seal over everything but bedrock, and the rock (war-plate scrap, seal gold veins). The
+expedition's story pass keeps its sites off all of them (`crosses_set_pieces`, in
+`crosses_strata_set_pieces`). **`GOLDEN_V11_DIGEST` is updated** (`0xd527_8215_2d11_3606`);
+V1-V10 digests unchanged.
+
+### State, formats and events
+
+- `Garrison` (world field, appended shared `SectionKey::Garrison`, saved with serde defaults,
+  hashed once non-empty): forts that stirred (keyed by their pylon, saved through
+  `pair_list`), defences, the Seal Gate, the Colossus's fight, falling stones, the tremor clock,
+  landmarks found. `GarrisonSchedule` (saved, never hashed or replicated, cleared in client
+  keyframes): whom the gate refused. No local points are stored (tiles, ticks and entity ids
+  only), so the frame needs no reframing.
+- Appended: twelve `CaveTile`s with **codes 160-171** (kept clear of the other tracks' appended
+  codes), nine `EnemyKind`s (`WarSentry` .. `ColossusLegs`), five `ShotKind`s (`SentryBolt`,
+  `SiegeShell`, `WardenOrb`, `ColossusBolt`, `FallingStone`), `Buildable::Defence`,
+  `BuildGroup::Defences`, `BuildRefusal::{NeedsGarrison, InFort}`, `MusicCue::{SleepingGarrison,
+  SealGate, GatekeeperColossus}`, `AmbienceCue::{Barracks, SealHall}`, `LandmarkKind::Garrison`.
+- Events: `GameplayEventKind::Garrison { what, player_id, x, y }`, netcode codes
+  `650 + GarrisonEvent::code()` (650-669, all twenty used).
+- **`PROTOCOL_VERSION` 18** (one bump for the track). **No save format bump** (every new field
+  has a serde default; an older save loads with the section empty, test).
+- Hooks: the drill refuses the Heart Seal without the Heart Key (`heart_seal_refuses`); siege
+  shells break defences where they burst (`garrison_shell_burst`); the Colossus's parts pass hits
+  on (`garrison_damage`), the unbound core takes more (`garrison_damage_factor`), the collapse
+  shrugs hits off (`garrison_ignores_damage`); a fort's machines know its holders and the
+  Colossus its hall (`garrison_notice`); the Colossus and its parts never roam.
+- Dev and scene seams: `stage_defence`, `stage_fort_wave`, `stage_colossus`,
+  `stage_colossus_fist`, `set_garrison`, `colossus_hall`, `seal_door`, `seal_court`,
+  `seal_keys_of`, `missing_seal_key`, `forts_near`, `fort_at`, `garrison_landmark_at`.
+- Shared files touched additively: `depth_progression` (the Heart Key is boss-won; the tests
+  that bought it now check it is never sold), the probe's authored content
+  (`garrison::authored_content`).
+
+### Game side
+
+- Tile art (`tile_art/garrison_art.rs`): riveted olive war plate with worn chevrons, slatted
+  bays behind a red lens, amber-banded pylons, hazard-edged barricades, dark bronze seal stone
+  with amber joints (glowing cracks on the cracked floor and vault), the gold door with engraved
+  rings, the crimson Heart Seal veined white, seal gold, rubble, key altars; back walls: dark
+  olive bulkheads, umber stone with gilded glyphs, and the Gatekeeper's hall's bronze with gold
+  pilasters.
+- Sprites (`pixel_art/sprites/garrison.rs`, generated from ASCII art): the five creatures, the
+  Colossus's torso (guard, roaring, unbound), head (calm, glaring), fist (clenched, red-hot),
+  legs, five shots, the turret (idle, firing) and the trap (armed, spent).
+- World (`rendering/world/garrison.rs`): fort racks of sleeping machines (green lamps asleep,
+  red when up), the hold pylon's band of amber light while a garrison is up, lit bays pulsing
+  faster as a wave nears, turrets with tracers, traps arcing, damage bars; the door's six
+  sockets in their keys' colours (lit per the seat's rig, then one by one as it opens) and a
+  gold glow as it sinks; a raised fist's red mark and column, a sweep's glowing line, the
+  collapse's glowing cracks and pouring dust, dust and a landing mark over every falling stone.
+  Every pulse is slow and steadies with the effects setting off.
+- HUD (`rendering/garrison_hud.rs`): the fort's wave of all, machines left, the build window and
+  tells (tells, never fail countdowns) and "leave and it stands down"; at the door the six keys
+  held or missing; in the hall the Colossus's stage, health and the collapse warning (a panel at
+  the top middle, clear of the fight).
+- News and cards (`local_game::announce_garrison`): landmark cards on every seat; a fort's
+  waves, tremors and the Colossus's fight for every local seat; the gate's verdict naming the
+  missing key and the rewards for the seat they concern.
+- Audio (appended at the end of `patches!`, `audio/patch/garrison.rs`, names prefixed `ab_`):
+  ten one-shots (turret shot, trap zap, klaxon, bay opening, defence breaking, fist slam, hall
+  collapse, socket chime, door grind, tremor), two music beds, two ambience beds and the
+  Colossus's theme (`garrison_music` in the director).
+- Scenes: `ab_garrison_telegraph`, `ab_garrison_defence`, `ab_grand_bastion`,
+  `ab_seal_gate_sockets`, `ab_seal_gate_opening`, `ab_seal_tremor`, `ab_colossus_guard`,
+  `ab_colossus_slam`, `ab_colossus_collapsing`, `ab_colossus_fallen`, `ab_colossus_unbound`.
+
+### Tests
+
+`world/garrison_tests.rs`: the places generated in the world (pylon, door, cracked floor, the
+Heart Seal under the hall); a fort stirring, telegraphing from its lit bays, sleeping after its
+last wave and paying its armoury; a fort standing down and starting over; waves waking at the
+same world time at 20 and 60 Hz and the garrison deterministic; defences placed in a fort
+without a claim but not in the open, locked before the garrison, refunded, no claim over a fort;
+a turret shooting a drone down (its tracer in the state), a trap stunning a sentry, a walker
+battering a barricade down; defences saved, replicated, hashed and older saves loading empty;
+tremor stones telegraphed by dust at every tick rate; the Seal Gate refusing each missing key
+(saying which, once) and opening with all six, its sockets lit one by one; **a bot with Descent
+VII kit (railgun, hull tier 15) beating the Colossus through every stage in order** across the
+collapsing hall, each collapse telegraphed for the full warning and immune, more than 15 % hull
+left, the Heart Key fitted and the floor opened; the parts drawn where they hit and passing hits
+to the core; a peaceful hall yielding and a lonely one sleeping with its collapse kept; the
+Heart Key boss-won, the Heart Seal refusing a drill and a blast without it and yielding to it;
+the garrison creatures keeping the body rules. `garrison::tests` and
+`worldgen::descent::garrison::tests` cover the rules' maths and the generation.
+
+### Descent probe
+
+The probe counts this track's content (`garrison::authored_content`: waking garrisons, base
+defence, garrison forts and the Grand Bastion; tremors, the gate's sockets, the Seal Court and
+the Colossus) beside the registry's new creatures, music and landmarks. Default seed, 60 Hz:
+
+| Stratum | Minutes | Leaves at (h) | Longest gap (min) |
+|---|---|---|---|
+| VII Sleeping Garrison | 150 | 68.3 | 56 |
+| VII The Seal Gate | 194 | 71.5 | 22 |
+
+The Heart Key is won at 69.1 h; Descent VII ends at 71.5 h (target 66-82) and the whole run
+at 79.9 h (target 75-90). The Sleeping Garrison's 56-minute gap is the one carried in from the
+placeholder Archive of Stars above it (ancients-a's stratum: the gap runs from its last new
+thing to the garrison's arrival); inside the garrison the new things come every 20 minutes or
+so. The Seal Gate (Wave 9's open item) now passes.
+
+### Seams and known limits
+
+- The Heart track owns Descent VIII: the Heart Seal is this track's (the boundary under the Seal
+  Gate); a later pass over its rows must leave it whole.
+- The story track owns logs 68-72 (the garrison and the gate); the landmarks' beats are separate
+  cards, and the story's sites keep off these places.
+- Ancients-a owns strata 1-3 and Descent VII's outpost; the Phase Drill's alloy seal opens onto
+  its Buried Megacity.
+- Defences need a claim outside forts (there is no free-standing field work in the open), and
+  they target any hostile, not just garrison machines; a turret's shot is hitscan.
+- Machines batter defences by reach, not by path: a sentry stuck behind a barricade it cannot
+  reach shoots over it.
+- The fists' tell frame flickers rather than following its exact tell (the renderer reads the
+  marks from the state).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

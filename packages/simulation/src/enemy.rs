@@ -4986,9 +4986,13 @@ mod tests {
         for kind in EnemyKind::ALL {
             let stats = kind.stats();
             assert!(stats.health > 0.0, "{kind:?}");
-            // The Leviathan's great body is the one exception (Wave 9).
+            // The Leviathan's great body is an exception (Wave 9), and so are the Gatekeeper
+            // Colossus's core and parts (Wave 10), scripted in their own hall.
+            let giant = kind == EnemyKind::Leviathan
+                || kind == EnemyKind::GatekeeperColossus
+                || kind.is_colossus_part();
             assert!(
-                stats.radius >= 6.0 && (stats.radius <= 20.0 || kind == EnemyKind::Leviathan),
+                stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"
             );
             // The crestback is a gentle mount (Wave 9): it never bites.
@@ -5041,7 +5045,11 @@ mod tests {
 
     #[test]
     fn every_kind_drops_something_worth_more_deeper() {
-        for kind in EnemyKind::ALL {
+        // The Colossus's parts never die (their hits pass to its core, Wave 10).
+        for kind in EnemyKind::ALL
+            .into_iter()
+            .filter(|kind| !kind.is_colossus_part())
+        {
             let shallow_items: u32 = (0..20)
                 .flat_map(|roll| loot(kind, 2, roll))
                 .map(|stack| stack.count)
