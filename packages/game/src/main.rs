@@ -25,6 +25,8 @@ mod scene_capture;
 mod screen_fx;
 mod shell;
 #[cfg(not(target_os = "emscripten"))]
+mod space_report;
+#[cfg(not(target_os = "emscripten"))]
 mod story_report;
 mod touch_screen;
 mod view_frame;
@@ -80,6 +82,9 @@ fn main() {
             eprintln!("{error}");
             std::process::exit(2);
         }
+    }
+    if space_report::run_if_asked(&args) {
+        return;
     }
     match village_report::parse_args(&args) {
         Ok(Some(options)) => {

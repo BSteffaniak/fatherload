@@ -71,6 +71,7 @@ pub mod rng;
 pub mod service;
 pub mod sky;
 pub mod skycraft;
+pub mod space;
 pub mod star_chart;
 pub mod summary;
 pub mod surface;

@@ -8,18 +8,23 @@
 //! buried city's shared section ([`crate::ancient_city::AncientCity::charts`]); read it with
 //! `WorldState::star_charts()`.
 //!
-//! # For the space generator (Wave 11)
+//! # Charts lead to real systems (Wave 11)
 //!
-//! * [`StarChart::system`] is the star system's **stable id**: seed the system's generation
-//!   from it (it already folds in the world seed). Two worlds never share ids by accident.
-//! * [`StarChart::sector`] is the system's position in the galaxy, in **sectors** relative to
-//!   the home system at `(0, 0)` ([`HOME_SECTOR`]), x to the right and y "up" the galactic
-//!   plane. Charts lie [`CHART_RING`] sectors out, nearer charts first: the Archive's
-//!   shallower vaults point to nearer stars.
-//! * [`StarChart::class`] and [`StarChart::worlds`] are what the chart promises (the star's
-//!   colour and how many worlds circle it, at least one): the generator should honour them.
-//! * [`StarChart::name`] is the builders' name for it, as the archivist reads it.
-//! * The list never shrinks or reorders; new charts append. Ids are unique in a list.
+//! * [`StarChart::sector`] is a **space sector** ([`crate::space::SpaceSector`]) relative to
+//!   the home system's at `(0, 0)` ([`HOME_SECTOR`]). Charts lie [`CHART_RING`] sectors out,
+//!   nearer charts first: the Archive's shallower vaults point to nearer stars.
+//! * [`StarChart::system`] is the id of a **real system the space generator places in that
+//!   sector** ([`crate::space::StarSystem::id`]): [`chart_at_site`] asks the generator
+//!   ([`crate::space::chart_target`]) and picks one of the sector's systems with worlds.
+//!   [`crate::space::resolve_chart`] (or `Space::chart_system`) maps a chart to its
+//!   `(sector, system index)`; a chart read before Wave 11 (an id hashed from its plinth)
+//!   resolves to a system of its sector picked by that id, so every chart leads somewhere.
+//! * [`StarChart::class`] and [`StarChart::worlds`] are the generator's star class and planet
+//!   count for that system (at least one world).
+//! * [`StarChart::name`] is the builders' name for it, as the archivist reads it (the same
+//!   name the generator gives the system).
+//! * The list never shrinks or reorders; new charts append. Ids are unique in a list (two
+//!   plinths charting the same star add it once).
 
 use serde::{Deserialize, Serialize};
 
@@ -35,11 +40,15 @@ pub const MAX_CHARTS: usize = 512;
 const SALT_SYSTEM: u64 = 0x57A2_C0DE;
 const SALT_PLACE: u64 = 0x57A2_0001;
 const SALT_NAME: u64 = 0x57A2_0002;
+const SALT_PICK: u64 = 0x57A2_0003;
 
 /// What kind of star a chart shows.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize,
+)]
 pub enum StarClass {
     /// A yellow sun like home's.
+    #[default]
     Yellow,
     /// A small red star.
     Red,
@@ -170,7 +179,8 @@ pub fn star_name(id: u64) -> String {
     name
 }
 
-/// The system id of the chart on the plinth at tile `(x, y)` of a world seeded `seed`.
+/// The plinth hash of the chart at tile `(x, y)` of a world seeded `seed` (before Wave 11 a
+/// chart's system id; now it only seeds which of its sector's systems the chart names).
 #[must_use]
 pub const fn system_id(seed: u64, x: i32, y: i32) -> u64 {
     // Never zero (zero could read as "no system" to a later reader).
@@ -215,16 +225,14 @@ pub fn chart_at_site(
     } else {
         sector
     };
-    #[allow(clippy::cast_possible_truncation, reason = "masked")]
-    let class = StarClass::ALL[((roll >> 32) % StarClass::ALL.len() as u64) as usize];
-    #[allow(clippy::cast_possible_truncation, reason = "below eight")]
-    let worlds = 1 + ((roll >> 40) % 7) as u8;
+    // The space generator's own system there (Wave 11): its id, star and world count.
+    let target = crate::space::chart_target(seed, sector, hash2(system, SALT_PICK, x, y));
     StarChart {
-        system,
+        system: target.id,
         sector,
-        class,
-        worlds,
-        name: star_name(system),
+        class: target.class,
+        worlds: target.planets,
+        name: star_name(target.id),
         site: (x, y),
         found,
     }
