@@ -448,6 +448,12 @@ impl WorldState {
         self.place_pass.store
     }
 
+    /// Whether the tick runs by stores (a pass of [`Self::simulate_places`] is under way).
+    #[must_use]
+    pub(super) const fn place_pass_running(&self) -> bool {
+        self.place_pass.running
+    }
+
     /// Whether a ground pass of a store other than the home world's is running.
     #[must_use]
     pub const fn in_ground_pass(&self) -> bool {
@@ -991,6 +997,12 @@ impl WorldState {
             let store_output = self.simulate_store(store, tick, inputs);
             output.merge_pass(store_output);
         }
+        // Space combat (Wave 12 hostiles) once a tick with every rig back from its store: free
+        // flight's rigs live in the Space store, far flyers park in the home store, and the
+        // ships fight them all on one clock (Wave 12 integration).
+        self.place_pass.store = StoreKey::Home;
+        self.place_pass.ground_only = false;
+        self.advance_hostiles(inputs, next_tick, &mut output);
         self.place_pass.running = false;
         self.place_pass.store = StoreKey::Home;
         self.place_pass.ground_only = false;

@@ -344,8 +344,12 @@ impl WorldState {
             self.advance_tombs(next_tick, &mut output);
             // Space flight (Wave 11): leaving home over the Moon, life support, the beacon.
             self.advance_star_flight(&mut output);
-            // Hostile factions and space combat (Wave 12 hostiles, `world/hostiles.rs`).
-            self.advance_hostiles(inputs, next_tick, &mut output);
+            // Hostile factions and space combat (Wave 12 hostiles, `world/hostiles.rs`): here
+            // on a world of one store; a world of stores fights once after every store's pass,
+            // with every rig back (free flight lives in its own store, Wave 12 integration).
+            if !self.place_pass_running() {
+                self.advance_hostiles(inputs, next_tick, &mut output);
+            }
             let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
             for player_id in recovery_player_ids {
                 if self.recover_lost_cargo_for_player(player_id) {
