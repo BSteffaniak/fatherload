@@ -4232,7 +4232,7 @@ impl EnemyKind {
                 ..stats("Shard Crab", Creature, Walking, AttackStyle::Lunge)
             },
             Self::GlintMoth => EnemyStats {
-                radius: 5.0,
+                radius: 6.0,
                 health: 6.0,
                 speed: 80.0,
                 sight_tiles: 10.0,
@@ -5900,12 +5900,16 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         EnemyKind::Trundlehorn | EnemyKind::Shellstrider | EnemyKind::Woolhorn => {
             add(richer, 2 + extra);
         }
-        // The frontier worlds (Wave 12): the hunters pay; the fauna carry nothing worth it.
+        // The frontier worlds (Wave 12): the hunters pay; the fauna carry little worth it.
         EnemyKind::DuneSkipper
         | EnemyKind::MirageMoth
         | EnemyKind::EmberStrider
         | EnemyKind::GlintMoth
-        | EnemyKind::ChimeDrifter => {}
+        | EnemyKind::ChimeDrifter => {
+            if rare < 15 {
+                add(mineral, 1);
+            }
+        }
         EnemyKind::BasaltTortoise | EnemyKind::CinderBat => {
             if rare < 30 {
                 add(mineral, 1);
@@ -5998,8 +6002,10 @@ mod tests {
             );
             // The crestback is a gentle mount (Wave 9): it never bites; nor do the wild
             // worlds' harmless fauna (Wave 12 planets-a).
+            // ... and neither do the frontier worlds' neutral fauna (Wave 12).
             assert!(
                 stats.contact_damage > 0.0
+                    || kind.is_frontier_fauna()
                     || matches!(
                         kind,
                         EnemyKind::Crestback | EnemyKind::Glimmerfin | EnemyKind::Rimeskipper
