@@ -383,8 +383,9 @@ pub fn step_flight(
                 }
                 // The parking hold: idle, slow, in open space with little pull.
                 let idle = input.forward == 0.0 && input.strafe == 0.0 && !spooling;
+                // Open space, or a station's sphere: never a world's, a hole's or a mouth's.
                 let open = matches!(flight.place, FlightPlace::Space)
-                    || down_body.is_none_or(|body| !body.landable() && body.kind != BodyKind::Home);
+                    || matches!(flight.place, FlightPlace::Approach(body) if body.index >= super::space::STATION_INDEX && body.index < super::space::COMET_INDEX);
                 let holding_before = flight.marks & MARK_HOLDING != 0;
                 let slow = flight.speed()
                     < if holding_before {

@@ -847,7 +847,9 @@ impl WorldState {
         let tier = player.hazard_gear.flight.nav_suite;
         let space = self.space();
         let fogged = nav::in_nebula(&space, centre);
-        let range = nav::ping_range(tier, fogged);
+        // Wave 12 systems: the fog where the rig is cuts the reach further, by its thickness.
+        let range = nav::ping_range(tier, fogged)
+            * crate::flight::systems::fog_range_share(space.fog_at(centre));
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_precision_loss,

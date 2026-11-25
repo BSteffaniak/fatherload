@@ -75,6 +75,8 @@ pub mod physics;
 pub mod space;
 pub mod systems;
 #[cfg(test)]
+mod systems_tests;
+#[cfg(test)]
 mod tests;
 
 pub use space::{BodyKind, FlightBody, GeneratedSpace, SpaceQuery, SpaceSystem, SystemRef};

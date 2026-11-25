@@ -167,6 +167,8 @@ pub(crate) mod places;
 #[cfg(test)]
 mod places_tests;
 mod space_systems;
+#[cfg(test)]
+mod space_systems_tests;
 pub use body_flight::{
     BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
 };

@@ -266,7 +266,15 @@ fn flying_back_into_the_home_world_hands_the_rig_to_its_sky() {
     let line = world.space_line_row().expect("line");
     let frame = world.frame();
     let rig = world.player(PLAYER).expect("rig");
-    assert_eq!(frame.col(rig.x), 12, "over the column it left from");
+    // Wave 12 systems: under the point of the home world it approached (a quarter turn east
+    // of the departure's column, the Moon's), not the column it left from.
+    let moon_column = crate::worldgen::sky::moon_column(&settings()).expect("moon");
+    let east = moon_column + 15_708;
+    assert!(
+        (frame.col(rig.x) - east).abs() <= 4,
+        "under the point it approached: {} vs {east}",
+        frame.col(rig.x)
+    );
     assert!(frame.row(rig.y) > line, "under the space line");
     assert!(rig.velocity_y > 0.0, "still falling in");
     // Coming in belly first is level in the home sky (the frames turn, the rig does not).
