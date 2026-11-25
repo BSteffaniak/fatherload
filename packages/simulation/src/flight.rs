@@ -65,6 +65,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ids::PlayerId, position::WorldPos, terrain::TILE_SIZE};
 
+#[doc(hidden)]
+pub mod autopilot;
 pub mod nav;
 pub mod physics;
 pub mod space;

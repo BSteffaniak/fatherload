@@ -166,6 +166,11 @@ pub(crate) mod places;
 #[cfg(test)]
 mod places_tests;
 mod body_flight;
+pub use body_flight::{
+    BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
+};
+#[cfg(test)]
+mod space_journey_tests;
 pub mod planet;
 #[cfg(test)]
 mod planet_tests;

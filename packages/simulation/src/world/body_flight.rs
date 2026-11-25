@@ -43,7 +43,7 @@ use crate::{
 use super::{WorldState, flight::AIR_REARM_SHARE};
 
 /// A rig is handed to a body's ground this many rows inside the top of its strip.
-pub const LAND_INSIDE_ROWS: f64 = 4.0;
+pub const LAND_INSIDE_ROWS: f64 = 8.0;
 /// A rig on a body's ground leaves for space this many rows over the top of its strip (more
 /// than [`LAND_INSIDE_ROWS`], so a rig hovering at the line never flickers between the two).
 pub const TAKE_OFF_ABOVE_ROWS: f64 = 2.0;
