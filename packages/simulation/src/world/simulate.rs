@@ -207,8 +207,9 @@ impl WorldState {
                 self.update_weapon(player_id, controls.weapon, tick.next(), &mut output);
                 if let Some(fuel_before) = fuel_before
                     && !no_clip
+                    && !ground_only
                 {
-                    // Lift ladders in bases (WP-BASE).
+                    // Lift ladders in bases (WP-BASE; bases are the home world's, F11).
                     self.apply_base_lift(player_id, fuel_before, controls.thrust);
                 }
             }

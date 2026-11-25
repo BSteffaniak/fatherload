@@ -948,3 +948,30 @@ fn special_charges_break_a_no_bombs_job_but_flares_do_not() {
     assert!(failed(&deploy(&mut world, ExplosiveKind::C4)));
     assert!(active(&world, LEAD, QUIET).is_none());
 }
+
+/// F11 (review fix): a crew quest's owner away on a space body is still in the world; the
+/// world pass, which sets away rigs aside, must not drop its crew quests.
+#[test]
+fn a_crew_quest_survives_its_owner_visiting_another_place() {
+    use crate::{
+        place::{BodyId, Place, SpaceBodyKey},
+        position::WorldPos,
+    };
+    let mut world = crew_world();
+    unlock(&mut world, LEAD, TWIN_FUSES);
+    accept(&mut world, LEAD, TWIN_FUSES, true);
+    assert_eq!(world.crew_quests().active.len(), 1);
+    world
+        .move_to_place(
+            LEAD,
+            Place::OnBody(BodyId::Space(SpaceBodyKey::new(1, 1, 0, 0))),
+            WorldPos::tile_center(0, -2),
+        )
+        .expect("lands");
+    let _ = idle(&mut world, 30);
+    assert_eq!(
+        world.crew_quests().active.len(),
+        1,
+        "the crew quest waits for its owner"
+    );
+}

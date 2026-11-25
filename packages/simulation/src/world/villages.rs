@@ -49,6 +49,10 @@ impl WorldState {
     /// The single rule for "may this rig use that counter", shared by the shell and the tick.
     #[must_use]
     pub fn player_village_building(&self, player_id: PlayerId) -> Option<(Arc<Village>, usize)> {
+        // Villages are on the home world (F11).
+        if !self.store_of(player_id).is_home() {
+            return None;
+        }
         // On foot the pilot is the one at the door (Part II F5).
         let (x, y) = self.actor_position(player_id)?;
         village::building_in(self.terrain.settings(), self.frame(), x, y)

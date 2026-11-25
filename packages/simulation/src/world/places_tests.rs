@@ -565,3 +565,66 @@ fn a_world_that_never_left_home_hashes_as_before() {
     // The body's ground stays (frozen, saved) once visited.
     assert!(!back.places().is_empty());
 }
+
+/// Review fix: the town's counters are the home world's. A rig on a body standing where the
+/// depot would be in its own ground's coordinates cannot sell, refuel or repair there, and no
+/// surface zone is reported for it.
+#[test]
+fn the_home_towns_counters_are_not_on_other_bodies() {
+    let mut world = deep_world(1);
+    let depot = crate::surface::SURFACE_BUILDINGS
+        .iter()
+        .find(|building| building.zone == crate::economy::SurfaceZone::Depot)
+        .expect("a depot");
+    let column = i64::from(depot.tile_x + depot.tile_width / 2);
+    world
+        .move_to_place(ONE, place_of(BODY_A), over_surface(column))
+        .expect("lands");
+    run(&mut world, 60, |_| ControlState::default());
+    // In the body's own coordinates the rig stands over the depot's columns.
+    let (x, y) = world
+        .store_frame(world.store_of(ONE))
+        .map(|frame| {
+            let rig = world.player(ONE).expect("rig");
+            frame.legacy_px(rig.x, rig.y)
+        })
+        .expect("a frame");
+    assert!(
+        crate::surface::surface_zone_at(x, y, TILE_SIZE).is_some(),
+        "the test stands where the town would be"
+    );
+    assert_eq!(world.player_surface_zone(ONE), None);
+    // Something to sell, a tank to fill and a hull to mend.
+    let rig = world.player_mut(ONE).expect("rig");
+    rig.cargo_bay.add(MineralKind::Copper, 3);
+    rig.fuel = 5.0;
+    rig.hull = 40.0;
+    rig.credits = 10_000;
+    for command in [
+        crate::PlayerCommand::SellCargo,
+        crate::PlayerCommand::Refuel,
+        crate::PlayerCommand::Repair,
+    ] {
+        let mut inputs = TickInputs::default();
+        inputs
+            .players
+            .entry(ONE)
+            .or_default()
+            .actions
+            .push(crate::TickAction {
+                sequence: crate::InputSequence::new(1),
+                command: command.clone(),
+            });
+        let now = world.simulation_tick();
+        let output = world.simulate_tick(now, &inputs);
+        assert!(
+            output
+                .action_outcomes
+                .iter()
+                .all(|outcome| outcome.outcome
+                    == crate::PlayerScopedCommandOutcome::IgnoredUnavailable),
+            "{command:?} on a body: {:?}",
+            output.action_outcomes
+        );
+    }
+}

@@ -1320,11 +1320,15 @@ impl WorldState {
         // Wave 8: a bay with no ore left (sold at a village, lost in a wreck, handed over)
         // carries no haul premium into the next trip.
         if !self.logistics.haul_descent.is_empty() {
+            // A rig away in another place this tick (F11) keeps its premium: its bay is
+            // checked when it is back in this pass.
             let players = &self.players;
+            let set_aside = &self.place_pass_set_aside();
             self.logistics.haul_descent.retain(|player_id, _| {
-                players
-                    .get(player_id)
-                    .is_some_and(|player| player.cargo_bay.minerals().next().is_some())
+                set_aside.contains(player_id)
+                    || players
+                        .get(player_id)
+                        .is_some_and(|player| player.cargo_bay.minerals().next().is_some())
             });
         }
         // Rides (a wrecked rig drops out of its cab; the rescue takes it from there).

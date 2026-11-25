@@ -253,6 +253,9 @@ pub struct PlacePass {
     pending_moves: Vec<(PlayerId, Place, WorldPos)>,
     /// Whether a pass is running at all.
     running: bool,
+    /// The players set aside for the running pass (they are in another store this tick; the
+    /// world pass's cleanups must not mistake them for players who left the world).
+    set_aside: BTreeSet<PlayerId>,
     /// Whether the world ticks by region (read from the home terrain at the start of the
     /// tick).
     regions: bool,
@@ -927,6 +930,19 @@ impl WorldState {
         })
     }
 
+    /// Whether `player_id` is in the world: a live rig of the running pass, or one set aside
+    /// for it because it is in another store this tick (F11). World-level cleanups that drop
+    /// the state of players who left use this, not `players.contains_key`.
+    #[must_use]
+    pub(crate) fn player_in_world(&self, player_id: PlayerId) -> bool {
+        self.players.contains_key(&player_id) || self.place_pass.set_aside.contains(&player_id)
+    }
+
+    /// The players set aside for the running pass (see [`Self::player_in_world`]).
+    pub(crate) fn place_pass_set_aside(&self) -> BTreeSet<PlayerId> {
+        self.place_pass.set_aside.clone()
+    }
+
     /// Takes the players `away` accepts (and their drills) out of the world for a pass.
     fn stash_players(&mut self, away: impl Fn(PlayerId) -> bool) -> PassPlayers {
         let mut stash = PassPlayers::default();
@@ -936,6 +952,7 @@ impl WorldState {
             .copied()
             .filter(|id| away(*id))
             .collect();
+        self.place_pass.set_aside = ids.iter().copied().collect();
         for id in ids {
             if let Some(player) = self.players.remove(&id) {
                 stash.players.insert(id, player);
@@ -951,6 +968,7 @@ impl WorldState {
     }
 
     fn restore_players(&mut self, stash: PassPlayers) {
+        self.place_pass.set_aside.clear();
         self.players.extend(stash.players);
         self.active_drills.extend(stash.drills);
         self.active_drill_timers.extend(stash.timers);

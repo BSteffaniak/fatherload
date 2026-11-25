@@ -571,7 +571,8 @@ impl WorldState {
             }
         }
         let mut crew = std::mem::take(&mut self.progression.crew_quests.active);
-        crew.retain(|quest| self.players.contains_key(&quest.owner));
+        // A crew member away in another place this tick keeps its quests (F11).
+        crew.retain(|quest| self.player_in_world(quest.owner));
         crew.retain_mut(|quest| self.step_quest_or_fail(quest, tick, notes, &facts, &mut events));
         crew.append(&mut self.progression.crew_quests.active);
         self.progression.crew_quests.active = crew;

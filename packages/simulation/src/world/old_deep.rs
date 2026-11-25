@@ -251,8 +251,12 @@ impl WorldState {
         }
         // Players who left the world keep nothing (a rig riding a lift is still here: it
         // keeps its dose for when it steps off).
-        let players = &self.players;
-        self.old_deep.doses.retain(|id, _| players.contains_key(id));
+        // A rig away in another place this tick keeps its dose too (F11).
+        let doses = std::mem::take(&mut self.old_deep.doses);
+        self.old_deep.doses = doses
+            .into_iter()
+            .filter(|(id, _)| self.player_in_world(*id))
+            .collect();
     }
 
     fn advance_mutations(&mut self, rigs: &[Rig], next_tick: SimulationTick) {

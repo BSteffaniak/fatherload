@@ -147,6 +147,10 @@ impl WorldState {
     /// The surface building zone `player_id`'s rig stands at, if any.
     #[must_use]
     pub fn player_surface_zone(&self, player_id: PlayerId) -> Option<SurfaceZone> {
+        // The town is on the home world (F11).
+        if !self.store_of(player_id).is_home() {
+            return None;
+        }
         // On foot the pilot is the one at the counter (Part II F5).
         let (x, y) = self.actor_position(player_id)?;
         // The town is a place: read the actor's absolute position (F7).
@@ -162,6 +166,15 @@ impl WorldState {
     /// cannot buy, sell or refuel from anywhere in the world.
     #[must_use]
     pub fn command_allowed_here(&self, player_id: PlayerId, command: &PlayerCommand) -> bool {
+        // The town's counters, the villages, the sky buoys and the townsfolk are the home
+        // world's (F11): away on a body or in space, a rig standing where they would be in
+        // its own ground's coordinates is not at them.
+        if !self.store_of(player_id).is_home()
+            && (command_service_zones(command).is_some()
+                || matches!(command, PlayerCommand::People(_)))
+        {
+            return false;
+        }
         if let PlayerCommand::Service(SessionServiceRequest::Village {
             village, building, ..
         }) = command
