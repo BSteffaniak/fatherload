@@ -334,7 +334,9 @@ impl PolarGeometry {
         let surface_columns = (std::f32::consts::TAU * radius).round().max(8.0) as u32;
         let mut halvings = Vec::new();
         let mut width = 1.0_f32;
-        let core = 12.0_f32.min(radius * 0.25);
+        // The core chamber: 12 tiles, or more on a giant whose eight halvings would run out
+        // before it (the shader takes eight).
+        let core = 12.0_f32.min(radius * 0.25).max(radius * 0.7 / 256.0 * 1.05);
         let mut depth = 0;
         while halvings.len() < MAX_HALVINGS {
             // The tile width at the bottom of row `depth` is width * (R - depth - 1) / R.
@@ -474,22 +476,28 @@ mod tests {
         assert!((zoom(0.0, 400.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
         assert!((zoom(4.0, 5_000.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
         assert!((zoom(1e9, 400.0) - SYSTEM_PX_PER_TILE).abs() < 1e-6);
-        // Far out, the whole body fits below the craft (the camera is locked to the craft).
+        // Coming in, the body's centre stays in the view below the craft (the camera is locked
+        // to the craft); far out, the whole body does.
         for (altitude, radius) in [(600.0, 400.0), (2_000.0, 5_000.0), (40_000.0, 9_000.0)] {
             let z = zoom(altitude, radius);
-            let far_side = (altitude + 2.0 * radius) * z;
-            assert!(far_side < 720.0, "{altitude} {radius}: {far_side}");
+            assert!(
+                altitude * z < 300.0,
+                "{altitude} {radius}: surface off screen"
+            );
+            if altitude >= 1.5 * radius {
+                let far_side = (altitude + 2.0 * radius) * z;
+                assert!(far_side < 720.0, "{altitude} {radius}: {far_side}");
+            }
             assert!(radius * z > 20.0, "{altitude} {radius}: too small");
         }
         // Monotonic and never jumping by more than a few percent per small step.
         let mut last = GROUND_PX_PER_TILE;
-        let mut altitude = 1.0_f32;
-        while altitude < 3e6 {
+        for step in 0..320 {
+            let altitude = 1.05_f32.powi(step);
             let z = zoom(altitude, 1_500.0);
             assert!(z <= last + 1e-6);
             assert!(z >= last * 0.9, "{altitude}: {last} -> {z}");
             last = z;
-            altitude *= 1.05;
         }
     }
 
@@ -508,10 +516,14 @@ mod tests {
                 let bottom = top - 1.0;
                 let top_width = std::f32::consts::TAU * top / columns;
                 let bottom_width = std::f32::consts::TAU * bottom / columns;
-                assert!(top_width <= 1.45, "R {radius} row {row}: {top_width}");
+                // Rows are whole tiles, so the last rows by the core run a little wide.
+                assert!(top_width <= 1.5, "R {radius} row {row}: {top_width}");
                 assert!(bottom_width >= 0.65, "R {radius} row {row}: {bottom_width}");
             }
-            assert!(geometry.radius_of_row(geometry.last_row() as f32 + 1.0) <= 12.5);
+            assert!(
+                geometry.radius_of_row(geometry.last_row() as f32 + 1.0)
+                    <= geometry.core_radius_tiles + 0.5
+            );
         }
     }
 

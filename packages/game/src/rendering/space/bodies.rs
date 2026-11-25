@@ -163,7 +163,7 @@ impl PlanetShader {
                 ]),
             ),
         ];
-        let colour3 = [
+        let tints = [
             (self.locations.dark, rgb(colours[0])),
             (self.locations.mid, rgb(colours[1])),
             (self.locations.light, rgb(colours[2])),
@@ -179,7 +179,7 @@ impl PlanetShader {
                     ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
                 );
             }
-            for (location, values) in colour3 {
+            for (location, values) in tints {
                 ffi::SetShaderValue(
                     **shader,
                     location,

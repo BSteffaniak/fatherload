@@ -210,7 +210,7 @@ fn build_moon(shaft: bool) -> FixtureStrip {
         for y in 0..height {
             let band = geometry.band(y);
             let centre = (MOON_COLUMN as i64 >> band) as i32;
-            let half = if band == 0 { 1 } else { 0 };
+            let half = i32::from(band == 0);
             for x in centre - half..=centre + half {
                 terrain.set_kind(TilePosition { x, y }, TileKind::Air);
             }
@@ -286,7 +286,7 @@ pub struct FixtureGround {
 }
 
 impl SpaceFixture {
-    fn empty(camera: SpaceCamera) -> Self {
+    const fn empty(camera: SpaceCamera) -> Self {
         Self {
             camera,
             stars: Vec::new(),

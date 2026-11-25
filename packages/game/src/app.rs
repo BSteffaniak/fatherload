@@ -296,6 +296,24 @@ struct App {
     space_view: Option<crate::rendering::space::fixtures::SpaceFixture>,
 }
 
+/// One frame of a staged space view (see [`App::space_view`]): its clock runs, nothing else.
+fn space_view_frame(
+    (raylib, thread): (&mut raylib::RaylibHandle, &raylib::RaylibThread),
+    renderer: &mut GameRenderer,
+    fixture: &mut crate::rendering::space::fixtures::SpaceFixture,
+    delta_seconds: f32,
+) -> bool {
+    #[cfg(not(target_os = "emscripten"))]
+    if raylib.window_should_close() {
+        return false;
+    }
+    fixture.advance(delta_seconds);
+    renderer.sync_space(raylib, thread, &fixture.view(), fixture.force_quads);
+    let mut draw = raylib.begin_drawing(thread);
+    renderer.render_space(&mut draw, &fixture.view());
+    true
+}
+
 /// The staged space view asked for, if any (see [`App::space_view`]).
 fn requested_space_view() -> Option<crate::rendering::space::fixtures::SpaceFixture> {
     use crate::rendering::space::fixtures;
@@ -361,6 +379,10 @@ impl App {
     }
 
     /// One complete frame; only the desktop loop blocks between frames.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one frame in order: input, simulation, audio, drawing"
+    )]
     fn frame(&mut self, browser_delta: Option<f32>) -> bool {
         let Self {
             pointer,
@@ -399,15 +421,7 @@ impl App {
         }
         let delta_seconds = browser_delta.unwrap_or_else(|| raylib.get_frame_time());
         if let Some(fixture) = space_view {
-            #[cfg(not(target_os = "emscripten"))]
-            if raylib.window_should_close() {
-                return false;
-            }
-            fixture.advance(delta_seconds);
-            renderer.sync_space(raylib, thread, &fixture.view(), fixture.force_quads);
-            let mut draw = raylib.begin_drawing(thread);
-            renderer.render_space(&mut draw, &fixture.view());
-            return true;
+            return space_view_frame((raylib, thread), renderer, fixture, delta_seconds);
         }
         #[cfg(not(target_os = "emscripten"))]
         let exit_requested = raylib.window_should_close();

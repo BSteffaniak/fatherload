@@ -305,13 +305,16 @@ mod tests {
         assert!(fragment_source(false, body).starts_with("#version 330\n"));
         // WebGL1: no texture(), in/out qualifiers, integer bit operations or bare integer
         // literals in the shared body.
-        assert!(!body.contains("texture("), "use TEX()");
-        assert!(!body.contains(" in "), "no in qualifiers");
-        assert!(!body.contains("<<") && !body.contains(">>") && !body.contains(" & "));
-        for line in body
+        let code: Vec<&str> = body
             .lines()
             .filter(|line| !line.trim_start().starts_with("//"))
-        {
+            .collect();
+        for line in &code {
+            assert!(!line.contains("texture("), "use TEX(): {line}");
+            assert!(!line.contains(" in "), "no in qualifiers: {line}");
+            assert!(!line.contains("<<") && !line.contains(">>") && !line.contains(" & "));
+        }
+        for line in code {
             for token in line.split(|c: char| !c.is_ascii_alphanumeric() && c != '.') {
                 assert!(
                     token.is_empty() || !token.chars().all(|c| c.is_ascii_digit()),

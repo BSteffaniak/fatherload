@@ -22,7 +22,7 @@ use crate::rendering::pixel_art::palette;
 
 /// How much of the motion effects the setting lets through (never quite none: the lines are
 /// how the player reads speed).
-fn motion_share(view: &SpaceRenderView<'_>) -> f32 {
+const fn motion_share(view: &SpaceRenderView<'_>) -> f32 {
     view.effects.scale(ScreenEffect::Wobble).max(0.2)
 }
 
@@ -71,7 +71,7 @@ fn lines(
     let shown = (count as f32 * intensity).ceil() as usize;
     additive(|| {
         for index in 0..shown {
-            let h = hash64(&[0x5eed, index as i64]);
+            let h = hash64(&[0x5eed, i64::try_from(index).unwrap_or(0)]);
             let rate = if warp {
                 0.9 + unit(h, 8) * 0.8
             } else {

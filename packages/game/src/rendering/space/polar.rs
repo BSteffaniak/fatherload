@@ -238,6 +238,7 @@ impl PolarGround {
     /// Draws the ground over `viewport` (logical points) with the craft at `pivot`. `sun` is
     /// the angle of the body's star from the camera's local up (radians, clockwise); `blend`
     /// fades the whole pass (approaching from space).
+    #[allow(clippy::too_many_lines, reason = "the shader's uniforms, one by one")]
     pub fn draw(
         &self,
         ground: &GroundView<'_>,
@@ -383,15 +384,10 @@ impl PolarGround {
                     width: fine.width as f32,
                     height: fine.height as f32,
                 },
-                ffi::Rectangle {
-                    x: viewport.x,
-                    y: viewport.y,
-                    width: viewport.width,
-                    height: viewport.height,
-                },
+                viewport,
                 ffi::Vector2 { x: 0.0, y: 0.0 },
                 0.0,
-                Color::new(255, 255, 255, (blend.clamp(0.0, 1.0) * 255.0) as u8).into(),
+                Color::new(255, 255, 255, (blend.clamp(0.0, 1.0) * 255.0) as u8),
             );
             ffi::EndShaderMode();
         }
@@ -400,11 +396,11 @@ impl PolarGround {
     /// The fallback: the fine window as curved quads (a few tiles wide each, so the curve
     /// stays smooth), lit per quad.
     pub fn draw_quads(&self, ground: &GroundView<'_>, camera: &RingCamera, sun: f32, blend: f32) {
+        const STEP: i32 = 4;
         let (Some(fine), Some(window)) = (self.fine.as_ref(), self.fine_window.as_ref()) else {
             return;
         };
         let geometry = ground.strip.geometry();
-        const STEP: i32 = 4;
         let alpha = (blend.clamp(0.0, 1.0) * 255.0) as u8;
         // SAFETY: an immediate-mode batch on the live fine texture, closed in this block.
         unsafe {
@@ -522,7 +518,7 @@ fn shade(colour: Color, light: f32) -> Color {
     Color::new(scale(colour.r), scale(colour.g), scale(colour.b), colour.a)
 }
 
-fn quad(values: &[f32; 8], start: usize) -> [f32; 4] {
+const fn quad(values: &[f32; 8], start: usize) -> [f32; 4] {
     [
         values[start],
         values[start + 1],
@@ -555,7 +551,7 @@ fn atmosphere(ground: &GroundView<'_>) -> (f32, [f32; 3]) {
     )
 }
 
-fn snap_down(value: i64, step: i64) -> i64 {
+const fn snap_down(value: i64, step: i64) -> i64 {
     value.div_euclid(step) * step
 }
 

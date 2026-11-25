@@ -347,6 +347,6 @@ mod tests {
     #[test]
     fn the_band_is_brightest_on_its_spine() {
         assert!((band_weight(0.0, 0.0) - 1.0).abs() < 1e-6);
-        assert!(band_weight(0.0, 2_000.0) < 0.01);
+        assert!(band_weight(0.0, BAND_SPACING * 0.5) < 0.01);
     }
 }

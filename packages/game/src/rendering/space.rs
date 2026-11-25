@@ -90,11 +90,11 @@ impl Projection {
     /// direction), so a star a light year away never makes a NaN.
     #[must_use]
     pub fn project(&self, position: WorldPos) -> (f32, f32) {
+        const LIMIT: f64 = 1.0e7;
         let (dx, dy) = self.camera.delta_f64(position);
         let scale = f64::from(self.scale);
         let (mut x, mut y) = (dx * scale, dy * scale);
         let far = x.abs().max(y.abs());
-        const LIMIT: f64 = 1.0e7;
         if far > LIMIT {
             x *= LIMIT / far;
             y *= LIMIT / far;
@@ -295,7 +295,7 @@ impl SpaceRenderer {
                 // is not used while it is open).
                 unsafe {
                     ffi::BeginTextureMode(**target);
-                    ffi::ClearBackground(SPACE_BLACK.into());
+                    ffi::ClearBackground(SPACE_BLACK);
                 }
                 self.draw_far(draw, view, &local);
                 // SAFETY: closes the texture pass above.
@@ -331,10 +331,10 @@ impl SpaceRenderer {
                             width: viewport.width,
                             height: -viewport.height,
                         },
-                        viewport.into(),
+                        viewport,
                         ffi::Vector2 { x: 0.0, y: 0.0 },
                         0.0,
-                        Color::WHITE.into(),
+                        Color::WHITE,
                     );
                     ffi::EndShaderMode();
                 }
@@ -379,10 +379,10 @@ impl SpaceRenderer {
         projection: &Projection,
     ) {
         starfield::draw_sky(draw, &self.art, view, projection);
-        objects::draw_nebulae(draw, &self.art, view, projection);
+        objects::draw_nebulae(&self.art, view, projection);
         objects::draw_wormholes(draw, &self.art, view, projection);
         objects::draw_stars(draw, &self.art, view, projection);
-        objects::draw_black_hole_discs(draw, &self.art, view, projection);
+        objects::draw_black_hole_discs(&self.art, view, projection);
         objects::draw_belts(draw, view, projection);
         self.planets.draw_bodies(draw, &self.art, view, projection);
         objects::draw_asteroids(draw, view, projection);
@@ -420,7 +420,7 @@ pub(super) fn draw_centred(
                 y: size.1 * 0.5,
             },
             degrees,
-            tint.into(),
+            tint,
         );
     }
 }

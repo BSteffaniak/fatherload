@@ -182,13 +182,7 @@ fn draw_star(
 }
 
 /// Draws the nebulae: overlapping cloud quads in their two colours, with young stars inside.
-pub fn draw_nebulae(
-    draw: &mut impl RaylibDraw,
-    art: &SpaceArt,
-    view: &SpaceRenderView<'_>,
-    projection: &Projection,
-) {
-    let _ = draw;
+pub fn draw_nebulae(art: &SpaceArt, view: &SpaceRenderView<'_>, projection: &Projection) {
     for nebula in view.nebulae {
         let point = projection.project(nebula.centre);
         let radius = projection.tiles(nebula.radius_tiles);
@@ -284,7 +278,7 @@ pub fn draw_wormholes(
                     (radius * 6.0, radius * 6.0),
                     0.0,
                     fade(hole.tint, 0.35),
-                )
+                );
             });
         }
         let dark = Color::new(hole.tint.r / 8, hole.tint.g / 8, hole.tint.b / 6 + 8, 255);
@@ -359,11 +353,11 @@ fn draw_disc(
     seconds: f32,
     front: Option<bool>,
 ) {
+    const RINGS: i32 = 16;
+    const SEGMENTS: i32 = 36;
     let horizon = projection.tiles(hole.horizon_tiles).max(3.0);
     let outer = projection.tiles(hole.disc_tiles).max(horizon * 3.0);
     let inner = horizon * 1.6;
-    const RINGS: i32 = 16;
-    const SEGMENTS: i32 = 36;
     // SAFETY: a matrix push balanced by the pop below.
     unsafe {
         ffi::rlPushMatrix();
@@ -387,7 +381,7 @@ fn draw_disc(
                 continue;
             }
             let h = hash64(&[
-                ring as i64,
+                i64::from(ring),
                 ((middle / 360.0 + turn).rem_euclid(1.0) * 24.0) as i64,
             ]);
             let streak = 0.55 + 0.45 * unit(h, 0);
@@ -412,19 +406,13 @@ fn ffiless_ring(inner: f32, outer: f32, start: f32, end: f32, colour: Color) {
             start,
             end,
             3,
-            colour.into(),
+            colour,
         );
     }
 }
 
 /// Draws every black hole's glow and disc (before the lens bends them).
-pub fn draw_black_hole_discs(
-    draw: &mut impl RaylibDraw,
-    art: &SpaceArt,
-    view: &SpaceRenderView<'_>,
-    projection: &Projection,
-) {
-    let _ = draw;
+pub fn draw_black_hole_discs(art: &SpaceArt, view: &SpaceRenderView<'_>, projection: &Projection) {
     for hole in view.black_holes {
         let point = projection.project(hole.centre);
         let outer = projection.tiles(hole.disc_tiles);
@@ -439,7 +427,7 @@ pub fn draw_black_hole_discs(
                     (outer * 4.0, outer * 1.6),
                     (hole.tilt - projection.roll).to_degrees(),
                     fade(palette::ORANGE, 0.3),
-                )
+                );
             });
         }
         additive(|| draw_disc(hole, point, projection, view.seconds, None));
@@ -620,25 +608,24 @@ pub fn draw_rock(
             draw(centre, pb, pa);
         }
     };
-    let mut paint = |colour: Color, scale: f32, shift: (f32, f32)| {
+    let mut layer = |colour: Color, scale: f32, shift: (f32, f32)| {
         fan(
             &mut |a, b, c| draw.draw_triangle(a, b, c, colour),
             scale,
             shift,
         );
     };
-    paint(tones[0], 1.0, (0.0, 0.0));
-    paint(
+    layer(tones[0], 1.0, (0.0, 0.0));
+    layer(
         tones[1],
         0.78,
         (light.0 * radius * 0.16, light.1 * radius * 0.16),
     );
-    paint(
+    layer(
         tones[2],
         0.38,
         (light.0 * radius * 0.4, light.1 * radius * 0.4),
     );
-    drop(paint);
     if radius > 4.0 {
         for crater in 0..2 {
             let hc = hash64(&[h as i64, 50 + crater]);
@@ -653,7 +640,7 @@ pub fn draw_rock(
             );
         }
     }
-    if (h >> 40) % 3 == 0 {
+    if (h >> 40).is_multiple_of(3) {
         for glint in 0..3 {
             let hg = hash64(&[h as i64, 80 + glint]);
             let at = toward(point, unit(hg, 0) * TAU, radius * 0.55 * unit(hg, 16));
@@ -751,9 +738,9 @@ fn draw_comet(
             } else {
                 palette::AMBER
             };
-            let size = if t < 0.2 { 3.0 } else { 2.0 };
+            let speck = if t < 0.2 { 3.0 } else { 2.0 };
             draw.draw_rectangle_rec(
-                Rectangle::new(x.round(), y.round(), size, size),
+                Rectangle::new(x.round(), y.round(), speck, speck),
                 fade(colour, (1.0 - t).powf(1.6) * 0.75),
             );
         }
@@ -840,6 +827,10 @@ fn block(draw: &mut impl RaylibDraw, x: f32, y: f32, w: f32, h: f32, colour: Col
 
 /// A station hub: a ring with modules, a truss, two solar wings, docking arms with slow
 /// lights and an antenna. 64 art pixels across, centred.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one placeholder's parts, top to bottom"
+)]
 fn draw_station(
     draw: &mut impl RaylibDraw,
     art: &SpaceArt,
@@ -895,7 +886,7 @@ fn draw_station(
             0.0,
             360.0,
             28,
-            STEEL.into(),
+            STEEL,
         );
         ffi::DrawRing(
             ffi::Vector2 { x: 0.0, y: 0.0 },
@@ -904,11 +895,11 @@ fn draw_station(
             200.0,
             340.0,
             12,
-            STEEL_LIGHT.into(),
+            STEEL_LIGHT,
         );
-        ffi::DrawCircle(0, 0, 6.5, STEEL_DARK.into());
-        ffi::DrawCircle(0, 0, 4.5, TEAL.into());
-        ffi::DrawCircle(-1, -1, 2.0, MINT.into());
+        ffi::DrawCircle(0, 0, 6.5, STEEL_DARK);
+        ffi::DrawCircle(0, 0, 4.5, TEAL);
+        ffi::DrawCircle(-1, -1, 2.0, MINT);
     }
     // Windows round the ring.
     for index in 0..8 {
