@@ -6817,6 +6817,25 @@ so. The Seal Gate (Wave 9's open item) now passes.
 - The fists' tell frame flickers rather than following its exact tell (the renderer reads the
   marks from the state).
 
+### Review (Wave 10 ancients-b review)
+
+- **The unbound core's lane**: the second collapse's side platforms sat on the very row the
+  bare core hovers along, so it drifted through them while chasing a rig. The platforms now
+  sit one high in the middle (`hall.min.y + 6`) and two low at the sides (`+ 15`), the core
+  hovers at `+ 11` between them, and `the_collapses_open_the_crypt_then_the_vault` checks the
+  core's head-to-fists span (with its bob) misses every platform row. Runtime writes only: no
+  digest moves.
+- The Grand Bastion's note from Amos no longer names Mara (the town's salvage keeper, with no
+  tie to the Fathers); it addresses whoever comes down after them.
+- Re-checked: the probe (Heart Key 69.1 h, Descent VII ends 71.5 h, whole run 79.9 h, the
+  Sleeping Garrison's 56-minute gap carried from the Archive of Stars above); the bot beats
+  the Colossus in about 140 s of fight at 30 Hz with about 70 % hull left on hull tier 15
+  (fair, perhaps on the easy side for a Descent VII gate with a maxed rack).
+- Still weak: the Seal Gate's door is two tiles wide, so it reads as a glowing pillar with
+  sockets more than a three-storey door; the slam's red floor mark is faint beside the rig;
+  the hall's back wall reads near black (gold pilasters on dark bronze); scene captures of the
+  forts show the milestone and tip toasts over the fort.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
