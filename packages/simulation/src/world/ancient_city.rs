@@ -554,8 +554,13 @@ impl WorldState {
                     if !overlaps {
                         continue;
                     }
-                    // Shoved out to the nearer side.
-                    let side: f32 = if x < cx { -1.0 } else { 1.0 };
+                    // Shoved out to the nearer side (the other if rock fills the nearer).
+                    let side = self.free_shove_side(
+                        if x < cx { -1.0 } else { 1.0 },
+                        cx,
+                        half + radius + 1.0,
+                        y,
+                    );
                     let slam = phase == StrokePhase::Out;
                     let struck_recently =
                         self.city_schedule
@@ -620,7 +625,12 @@ impl WorldState {
                         && y - radius < floor_px
                         && y + radius > head_top + 2.0;
                     if in_ram && head_top < floor_px - 1.0 {
-                        let side: f32 = if dx < 0.0 { -1.0 } else { 1.0 };
+                        let side = self.free_shove_side(
+                            if dx < 0.0 { -1.0 } else { 1.0 },
+                            cx,
+                            place.half_span + radius + 1.0,
+                            y,
+                        );
                         if let Some(player) = self.players.get_mut(&player_id) {
                             player.x = quantize(side.mul_add(place.half_span + radius + 1.0, cx));
                             player.velocity_x = quantize(side * 160.0);
@@ -674,6 +684,24 @@ impl WorldState {
                 player.x_remainder = rest;
                 let _ = (vx, radius);
             }
+        }
+    }
+
+    /// Which side (-1 left, 1 right) a machine centred at `cx` shoves a rig at row `y` out to,
+    /// `reach` px from its centre: `preferred`, unless rock fills it and the other side is
+    /// clear (a rig is never shoved into rock it could not drive out of).
+    fn free_shove_side(&self, preferred: f32, cx: f32, reach: f32, y: f32) -> f32 {
+        let blocked = |side: f32| {
+            super::movement::authoritative_player_collides(
+                &self.terrain,
+                side.mul_add(reach, cx),
+                y,
+            )
+        };
+        if blocked(preferred) && !blocked(-preferred) {
+            -preferred
+        } else {
+            preferred
         }
     }
 

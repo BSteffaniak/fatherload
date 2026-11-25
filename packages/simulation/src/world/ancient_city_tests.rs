@@ -476,23 +476,93 @@ fn a_crusher_warns_then_strikes_a_rig_under_it_once_a_slam_and_shoves_it_out() {
         },
     );
     let hull = world.player(PLAYER).expect("rig").hull;
-    let mut struck = 0;
-    for _ in 0..cycle.period_millis * 30 / 1_000 {
-        let events = ticks(&mut world, 1);
-        struck += city_events(&events)
-            .iter()
-            .filter(|(what, _)| *what == CityEvent::Crushed)
-            .count();
-    }
-    assert_eq!(struck, 1, "one strike a slam");
-    assert!(world.player(PLAYER).expect("rig").hull < hull);
-    // Shoved out from under it.
-    let (x, _) = rig_xy(&world);
     let cx = world
         .frame()
         .tile_center(TilePosition { x: column, y: 0 })
         .0;
+    let mut struck = 0;
+    let mut shoved_to = None;
+    for _ in 0..cycle.period_millis * 30 / 1_000 {
+        let events = ticks(&mut world, 1);
+        let hits = city_events(&events)
+            .iter()
+            .filter(|(what, _)| *what == CityEvent::Crushed)
+            .count();
+        if hits > 0 && shoved_to.is_none() {
+            shoved_to = Some(rig_xy(&world));
+        }
+        struck += hits;
+    }
+    assert_eq!(struck, 1, "one strike a slam");
+    assert!(world.player(PLAYER).expect("rig").hull < hull);
+    // Shoved out from under it (the belt may carry it back for the next slam: that is the
+    // line's rhythm), and never into rock.
+    let (x, y) = shoved_to.expect("struck");
     assert!((x - cx).abs() > TILE_SIZE * 1.5, "still under the crusher");
+    assert!(
+        !super::movement::authoritative_player_collides(world.terrain(), x, y),
+        "shoved into rock at {x}"
+    );
+}
+
+#[test]
+fn a_crusher_shoves_a_rig_away_from_rock_never_into_it() {
+    let mut world = world_at(30);
+    let mover = movers(Stratum::EngineHalls)
+        .into_iter()
+        .find(|mover| matches!(mover, CityMover::Crusher { .. }))
+        .expect("a crusher");
+    let CityMover::Crusher {
+        column,
+        housing_row,
+        cycle,
+        ..
+    } = mover.clone()
+    else {
+        unreachable!("a crusher")
+    };
+    let floor = housing_row + 3 + cycle.travel;
+    while mover.crusher_bottom(now(&world)).map(|(_, phase)| phase) != Some(StrokePhase::Rest) {
+        let _ = ticks(&mut world, 1);
+    }
+    // A rig just right of the centre would be shoved right, but rock (dug back in, say) fills
+    // that side: it goes out the open left side instead.
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: column,
+            y: floor - 1,
+        },
+    );
+    let rock: Vec<(TilePosition, TileKind)> = (column + 2..=column + 4)
+        .flat_map(|x| (floor - 3..floor).map(move |y| (TilePosition { x, y }, TileKind::Stone)))
+        .collect();
+    for (position, kind) in &rock {
+        let _ = world.terrain_mut().set_kind(*position, *kind);
+    }
+    let cx = world
+        .frame()
+        .tile_center(TilePosition { x: column, y: 0 })
+        .0;
+    if let Some(rig) = world.player_mut(PLAYER) {
+        rig.x += 2.0;
+    }
+    for _ in 0..cycle.period_millis * 30 / 1_000 {
+        let events = ticks(&mut world, 1);
+        if has(&events, CityEvent::Crushed) {
+            let (x, y) = rig_xy(&world);
+            assert!(
+                x < TILE_SIZE.mul_add(-1.5, cx),
+                "shoved left, out of the rock: {x} vs {cx}"
+            );
+            assert!(
+                !super::movement::authoritative_player_collides(world.terrain(), x, y),
+                "the rig sits in rock"
+            );
+            return;
+        }
+    }
+    panic!("the crusher never struck");
 }
 
 #[test]
@@ -1032,6 +1102,107 @@ fn a_lever_vaults_gate_opens_to_its_lever_and_the_vault_counts_once() {
             .found
             .contains(&CityLandmark::FirstVault)
     );
+}
+
+#[test]
+fn a_pilot_crawls_to_a_lever_vaults_lever_and_the_rig_drives_in_to_its_chart() {
+    use crate::pilot::{PilotAction, PilotMode};
+    let stamp = vault(VaultKind::Lever);
+    let mut world = world_at(30);
+    // The vault waits in rock; the rig has dug up to its face (the gate and the vent above).
+    put_rig(&mut world, cell(&stamp, -3, 6));
+    for lx in -5..=-1 {
+        for ly in 1..=6 {
+            let _ = world
+                .terrain_mut()
+                .set_kind(cell(&stamp, lx, ly), TileKind::Air);
+        }
+    }
+    put_rig(&mut world, cell(&stamp, -3, 6));
+    let _ = ticks(&mut world, 15);
+    let gate = [4, 5, 6].map(|ly| cell(&stamp, 0, ly));
+    let gate_kind =
+        |world: &WorldState| gate.map(|tile| world.terrain().tile(tile).map(|found| found.kind));
+    assert!(
+        gate_kind(&world)
+            .iter()
+            .all(|kind| *kind == Some(TileKind::Built(crate::base::BuiltTile::Gate))),
+        "the gate starts shut"
+    );
+    // Out of the rig, and through the vent into the crawlway beside the lever.
+    let events = world
+        .simulate_tick(
+            world.simulation_tick(),
+            &TickInputs::default().act(PLAYER, PlayerCommand::TogglePilot),
+        )
+        .events;
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event.kind, GameplayEventKind::PilotExited { .. })),
+        "the pilot climbs out"
+    );
+    let _ = ticks(&mut world, 10);
+    let id = world.pilot_of(PLAYER).expect("on foot").0;
+    let frame = world.frame();
+    let (x, _) = frame.tile_center(cell(&stamp, 2, 2));
+    let feet = frame.row_px(stamp.bounds.min.y + 3) - 0.25;
+    world.edit_pilot(id, |body, state| {
+        body.x = x;
+        body.y = feet;
+        body.previous_x = x;
+        body.previous_y = feet;
+        body.velocity_x = 0.0;
+        body.velocity_y = 0.0;
+        state.mode = PilotMode::Free;
+        state.grounded = true;
+    });
+    let _ = ticks(&mut world, 2);
+    let (lever, _) = world.pilot_usable(PLAYER).expect("the lever is in reach");
+    assert_eq!(lever, cell(&stamp, 3, 2));
+    let _ = world.simulate_tick(
+        world.simulation_tick(),
+        &TickInputs::default().act(PLAYER, PlayerCommand::Pilot(PilotAction::Use)),
+    );
+    assert!(
+        gate_kind(&world)
+            .iter()
+            .all(|kind| *kind == Some(TileKind::Air)),
+        "the lever opened the gate: {:?}",
+        gate_kind(&world)
+    );
+    // Back to the rig (it waits outside) and in through the open gate to the plinth.
+    let (rx, ry) = rig_xy(&world);
+    world.edit_pilot(id, |body, state| {
+        body.x = rx;
+        body.y = ry + 10.0;
+        body.previous_x = rx;
+        body.previous_y = ry + 10.0;
+        body.velocity_x = 0.0;
+        body.velocity_y = 0.0;
+        state.mode = PilotMode::Free;
+        state.grounded = true;
+    });
+    let _ = ticks(&mut world, 2);
+    let _ = world.simulate_tick(
+        world.simulation_tick(),
+        &TickInputs::default().act(PLAYER, PlayerCommand::TogglePilot),
+    );
+    let _ = ticks(&mut world, 10);
+    assert!(world.pilot_of(PLAYER).is_none(), "the pilot is back aboard");
+    let inward = if stamp.mirrored { -1.0 } else { 1.0 };
+    let mut read = false;
+    let mut opened = false;
+    for _ in 0..30 * 20 {
+        let events = tick_with(&mut world, ControlState::new(inward, false, false));
+        opened |= has(&events, CityEvent::VaultOpened);
+        if has(&events, CityEvent::ChartRead) {
+            read = true;
+            break;
+        }
+    }
+    assert!(opened && read, "opened {opened}, read {read}");
+    assert_eq!(world.star_charts().len(), 1);
 }
 
 // --- Creatures, state and determinism ----------------------------------------------------------
