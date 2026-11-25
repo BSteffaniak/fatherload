@@ -1222,7 +1222,8 @@ pub(super) fn draw_minimap_for_view(
             player_accent(remote.player_id, Some(remote.cosmetics)),
         );
     }
-    if terrain.is_streamed() {
+    // A round body (Wave 11) has no home town to point at.
+    if terrain.is_streamed() && terrain.planet_ground().is_none() {
         // Navigation in an endless world: which way, and how far, home is.
         let heading = town_heading(crate::view_frame::frame().legacy_x(view.player.x) / TILE_SIZE);
         if heading != "in town" {
@@ -1856,12 +1857,23 @@ fn map_footer(ui: &UiFrame<'_, '_>) -> String {
     };
     let terrain = ui.snapshot.terrain;
     let column = crate::view_frame::frame().legacy_x(ui.player.x) / TILE_SIZE;
-    let across = if terrain.is_streamed() {
-        // An endless world has no edge: say how far the town is, and which way.
-        town_heading(column)
-    } else {
-        format!("{column:.0} m from the west edge")
-    };
+    let across = terrain.planet_ground().map_or_else(
+        || {
+            if terrain.is_streamed() {
+                // An endless world has no edge: say how far the town is, and which way.
+                town_heading(column)
+            } else {
+                format!("{column:.0} m from the west edge")
+            }
+        },
+        |planet| {
+            // A round body (Wave 11): how far round it the rig is.
+            let width = planet.strip_width();
+            #[allow(clippy::cast_precision_loss, reason = "strip widths are small")]
+            let round = column.rem_euclid(width as f32);
+            format!("{round:.0} of {width} m round")
+        },
+    );
     format!(
         "{height} ({layer}) | deepest {} m | {across}",
         ui.snapshot.progression.deepest_tile_reached,

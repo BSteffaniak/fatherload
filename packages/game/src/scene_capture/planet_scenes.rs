@@ -78,6 +78,17 @@ pub const PLANET_SCENES: &[Scene] = &[
         setup: |stage| surface_scene(stage, moon(), 140),
     },
     Scene {
+        name: "planet_moon_spawn",
+        summary: "Where a new moon world sets the rig down: no home town, trails or shops on a body of its own",
+        setup: |stage| {
+            surface_scene(
+                stage,
+                moon(),
+                fatherload_simulation::world::planet::PLANET_SPAWN_COLUMN,
+            );
+        },
+    },
+    Scene {
         name: "planet_moon_halving_ring",
         summary: "Deep in the moon: a shaft through the basalt mantle where the ring's columns halve, every dug ring tile open whole",
         setup: |stage| {

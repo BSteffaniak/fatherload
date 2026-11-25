@@ -1280,8 +1280,10 @@ impl Director {
             let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
             let (first, last) = surface::town_span();
             let surface = snapshot.terrain.surface_row(tile.x);
-            let home_town =
-                (first..=last).contains(&tile.x) && (surface - 14..=surface + 2).contains(&tile.y);
+            // A round body (Wave 11) has no home town.
+            let home_town = snapshot.terrain.planet_ground().is_none()
+                && (first..=last).contains(&tile.x)
+                && (surface - 14..=surface + 2).contains(&tile.y);
             // Villages on the surface and sky towns above it; an underground village's hall is
             // a cave (no birds or carts down there), so it keeps the cave's beds.
             let town = home_town
