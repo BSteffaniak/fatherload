@@ -202,9 +202,14 @@ void main() {
     vec4 texel = vec4(0.0);
     float fx = (pick9(uFineOffA, uFineOffB, uBand8.x, band) + across) / uFine.x;
     float fy = (uFine.z + rowRel) / uFine.y;
+    bool coarse = true;
     if (fx >= 0.0 && fx <= 1.0 && fy >= 0.0 && fy <= 1.0) {
         texel = TEX(texture0, vec2(fx, fy));
-    } else {
+        // A cell whose art is not painted yet holds alpha 1/255: take the coarse map there.
+        coarse = texel.a > 0.002 && texel.a < 0.006;
+    }
+    if (coarse) {
+        texel = vec4(0.0);
         float cx = pick9(uCoarseOffA, uCoarseOffB, uBand8.y, band) + across;
         if (uCoarseInfo.w > 0.5) {
             cx = mod(cx, cols);

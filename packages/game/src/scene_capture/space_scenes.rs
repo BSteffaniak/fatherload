@@ -147,6 +147,11 @@ pub const SPACE_SCENES: &[Scene] = &[
         setup: |stage| stage.space_view("space_warp"),
     },
     Scene {
+        name: "space_moon_flyover",
+        summary: "Wave 11: skimming the small moon's hills (timed with --frame-timing: the ground pans 40 columns a second, its art repainted a little at a time)",
+        setup: |stage| stage.space_view("space_moon_flyover"),
+    },
+    Scene {
         name: "space_cruise",
         summary: "Wave 11: Star Drive cruise past a moon: speed lines",
         setup: |stage| stage.space_view("space_cruise"),

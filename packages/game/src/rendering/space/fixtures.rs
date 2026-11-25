@@ -273,6 +273,8 @@ pub struct SpaceFixture {
     pub effects: EffectsIntensity,
     /// Draw the polar ground as curved quads (the fallback's own scene).
     pub force_quads: bool,
+    /// Surface columns a second the craft flies along the ground (the flyover's motion).
+    pub drift: f64,
 }
 
 /// Where a fixture stands on a body.
@@ -307,6 +309,7 @@ impl SpaceFixture {
             seconds: 12.0,
             effects: EffectsIntensity::Full,
             force_quads: false,
+            drift: 0.0,
         }
     }
 
@@ -344,6 +347,28 @@ impl SpaceFixture {
     /// Advances the presentation clock (the browser's timing page animates).
     pub fn advance(&mut self, seconds: f32) {
         self.seconds += seconds;
+        if self.drift != 0.0
+            && let Some(ground) = self.ground.as_mut()
+        {
+            ground.column += self.drift * f64::from(seconds);
+            self.follow_ground();
+        }
+    }
+
+    /// Puts the space camera where the ground's place is (the camera locked to the craft).
+    fn follow_ground(&mut self) {
+        let Some(ground) = self.ground.as_ref() else {
+            return;
+        };
+        let geometry = ground.strip.geometry();
+        let angle = (ground.column / f64::from(geometry.surface_columns) * std::f64::consts::TAU)
+            + f64::from(ground.body.spin);
+        let radius = f64::from(geometry.radius_of_row(ground.row)) * f64::from(TILE_SIZE);
+        self.camera.centre = ground.body.centre.offset(
+            (angle.sin() * radius) as f32,
+            (-angle.cos() * radius) as f32,
+        );
+        self.camera.roll = angle as f32 + ground.roll;
     }
 
     /// Stands the camera on `body` at `column`, `row` (rolled `roll` against the local up),
@@ -356,19 +381,7 @@ impl SpaceFixture {
         px_per_tile: f32,
         things: Vec<GroundThing>,
     ) {
-        let geometry = strip.geometry();
-        let angle = (column / f64::from(geometry.surface_columns) * std::f64::consts::TAU)
-            + f64::from(body.spin);
-        let radius = f64::from(geometry.radius_of_row(row)) * f64::from(TILE_SIZE);
-        let centre = body.centre.offset(
-            (angle.sin() * radius) as f32,
-            (-angle.cos() * radius) as f32,
-        );
-        self.camera = SpaceCamera {
-            centre,
-            roll: angle as f32 + roll,
-            px_per_tile,
-        };
+        self.camera.px_per_tile = px_per_tile;
         self.ground = Some(FixtureGround {
             body,
             strip,
@@ -377,6 +390,7 @@ impl SpaceFixture {
             roll,
             things,
         });
+        self.follow_ground();
     }
 }
 
@@ -497,7 +511,7 @@ fn surface_things(strip: &FixtureStrip, column: f64) -> Vec<GroundThing> {
 }
 
 /// Every fixture's scene name, in order.
-pub const NAMES: [&str; 19] = [
+pub const NAMES: [&str; 21] = [
     "space_deep_starfield",
     "space_star_system",
     "space_planet_gallery",
@@ -517,9 +531,11 @@ pub const NAMES: [&str; 19] = [
     "space_station_derelict",
     "space_wormhole",
     "space_warp",
+    "space_cruise",
+    "space_moon_flyover",
 ];
 
-/// The fixture named `name` (see [`NAMES`]; also `space_cruise`).
+/// The fixture named `name` (see [`NAMES`]).
 #[must_use]
 #[allow(
     clippy::too_many_lines,
@@ -608,7 +624,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 look: None,
             });
         }
-        "space_moon_surface" | "space_moon_night" | "space_moon_rolled" => {
+        "space_moon_surface" | "space_moon_night" | "space_moon_rolled" | "space_moon_flyover" => {
             moon_sky(&mut fixture);
             let strip = moon(false);
             let (column, roll) = match name {
@@ -619,17 +635,21 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 _ => (MOON_COLUMN, 0.0),
             };
             let ground = strip.ground_row(column) as f32;
-            let row = if name == "space_moon_rolled" {
-                ground - 9.0
-            } else {
-                ground - 0.45
+            let row = match name {
+                "space_moon_rolled" => ground - 9.0,
+                // Skimming the hills (the timing run pans the ground under the craft).
+                "space_moon_flyover" => ground - 4.0,
+                _ => ground - 0.45,
             };
             let things = surface_things(strip, column);
             fixture.stand_on(moon_body(), strip, (column, row, roll), 32.0, things);
             fixture.craft = Some(CraftView {
-                thrusting: name == "space_moon_rolled",
+                thrusting: name == "space_moon_rolled" || name == "space_moon_flyover",
                 look: None,
             });
+            if name == "space_moon_flyover" {
+                fixture.drift = 40.0;
+            }
         }
         "space_planet_surface" | "space_approach_planet" => {
             fixture.stars.push(StarView {

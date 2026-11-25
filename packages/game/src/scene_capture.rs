@@ -275,6 +275,15 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
         // Each scene starts with fresh dialog focus and scroll, whatever the last one showed.
         renderer.reset_ui_state();
         let path = options.dir.join(format!("{}.png", scene.name));
+        if let Some(fixture) = &space {
+            // The polar ground paints its tile art over a few frames; a still shows it all.
+            for _ in 0..2_000 {
+                renderer.sync_space(&mut raylib, &thread, &fixture.view(), fixture.force_quads);
+                if renderer.space_ground_settled() {
+                    break;
+                }
+            }
+        }
         for frame in 0..RENDER_FRAMES {
             let screen = crate::window::DesktopWindow::screen(&raylib);
             let snapshot = game.snapshot(screen);

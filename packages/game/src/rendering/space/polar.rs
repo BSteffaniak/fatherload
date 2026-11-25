@@ -10,6 +10,10 @@
 //! atmosphere. Without the shader (a driver that refuses it) the fine window is drawn as
 //! curved quads instead ([`PolarGround::draw_quads`]), the plan's other route.
 //!
+//! The fine window's art is kept on the CPU and repainted a little at a time ([`fine`]): a
+//! moved window copies what it already holds, a changed tile ([`PolarGround::mark_tile_dirty`])
+//! repaints its rows, and new cells show the coarse map until their art is painted.
+//!
 //! Everything is worked out relative to the camera: the camera's column is an `f64`, each
 //! band's offset into its window is taken in `f64` on the CPU, and the shader only ever sees
 //! small numbers (tiles from the craft), so a 60,000-column world draws as exactly as a small
@@ -23,11 +27,16 @@
     reason = "texture sizes, tile windows and texels are small whole numbers drawn as floats"
 )]
 
-use std::{collections::BTreeMap, f64::consts::TAU};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    f64::consts::TAU,
+};
 
 use raylib::{ffi, prelude::*};
 
 use fatherload_simulation::terrain::{Terrain, TilePosition};
+
+mod fine;
 
 use super::{
     shaders,
@@ -57,10 +66,9 @@ const COARSE_WINDOW: (i32, i32) = (2_048, 1_024);
 const SKY_ROWS: i32 = 48;
 
 /// One painted window of the strip.
-#[derive(Clone, Debug, Default, PartialEq)]
-struct Window {
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Window {
     body: u64,
-    revision: u64,
     /// First row.
     row0: i32,
     /// Size (tiles).
@@ -97,9 +105,15 @@ pub struct PolarGround {
     shader: Option<Shader>,
     locations: Locations,
     fine: Option<Texture2D>,
-    fine_window: Option<Window>,
+    fine_art: fine::FineArt,
     coarse: Option<Texture2D>,
     coarse_window: Option<Window>,
+    /// The coarse map's texels (kept to patch a changed row).
+    coarse_pixels: Vec<u8>,
+    /// The strip revision the coarse map shows.
+    coarse_revision: u64,
+    /// Rows changed since the coarse map was last brought up to date.
+    coarse_dirty: BTreeSet<i32>,
     /// Draw the curved quads even with the shader (the fallback's own screenshot).
     pub force_quads: bool,
     /// Whether this frame's view reaches past the fine window (the coarse map is drawn).
@@ -177,12 +191,22 @@ impl PolarGround {
             shader,
             locations,
             fine: None,
-            fine_window: None,
+            fine_art: fine::FineArt::default(),
             coarse: None,
             coarse_window: None,
+            coarse_pixels: Vec::new(),
+            coarse_revision: 0,
+            coarse_dirty: BTreeSet::new(),
             force_quads: false,
             coarse_used: false,
         }
+    }
+
+    /// Whether every cell of the fine window has its art (scene capture waits for it).
+    #[cfg(not(target_os = "emscripten"))]
+    #[must_use]
+    pub const fn settled(&self) -> bool {
+        !self.fine_art.has_pending()
     }
 
     /// Whether the polar shader compiled.
@@ -190,6 +214,21 @@ impl PolarGround {
     #[must_use]
     pub const fn shader_ready(&self) -> bool {
         self.shader.is_some()
+    }
+
+    /// Tile `tile` of the strip's terrain changed (TODO-SEAM: the integrator calls this for
+    /// each terrain change of the seat's body, as the home world's renderer is told of its
+    /// own). Its rows repaint on the next sync; a strip whose revision changes with no tile
+    /// marked repaints everything over a few frames. Assumes `PolarStrip::tile_at` keeps rows
+    /// (band columns may map anywhere).
+    #[allow(
+        dead_code,
+        reason = "TODO-SEAM: the integrator calls it from the seat's terrain changes"
+    )]
+    pub fn mark_tile_dirty(&mut self, tile: TilePosition) {
+        self.fine_art.mark_dirty(tile);
+        let reach = tile_art::TELLTALE_RADIUS.max(1);
+        self.coarse_dirty.extend(tile.y - reach..=tile.y + reach);
     }
 
     /// Repaints the windows the camera needs (once per frame, before drawing).
@@ -208,23 +247,99 @@ impl PolarGround {
         // Close to the centre the view takes in a wide angle of the deep rings, more columns
         // than the window holds: the coarse map fills in round it.
         let reach_tiles = reach / px_per_tile.max(0.001);
-        self.coarse_used =
-            needed > FINE_MAX || reach_tiles > geometry.radius_of_row(ground.row).max(1.0) * 0.35;
-        let fine = fine_window(ground, geometry, strip.revision(), needed);
-        if self.fine_window.as_ref() != Some(&fine) {
-            let pixels = paint_fine(strip, &fine);
-            let size = (fine.size.0 * TILE_ART, fine.size.1 * TILE_ART);
-            upload(raylib, thread, &mut self.fine, size, &pixels);
-            self.fine_window = Some(fine);
+        let revision = strip.revision();
+        let fine = fine_window(ground, geometry, needed);
+        if self
+            .coarse_window
+            .as_ref()
+            .is_some_and(|coarse| coarse.body != fine.body)
+        {
+            self.coarse_window = None;
+            self.coarse_dirty.clear();
         }
+        self.fine_art
+            .sync(strip, &fine, (ground.column, ground.row), revision);
+        self.upload_fine(raylib, thread);
+        // Cells whose art is not painted yet show the coarse map.
+        self.coarse_used = needed > FINE_MAX
+            || reach_tiles > geometry.radius_of_row(ground.row).max(1.0) * 0.35
+            || self.fine_art.has_pending();
         if self.coarse_used {
-            let coarse = coarse_window(ground, geometry, strip.revision());
-            if self.coarse_window.as_ref() != Some(&coarse) {
-                let pixels = paint_coarse(strip, &coarse);
-                upload(raylib, thread, &mut self.coarse, coarse.size, &pixels);
-                self.coarse_window = Some(coarse);
+            self.sync_coarse(raylib, thread, ground, revision);
+        }
+    }
+
+    /// Uploads what of the fine art changed this frame.
+    fn upload_fine(&mut self, raylib: &mut RaylibHandle, thread: &RaylibThread) {
+        let Some(window) = self.fine_art.window.as_ref() else {
+            return;
+        };
+        let size = (window.size.0 * TILE_ART, window.size.1 * TILE_ART);
+        let fits = self
+            .fine
+            .as_ref()
+            .is_some_and(|texture| texture.width == size.0 && texture.height == size.1);
+        let upload = std::mem::take(&mut self.fine_art.upload);
+        match upload {
+            _ if !fits => upload_texture(raylib, thread, &mut self.fine, size, &self.fine_art.rgba),
+            fine::Upload::Everything => {
+                upload_texture(raylib, thread, &mut self.fine, size, &self.fine_art.rgba);
+            }
+            fine::Upload::Rows(first, last) => {
+                if let Some(texture) = self.fine.as_ref() {
+                    update_rows(
+                        texture,
+                        &self.fine_art.rgba,
+                        size.0,
+                        first * TILE_ART,
+                        (last + 1) * TILE_ART,
+                    );
+                }
+            }
+            fine::Upload::Nothing => {}
+        }
+    }
+
+    /// Brings the coarse map up to the camera and the strip's changes.
+    fn sync_coarse(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        ground: &GroundView<'_>,
+        revision: u64,
+    ) {
+        let strip = ground.strip;
+        let coarse = coarse_window(ground, strip.geometry());
+        let moved = self.coarse_window.as_ref() != Some(&coarse);
+        // Whole rings show every change; a big world's window, the changes it was told of.
+        let unexplained =
+            coarse.ring && revision != self.coarse_revision && self.coarse_dirty.is_empty();
+        if moved || unexplained {
+            self.coarse_pixels = paint_coarse(strip, &coarse);
+            upload_texture(
+                raylib,
+                thread,
+                &mut self.coarse,
+                coarse.size,
+                &self.coarse_pixels,
+            );
+            self.coarse_window = Some(coarse);
+            self.coarse_dirty.clear();
+        } else if !self.coarse_dirty.is_empty() {
+            let rows = std::mem::take(&mut self.coarse_dirty);
+            let (first, last) = (
+                rows.first().copied().unwrap_or(0) - coarse.row0,
+                rows.last().copied().unwrap_or(0) - coarse.row0,
+            );
+            let (first, last) = (first.max(0), last.min(coarse.size.1 - 1));
+            if first <= last {
+                paint_coarse_rows(strip, &coarse, &mut self.coarse_pixels, first..=last);
+                if let Some(texture) = self.coarse.as_ref() {
+                    update_rows(texture, &self.coarse_pixels, coarse.size.0, first, last + 1);
+                }
             }
         }
+        self.coarse_revision = revision;
     }
 
     /// The ring camera for `ground` seen at `px_per_tile` with the craft at `pivot`.
@@ -258,7 +373,7 @@ impl PolarGround {
         let Some(fine) = self.fine.as_ref() else {
             return;
         };
-        let Some(window) = self.fine_window.as_ref() else {
+        let Some(window) = self.fine_art.window.as_ref() else {
             return;
         };
         if blend <= 0.0 {
@@ -411,7 +526,7 @@ impl PolarGround {
     /// stays smooth), lit per quad.
     pub fn draw_quads(&self, ground: &GroundView<'_>, camera: &RingCamera, sun: f32, blend: f32) {
         const STEP: i32 = 4;
-        let (Some(fine), Some(window)) = (self.fine.as_ref(), self.fine_window.as_ref()) else {
+        let (Some(fine), Some(window)) = (self.fine.as_ref(), self.fine_art.window.as_ref()) else {
             return;
         };
         let geometry = ground.strip.geometry();
@@ -569,12 +684,7 @@ const fn snap_down(value: i64, step: i64) -> i64 {
 }
 
 /// The fine window the camera needs.
-fn fine_window(
-    ground: &GroundView<'_>,
-    geometry: &PolarGeometry,
-    revision: u64,
-    needed: i32,
-) -> Window {
+fn fine_window(ground: &GroundView<'_>, geometry: &PolarGeometry, needed: i32) -> Window {
     let fit = |least: i32| {
         let snapped = (needed + WINDOW_STEP - 1) / WINDOW_STEP * WINDOW_STEP;
         snapped.clamp(least, FINE_MAX)
@@ -589,7 +699,6 @@ fn fine_window(
     }
     Window {
         body: ground.body.id,
-        revision,
         row0: row0.max(geometry.surface_row - SKY_ROWS - height),
         size: (width, height),
         origins,
@@ -598,7 +707,7 @@ fn fine_window(
 }
 
 /// The coarse window the camera needs: whole rings of a small world, else a window.
-fn coarse_window(ground: &GroundView<'_>, geometry: &PolarGeometry, revision: u64) -> Window {
+fn coarse_window(ground: &GroundView<'_>, geometry: &PolarGeometry) -> Window {
     let top = geometry.surface_row - SKY_ROWS;
     let bottom = geometry.last_row() + 1;
     let columns = geometry.surface_columns as i32;
@@ -623,9 +732,6 @@ fn coarse_window(ground: &GroundView<'_>, geometry: &PolarGeometry, revision: u6
     }
     Window {
         body: ground.body.id,
-        // Small rings repaint on every change; big windows only as the camera moves (a dig
-        // shows in the fine window at once).
-        revision: if ring { revision } else { 0 },
         row0,
         size: (width, height.max(1)),
         origins,
@@ -641,50 +747,28 @@ fn strip_tile(strip: &dyn PolarStrip, column: i64, row: i32) -> Option<TilePosit
     strip.tile_at(band, column.rem_euclid(ring) as u32, row)
 }
 
-/// Paints the fine window: tile art, RGBA, transparent sky.
-fn paint_fine(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
-    let geometry = strip.geometry();
-    let terrain = strip.terrain();
+/// Paints the coarse window: one texel per tile (the mean of its art), the sky clear.
+fn paint_coarse(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
     let (width, height) = window.size;
-    let stride = (width * TILE_ART) as usize;
-    let mut art = vec![TRANSPARENT; stride * (height * TILE_ART) as usize];
-    for y in 0..height {
-        let row = window.row0 + y;
-        if row > geometry.last_row() {
-            break;
-        }
-        let origin = window.origins[geometry.band(row) as usize];
-        for x in 0..width {
-            if let Some(tile) = strip_tile(strip, origin + i64::from(x), row) {
-                tile_art::paint_tile(
-                    terrain,
-                    tile,
-                    &mut art,
-                    stride,
-                    ((x * TILE_ART) as usize, (y * TILE_ART) as usize),
-                );
-            }
-        }
-    }
-    let mut pixels = vec![0_u8; art.len() * 4];
-    for (index, value) in art.iter().enumerate() {
-        if *value != TRANSPARENT {
-            let colour = color_at(*value);
-            pixels[index * 4..index * 4 + 4]
-                .copy_from_slice(&[colour.r, colour.g, colour.b, colour.a]);
-        }
-    }
+    let mut pixels = vec![0_u8; (width * height * 4) as usize];
+    paint_coarse_rows(strip, window, &mut pixels, 0..=height - 1);
     pixels
 }
 
-/// Paints the coarse window: one texel per tile, the sky clear, caves dark.
-fn paint_coarse(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
+/// Paints `rows` (window rows) of the coarse window into `pixels`.
+fn paint_coarse_rows(
+    strip: &dyn PolarStrip,
+    window: &Window,
+    pixels: &mut [u8],
+    rows: std::ops::RangeInclusive<i32>,
+) {
     let geometry = strip.geometry();
     let terrain = strip.terrain();
-    let (width, height) = window.size;
-    let mut pixels = vec![0_u8; (width * height * 4) as usize];
+    let width = window.size.0;
     let mut means = BTreeMap::new();
-    for y in 0..height {
+    for y in rows {
+        let line = (y * width * 4) as usize;
+        pixels[line..line + (width * 4) as usize].fill(0);
         let row = window.row0 + y;
         if row > geometry.last_row() {
             break;
@@ -716,7 +800,6 @@ fn paint_coarse(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
             pixels[at..at + 4].copy_from_slice(&[colour.r, colour.g, colour.b, 255]);
         }
     }
-    pixels
 }
 
 /// The mean colour of `tile`'s art (`fallback` when it paints nothing opaque).
@@ -743,8 +826,30 @@ fn art_mean(terrain: &Terrain, tile: TilePosition, fallback: Color) -> Color {
     )
 }
 
+/// Uploads texel rows `first..end` of `pixels` (RGBA, `width` texels a row) into `texture`.
+fn update_rows(texture: &Texture2D, pixels: &[u8], width: i32, first: i32, end: i32) {
+    let start = (first * width * 4) as usize;
+    let Some(rows) = pixels.get(start..(end * width * 4) as usize) else {
+        return;
+    };
+    // SAFETY: a live texture of `width` texels a row; `rows` holds exactly `end - first` rows
+    // of RGBA texels, the texture's format.
+    unsafe {
+        ffi::UpdateTextureRec(
+            **texture,
+            ffi::Rectangle {
+                x: 0.0,
+                y: first as f32,
+                width: width as f32,
+                height: (end - first) as f32,
+            },
+            rows.as_ptr().cast(),
+        );
+    }
+}
+
 /// Makes `target` a texture of `size` holding `pixels` (point filtered).
-fn upload(
+fn upload_texture(
     raylib: &mut RaylibHandle,
     thread: &RaylibThread,
     target: &mut Option<Texture2D>,

@@ -281,6 +281,14 @@ impl GameRenderer {
         self.space.sync(raylib, thread, view, size);
     }
 
+    /// Whether the polar ground has painted all its tile art (it paints a few hundred tiles a
+    /// frame, showing the coarse map meanwhile).
+    #[cfg(not(target_os = "emscripten"))]
+    #[must_use]
+    pub const fn space_ground_settled(&self) -> bool {
+        self.space.polar.settled()
+    }
+
     /// Draws one space view over the whole screen (the screenshot scenes and the browser's
     /// space timing page; TODO-SEAM: the integrator draws each seat's view in its viewport
     /// from `render_seat`, then the seat's HUD over it as usual).
