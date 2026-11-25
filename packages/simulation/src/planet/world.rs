@@ -5,9 +5,9 @@
 //! the generic generator ([`super::PlanetGround`]) lays out as hills, ragged concentric strata,
 //! caves and a core chamber. A **theme world** builds on that: its own surface shape, its own
 //! features over the strata, its own strata depth, and the sites the other tracks build on.
-//! [`world_of`] is the registry: append a match arm per theme world (Wave 12 planets-a owns
-//! the jungle, ocean archipelago and glacier worlds in [`super::wilds`]; planets-b and Wave 13
-//! add theirs).
+//! [`world_of`] reads the theme framework's registry ([`super::hooks::THEME_HOOKS`]): a theme's
+//! hooks name its world (Wave 12 planets-a's jungle, ocean archipelago and glacier worlds in
+//! [`super::wilds`]).
 
 use super::{PlanetGround, PlanetParams, PlanetThemeId};
 use crate::{
@@ -60,13 +60,9 @@ pub trait ThemeWorld: Sync {
     fn landmark_site(&self, ground: &PlanetGround) -> Option<SurfaceSite>;
 }
 
-/// The theme world of `theme`, if it is one (the registry; append arms).
+/// The theme world of `theme`, if it is one: the theme's hooks say
+/// ([`super::hooks::PlanetThemeHooks::world`]; one registry, Wave 12 integration).
 #[must_use]
 pub fn world_of(theme: PlanetThemeId) -> Option<&'static dyn ThemeWorld> {
-    match theme {
-        PlanetThemeId::JUNGLE => Some(&super::wilds::jungle::JUNGLE_WORLD),
-        PlanetThemeId::OCEAN => Some(&super::wilds::ocean::OCEAN_WORLD),
-        PlanetThemeId::GLACIER => Some(&super::wilds::glacier::GLACIER_WORLD),
-        _ => None,
-    }
+    super::hooks::hooks(theme).world()
 }

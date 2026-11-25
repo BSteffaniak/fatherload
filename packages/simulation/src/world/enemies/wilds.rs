@@ -214,7 +214,7 @@ impl WorldState {
         match state.kind {
             EnemyKind::Trundlehorn | EnemyKind::Woolhorn => {
                 // The herds bed down at night (unless struck).
-                let night = self.wild_night();
+                let night = self.wild_night_at(frame.tile_at(body.x, body.y).x);
                 match (night, state.mode) {
                     (true, EnemyMode::Idle) if state.last_attacker.is_none() => {
                         state.mode = EnemyMode::Dormant;

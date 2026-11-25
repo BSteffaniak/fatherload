@@ -801,7 +801,15 @@ impl WorldState {
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
-        let taken = drain(&hazards, &player.hazard_gear.ship, thrusting);
+        let mut taken = drain(&hazards, &player.hazard_gear.ship, thrusting);
+        // A wild or frontier world applies its hazards zone by zone through its own rules
+        // (reading the same planet gear): here they are only named (Wave 12 integration).
+        if crate::station::hazard::theme_rules_hazards(&found) {
+            taken = crate::station::hazard::HazardDrain {
+                biting: taken.biting,
+                ..Default::default()
+            };
+        }
         // The hull and fuel drains are shares of the rig's own hull and tank.
         let hull_lost = taken.hull * player.max_hull() * seconds;
         if !infinite_fuel {

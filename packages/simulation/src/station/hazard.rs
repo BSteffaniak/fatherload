@@ -6,9 +6,13 @@
 //! air eats into the air supply, and high gravity makes every second of thrust cost more fuel.
 //! Gear of a lower tier than the tag's severity halves the drain; a tier at or over it stops it.
 //!
-//! TODO-SEAM(w12-planets-a / planets-b): the theme tracks put their own hazard tags on their
-//! worlds; until then the tags come from the body's physical parameters (temperature, air and
-//! gravity) the space generator rolled.
+//! The tags come from the body's physical parameters (temperature, air and gravity) the space
+//! generator rolled, joined by its planet theme's own tags
+//! ([`crate::planet::PlanetThemeHooks::hazard_tags`]: the jungle's spores, the volcanic world's
+//! heat and ash, the glacier's cold, ...). A theme whose world rules apply its hazards zone by
+//! zone ([`crate::planet::PlanetThemeHooks::rules_own_hazards`]: the wild and frontier worlds)
+//! reads the same planet gear through [`gear_tier`], and the flat drain stands back on its
+//! ground so nothing bites twice (Wave 12 integration).
 
 use serde::{Deserialize, Serialize};
 
@@ -110,7 +114,29 @@ pub fn hazards_of(body: &SpaceBody) -> Vec<(PlanetHazard, u8)> {
     if heavy > 0 {
         out.push((PlanetHazard::HighGravity, heavy));
     }
+    // The theme's own tags (the worst severity of each wins).
+    let theme = crate::planet::hooks::hooks(crate::place::planet_theme_of(body.theme));
+    for &(hazard, severity) in theme.hazard_tags() {
+        match out.iter_mut().find(|(tag, _)| *tag == hazard) {
+            Some(entry) => entry.1 = entry.1.max(severity),
+            None => out.push((hazard, severity)),
+        }
+    }
+    out.sort_by_key(|(hazard, _)| *hazard);
     out
+}
+
+/// Whether the theme of `body` applies its hazards itself (the flat drain stands back).
+#[must_use]
+pub fn theme_rules_hazards(body: &SpaceBody) -> bool {
+    crate::planet::hooks::hooks(crate::place::planet_theme_of(body.theme)).rules_own_hazards()
+}
+
+/// The planet-gear tier `gear` holds against `hazard` (0 bare, 1 the first tier, 2 the
+/// second): what the theme worlds' own hazard rules read (Wave 12 integration).
+#[must_use]
+pub const fn gear_tier(gear: &crate::protection::HazardGear, hazard: PlanetHazard) -> u8 {
+    gear.ship.gear(hazard.counter())
 }
 
 /// How much of a tag of `severity` gets through `gear` (1 all, 0.5 half, 0 none).

@@ -633,12 +633,12 @@ fn glacier_tunnels_refreeze_at_night_and_rime_gives_way_under_a_rig() {
             TileKind::Air,
         );
     }
-    // Night: jump the clock into the second half of a day.
-    let day = life::day_seconds(&params) * 1_000;
-    let hz = u64::from(world.timing().rate.hz());
-    let night = (day * 3 / 4) * hz / 1_000;
-    world.set_simulation_tick(crate::SimulationTick::new(night));
-    assert!(world.wild_night());
+    // Night: jump the body's clock to local midnight over the tunnel (its own day, Wave 12
+    // bodylife).
+    let _ = params;
+    let clock = world.body_life_here().expect("the body's life").clock;
+    world.set_body_millis(clock.millis_when(0, i64::from(column), 0));
+    assert!(world.wild_night_at(column));
     let mut events = Vec::new();
     for _ in 0..30 * 12 {
         events.extend(wild_events(&step(&mut world, idle())));

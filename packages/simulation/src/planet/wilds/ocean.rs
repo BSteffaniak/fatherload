@@ -117,7 +117,7 @@ pub fn elevation(ground: &PlanetGround, column: i64) -> i64 {
     let broad = ground.periodic_noise(60, column, 256);
     let fine = ground.periodic_noise(61, column, 32);
     let mut value = (broad * 3 + fine) / 4;
-    let half = i64::from(super::SETTLEMENT_WIDTH / 2);
+    let half = i64::from(super::settlement_width(ground) / 2);
     let island = settlement_column(ground) + half;
     let delta = wrap_delta(column, island, width).abs();
     if delta < half + 60 {
@@ -149,7 +149,7 @@ pub fn surface(ground: &PlanetGround, column: i64) -> i32 {
         };
         i32::try_from(rows).unwrap_or(0)
     };
-    let half = i64::from(super::SETTLEMENT_WIDTH / 2);
+    let half = i64::from(super::settlement_width(ground) / 2);
     let island = settlement_column(ground) + half;
     if let Some(weight) = site_weight(column, island, half, width) {
         return ease(natural(column), natural(island).min(-2), weight);

@@ -138,8 +138,8 @@ pub fn tree_in_cell(ground: &PlanetGround, cell: i64) -> Option<Tree> {
         wrap_delta(column, centre, width).abs() <= half + 14
             || wrap_delta(column + trunk, centre, width).abs() <= half + 14
     };
-    let settlement = settlement_column(ground) + i64::from(super::SETTLEMENT_WIDTH / 2);
-    if clear(settlement, i64::from(super::SETTLEMENT_WIDTH / 2))
+    let settlement = settlement_column(ground) + i64::from(super::settlement_width(ground) / 2);
+    if clear(settlement, i64::from(super::settlement_width(ground) / 2))
         || clear(landmark_column(ground), ELDER_RISE)
     {
         return None;
@@ -164,7 +164,7 @@ pub fn tree_in_cell(ground: &PlanetGround, cell: i64) -> Option<Tree> {
 pub fn surface(ground: &PlanetGround, column: i64) -> i32 {
     let width = i64::from(ground.strip_width());
     let natural = -ground.hill(column);
-    let half = i64::from(super::SETTLEMENT_WIDTH / 2);
+    let half = i64::from(super::settlement_width(ground) / 2);
     let settlement = settlement_column(ground) + half;
     if let Some(weight) = site_weight(column, settlement, half, width) {
         return ease(natural, -ground.hill(settlement), weight);

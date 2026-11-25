@@ -45,8 +45,22 @@ impl PlanetHazard {
         }
     }
 
+    /// The stations' hazard tag whose planet gear counters it (`None` for the Trench's
+    /// pressure: only the Descent's pressure hull holds it).
+    #[must_use]
+    pub const fn gear_hazard(self) -> Option<crate::station::hazard::PlanetHazard> {
+        use crate::station::hazard::PlanetHazard as Gear;
+        match self {
+            Self::Heat => Some(Gear::Heat),
+            Self::Cold => Some(Gear::Cold),
+            Self::ToxicAir => Some(Gear::ToxicAir),
+            Self::HighGravity => Some(Gear::HighGravity),
+            Self::Pressure => None,
+        }
+    }
+
     /// The rig system from the Descent that already counters it (`None`: only planet gear
-    /// will). TODO-SEAM w12-stations: the planet gear line counters every hazard too
+    /// will). The stations' planet gear line counters the rest too
     /// (`WorldState::planet_gear_counters`).
     #[must_use]
     pub const fn descent_counter(self) -> Option<RigSystem> {
@@ -387,51 +401,59 @@ pub fn body_hazards(params: &PlanetParams) -> Vec<PlanetHazard> {
     hazards
 }
 
-/// Seconds a weather cycle lasts.
-pub const WEATHER_CYCLE_SECONDS: u64 = 150;
-/// One weather cycle in three brings a storm (on average).
-const STORM_ONE_IN: u64 = 3;
+/// Seconds a weather spell lasts (the bodylife forecast's spells).
+pub const WEATHER_CYCLE_SECONDS: u64 = crate::bodylife::weather::SPELL_MILLIS / 1_000;
+
+impl WeatherKind {
+    /// The bodylife weather kind this storm is ([`super::hooks::WILDS_WEATHER`]).
+    #[must_use]
+    pub const fn id(self) -> crate::bodylife::WeatherId {
+        match self {
+            Self::Downpour => super::hooks::DOWNPOUR,
+            Self::Squall => super::hooks::SQUALL,
+            Self::Blizzard => super::hooks::BLIZZARD,
+        }
+    }
+}
 
 /// The weather on the body of `params` at world time `millis`.
 ///
-/// A pure function of the body and the time: every peer agrees. TODO-SEAM w12-bodylife: the
-/// per-body weather system replaces this schedule; the theme's kind ([`WildTheme::weather`])
-/// is what it should pick.
+/// The body's own forecast (Wave 12 bodylife, wired on integration): the theme's weather
+/// table ([`super::hooks`]) rolls each spell, and the storm's strength is the forecast's
+/// intensity while the spell is the theme's storm (it fades in and out with the spell). A
+/// pure function of the body's seed and the time, the same one the body badge reads: every
+/// peer agrees.
 #[must_use]
 pub fn weather_at(params: &PlanetParams, millis: u64) -> Option<Weather> {
     let wild = wild_theme(params.theme)?;
-    let cycle_millis = WEATHER_CYCLE_SECONDS * 1_000;
-    let cycle = millis / cycle_millis;
-    let ground_roll =
-        super::super::hash3(params.seed, 0x3EA7, i64::try_from(cycle).unwrap_or(0), 0);
-    if !ground_roll.is_multiple_of(STORM_ONE_IN) {
-        return Some(Weather {
-            kind: wild.weather,
-            intensity: 0,
-        });
-    }
-    // Up over the first fifth, full in the middle, down over the last fifth.
-    let into = millis % cycle_millis;
-    let ramp = cycle_millis / 5;
-    let level = if into < ramp {
-        into * 1_000 / ramp
-    } else if into > cycle_millis - ramp {
-        (cycle_millis - into) * 1_000 / ramp
+    let table = crate::planet::hooks::hooks(params.theme).weather_table();
+    // The wild tables hold only kinds that blow without air: any atmosphere reads the same.
+    let now = crate::bodylife::weather::forecast(
+        params.seed,
+        table,
+        crate::space::Atmosphere::Thin,
+        millis,
+        false,
+    );
+    let intensity = if now.kind == wild.weather.id() {
+        now.intensity_permille
     } else {
-        1_000
+        0
     };
     Some(Weather {
         kind: wild.weather,
-        intensity: u16::try_from(level).unwrap_or(1_000),
+        intensity,
     })
 }
 
-/// The body's day length, seconds. TODO-SEAM w12-bodylife: the space body's `day_seconds`
-/// through the per-body clock; until then a length from the body's seed (8-40 minutes, the
-/// space generator's range).
+/// The day length, seconds, of a wild world with no space body behind it.
+///
+/// The polar track's lone planet worlds keep [`crate::bodylife::LONE_PLANET_DAY_SECONDS`]; a
+/// space body's day is its own clock's ([`crate::WorldState::wild_night_at`] reads it).
 #[must_use]
 pub const fn day_seconds(params: &PlanetParams) -> u64 {
-    480 + super::super::hash3(params.seed, 0xDA7, 0, 0) % 1_920
+    let _ = params;
+    crate::bodylife::LONE_PLANET_DAY_SECONDS as u64
 }
 
 /// Whether it is night at the surface of the body of `params` at world time `millis` (the

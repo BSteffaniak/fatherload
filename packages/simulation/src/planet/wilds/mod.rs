@@ -28,6 +28,7 @@
 //! `world/wilds.rs`'s tick.
 
 pub mod glacier;
+pub mod hooks;
 pub mod jungle;
 pub mod life;
 pub mod ocean;
@@ -108,6 +109,23 @@ pub const fn roll(ground: &PlanetGround, purpose: u64, a: i64, b: i64) -> u64 {
     hash3(ground.params().seed, 0x5EED_0000 + purpose, a, b)
 }
 
+/// The settlement site's width.
+///
+/// [`SETTLEMENT_WIDTH`], or wide enough for the alien town that stands on it when a species
+/// settled the body (its span and the fades either side, Wave 12 integration: the aliens
+/// build on the theme's site).
+#[must_use]
+pub fn settlement_width(ground: &PlanetGround) -> i32 {
+    crate::alien::AlienSpecies::from_folk(ground.params().folk).map_or(
+        SETTLEMENT_WIDTH,
+        |species| {
+            SETTLEMENT_WIDTH.max(
+                2 * (crate::alien::town::span_half(species) + crate::alien::town::FADE_COLUMNS + 2),
+            )
+        },
+    )
+}
+
 /// The settlement site's first column (a pure function of the body).
 #[must_use]
 pub fn settlement_column(ground: &PlanetGround) -> i64 {
@@ -119,7 +137,8 @@ pub fn settlement_column(ground: &PlanetGround) -> i64 {
 #[must_use]
 pub fn landmark_column(ground: &PlanetGround) -> i64 {
     let width = i64::from(ground.strip_width());
-    (settlement_column(ground) + i64::from(SETTLEMENT_WIDTH / 2) + width / 2).rem_euclid(width)
+    (settlement_column(ground) + i64::from(settlement_width(ground) / 2) + width / 2)
+        .rem_euclid(width)
 }
 
 /// The secret's column on a small body: a quarter lap from the settlement.
@@ -155,10 +174,11 @@ pub fn ease(natural: i32, level: i32, weight: i64) -> i32 {
 #[must_use]
 pub fn settlement_site_of(ground: &PlanetGround, surface: impl Fn(i64) -> i32) -> SurfaceSite {
     let first = settlement_column(ground);
-    let floor = surface(first + i64::from(SETTLEMENT_WIDTH / 2));
+    let width = settlement_width(ground);
+    let floor = surface(first + i64::from(width / 2));
     SurfaceSite {
         first: i32::try_from(first).unwrap_or(0),
-        width: SETTLEMENT_WIDTH,
+        width,
         floor,
     }
 }

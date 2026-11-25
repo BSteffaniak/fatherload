@@ -215,7 +215,13 @@ pub const BODYLIFE_WEATHER: &[WeatherKind] = &[
 ];
 
 /// Every track's weather kinds (append a track's list at the end; ids come from the kinds).
-pub const WEATHER_REGISTRY: &[&[WeatherKind]] = &[BODYLIFE_WEATHER];
+pub const WEATHER_REGISTRY: &[&[WeatherKind]] = &[
+    BODYLIFE_WEATHER,
+    // Wave 12 planets-a: the downpour, squall and blizzard.
+    crate::planet::wilds::hooks::WILDS_WEATHER,
+    // Wave 12 planets-b: the sandstorm, ash fall and glitterfrost.
+    crate::frontier::hooks::FRONTIER_WEATHER,
+];
 
 /// The kind with id `id` (an unknown id, from a newer build, reads as clear skies).
 #[must_use]

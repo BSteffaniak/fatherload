@@ -6,8 +6,8 @@
 //! * **Hazards** ([`PlanetHazard`]): cold drinks fuel (twice as fast in a blizzard, three
 //!   times in the Under-Ice Sea's water); a black smoker's heat burns the hull; the Trench's
 //!   water crushes it; spore-laden air fouls it. Each is countered by the Descent's rig system
-//!   ([`PlanetHazard::descent_counter`]) or by planet gear ([`WorldState::planet_gear_counters`],
-//!   TODO-SEAM w12-stations), and only rigs feel them (the pilot's suit is its own).
+//!   ([`PlanetHazard::descent_counter`]) or by the stations' planet gear
+//!   ([`WorldState::planet_gear_counters`]), and only rigs feel them (the pilot's suit is its own).
 //! * **Signature rules**: grasping roots hold back a rig rubbing against them; a rig resting on
 //!   rime breaks through (snow bridges over crevasses); at night tunnels through the glacier
 //!   refreeze as rime and by day the rime thaws; an icicle over a passing rig cracks and falls
@@ -109,12 +109,25 @@ impl WorldState {
         life::weather_at(planet.params(), self.millis_at(self.simulation_tick))
     }
 
-    /// Whether it is night on this wild world now.
+    /// Whether it is night on this wild world now, at the top of its strip (column 0).
     #[must_use]
     pub fn wild_night(&self) -> bool {
-        self.wild_world().is_some_and(|(planet, _)| {
-            life::is_night(planet.params(), self.millis_at(self.simulation_tick))
-        })
+        self.wild_night_at(0)
+    }
+
+    /// Whether it is night at strip column `column` of this wild world now: the body's own
+    /// clock (Wave 12 bodylife; the sun below the horizon there), so night sweeps round the
+    /// body with its terminator and the body badge agrees.
+    #[must_use]
+    pub fn wild_night_at(&self, column: i32) -> bool {
+        let Some((planet, _)) = self.wild_world() else {
+            return false;
+        };
+        let millis = self.body_millis();
+        self.body_life_here().map_or_else(
+            || life::is_night(planet.params(), millis),
+            |body| body.clock.elevation(millis, i64::from(column)) < 0.0,
+        )
     }
 
     /// The enemy tier at `tile` on a wild world (`None` elsewhere): [`WILD_BASE_TIER`] on the
@@ -149,15 +162,19 @@ impl WorldState {
         )
     }
 
-    /// Whether `player_id`'s planet gear counters `hazard`. TODO-SEAM w12-stations: the
-    /// stations track's planet gear line (heat, cold, toxic air, high gravity) answers here;
-    /// until it lands only the Descent's rig systems counter ([`PlanetHazard::descent_counter`]).
+    /// Whether `player_id`'s planet gear counters `hazard`: the stations' planet gear line
+    /// (Wave 12 integration: heat shielding, cold insulation, toxic-air filters, high-gravity
+    /// struts, any tier), or the Descent's rig system that already does
+    /// ([`PlanetHazard::descent_counter`]). Pressure has only the Descent's pressure hull.
     #[must_use]
     pub fn planet_gear_counters(&self, player_id: PlayerId, hazard: PlanetHazard) -> bool {
         let Some(player) = self.players.get(&player_id) else {
             return false;
         };
-        hazard
+        let gear = hazard
+            .gear_hazard()
+            .is_some_and(|tag| crate::station::hazard::gear_tier(&player.hazard_gear, tag) > 0);
+        gear || hazard
             .descent_counter()
             .is_some_and(|system| player.hazard_gear.has_system(system))
     }
@@ -488,7 +505,6 @@ impl WorldState {
         if !next_tick.get().is_multiple_of(every) {
             return;
         }
-        let night = life::is_night(planet.params(), self.millis_at(next_tick));
         let sweep = next_tick.get() / every;
         let frame = self.frame();
         // Bodies the ice must not close round: rigs and pilots.
@@ -512,6 +528,7 @@ impl WorldState {
             if life::signature_at(planet, centre.x, centre.y) != Some(SignatureRule::SlickIce) {
                 continue;
             }
+            let night = self.wild_night_at(centre.x);
             let mut changed = false;
             for dy in -FREEZE_REACH..=FREEZE_REACH {
                 for dx in -FREEZE_REACH..=FREEZE_REACH {

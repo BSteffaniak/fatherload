@@ -206,6 +206,14 @@ pub trait PlanetThemeHooks: Sync {
         flattest_sites(ground, count)
     }
 
+    /// The theme's own settlement site, if it levels one: `(middle column, width)` of the
+    /// stretch it keeps flat, dry and clear for a town (the aliens build their town there,
+    /// [`crate::alien::town::sites`]). `None`: towns spread round the body on generic ground.
+    fn settlement_site(&self, ground: &PlanetGround) -> Option<(i32, i32)> {
+        let _ = ground;
+        None
+    }
+
     /// The theme's climate on top of the body's numbers.
     fn climate(&self) -> ThemeClimate {
         ThemeClimate::default()
@@ -214,6 +222,26 @@ pub trait PlanetThemeHooks: Sync {
     /// Hazards of its ground and air.
     fn hazards(&self) -> ThemeHazards {
         ThemeHazards::default()
+    }
+
+    /// The theme's whole-world generator, if it builds its chunks itself (the wild worlds,
+    /// [`super::world::ThemeWorld`]); `None` keeps the generic generator over these hooks.
+    fn world(&self) -> Option<&'static dyn super::world::ThemeWorld> {
+        None
+    }
+
+    /// The hazard tags its worlds carry on top of their physical ones (each mild 1 or severe
+    /// 2): the stations' planet gear counters them, the bar's gossip and the landing warning
+    /// name them ([`crate::station::hazard::hazards_of_body`]).
+    fn hazard_tags(&self) -> &'static [(crate::station::hazard::PlanetHazard, u8)] {
+        &[]
+    }
+
+    /// Whether the theme's own world rules apply its hazards zone by zone (reading the planet
+    /// gear through [`crate::station::hazard::gear_tier`]): the stations' flat per-second
+    /// drain then stands back on its ground, so nothing bites twice.
+    fn rules_own_hazards(&self) -> bool {
+        false
     }
 
     /// Its music.
@@ -403,7 +431,19 @@ impl PlanetThemeHooks for IceTheme {
 
 /// Themes with hooks of their own (append `&YourTheme` at the end; a theme missing here
 /// plays with the generic hooks).
-pub static THEME_HOOKS: &[&dyn PlanetThemeHooks] = &[&BarrenTheme, &RockyTheme, &IceTheme];
+pub static THEME_HOOKS: &[&dyn PlanetThemeHooks] = &[
+    &BarrenTheme,
+    &RockyTheme,
+    &IceTheme,
+    // Wave 12 planets-a: the wild worlds.
+    &super::wilds::hooks::JUNGLE_HOOKS,
+    &super::wilds::hooks::OCEAN_HOOKS,
+    &super::wilds::hooks::GLACIER_HOOKS,
+    // Wave 12 planets-b: the frontier worlds.
+    &crate::frontier::hooks::DUNE_HOOKS,
+    &crate::frontier::hooks::VOLCANIC_HOOKS,
+    &crate::frontier::hooks::CRYSTAL_HOOKS,
+];
 
 const fn data_hooks<const N: usize>() -> [DataTheme; N] {
     let mut out = [DataTheme(PlanetThemeId(0)); N];

@@ -192,11 +192,8 @@ pub enum WeatherPhase {
     Storm,
 }
 
-/// A frontier world's weather at a moment.
-///
-/// TODO-SEAM w12-bodylife: the bodylife track owns each body's weather and clock; until its
-/// per-body weather lands, a frontier world's weather is this pure schedule of its seed and
-/// world time ([`weather_at`]), and the effects read only this value.
+/// A frontier world's weather at a moment: the body's own forecast seen by the frontier's
+/// rules ([`weather_at`]); the effects read only this value.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Weather {
     pub phase: WeatherPhase,
@@ -218,67 +215,80 @@ pub const fn storm_name(style: FrontierStyle) -> &'static str {
     }
 }
 
-/// One weather cycle's length per style, milliseconds.
-const fn cycle_millis(style: FrontierStyle) -> u64 {
-    match style {
-        FrontierStyle::Desert => 240_000,
-        FrontierStyle::Volcanic => 200_000,
-        FrontierStyle::Crystal => 260_000,
-    }
-}
-
 /// How long the telegraph runs before a storm.
 pub const RISING_MILLIS: u64 = 12_000;
-/// How long a storm's strength takes to ramp in (and out).
-const RAMP_MILLIS: u64 = 4_000;
 
 const P_WEATHER: u64 = 80;
 
+/// Spells looked ahead (or back) for a storm's edges.
+const SPELL_REACH: u64 = 48;
+
 /// The weather of a frontier world of `style` and `seed` at world time `millis`.
+///
+/// The body's own forecast (Wave 12 bodylife, wired on integration): the frontier's weather
+/// table ([`super::hooks`]) rolls each spell of [`crate::bodylife::weather::SPELL_MILLIS`];
+/// a run of storm spells is the storm (its strength the forecast's intensity, which fades in
+/// and out with the run), and the [`RISING_MILLIS`] before a run are its telegraph. The wind
+/// keeps one direction for a whole run. A pure function of the seed and the time, the same
+/// one the body badge reads.
 #[must_use]
 pub fn weather_at(style: FrontierStyle, seed: u64, millis: u64) -> Weather {
-    let cycle = cycle_millis(style);
-    let index = millis / cycle;
-    let into = millis % cycle;
-    let roll = hash3(seed, P_WEATHER, i64::try_from(index).unwrap_or(0), 0);
-    let start = 50_000 + roll % 60_000;
-    let length = 45_000 + (roll >> 20) % 25_000;
-    let wind = if (roll >> 40).is_multiple_of(2) {
-        1
-    } else {
-        -1
-    };
-    let rising_from = start - RISING_MILLIS;
-    let end = start + length;
-    if into < rising_from || into >= end {
-        let remaining = if into < rising_from {
-            rising_from - into
+    use crate::bodylife::weather::{SPELL_MILLIS, forecast, spell_kind};
+    let table = crate::planet::hooks::hooks(style.theme()).weather_table();
+    let storm = super::hooks::storm_kind(style);
+    // The frontier tables hold only kinds that blow without air: any atmosphere reads alike.
+    let air = crate::space::Atmosphere::Thin;
+    let is_storm = |spell: u64| spell_kind(seed, table, air, spell) == storm;
+    let spell = millis / SPELL_MILLIS;
+    let wind_of = |first: u64| {
+        let roll = hash3(seed, P_WEATHER, i64::try_from(first).unwrap_or(0), 0);
+        if (roll >> 40).is_multiple_of(2) {
+            1
         } else {
-            cycle - into + 50_000 - RISING_MILLIS
+            -1
+        }
+    };
+    if is_storm(spell) {
+        let mut first = spell;
+        while first > 0 && spell - first < SPELL_REACH && is_storm(first - 1) {
+            first -= 1;
+        }
+        let mut end = spell + 1;
+        while end - spell < SPELL_REACH && is_storm(end) {
+            end += 1;
+        }
+        let now = forecast(seed, table, air, millis, false);
+        return Weather {
+            phase: WeatherPhase::Storm,
+            wind: wind_of(first),
+            strength_permille: now.intensity_permille.min(1_000),
+            remaining_millis: end * SPELL_MILLIS - millis,
         };
+    }
+    let next = (spell + 1..=spell + SPELL_REACH).find(|candidate| is_storm(*candidate));
+    let Some(next) = next else {
         return Weather {
             phase: WeatherPhase::Calm,
-            wind,
+            wind: 1,
             strength_permille: 0,
-            remaining_millis: remaining,
+            remaining_millis: SPELL_REACH * SPELL_MILLIS,
         };
-    }
-    if into < start {
+    };
+    let start = next * SPELL_MILLIS;
+    let rising_from = start.saturating_sub(RISING_MILLIS);
+    if millis >= rising_from {
         return Weather {
             phase: WeatherPhase::Rising,
-            wind,
+            wind: wind_of(next),
             strength_permille: 0,
-            remaining_millis: start - into,
+            remaining_millis: start - millis,
         };
     }
-    let ramp_in = (into - start).min(RAMP_MILLIS);
-    let ramp_out = (end - into).min(RAMP_MILLIS);
-    let strength = ramp_in.min(ramp_out) * 1_000 / RAMP_MILLIS;
     Weather {
-        phase: WeatherPhase::Storm,
-        wind,
-        strength_permille: u16::try_from(strength).unwrap_or(1_000),
-        remaining_millis: end - into,
+        phase: WeatherPhase::Calm,
+        wind: wind_of(next),
+        strength_permille: 0,
+        remaining_millis: rising_from - millis,
     }
 }
 

@@ -37,6 +37,7 @@
 pub mod crystal;
 pub mod desert;
 pub mod generate;
+pub mod hooks;
 pub mod rules;
 #[cfg(test)]
 mod tests;
@@ -124,9 +125,9 @@ impl FrontierStyle {
 #[must_use]
 pub const fn style_of(theme: PlanetThemeId) -> Option<FrontierStyle> {
     match theme.0 {
-        3 => Some(FrontierStyle::Desert),
-        4 => Some(FrontierStyle::Volcanic),
-        5 => Some(FrontierStyle::Crystal),
+        id if id == DUNE_WORLD.0 => Some(FrontierStyle::Desert),
+        id if id == VOLCANIC_WORLD.0 => Some(FrontierStyle::Volcanic),
+        id if id == CRYSTAL_WORLD.0 => Some(FrontierStyle::Crystal),
         _ => None,
     }
 }
@@ -243,6 +244,18 @@ pub enum PlanetHazard {
 impl PlanetHazard {
     pub const ALL: [Self; 4] = [Self::Heat, Self::Cold, Self::ToxicAir, Self::HighGravity];
 
+    /// The stations' hazard tag (the planet gear line that counters it).
+    #[must_use]
+    pub const fn gear_hazard(self) -> crate::station::hazard::PlanetHazard {
+        use crate::station::hazard::PlanetHazard as Gear;
+        match self {
+            Self::Heat => Gear::Heat,
+            Self::Cold => Gear::Cold,
+            Self::ToxicAir => Gear::ToxicAir,
+            Self::HighGravity => Gear::HighGravity,
+        }
+    }
+
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
@@ -278,17 +291,19 @@ pub fn hazards(style: FrontierStyle) -> Vec<PlanetHazard> {
 
 /// The planet-gear tier a rig's gear gives against `hazard` (0-6).
 ///
-/// TODO-SEAM w12-stations: the stations track sells the planet-gear line (heat, cold, toxic
-/// air, high gravity); until it lands each hazard reads the closest existing counter: heat
-/// the heat shield, cold the de-icer, toxic air the gas scrubber, high gravity nothing.
+/// The stations' planet gear line answers (Wave 12 integration): each of its two tiers is
+/// three of these (the second stops the hazard). A rig's older counters still count where
+/// they are better: heat the heat shield, cold the de-icer, toxic air the gas scrubber.
 #[must_use]
 pub const fn planet_gear_tier(gear: &crate::protection::HazardGear, hazard: PlanetHazard) -> u8 {
-    let tier = match hazard {
+    let legacy = match hazard {
         PlanetHazard::Heat => gear.heat_shield,
         PlanetHazard::Cold => gear.de_icer,
         PlanetHazard::ToxicAir => gear.gas_scrubber,
         PlanetHazard::HighGravity => 0,
     };
+    let station = crate::station::hazard::gear_tier(gear, hazard.gear_hazard()).saturating_mul(3);
+    let tier = if station > legacy { station } else { legacy };
     if tier > PLANET_GEAR_MAX_TIER {
         PLANET_GEAR_MAX_TIER
     } else {

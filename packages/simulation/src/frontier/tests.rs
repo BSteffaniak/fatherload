@@ -460,7 +460,8 @@ fn the_weather_telegraphs_every_storm_and_is_a_pure_schedule() {
     for style in FrontierStyle::ALL {
         let mut phases = Vec::new();
         let mut last = None;
-        for second in 0..1_200_u64 {
+        // The body's forecast (150 s spells, about one in four a storm): two hours of it.
+        for second in 0..7_200_u64 {
             let weather = rules::weather_at(style, 99, second * 1_000);
             assert_eq!(weather, rules::weather_at(style, 99, second * 1_000));
             if last != Some(weather.phase) {
@@ -602,9 +603,9 @@ fn each_world_has_neutral_fauna_and_hunters_in_its_rosters() {
 fn the_space_report_names_each_frontier_ground() {
     let text = crate::space::report::space_report(0x0D3E_9DE5, 2);
     for line in [
-        "desert dunes       -> Dune World: Shifting Dunes, Buried City, Worm Galleries, Glass Deep",
-        "volcanic           -> Volcanic World: Ash Fields, Basalt Flows, Obsidian Mantle, Magma Chambers",
-        "crystal            -> Crystal World: Shard Meadows, Prism Beds, Growing Geodes, Heavy Lattice",
+        "desert dunes       Dune World: Shifting Dunes, Buried City, Worm Galleries, Glass Deep",
+        "volcanic           Volcanic World: Ash Fields, Basalt Flows, Obsidian Mantle, Magma Chambers",
+        "crystal            Crystal World: Shard Meadows, Prism Beds, Growing Geodes, Heavy Lattice",
     ] {
         assert!(text.contains(line), "{line}\n{text}");
     }
