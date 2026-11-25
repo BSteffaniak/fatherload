@@ -6290,15 +6290,24 @@ downward gravity under turned fields, no current, wind or sideways field moves i
 ### 5. The Underground Ocean is one sea (V11 generation)
 
 Basins roll in nearly every ocean cell (900-1000 per mille), 50-72 tiles wide and 22-42 deep,
-and neighbouring basins are joined by `DrownedStampKind::Channel` (appended): a 5-row flooded
-channel sideways under both surfaces, or a 5-wide shaft from a basin down into the one below,
-walled with seabed and coral; the channel's water runs through the rims it joins
-(`drowned_tile` lays channel water first). Channels keep off the fixed set pieces, Merrow City
-and the outposts' column (the lift's column stays dry between the sea's two halves). Test:
-`the_underground_oceans_basins_are_joined_into_one_sea` (three seeds: flooding the generated
-water from one basin reaches 90 %+ of the basins on a 600-column side). **`GOLDEN_V11_DIGEST`
-updated** to `0x07a0_13a3_417e_3097` (a channel's chunk is pinned too); V1-V10 digests
-unchanged.
+hanging from the tops of their cells so a row of basins shares one sea level within a few rows.
+Neighbouring basins are joined by `DrownedStampKind::Channel` (appended) passages walled with
+seabed and coral: sideways, a 5-row passage along the sea's surface just above the higher of
+the two basins' water; downwards, a passage out over the upper basin's water to a 5-wide shaft
+just outside its rim (east, else west, whichever keeps clear of the neighbouring basins), down
+to the lower basin's surface and in over its water. A sub surfaces, crosses and dives again.
+
+The passages are open air, not water, on purpose: the first cut flooded them, so a basin
+drilled out from below drained the whole sea down the shaft and kept the fluid pass busy for
+minutes (the deep-descent bot stalled in the ocean). Now no water joins two basins, and a
+drilled-out basin drains alone, as it always did. `drowned_tile` opens a passage through the
+basins' rims first (keeping a basin's own water where the passage meets it). Passages keep off
+the fixed set pieces, Merrow City and the outposts' column (the lift's column stays dry
+between the sea's two halves). Test: `the_underground_oceans_basins_are_joined_into_one_sea`
+(three seeds: sailing from one basin through water and the passages reaches 90 %+ of the
+basins on a 600-column side, and flooding the water alone never leaves the first basin).
+**`GOLDEN_V11_DIGEST` updated** to `0x3918_28b8_49df_663c` (a passage's chunk is pinned too);
+V1-V10 digests unchanged.
 
 ### 6. The deep settlements build their own
 

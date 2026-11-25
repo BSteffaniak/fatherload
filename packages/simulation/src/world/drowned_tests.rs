@@ -101,6 +101,23 @@ fn middle_row(stratum: Stratum) -> i32 {
 /// A column far from every set piece (the test room is built by hand).
 const FAR: i32 = -260;
 
+/// A test room's centre in the Underground Ocean on [`FAR`]'s column, clear of every basin's
+/// gyre (the basins fill nearly every ocean cell, Wave 10 polish), for a room `(half_w, half_h)`.
+fn still_water_centre(half: (i32, i32)) -> TilePosition {
+    let settings = settings();
+    let lay = layout(&settings);
+    let (top, bottom) = lay.rows(Stratum::UndergroundOcean);
+    (top + half.1 + 20..bottom - half.1 - 20)
+        .map(|y| TilePosition { x: FAR, y })
+        .find(|centre| {
+            let room = TileRect::around(*centre, half.0 + 4, half.1 + 4);
+            drowned::basins_in(&settings, &lay, &room)
+                .iter()
+                .all(|basin| !basin.bounds.intersects(&room))
+        })
+        .expect("still water between the basins")
+}
+
 /// A sealed stone room `(half_w, half_h)` round `centre`, open inside, filled with water up
 /// to `water_rows` from its floor (all of it for `i32::MAX`).
 fn room(world: &mut WorldState, centre: TilePosition, half: (i32, i32), water_rows: i32) {
@@ -179,10 +196,7 @@ fn a_flooded_submarine_settles_on_the_bottom_and_drills_through_it() {
 #[test]
 fn ballast_trims_the_submarine_to_rise_hover_and_sink() {
     let mut world = world_at(30);
-    let centre = TilePosition {
-        x: FAR,
-        y: middle_row(Stratum::UndergroundOcean),
-    };
+    let centre = still_water_centre((6, 10));
     room(&mut world, centre, (6, 10), i32::MAX);
     // Neutral trim: the submarine hovers (barely moves in two seconds).
     let _ = ticks(&mut world, 10);
@@ -215,10 +229,7 @@ fn ballast_runs_alike_at_every_tick_rate() {
     let mut heights = Vec::new();
     for hz in [20, 30, 60] {
         let mut world = world_at(hz);
-        let centre = TilePosition {
-            x: FAR,
-            y: middle_row(Stratum::UndergroundOcean),
-        };
+        let centre = still_water_centre((6, 12));
         room(&mut world, centre, (6, 12), i32::MAX);
         let start = rig_xy(&world).1;
         // One second of blowing the tanks, two of rising.

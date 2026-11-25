@@ -575,8 +575,9 @@ fn the_underground_oceans_basins_are_joined_into_one_sea() {
             "seed {seed}: a sea of basins ({})",
             basins.len()
         );
-        // Flood the generated water from the first basin's heart: every basin is reached.
-        let water = |at: TilePosition| {
+        // Sail from the first basin's heart (through water and the passages over it): every
+        // basin is reached.
+        let tile = |at: TilePosition| {
             drowned_tile(
                 &settings,
                 &layout,
@@ -586,36 +587,58 @@ fn the_underground_oceans_basins_are_joined_into_one_sea() {
                 at.y,
                 TileKind::Stone,
             )
-            .is_some_and(|kind| kind == TileKind::Fluid(FluidKind::Water))
+        };
+        let water = |at: TilePosition| tile(at) == Some(TileKind::Fluid(FluidKind::Water));
+        let open = |at: TilePosition| water(at) || tile(at) == Some(TileKind::Air);
+        let flood = |start: TilePosition, through: &dyn Fn(TilePosition) -> bool| {
+            let mut seen = std::collections::BTreeSet::from([start]);
+            let mut queue = vec![start];
+            while let Some(at) = queue.pop() {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let next = TilePosition {
+                        x: at.x + dx,
+                        y: at.y + dy,
+                    };
+                    if area.expanded(40).contains(next) && !seen.contains(&next) && through(next) {
+                        seen.insert(next);
+                        queue.push(next);
+                    }
+                }
+            }
+            seen
         };
         let start = basins
             .iter()
             .map(|basin| basin.bounds.center())
             .find(|centre| water(*centre))
             .expect("a basin's heart is water");
-        let mut seen = std::collections::BTreeSet::from([start]);
-        let mut queue = vec![start];
-        while let Some(at) = queue.pop() {
-            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                let next = TilePosition {
-                    x: at.x + dx,
-                    y: at.y + dy,
-                };
-                if area.expanded(40).contains(next) && !seen.contains(&next) && water(next) {
-                    seen.insert(next);
-                    queue.push(next);
-                }
-            }
-        }
+        let seen = flood(start, &open);
         let reached = basins
             .iter()
-            .filter(|basin| seen.iter().any(|at| basin.bounds.contains(*at)))
+            .filter(|basin| {
+                seen.iter()
+                    .any(|at| water(*at) && basin.bounds.contains(*at))
+            })
             .count();
         assert!(
             reached * 10 >= basins.len() * 9,
             "seed {seed}: one sea joins {reached} of {} basins",
             basins.len()
         );
+        // No water joins two basins: the passages run over the water, so a basin drilled out
+        // from below drains alone, never the whole sea down the shaft (which also kept the
+        // fluid pass busy for minutes).
+        let home = basins
+            .iter()
+            .find(|basin| basin.bounds.contains(start))
+            .expect("the start's basin");
+        for at in flood(start, &water) {
+            assert!(
+                home.bounds.contains(at),
+                "seed {seed}: the water of {:?} runs on to {at:?}",
+                home.bounds
+            );
+        }
     }
 }
 

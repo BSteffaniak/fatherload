@@ -80,9 +80,9 @@ pub enum DrownedStampKind {
     ReefTerrace,
     PearlBed,
     LeviathanArena,
-    /// A flooded channel joining two neighbouring Underground Ocean basins (Wave 10 polish:
-    /// the basins are one sea): sideways under both basins' surfaces, or a shaft down from one
-    /// basin into the one below.
+    /// A passage joining two neighbouring Underground Ocean basins (Wave 10 polish: the basins
+    /// are one sea): sideways along the sea's surface, or out of one basin, down a shaft beside
+    /// it and into the one below. Open above the water, so no water joins two basins.
     Channel,
 }
 
@@ -521,7 +521,13 @@ fn region_stamp(
     let sw = roll_range(roll, 10, w.0, w.1.min(width - 8));
     let sh = roll_range(roll, 20, h.0, h.1.min(height - 6));
     let x = rx * width + roll_range(roll, 30, 3, (width - sw - 3).max(3));
-    let y = ry * height + roll_range(roll, 40, 3, (height - sh - 3).max(3));
+    // The Underground Ocean's basins hang from the tops of their cells, so a row of them shares
+    // one sea level (within a few rows) and the channels between them run along it.
+    let y = if stratum == Stratum::UndergroundOcean {
+        ry * height + 3
+    } else {
+        ry * height + roll_range(roll, 40, 3, (height - sh - 3).max(3))
+    };
     let bounds = rect(x, y, (sw, sh));
     let (top, bottom) = layout.rows(stratum);
     if bounds.min.y < top + 16 || bounds.max.y > bottom - 16 {
@@ -584,33 +590,48 @@ pub fn stamps_with(
             }
         }
     }
-    // The channels joining neighbouring basins (after every region stamp: a channel's
-    // walls never cut into a basin, its water runs through their rims).
+    // The passages joining neighbouring basins (after every region stamp: a passage's walls
+    // never cut into a basin, its opening runs through their rims). Every passage runs along
+    // the sea's surface, above the water: a sub surfaces, crosses and dives again, and no water
+    // joins two basins (one drilled out below drains alone, as it always did, not the whole sea
+    // down the shaft with the fluid pass busy for minutes).
     let basin_at = |rx: i32, ry: i32| {
         region_stamp(settings, layout, &fixed, city.as_ref(), rx, ry)
             .filter(|stamp| stamp.kind == DrownedStampKind::Basin)
     };
+    let column = landmarks::outpost_column(settings);
     for ry in area.min.y.div_euclid(height) - 1..=area.max.y.div_euclid(height) {
-        for rx in area.min.x.div_euclid(width) - 1..=area.max.x.div_euclid(width) {
+        for rx in area.min.x.div_euclid(width) - 1..=area.max.x.div_euclid(width) + 1 {
             let Some(here) = basin_at(rx, ry) else {
                 continue;
             };
-            let joins = [
-                basin_at(rx + 1, ry).and_then(|east| side_channel(&here, &east)),
-                basin_at(rx, ry + 1).and_then(|below| shaft_channel(&here, &below)),
-            ];
-            for channel in joins.into_iter().flatten() {
-                let clear = channel.bounds.intersects(area)
-                    && !fixed
+            let side = basin_at(rx + 1, ry).map(|east| vec![side_channel(&here, &east)]);
+            // Down to the basin below, else to one below and beside it.
+            let down = [0, 1, -1].into_iter().find_map(|step| {
+                let below = basin_at(rx + step, ry + 1)?;
+                let others: Vec<DrownedStamp> = [(-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]
+                    .into_iter()
+                    .filter(|&(dx, dy)| (dx, dy) != (step, 1))
+                    .filter_map(|(dx, dy)| basin_at(rx + dx, ry + dy))
+                    .collect();
+                link_down(&here, &below, &others)
+            });
+            for link in [side, down].into_iter().flatten() {
+                let clear = link.iter().all(|segment| {
+                    !fixed
                         .iter()
-                        .any(|stamp| stamp.bounds.expanded(3).intersects(&channel.bounds))
-                    && !city
-                        .is_some_and(|site| site.bounds().expanded(3).intersects(&channel.bounds));
-                let column = landmarks::outpost_column(settings);
-                let crosses_column =
-                    channel.bounds.max.x >= column - 24 && channel.bounds.min.x <= column + 24;
-                if clear && !crosses_column {
-                    found.push(channel);
+                        .any(|stamp| stamp.bounds.expanded(3).intersects(&segment.bounds))
+                        && !city.is_some_and(|site| {
+                            site.bounds().expanded(3).intersects(&segment.bounds)
+                        })
+                        && (segment.bounds.max.x < column - 24
+                            || segment.bounds.min.x > column + 24)
+                });
+                if clear {
+                    found.extend(
+                        link.into_iter()
+                            .filter(|segment| segment.bounds.intersects(area)),
+                    );
                 }
             }
         }
@@ -618,8 +639,8 @@ pub fn stamps_with(
     found
 }
 
-/// Rows of a channel's water (its walls are one more row or column each side).
-const CHANNEL_WATER: i32 = 5;
+/// Rows (or columns) a passage is open (its walls are one more each side).
+const PASSAGE_OPEN: i32 = 5;
 
 /// `(water surface row, floor row)` of a basin (as [`basin`] carves it).
 fn basin_water_rows(stamp: &DrownedStamp) -> (i32, i32) {
@@ -628,69 +649,116 @@ fn basin_water_rows(stamp: &DrownedStamp) -> (i32, i32) {
     (surface, cy + ry * 6 / 10)
 }
 
-/// A sideways channel from basin `west` to basin `east` under both their surfaces, or `None`
-/// when their water rows do not overlap enough.
-fn side_channel(west: &DrownedStamp, east: &DrownedStamp) -> Option<DrownedStamp> {
-    let (west_surface, west_floor) = basin_water_rows(west);
-    let (east_surface, east_floor) = basin_water_rows(east);
-    let low = west_surface.max(east_surface) + 2;
-    let high = west_floor.min(east_floor) - 2;
-    if high - low < CHANNEL_WATER {
-        return None;
-    }
-    let top = i32::midpoint(low, high) - CHANNEL_WATER / 2;
+/// The `(ceiling, floor)` wall rows of a passage along a sea surface on row `surface`: open on
+/// the [`PASSAGE_OPEN`] rows just above it, floored on the surface row itself.
+const fn passage_rows(surface: i32) -> (i32, i32) {
+    (surface - PASSAGE_OPEN - 1, surface)
+}
+
+/// A sideways passage from basin `west` to basin `east` just above the higher of their two
+/// water surfaces (so it never opens into either's water).
+fn side_channel(west: &DrownedStamp, east: &DrownedStamp) -> DrownedStamp {
+    let (west_surface, _) = basin_water_rows(west);
+    let (east_surface, _) = basin_water_rows(east);
     let (west_x, _, _, _) = ellipse(&west.bounds);
     let (east_x, _, _, _) = ellipse(&east.bounds);
-    Some(DrownedStamp {
-        kind: DrownedStampKind::Channel,
-        bounds: TileRect {
-            min: TilePosition {
-                x: west_x,
-                y: top - 1,
-            },
-            max: TilePosition {
-                x: east_x,
-                y: top + CHANNEL_WATER,
-            },
-        },
-        seed: west.seed ^ east.seed.rotate_left(17),
-        along: west.along,
-    })
+    channel_rect(
+        (west_x, east_x),
+        passage_rows(west_surface.min(east_surface)),
+        west.seed ^ east.seed.rotate_left(17),
+        west.along,
+    )
 }
 
-/// A shaft from basin `upper`'s water down into basin `lower`'s, or `None` when they do not
-/// overlap enough sideways.
-fn shaft_channel(upper: &DrownedStamp, lower: &DrownedStamp) -> Option<DrownedStamp> {
-    let left = upper.bounds.min.x.max(lower.bounds.min.x) + 6;
-    let right = upper.bounds.max.x.min(lower.bounds.max.x) - 6;
-    if right - left < CHANNEL_WATER {
-        return None;
-    }
-    let x = i32::midpoint(left, right) - CHANNEL_WATER / 2;
-    let (_, upper_y, _, _) = ellipse(&upper.bounds);
+/// The passage from basin `upper` down to basin `lower` below it: out of `upper` over its
+/// water to a shaft just outside its rim, the shaft down to `lower`'s surface and a passage in
+/// over its water. `None` when neither side's shaft keeps clear of the neighbouring `others`.
+fn link_down(
+    upper: &DrownedStamp,
+    lower: &DrownedStamp,
+    others: &[DrownedStamp],
+) -> Option<Vec<DrownedStamp>> {
+    let (upper_surface, _) = basin_water_rows(upper);
     let (lower_surface, _) = basin_water_rows(lower);
-    if lower_surface <= upper_y {
+    if lower_surface < upper_surface + 3 * PASSAGE_OPEN {
         return None;
     }
-    Some(DrownedStamp {
-        kind: DrownedStampKind::Channel,
-        bounds: TileRect {
-            min: TilePosition {
-                x: x - 1,
-                y: upper_y,
+    let (upper_x, _, _, _) = ellipse(&upper.bounds);
+    let (lower_x, _, _, _) = ellipse(&lower.bounds);
+    let seed = upper.seed ^ lower.seed.rotate_left(29);
+    let (out_ceiling, out_floor) = passage_rows(upper_surface);
+    let (into_ceiling, into_floor) = passage_rows(lower_surface);
+    // The shaft's first open column: just east of the upper basin's rim, else just west.
+    [
+        upper.bounds.max.x + 3,
+        upper.bounds.min.x - 3 - PASSAGE_OPEN,
+    ]
+    .into_iter()
+    .map(|x| {
+        // Open from the out passage's first row to the in passage's last.
+        let shaft = DrownedStamp {
+            kind: DrownedStampKind::Channel,
+            bounds: TileRect {
+                min: TilePosition {
+                    x: x - 1,
+                    y: out_ceiling + 1,
+                },
+                max: TilePosition {
+                    x: x + PASSAGE_OPEN,
+                    y: into_floor - 1,
+                },
             },
-            max: TilePosition {
-                x: x + CHANNEL_WATER,
-                y: lower_surface + 1,
-            },
-        },
-        seed: upper.seed ^ lower.seed.rotate_left(29),
-        along: upper.along,
+            seed,
+            along: upper.along,
+        };
+        // Out of the upper basin to the shaft's far wall (capping it), and in from the shaft's
+        // near wall to the lower basin's heart (at least ten wide, so it reads as sideways).
+        let shaft_walls = (x - 1, x + PASSAGE_OPEN);
+        let out = channel_rect(
+            (upper_x.min(shaft_walls.0), upper_x.max(shaft_walls.1)),
+            (out_ceiling, out_floor),
+            seed.rotate_left(7),
+            upper.along,
+        );
+        let (into_min, into_max) = (lower_x.min(shaft_walls.0), lower_x.max(shaft_walls.1));
+        let into = channel_rect(
+            (into_min, into_max.max(into_min + 10)),
+            (into_ceiling, into_floor),
+            seed.rotate_left(13),
+            lower.along,
+        );
+        vec![out, shaft, into]
+    })
+    .find(|link| {
+        link.iter().all(|segment| {
+            others
+                .iter()
+                .all(|other| !other.bounds.expanded(1).intersects(&segment.bounds))
+        })
     })
 }
 
-/// Whether `(x, y)` is in a channel's water (rather than its walls).
-const fn channel_water(stamp: &DrownedStamp, x: i32, y: i32) -> bool {
+/// A sideways passage over columns `columns` (first to last), its ceiling and floor walls on
+/// the rows `rows`.
+const fn channel_rect(
+    (first, last): (i32, i32),
+    (top, bottom): (i32, i32),
+    seed: u64,
+    along: u16,
+) -> DrownedStamp {
+    DrownedStamp {
+        kind: DrownedStampKind::Channel,
+        bounds: TileRect {
+            min: TilePosition { x: first, y: top },
+            max: TilePosition { x: last, y: bottom },
+        },
+        seed,
+        along,
+    }
+}
+
+/// Whether `(x, y)` is in a passage's opening (rather than its walls).
+const fn passage_open(stamp: &DrownedStamp, x: i32, y: i32) -> bool {
     let bounds = stamp.bounds;
     if bounds.max.x - bounds.min.x > bounds.max.y - bounds.min.y {
         y > bounds.min.y && y < bounds.max.y
@@ -699,10 +767,10 @@ const fn channel_water(stamp: &DrownedStamp, x: i32, y: i32) -> bool {
     }
 }
 
-/// A channel's tile: water inside, seabed (now and then coral) walls.
+/// A passage's tile: open inside, seabed (now and then coral) walls.
 const fn channel(stamp: &DrownedStamp, x: i32, y: i32) -> TileKind {
-    if channel_water(stamp, x, y) {
-        return WATER;
+    if passage_open(stamp, x, y) {
+        return TileKind::Air;
     }
     if hash2(stamp.seed, SALT_CORAL, x, y).is_multiple_of(6) {
         cave(CaveTile::Coral)
@@ -1183,16 +1251,25 @@ pub fn drowned_tile(
     {
         return Some(kind);
     }
-    // A channel's water runs through the basins' rims and floors it joins (Wave 10 polish).
+    // A passage's opening runs through the rims of the basins it joins (Wave 10 polish), never
+    // through their water.
     let at = TilePosition { x, y };
     if carvable(base)
         && stamps.iter().any(|stamp| {
             stamp.kind == DrownedStampKind::Channel
                 && stamp.bounds.contains(at)
-                && channel_water(stamp, x, y)
+                && passage_open(stamp, x, y)
         })
     {
-        return Some(WATER);
+        let held = stamps
+            .iter()
+            .filter(|stamp| stamp.kind != DrownedStampKind::Channel)
+            .find_map(|stamp| stamp_tile(stamp, x, y, base));
+        return Some(if held == Some(WATER) {
+            WATER
+        } else {
+            TileKind::Air
+        });
     }
     for stamp in stamps {
         if let Some(kind) = stamp_tile(stamp, x, y, base) {
