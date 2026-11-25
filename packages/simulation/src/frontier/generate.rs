@@ -12,12 +12,54 @@
 //! seam. Structures that need square tiles (ruins, light wells, secrets) stay above the first
 //! ring-halving row.
 
+use std::{cell::RefCell, rc::Rc};
+
 use super::{FrontierStyle, FrontierTile, Landmark, Secret};
 use crate::{
     fluid::FluidKind,
-    planet::{PlanetGround, hash3},
+    planet::{PlanetGround, PlanetParams, hash3},
     terrain::{Tile, TileKind, TilePosition, tile_durability},
 };
+
+/// What a frontier world lays out once (its light wells and its secret: each reads the
+/// surface, which every tile would otherwise recompute), memoized per thread for the last
+/// planet generated. A cache: a pure function of the params, so it never changes a tile.
+#[derive(Debug)]
+struct Memo {
+    wells: Vec<Option<LightWell>>,
+    secret: (i64, i32),
+}
+
+thread_local! {
+    static MEMO: RefCell<Option<(PlanetParams, Rc<Memo>)>> = const { RefCell::new(None) };
+}
+
+fn memo(ground: &PlanetGround) -> Rc<Memo> {
+    let params = *ground.params();
+    let cached = MEMO.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .filter(|(key, _)| *key == params)
+            .map(|(_, memo)| Rc::clone(memo))
+    });
+    if let Some(memo) = cached {
+        return memo;
+    }
+    let style = super::style_of_ground(ground).unwrap_or(FrontierStyle::Desert);
+    let wells = if style == FrontierStyle::Crystal {
+        (0..cells(ground, WELL_COLUMNS))
+            .map(|index| light_well_raw(ground, index))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let built = Rc::new(Memo {
+        wells,
+        secret: secret_layout_raw(ground, style),
+    });
+    MEMO.with(|cell| *cell.borrow_mut() = Some((params, Rc::clone(&built))));
+    built
+}
 
 /// The caves of a planet: `(centre column, centre row, half width, half height)`.
 pub type Caves = [(i64, i32, i64, i32)];
@@ -278,6 +320,15 @@ impl LightWell {
 /// ring-halving row.
 #[must_use]
 pub fn light_well_at(ground: &PlanetGround, index: i64) -> Option<LightWell> {
+    let count = cells(ground, WELL_COLUMNS);
+    memo(ground)
+        .wells
+        .get(usize::try_from(index.rem_euclid(count)).unwrap_or(0))
+        .copied()
+        .flatten()
+}
+
+fn light_well_raw(ground: &PlanetGround, index: i64) -> Option<LightWell> {
     let w = width(ground);
     let roll = hash3(seed(ground), P_WELL, index, 0);
     let mut column = index * WELL_COLUMNS + 180 + i64::try_from(roll % 560).unwrap_or(0);
@@ -356,7 +407,11 @@ fn well_near(ground: &PlanetGround, column: i64) -> Option<LightWell> {
 }
 
 /// The secret's layout on a small body: the pocket's centre column and its top row.
-fn secret_layout(ground: &PlanetGround, style: FrontierStyle) -> (i64, i32) {
+fn secret_layout(ground: &PlanetGround, _style: FrontierStyle) -> (i64, i32) {
+    memo(ground).secret
+}
+
+fn secret_layout_raw(ground: &PlanetGround, style: FrontierStyle) -> (i64, i32) {
     let w = width(ground);
     let mut column =
         i64::try_from(hash3(seed(ground), P_SECRET, 0, 0) % w.cast_unsigned()).unwrap_or(0);
@@ -594,10 +649,15 @@ pub fn feature_tile(
     {
         return Some(tile);
     }
+    let stratum = if row >= surface {
+        ground.stratum_index(i32::try_from(column).unwrap_or(0), row)
+    } else {
+        0
+    };
     let feature = match style {
-        FrontierStyle::Desert => desert_tile(ground, column, row, surface),
-        FrontierStyle::Volcanic => volcanic_tile(ground, caves, column, row, surface),
-        FrontierStyle::Crystal => crystal_tile(ground, column, row, surface),
+        FrontierStyle::Desert => desert_tile(ground, column, row, surface, stratum),
+        FrontierStyle::Volcanic => volcanic_tile(ground, caves, column, row, surface, stratum),
+        FrontierStyle::Crystal => crystal_tile(ground, column, row, surface, stratum),
     };
     if feature.is_some() || row < surface + ground.theme().crust_rows {
         return feature;
@@ -605,7 +665,7 @@ pub fn feature_tile(
     if ground.in_cave_at(caves, column, row) {
         return None;
     }
-    Some(fill_tile(ground, style, column, row))
+    Some(fill_tile(ground, style, column, row, stratum))
 }
 
 /// How a stratum's accent rock lies in its common rock.
@@ -652,8 +712,13 @@ fn noise2(ground: &PlanetGround, purpose: u64, x: i64, y: i32, cx: i64, cy: i32)
 
 /// A stratum's ground at `(column, row)`: its ores, then its accent rock in the stratum's
 /// pattern, else its common rock.
-fn fill_tile(ground: &PlanetGround, style: FrontierStyle, column: i64, row: i32) -> Tile {
-    let index = ground.stratum_index(i32::try_from(column).unwrap_or(0), row);
+fn fill_tile(
+    ground: &PlanetGround,
+    style: FrontierStyle,
+    column: i64,
+    row: i32,
+    index: usize,
+) -> Tile {
     let stratum = &ground.theme().strata[index];
     let roll = hash3(seed(ground), P_ORE, column, i64::from(row));
     let ore_roll = u16::try_from(roll % 10_000).unwrap_or(0);
@@ -750,7 +815,13 @@ fn secret_tile(
 // The dune world.
 // ---------------------------------------------------------------------------------------------
 
-fn desert_tile(ground: &PlanetGround, column: i64, row: i32, surface: i32) -> Option<Tile> {
+fn desert_tile(
+    ground: &PlanetGround,
+    column: i64,
+    row: i32,
+    surface: i32,
+    stratum: usize,
+) -> Option<Tile> {
     let index = cell(ground, column, DUNE_COLUMNS);
     let t = column.rem_euclid(DUNE_COLUMNS);
     // The Sleeping Sentinel.
@@ -771,7 +842,6 @@ fn desert_tile(ground: &PlanetGround, column: i64, row: i32, surface: i32) -> Op
         }
         return None;
     }
-    let stratum = ground.stratum_index(i32::try_from(column).unwrap_or(0), row);
     match stratum {
         // The Buried City's ruins.
         1 => ruin_tile(ground, column, row),
@@ -943,6 +1013,7 @@ fn volcanic_tile(
     column: i64,
     row: i32,
     surface: i32,
+    stratum: usize,
 ) -> Option<Tile> {
     if row < surface {
         // The lava seas (their surface at the datum).
@@ -978,7 +1049,6 @@ fn volcanic_tile(
         }
     }
     let depth = row - surface;
-    let stratum = ground.stratum_index(i32::try_from(column).unwrap_or(0), row);
     let roll = hash3(seed(ground), P_GAS, column, i64::from(row));
     match stratum {
         0 if depth > 3 && roll.is_multiple_of(150) => Some(plain(TileKind::Gas)),
@@ -1009,7 +1079,13 @@ fn volcanic_tile(
 // The crystal world.
 // ---------------------------------------------------------------------------------------------
 
-fn crystal_tile(ground: &PlanetGround, column: i64, row: i32, surface: i32) -> Option<Tile> {
+fn crystal_tile(
+    ground: &PlanetGround,
+    column: i64,
+    row: i32,
+    surface: i32,
+    stratum: usize,
+) -> Option<Tile> {
     // The Choir Spire and its geode.
     let landmark = landmark_centre(ground, FrontierStyle::Crystal);
     let ldx = round_dx(ground, column, landmark);
@@ -1045,7 +1121,6 @@ fn crystal_tile(ground: &PlanetGround, column: i64, row: i32, surface: i32) -> O
     if row < surface {
         return spire_tile(ground, column, row, surface);
     }
-    let stratum = ground.stratum_index(i32::try_from(column).unwrap_or(0), row);
     if stratum == 2 {
         return geode_cell_tile(ground, column, row);
     }

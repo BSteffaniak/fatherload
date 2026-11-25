@@ -64,8 +64,8 @@ pub fn rule_at(
 /// even the best classic cooling leaves a burn the stations track's heat gear covers.
 const fn zone_heat(style: FrontierStyle) -> [u8; 5] {
     match style {
-        FrontierStyle::Desert => [6, 3, 3, 6, 15],
-        FrontierStyle::Volcanic => [9, 6, 12, 21, 42],
+        FrontierStyle::Desert => [9, 3, 6, 9, 24],
+        FrontierStyle::Volcanic => [12, 9, 18, 30, 54],
         FrontierStyle::Crystal => [0, 0, 0, 0, 0],
     }
 }
@@ -335,15 +335,18 @@ const fn eruption_cycle(seed: u64, cone: i64) -> (u64, u64) {
 }
 
 /// Cone `cone`'s phase at world time `millis`, and the world time its eruption (current or
-/// next) starts.
+/// next) starts (negative for one already under way at world time 0).
 #[must_use]
-pub const fn eruption_at(seed: u64, cone: i64, millis: u64) -> (EruptionPhase, u64) {
+#[allow(
+    clippy::cast_possible_wrap,
+    reason = "world milliseconds stay far below i64::MAX"
+)]
+pub const fn eruption_at(seed: u64, cone: i64, millis: u64) -> (EruptionPhase, i64) {
     let (length, offset) = eruption_cycle(seed, cone);
     let shifted = millis + offset;
     let into = shifted % length;
     let erupt_from = length - ERUPTION_MILLIS;
-    let start = shifted - into + erupt_from;
-    let start = start.saturating_sub(offset);
+    let start = (shifted - into + erupt_from) as i64 - offset as i64;
     let phase = if into >= erupt_from {
         EruptionPhase::Erupting
     } else if into >= erupt_from - RUMBLE_MILLIS {
@@ -363,28 +366,26 @@ pub struct LavaBomb {
     pub land: u64,
 }
 
-/// The bombs cone `cone` of `ground` throws in the eruption that starts at `start`.
-fn eruption_bombs(ground: &PlanetGround, cone: i64, start: u64) -> impl Iterator<Item = LavaBomb> {
+/// The bombs cone `cone` of `ground` throws in the eruption that starts at `start` (none
+/// before world time 0).
+fn eruption_bombs(ground: &PlanetGround, cone: i64, start: i64) -> impl Iterator<Item = LavaBomb> {
     let seed = ground.params().seed;
     let found = cone_at(ground, cone);
     let reach = found.radius + 28;
     let width = i64::from(ground.grid().surface_columns());
-    (0..ERUPTION_MILLIS / BOMB_PERIOD_MILLIS).map(move |k| {
-        let roll = hash3(
-            seed,
-            P_BOMB,
-            cone,
-            i64::try_from(start / 1_000 + k).unwrap_or(0),
-        );
+    (0..ERUPTION_MILLIS / BOMB_PERIOD_MILLIS).filter_map(move |k| {
+        let k = i64::try_from(k).unwrap_or(0);
+        let roll = hash3(seed, P_BOMB, cone, start.div_euclid(1_000) + k);
         let offset =
             i64::try_from(roll % u64::try_from(2 * reach + 1).unwrap_or(1)).unwrap_or(0) - reach;
-        let launch = start + k * BOMB_PERIOD_MILLIS;
-        LavaBomb {
+        let launch =
+            u64::try_from(start + k * i64::try_from(BOMB_PERIOD_MILLIS).unwrap_or(0)).ok()?;
+        Some(LavaBomb {
             cone,
             column: (found.centre + offset).rem_euclid(width),
             launch,
             land: launch + BOMB_FLIGHT_MILLIS,
-        }
+        })
     })
 }
 
