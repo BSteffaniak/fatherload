@@ -454,6 +454,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Wilds {
             what, player_id, ..
         } => (900 + what.code() as u32, player_id),
+        // The frontier worlds (wave 12 planets-b): 920-939.
+        GameplayEventKind::Frontier {
+            what, player_id, ..
+        } => (920 + what.code() as u32, player_id),
     }
 }
 

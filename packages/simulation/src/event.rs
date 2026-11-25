@@ -1374,6 +1374,17 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The frontier worlds (Wave 12 planets-b; netcode codes 920-939).
+    /// Something happened on a dune, volcanic or crystal world at tile `(x, y)` of its ground
+    /// (sand slid, a floor gave way, glass or crystal shattered, a vault opened, a cone
+    /// rumbled or erupted, a bomb landed, a storm rose); `player_id` is whose doing, if
+    /// anyone's.
+    Frontier {
+        what: crate::frontier::FrontierEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -1200,7 +1200,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Heart { player_id, .. }
         | GameplayEventKind::Story { player_id, .. }
         | GameplayEventKind::Planet { player_id, .. }
-        | GameplayEventKind::Wilds { player_id, .. } => player_id,
+        | GameplayEventKind::Wilds { player_id, .. }
+        | GameplayEventKind::Frontier { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

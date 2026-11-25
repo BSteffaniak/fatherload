@@ -300,6 +300,13 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   terrain ops, chunk refreshes and keyframes (the jungle, ocean archipelago and glacier
 ///   worlds' ground), twelve appended `EnemyKind`s (`Trundlehorn` .. `Crevassewyrm`), and the
 ///   wild world events 900-919 (`GameplayEventKind::Wilds` with `planet::wilds::WildsEvent`).
+/// * Planets-b (the dune, volcanic and crystal worlds): `TileKind::Frontier(FrontierTile)`
+///   tiles (kind codes `0x2400..=0x26FF`) in terrain ops, store tile ops, chunk refreshes and
+///   keyframes; three appended planet themes (ids 3-5) in `PlanetParams`; twelve appended
+///   `EnemyKind`s (`DuneSkipper` .. `GeodeMimic`) in entity records; the frontier events
+///   920-939 (`GameplayEventKind::Frontier` with `frontier::FrontierEvent`). No world field or
+///   section: the frontier rules keep no state of their own (the weather and the eruptions are
+///   pure schedules of the planet's seed and world time).
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -317,7 +317,20 @@ mod tests {
                 | Patch::HeartFightLoop
                 | Patch::CoreOceanLoop
                 | Patch::DarkMatterLoop
-                | Patch::EndingLoop => (40.0, 3_000.0),
+                | Patch::EndingLoop
+                // The frontier worlds (wave 12 planets-b): the volcano's rumble, eruption and
+                // march, the storms' low winds, the wyrm's groan and the drifter's deep bell.
+                | Patch::PbRumble
+                | Patch::PbEruption
+                | Patch::PbVolcanoLoop
+                | Patch::PbVolcanicMusicLoop
+                | Patch::PbStormRising
+                | Patch::PbStormBreak
+                | Patch::PbWyrmRipple
+                | Patch::PbDuneWindLoop
+                | Patch::PbDuneMusicLoop
+                | Patch::PbFloorCrumble
+                | Patch::PbLavaBomb => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

@@ -910,6 +910,36 @@ pub enum SoundCue {
     SystemsTransit,
     /// Ore broken off an asteroid (or comet dust gathered) in flight.
     SystemsOreCrunch,
+    /// Loose sand sliding into a tunnel.
+    FrontierSandSlide,
+    /// A cracked ruin floor giving way.
+    FrontierFloorCrumble,
+    /// Desert glass shattering in a chain.
+    FrontierGlassShatter,
+    /// Resonant crystal ringing apart.
+    FrontierCrystalRing,
+    /// Obsidian splintering at the drill.
+    FrontierSplinter,
+    /// A light well's beam reaching its receptor.
+    FrontierBeamLit,
+    /// A sealed geode vault opening.
+    FrontierVaultOpen,
+    /// A volcano beginning to rumble.
+    FrontierRumble,
+    /// A volcano erupting.
+    FrontierEruption,
+    /// A lava bomb landing.
+    FrontierLavaBomb,
+    /// A frontier storm coming.
+    FrontierStormRising,
+    /// A frontier storm breaking.
+    FrontierStormBreak,
+    /// Crystal growing back into a tunnel.
+    FrontierCrystalGrow,
+    /// A struck chime drifter ringing.
+    FrontierChime,
+    /// A dune wyrm's ripple before it erupts.
+    FrontierWyrmRipple,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

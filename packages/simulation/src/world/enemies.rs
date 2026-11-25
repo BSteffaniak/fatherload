@@ -71,6 +71,7 @@ mod crypt;
 mod distortion;
 mod drowned;
 mod far_strange;
+mod frontier;
 mod garrison;
 mod heart;
 pub(super) mod hollow;
@@ -280,6 +281,8 @@ const fn diggable_by(enemy: EnemyKind, kind: TileKind) -> bool {
                     | crate::planet::wilds::WildTile::Permafrost
             )
         ),
+        // Wave 12: the dune wyrm swims the dune world's sand.
+        EnemyKind::DuneWyrm => frontier::wyrm_ground(kind),
         _ => diggable(kind),
     }
 }
@@ -722,6 +725,9 @@ impl WorldState {
             return fits;
         }
         if let Some(fits) = self.heart_habitat(kind, tile) {
+            return fits;
+        }
+        if let Some(fits) = self.frontier_habitat(kind, tile) {
             return fits;
         }
         let spec = kind.stats();
@@ -1347,6 +1353,8 @@ impl WorldState {
             // The wild worlds (Wave 12 planets-a): the peaceful fight back, ambushers look
             // below, packs see farther in a blizzard.
             .or_else(|| self.wilds_notice(body, state, || self.perceive(body, state)))
+            // The frontier worlds (Wave 12): the fauna never hunt, the wyrm hears drilling.
+            .or_else(|| self.frontier_notice(body, state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1422,6 +1430,13 @@ impl WorldState {
         // And the Heart's (Wave 10): moths to dark matter, beetles to roofs, orbits, eels.
         if state.kind.is_heart()
             && let Some(intent) = self.heart_behave(body, state, now)
+        {
+            return intent;
+        }
+        // And the frontier worlds' (Wave 12): fauna run or shell up, moths circle lamps, the
+        // drifter rings.
+        if state.kind.is_frontier()
+            && let Some(intent) = self.frontier_behave(id, body, state, now, output)
         {
             return intent;
         }
@@ -3080,6 +3095,19 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::Woolhorn
         | EnemyKind::Rimeskipper
         | EnemyKind::Rimewolf
-        | EnemyKind::Crevassewyrm => false,
+        | EnemyKind::Crevassewyrm
+        // The frontier worlds' creatures have their own spawner (Wave 12 planets-b).
+        | EnemyKind::DuneSkipper
+        | EnemyKind::DuneWyrm
+        | EnemyKind::GlassScorpion
+        | EnemyKind::MirageMoth
+        | EnemyKind::MagmaSlug
+        | EnemyKind::CinderBat
+        | EnemyKind::EmberStrider
+        | EnemyKind::BasaltTortoise
+        | EnemyKind::ShardCrab
+        | EnemyKind::GlintMoth
+        | EnemyKind::ChimeDrifter
+        | EnemyKind::GeodeMimic => false,
     }
 }

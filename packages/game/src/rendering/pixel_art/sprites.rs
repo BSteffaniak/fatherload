@@ -11,6 +11,7 @@ pub mod drowned;
 pub mod enemies;
 pub mod explosives;
 pub mod far_strange;
+pub mod frontier;
 pub mod garrison;
 pub mod heart;
 pub mod hollow;
@@ -624,6 +625,19 @@ pub const ALL: &[&SpriteDef] = &[
     &wilds::RIMESKIPPER,
     &wilds::RIMEWOLF,
     &wilds::CREVASSEWYRM,
+    // The frontier worlds' creatures (Wave 12 planets-b).
+    &frontier::DUNE_SKIPPER,
+    &frontier::DUNE_WYRM,
+    &frontier::GLASS_SCORPION,
+    &frontier::MIRAGE_MOTH,
+    &frontier::MAGMA_SLUG,
+    &frontier::CINDER_BAT,
+    &frontier::EMBER_STRIDER,
+    &frontier::BASALT_TORTOISE,
+    &frontier::SHARD_CRAB,
+    &frontier::GLINT_MOTH,
+    &frontier::CHIME_DRIFTER,
+    &frontier::GEODE_MIMIC,
 ];
 
 #[cfg(test)]

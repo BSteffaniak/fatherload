@@ -45,6 +45,7 @@ pub mod volcanic;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    enemy::EnemyKind,
     item::ItemKind,
     planet::{PlanetGround, PlanetThemeId},
     terrain::{ArtifactKind, TilePosition},
@@ -368,6 +369,136 @@ pub fn secret(ground: &PlanetGround) -> Option<Secret> {
         return None;
     }
     Some(generate::secret_of(ground, style))
+}
+
+/// The creatures of `style`'s `zone`, with spawn weights (the frontier spawner,
+/// `world/enemies/frontier.rs`): neutral fauna on the surfaces, the hunters below.
+#[must_use]
+pub const fn roster(style: FrontierStyle, zone: rules::Zone) -> &'static [(EnemyKind, u32)] {
+    use EnemyKind::{
+        BasaltTortoise, ChimeDrifter, CinderBat, DuneSkipper, DuneWyrm, EmberStrider, GeodeMimic,
+        GlassScorpion, GlintMoth, MagmaSlug, MirageMoth, ShardCrab,
+    };
+    use rules::Zone;
+    match (style, zone) {
+        (FrontierStyle::Desert, Zone::Surface) => {
+            &[(DuneSkipper, 6), (MirageMoth, 3), (DuneWyrm, 2)]
+        }
+        (FrontierStyle::Desert, Zone::Stratum(0)) => &[(DuneWyrm, 3), (GlassScorpion, 1)],
+        (FrontierStyle::Desert, Zone::Stratum(1)) => &[(GlassScorpion, 4), (DuneWyrm, 1)],
+        (FrontierStyle::Desert, Zone::Stratum(2)) => &[(DuneWyrm, 4), (GlassScorpion, 2)],
+        (FrontierStyle::Desert, _) => &[(GlassScorpion, 4), (DuneWyrm, 2)],
+        (FrontierStyle::Volcanic, Zone::Surface) => {
+            &[(BasaltTortoise, 4), (EmberStrider, 4), (CinderBat, 2)]
+        }
+        (FrontierStyle::Volcanic, Zone::Stratum(0)) => &[(CinderBat, 4), (MagmaSlug, 1)],
+        (FrontierStyle::Volcanic, Zone::Stratum(1)) => &[(CinderBat, 3), (MagmaSlug, 2)],
+        (FrontierStyle::Volcanic, Zone::Stratum(2)) => &[(MagmaSlug, 3), (CinderBat, 2)],
+        (FrontierStyle::Volcanic, _) => &[(MagmaSlug, 4), (CinderBat, 2)],
+        (FrontierStyle::Crystal, Zone::Surface) => &[(GlintMoth, 5), (ShardCrab, 2)],
+        (FrontierStyle::Crystal, Zone::Stratum(0)) => {
+            &[(ShardCrab, 3), (ChimeDrifter, 2), (GlintMoth, 1)]
+        }
+        (FrontierStyle::Crystal, Zone::Stratum(1)) => &[(ChimeDrifter, 3), (ShardCrab, 2)],
+        (FrontierStyle::Crystal, Zone::Stratum(2)) => {
+            &[(GeodeMimic, 3), (ShardCrab, 2), (ChimeDrifter, 1)]
+        }
+        (FrontierStyle::Crystal, _) => &[(GeodeMimic, 3), (ShardCrab, 3)],
+    }
+}
+
+/// Every creature of `style` (its native fauna and hunters).
+#[must_use]
+pub const fn creatures(style: FrontierStyle) -> [EnemyKind; 4] {
+    match style {
+        FrontierStyle::Desert => [
+            EnemyKind::DuneSkipper,
+            EnemyKind::MirageMoth,
+            EnemyKind::DuneWyrm,
+            EnemyKind::GlassScorpion,
+        ],
+        FrontierStyle::Volcanic => [
+            EnemyKind::BasaltTortoise,
+            EnemyKind::EmberStrider,
+            EnemyKind::CinderBat,
+            EnemyKind::MagmaSlug,
+        ],
+        FrontierStyle::Crystal => [
+            EnemyKind::GlintMoth,
+            EnemyKind::ChimeDrifter,
+            EnemyKind::ShardCrab,
+            EnemyKind::GeodeMimic,
+        ],
+    }
+}
+
+/// Something that happened on a frontier world (netcode codes 920-939, see
+/// [`crate::event::GameplayEventKind::Frontier`]).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum FrontierEvent {
+    /// Loose sand (or ash) slid into open ground.
+    SandSlid,
+    /// A cracked ruin floor gave way.
+    FloorCrumbled,
+    /// Desert glass shattered in a chain (the shards nicked the driller's hull).
+    GlassShattered,
+    /// Resonant crystal rang and shattered its neighbours.
+    CrystalRang,
+    /// Obsidian splintered at the drill.
+    Splintered,
+    /// A light well's beam reached its receptor.
+    BeamLit,
+    /// A sealed geode vault opened.
+    VaultOpened,
+    /// A volcano began to rumble (its bombs follow).
+    EruptionRumble,
+    /// A volcano erupted.
+    EruptionStarted,
+    /// A lava bomb landed.
+    LavaBombLanded,
+    /// A storm is coming (sandstorm, ash fall or glitterfrost).
+    StormRising,
+    /// The storm broke.
+    StormStarted,
+    /// The storm passed.
+    StormEnded,
+    /// Crystal grew back into a tunnel.
+    CrystalRegrew,
+    /// A struck chime drifter rang.
+    DrifterChimed,
+    /// A dune wyrm's ripple: it is about to erupt.
+    WyrmRipple,
+    /// A rig felt a planet hazard bite (toxic air, cold) without the gear for it.
+    HazardBite,
+}
+
+impl FrontierEvent {
+    /// Every event, in code order.
+    pub const ALL: [Self; 17] = [
+        Self::SandSlid,
+        Self::FloorCrumbled,
+        Self::GlassShattered,
+        Self::CrystalRang,
+        Self::Splintered,
+        Self::BeamLit,
+        Self::VaultOpened,
+        Self::EruptionRumble,
+        Self::EruptionStarted,
+        Self::LavaBombLanded,
+        Self::StormRising,
+        Self::StormStarted,
+        Self::StormEnded,
+        Self::CrystalRegrew,
+        Self::DrifterChimed,
+        Self::WyrmRipple,
+        Self::HazardBite,
+    ];
+
+    /// Offset of the event's netcode code from 920.
+    #[must_use]
+    pub const fn code(self) -> u16 {
+        self as u16
+    }
 }
 
 /// A tile of a frontier world's ground ([`crate::terrain::TileKind::Frontier`]).

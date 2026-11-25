@@ -18,6 +18,7 @@ mod ancient_city;
 mod distortion;
 mod drowned;
 mod far_strange;
+mod frontier;
 mod garrison;
 mod heart;
 mod hollow;
@@ -547,6 +548,28 @@ patches! {
     PlanetOceanLoop => "loop_planet_ocean",
     PlanetGlacierLoop => "loop_planet_glacier",
     PlanetStormLoop => "loop_planet_storm",
+    // The frontier worlds (wave 12 planets-b): their rules' one-shots, music and beds.
+    PbSandSlide => "pb_sand_slide",
+    PbFloorCrumble => "pb_floor_crumble",
+    PbGlassShatter => "pb_glass_shatter",
+    PbCrystalRing => "pb_crystal_ring",
+    PbSplinter => "pb_splinter",
+    PbBeamLit => "pb_beam_lit",
+    PbVaultOpen => "pb_vault_open",
+    PbRumble => "pb_rumble",
+    PbEruption => "pb_eruption",
+    PbLavaBomb => "pb_lava_bomb",
+    PbStormRising => "pb_storm_rising",
+    PbStormBreak => "pb_storm_break",
+    PbCrystalGrow => "pb_crystal_grow",
+    PbChime => "pb_drifter_chime",
+    PbWyrmRipple => "pb_wyrm_ripple",
+    PbDuneMusicLoop => "pb_loop_dune_world",
+    PbVolcanicMusicLoop => "pb_loop_volcanic_world",
+    PbCrystalMusicLoop => "pb_loop_crystal_world",
+    PbDuneWindLoop => "pb_loop_dune_wind",
+    PbVolcanoLoop => "pb_loop_volcano",
+    PbCrystalHumLoop => "pb_loop_crystal_hum",
 }
 
 /// Playback metadata of a patch.
@@ -1022,6 +1045,35 @@ impl Patch {
                 .send(0.45)
                 .jitter(0.03, 0.5)
                 .priority(8),
+            // The frontier worlds (wave 12 planets-b): beds loop; the volcano's set pieces are
+            // big; the rest are the ground's own feedback.
+            Self::PbDuneMusicLoop
+            | Self::PbVolcanicMusicLoop
+            | Self::PbCrystalMusicLoop
+            | Self::PbDuneWindLoop
+            | Self::PbVolcanoLoop
+            | Self::PbCrystalHumLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::PbEruption | Self::PbVaultOpen | Self::PbBeamLit => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.02, 0.5)
+                .priority(7),
+            Self::PbRumble | Self::PbStormRising | Self::PbStormBreak | Self::PbWyrmRipple => {
+                PatchInfo::new(Alarm).instances(1).send(0.35).jitter(0.02, 0.5)
+            }
+            Self::PbLavaBomb | Self::PbFloorCrumble => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.05, 1.0),
+            Self::PbSandSlide
+            | Self::PbGlassShatter
+            | Self::PbCrystalRing
+            | Self::PbSplinter
+            | Self::PbCrystalGrow
+            | Self::PbChime => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.35)
+                .jitter(0.04, 0.8),
             // The story finale (wave 10 story): set pieces that hush the mix.
             Self::StoryDescentCall => PatchInfo::new(Big)
                 .instances(1)
@@ -1825,6 +1877,27 @@ impl Patch {
             Self::PlanetOceanLoop => wilds::ocean_world_loop(rng),
             Self::PlanetGlacierLoop => wilds::glacier_world_loop(rng),
             Self::PlanetStormLoop => wilds::wild_storm_loop(rng),
+            Self::PbSandSlide => frontier::sand_slide(rng),
+            Self::PbFloorCrumble => frontier::floor_crumble(rng),
+            Self::PbGlassShatter => frontier::glass_shatter(rng),
+            Self::PbCrystalRing => frontier::crystal_ring(rng),
+            Self::PbSplinter => frontier::splinter(rng),
+            Self::PbBeamLit => frontier::beam_lit(rng),
+            Self::PbVaultOpen => frontier::vault_open(rng),
+            Self::PbRumble => frontier::rumble(rng),
+            Self::PbEruption => frontier::eruption(rng),
+            Self::PbLavaBomb => frontier::lava_bomb(rng),
+            Self::PbStormRising => frontier::storm_rising(rng),
+            Self::PbStormBreak => frontier::storm_break(rng),
+            Self::PbCrystalGrow => frontier::crystal_grow(rng),
+            Self::PbChime => frontier::drifter_chime(rng),
+            Self::PbWyrmRipple => frontier::wyrm_ripple(rng),
+            Self::PbDuneMusicLoop => frontier::dune_music_loop(rng),
+            Self::PbVolcanicMusicLoop => frontier::volcanic_music_loop(rng),
+            Self::PbCrystalMusicLoop => frontier::crystal_music_loop(rng),
+            Self::PbDuneWindLoop => frontier::dune_wind_loop(rng),
+            Self::PbVolcanoLoop => frontier::volcano_loop(rng),
+            Self::PbCrystalHumLoop => frontier::crystal_hum_loop(rng),
         }
     }
 }

@@ -608,6 +608,10 @@ impl WorldState {
                 MineResult::Mined(TileKind::Core(tile)) => {
                     Self::mined_core_tile(player_id, target, tile, &mut output);
                 }
+                // The frontier worlds (Wave 12): glass and crystal shatter, obsidian splinters.
+                MineResult::Mined(TileKind::Frontier(tile)) => {
+                    self.frontier_mined(player_id, target, tile, &mut output);
+                }
                 MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
                     self.open_cave_cache(player_id, target, tile, &mut output);
                 }
@@ -637,6 +641,8 @@ impl WorldState {
             self.advance_entities(EntityPhase::Late, next_tick, &mut output);
             self.advance_pilot_pickups(&mut output);
             self.apply_test_mode_refills();
+            // A frontier world's rules, weather, volcanoes and creatures (Wave 12).
+            self.advance_frontier(next_tick, &mut output);
             self.advance_fluids(next_tick, &mut output);
             // A body's round ground: take-offs into space and life support (Wave 11).
             self.advance_body_flight(&mut output);
@@ -725,6 +731,8 @@ impl WorldState {
         self.advance_milestones(&mut output);
         self.apply_test_mode_refills();
         self.advance_sky_isles(&mut output);
+        // A world that is a frontier planet (Wave 12): its rules, weather and creatures.
+        self.advance_frontier(next_tick, &mut output);
         // Last before the journal closes: every terrain write this tick wakes its fluid.
         self.advance_fluids(next_tick, &mut output);
         output.terrain_ops = self.terrain.finish_journal();

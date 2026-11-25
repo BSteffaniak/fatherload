@@ -349,6 +349,22 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SystemsHoleWarning => Patch::SystemsHoleWarning,
         SoundCue::SystemsTransit => Patch::SystemsTransit,
         SoundCue::SystemsOreCrunch => Patch::SystemsOreCrunch,
+        // The frontier worlds (Wave 12 planets-b).
+        SoundCue::FrontierSandSlide => Patch::PbSandSlide,
+        SoundCue::FrontierFloorCrumble => Patch::PbFloorCrumble,
+        SoundCue::FrontierGlassShatter => Patch::PbGlassShatter,
+        SoundCue::FrontierCrystalRing => Patch::PbCrystalRing,
+        SoundCue::FrontierSplinter => Patch::PbSplinter,
+        SoundCue::FrontierBeamLit => Patch::PbBeamLit,
+        SoundCue::FrontierVaultOpen => Patch::PbVaultOpen,
+        SoundCue::FrontierRumble => Patch::PbRumble,
+        SoundCue::FrontierEruption => Patch::PbEruption,
+        SoundCue::FrontierLavaBomb => Patch::PbLavaBomb,
+        SoundCue::FrontierStormRising => Patch::PbStormRising,
+        SoundCue::FrontierStormBreak => Patch::PbStormBreak,
+        SoundCue::FrontierCrystalGrow => Patch::PbCrystalGrow,
+        SoundCue::FrontierChime => Patch::PbChime,
+        SoundCue::FrontierWyrmRipple => Patch::PbWyrmRipple,
     }
 }
 
@@ -680,6 +696,33 @@ pub const fn wilds_cue(what: fatherload_simulation::planet::wilds::WildsEvent) -
         E::StormRising => SoundCue::Thunderclap,
         E::RimeBroke => SoundCue::PickBreak,
     }
+}
+
+/// The sound of a frontier world's event (Wave 12 planets-b; exhaustive: a new event needs an
+/// answer). The storm's own bed and the volcano's rumble loop are the place sounds.
+#[must_use]
+pub const fn frontier_cue(
+    what: fatherload_simulation::frontier::FrontierEvent,
+) -> Option<SoundCue> {
+    use fatherload_simulation::frontier::FrontierEvent as E;
+    Some(match what {
+        E::SandSlid => SoundCue::FrontierSandSlide,
+        E::FloorCrumbled => SoundCue::FrontierFloorCrumble,
+        E::GlassShattered => SoundCue::FrontierGlassShatter,
+        E::CrystalRang => SoundCue::FrontierCrystalRing,
+        E::Splintered => SoundCue::FrontierSplinter,
+        E::BeamLit => SoundCue::FrontierBeamLit,
+        E::VaultOpened => SoundCue::FrontierVaultOpen,
+        E::EruptionRumble => SoundCue::FrontierRumble,
+        E::EruptionStarted => SoundCue::FrontierEruption,
+        E::LavaBombLanded => SoundCue::FrontierLavaBomb,
+        E::StormRising => SoundCue::FrontierStormRising,
+        E::StormStarted => SoundCue::FrontierStormBreak,
+        E::CrystalRegrew => SoundCue::FrontierCrystalGrow,
+        E::DrifterChimed => SoundCue::FrontierChime,
+        E::WyrmRipple => SoundCue::FrontierWyrmRipple,
+        E::StormEnded | E::HazardBite => return None,
+    })
 }
 
 /// What each flight event sounds like (Wave 11; exhaustive: a new event needs a sound).
@@ -1290,6 +1333,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::HeartLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
         // Round bodies (Wave 11): a bad touchdown scrapes or knocks the hull; righting clunks.
         GameplayEventKind::Planet { what, .. } => planet_cue(*what),
+        // The frontier worlds (Wave 12 planets-b).
+        GameplayEventKind::Frontier { what, .. } => frontier_cue(*what),
         // Space flight (Wave 11).
         GameplayEventKind::Flight { what, .. } => Some(flight_cue(*what)),
         // Space's things (Wave 12 systems).
@@ -1651,7 +1696,8 @@ mod tests {
             | GameplayEventKind::Flight { .. }
             | GameplayEventKind::SpaceSystems { .. }
             | GameplayEventKind::BodyLife { .. }
-            | GameplayEventKind::Wilds { .. } => {}
+            | GameplayEventKind::Wilds { .. }
+            | GameplayEventKind::Frontier { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2125,6 +2171,14 @@ mod tests {
                 y: 0,
             });
         }
+        for what in fatherload_simulation::frontier::FrontierEvent::ALL {
+            events.push(GameplayEventKind::Frontier {
+                what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+            });
+        }
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {
             events.push(GameplayEventKind::AnomalyEntered {
                 player_id,
@@ -2537,6 +2591,20 @@ mod tests {
                     x: 0,
                     y: 0,
                 },
+                // A frontier storm passing is the wind bed fading; a hazard's bite is the hull
+                // hit's (Wave 12).
+                GameplayEventKind::Frontier {
+                    what: fatherload_simulation::frontier::FrontierEvent::StormEnded,
+                    player_id: Some(PlayerId::new(1)),
+                    x: 0,
+                    y: 0,
+                },
+                GameplayEventKind::Frontier {
+                    what: fatherload_simulation::frontier::FrontierEvent::HazardBite,
+                    player_id: Some(PlayerId::new(1)),
+                    x: 0,
+                    y: 0,
+                },
                 GameplayEventKind::PeopleInteraction {
                     player_id: PlayerId::new(1)
                 },
@@ -2831,6 +2899,21 @@ mod tests {
             SoundCue::SystemsHoleWarning,
             SoundCue::SystemsTransit,
             SoundCue::SystemsOreCrunch,
+            SoundCue::FrontierSandSlide,
+            SoundCue::FrontierFloorCrumble,
+            SoundCue::FrontierGlassShatter,
+            SoundCue::FrontierCrystalRing,
+            SoundCue::FrontierSplinter,
+            SoundCue::FrontierBeamLit,
+            SoundCue::FrontierVaultOpen,
+            SoundCue::FrontierRumble,
+            SoundCue::FrontierEruption,
+            SoundCue::FrontierLavaBomb,
+            SoundCue::FrontierStormRising,
+            SoundCue::FrontierStormBreak,
+            SoundCue::FrontierCrystalGrow,
+            SoundCue::FrontierChime,
+            SoundCue::FrontierWyrmRipple,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

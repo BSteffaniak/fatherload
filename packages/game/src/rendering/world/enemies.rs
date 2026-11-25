@@ -27,9 +27,9 @@ use crate::rendering::pixel_art::{
     sprite::{self, SpriteDef},
     sprites::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
-        drowned as drowned_art, enemies as art, far_strange as far_art, garrison as garrison_art,
-        heart as heart_art, hollow as hollow_art, living as living_art, moon as moon_art,
-        old_deep as deep_art, tomb as tomb_art, wilds as wilds_art,
+        drowned as drowned_art, enemies as art, far_strange as far_art, frontier as frontier_art,
+        garrison as garrison_art, heart as heart_art, hollow as hollow_art, living as living_art,
+        moon as moon_art, old_deep as deep_art, tomb as tomb_art, wilds as wilds_art,
     },
 };
 
@@ -213,6 +213,19 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Rimeskipper => &wilds_art::RIMESKIPPER,
         EnemyKind::Rimewolf => &wilds_art::RIMEWOLF,
         EnemyKind::Crevassewyrm => &wilds_art::CREVASSEWYRM,
+        // The frontier worlds (Wave 12 planets-b).
+        EnemyKind::DuneSkipper => &frontier_art::DUNE_SKIPPER,
+        EnemyKind::DuneWyrm => &frontier_art::DUNE_WYRM,
+        EnemyKind::GlassScorpion => &frontier_art::GLASS_SCORPION,
+        EnemyKind::MirageMoth => &frontier_art::MIRAGE_MOTH,
+        EnemyKind::MagmaSlug => &frontier_art::MAGMA_SLUG,
+        EnemyKind::CinderBat => &frontier_art::CINDER_BAT,
+        EnemyKind::EmberStrider => &frontier_art::EMBER_STRIDER,
+        EnemyKind::BasaltTortoise => &frontier_art::BASALT_TORTOISE,
+        EnemyKind::ShardCrab => &frontier_art::SHARD_CRAB,
+        EnemyKind::GlintMoth => &frontier_art::GLINT_MOTH,
+        EnemyKind::ChimeDrifter => &frontier_art::CHIME_DRIFTER,
+        EnemyKind::GeodeMimic => &frontier_art::GEODE_MIMIC,
     }
 }
 
@@ -939,6 +952,43 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 sprite.frame_at(phase) % 2
             }
         }
+        // The frontier worlds (Wave 12): wings and bells loop; walkers stride while moving;
+        // scorpions and crabs raise tail and claws to strike; the wyrm gapes to erupt; the
+        // tortoise shells up standing still; the mimic is a closed rock until it wakes.
+        EnemyKind::MirageMoth
+        | EnemyKind::CinderBat
+        | EnemyKind::GlintMoth
+        | EnemyKind::ChimeDrifter
+        | EnemyKind::MagmaSlug => sprite.frame_at(phase),
+        EnemyKind::DuneSkipper | EnemyKind::EmberStrider => {
+            if moving {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
+        EnemyKind::DuneWyrm => usize::from(attacking),
+        EnemyKind::GlassScorpion | EnemyKind::ShardCrab => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 6.0) as usize) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::BasaltTortoise => {
+            if moving {
+                ((phase * 3.0) as usize) % 2
+            } else {
+                2
+            }
+        }
+        EnemyKind::GeodeMimic => match state.mode {
+            EnemyMode::Dormant => 0,
+            EnemyMode::Windup | EnemyMode::Strike => 2,
+            _ => 1,
+        },
     }
 }
 

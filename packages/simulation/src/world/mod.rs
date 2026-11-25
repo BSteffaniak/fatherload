@@ -107,6 +107,7 @@ mod fluids;
 mod frame;
 #[cfg(test)]
 mod frame_tests;
+mod frontier;
 mod garage;
 mod garrison;
 #[cfg(test)]

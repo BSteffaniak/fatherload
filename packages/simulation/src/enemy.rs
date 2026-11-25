@@ -204,6 +204,25 @@
 //! | [`EnemyKind::Rimeskipper`] | creature (harmless) | the glacier | hops away from rigs | none needed |
 //! | [`EnemyKind::Rimewolf`] | creature (pack predator) | the glacier, bolder in a blizzard | the pack circles, then leaps together | break the circle, blasts |
 //! | [`EnemyKind::Crevassewyrm`] | creature (ambusher, burrower) | crevasses and the Permafrost Caves | ice cracks round it, then it lunges out of the wall | stop drilling near it, blasts |
+//!
+//! The frontier worlds' creatures (Wave 12 planets-b, [`crate::frontier`]) live on the dune,
+//! volcanic and crystal planets, in each planet's local frame; `world/enemies/frontier.rs`
+//! spawns them by zone and gives the neutral fauna and the wyrm their ways:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::DuneSkipper`] | creature (neutral fauna) | dune world surface | hops about; bolts from a rig | leave it be |
+//! | [`EnemyKind::DuneWyrm`] | creature (burrower, big) | dune world sand and galleries; hears drilling (three times as far in the galleries) | a ripple in the sand, then it erupts | stop drilling, keep moving, blasts |
+//! | [`EnemyKind::GlassScorpion`] | creature (armoured) | the Buried City and the Glass Deep | raises its glass tail before the sting | blasts; bullets glance off |
+//! | [`EnemyKind::MirageMoth`] | creature (neutral fauna) | over the oases | a shimmer on the water | leave it be |
+//! | [`EnemyKind::MagmaSlug`] | creature (slow, burning) | the volcanic world's flows and magma chambers | glows as it oozes close | keep away; it shrugs off fire |
+//! | [`EnemyKind::CinderBat`] | creature (swarmer) | ash fields and lava tubes | ember-eyed packs | anything; not fire |
+//! | [`EnemyKind::EmberStrider`] | creature (neutral fauna) | the lava shores (it walks on lava) | stilt legs over the glow | leave it be |
+//! | [`EnemyKind::BasaltTortoise`] | creature (neutral fauna, armoured) | volcanic islands | shells up when a rig comes close | leave it be |
+//! | [`EnemyKind::ShardCrab`] | creature (armoured) | the crystal world's meadows and geodes | rears its crystal claws | blasts; bullets glance off |
+//! | [`EnemyKind::GlintMoth`] | creature (neutral fauna) | crystal spires; drawn to lamps | circles a rig's lights | harmless |
+//! | [`EnemyKind::ChimeDrifter`] | creature (neutral fauna) | the crystal world's caverns | a slow bell; struck, it rings and shatters the crystal round it | use it |
+//! | [`EnemyKind::GeodeMimic`] | creature (ambusher) | geodes and the heavy lattice | a crystal lump that opens when you come close | blasts; keep your distance |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -547,6 +566,32 @@ pub enum EnemyKind {
     Rimewolf,
     /// Glacier: an ambusher in the ice walls of crevasses and caves; it lunges out of them.
     Crevassewyrm,
+    // --- The frontier worlds (Wave 12 planets-b) ---
+    /// A dune skipper: a long-eared hopper of the dune world's surface (neutral fauna).
+    DuneSkipper,
+    /// A dune wyrm: a huge sand-swimmer that hears drilling and erupts under rigs.
+    DuneWyrm,
+    /// A glass scorpion of the ruins and the glass deep (armoured).
+    GlassScorpion,
+    /// A mirage moth over the oases (neutral fauna).
+    MirageMoth,
+    /// A magma slug: slow, burning, fire-proof.
+    MagmaSlug,
+    /// A cinder bat: ember-eyed packs in the ash and the tubes.
+    CinderBat,
+    /// An ember strider: a stilt-legged grazer that walks the lava shores (neutral fauna).
+    EmberStrider,
+    /// A basalt tortoise of the volcanic islands (neutral fauna, armoured).
+    BasaltTortoise,
+    /// A shard crab: crystal claws and an armoured shell.
+    ShardCrab,
+    /// A glint moth drawn to a rig's lamps (neutral fauna).
+    GlintMoth,
+    /// A chime drifter: a slow bell of a creature; struck, it rings the crystal round it to
+    /// pieces (neutral fauna).
+    ChimeDrifter,
+    /// A geode mimic: a crystal lump that opens into jaws.
+    GeodeMimic,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -1010,7 +1055,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 162] = [
+    pub const ALL: [Self; 174] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1173,6 +1218,18 @@ impl EnemyKind {
         Self::Rimeskipper,
         Self::Rimewolf,
         Self::Crevassewyrm,
+        Self::DuneSkipper,
+        Self::DuneWyrm,
+        Self::GlassScorpion,
+        Self::MirageMoth,
+        Self::MagmaSlug,
+        Self::CinderBat,
+        Self::EmberStrider,
+        Self::BasaltTortoise,
+        Self::ShardCrab,
+        Self::GlintMoth,
+        Self::ChimeDrifter,
+        Self::GeodeMimic,
     ];
 
     /// Whether this is one of the wild worlds' creatures (Wave 12 planets-a).
@@ -1192,6 +1249,41 @@ impl EnemyKind {
                 | Self::Rimeskipper
                 | Self::Rimewolf
                 | Self::Crevassewyrm
+        )
+    }
+
+    /// Whether this is one of the frontier worlds' creatures (Wave 12 planets-b).
+    #[must_use]
+    pub const fn is_frontier(self) -> bool {
+        matches!(
+            self,
+            Self::DuneSkipper
+                | Self::DuneWyrm
+                | Self::GlassScorpion
+                | Self::MirageMoth
+                | Self::MagmaSlug
+                | Self::CinderBat
+                | Self::EmberStrider
+                | Self::BasaltTortoise
+                | Self::ShardCrab
+                | Self::GlintMoth
+                | Self::ChimeDrifter
+                | Self::GeodeMimic
+        )
+    }
+
+    /// Whether this is one of the frontier worlds' neutral fauna: it never hunts a rig; it
+    /// runs (or shells up) when one comes close.
+    #[must_use]
+    pub const fn is_frontier_fauna(self) -> bool {
+        matches!(
+            self,
+            Self::DuneSkipper
+                | Self::MirageMoth
+                | Self::EmberStrider
+                | Self::BasaltTortoise
+                | Self::GlintMoth
+                | Self::ChimeDrifter
         )
     }
 
@@ -1429,6 +1521,12 @@ impl EnemyKind {
             Self::CoronaWisp => 2.2,
             Self::HorizonLurker | Self::SlagSkimmer | Self::DriveCoil => 1.6,
             Self::StarHeart => 8.0,
+            // The frontier worlds (Wave 12): embers, glints and the drifter's bell.
+            Self::MagmaSlug => 1.4,
+            Self::CinderBat | Self::GlintMoth => 1.0,
+            Self::ChimeDrifter => 1.6,
+            Self::EmberStrider => 0.8,
+            Self::MirageMoth => 0.6,
             _ => 0.0,
         }
     }
@@ -4003,6 +4101,179 @@ impl EnemyKind {
                 knockback: 240.0,
                 ..stats("Crevassewyrm", Creature, Burrowing, AttackStyle::Lunge)
             },
+            // --- The frontier worlds (Wave 12 planets-b) ---
+            Self::DuneSkipper => EnemyStats {
+                radius: 7.0,
+                health: 18.0,
+                speed: 95.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Dune Skipper", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::DuneWyrm => EnemyStats {
+                radius: 12.0,
+                health: 150.0,
+                speed: 80.0,
+                dash_speed: 300.0,
+                sight_tiles: 4.0,
+                hearing_tiles: 12.0,
+                leash_tiles: 40.0,
+                contact_damage: 16.0,
+                windup_millis: 1_100,
+                cooldown_millis: 3_800,
+                attack_range_tiles: 6.0,
+                knockback: 260.0,
+                ..stats("Dune Wyrm", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::GlassScorpion => EnemyStats {
+                radius: 9.0,
+                health: 60.0,
+                speed: 70.0,
+                dash_speed: 260.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 22.0,
+                contact_damage: 11.0,
+                windup_millis: 650,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 3.0,
+                knockback: 180.0,
+                ..stats("Glass Scorpion", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::MirageMoth => EnemyStats {
+                radius: 6.0,
+                health: 8.0,
+                speed: 60.0,
+                sight_tiles: 5.0,
+                hearing_tiles: 2.0,
+                leash_tiles: 12.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.4,
+                knockback: 20.0,
+                ..stats("Mirage Moth", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::MagmaSlug => EnemyStats {
+                radius: 8.0,
+                health: 70.0,
+                speed: 28.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 18.0,
+                contact_damage: 12.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 120.0,
+                ..stats("Magma Slug", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::CinderBat => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 155.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Cinder Bat", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::EmberStrider => EnemyStats {
+                radius: 9.0,
+                health: 40.0,
+                speed: 70.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Ember Strider", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::BasaltTortoise => EnemyStats {
+                radius: 10.0,
+                health: 160.0,
+                speed: 22.0,
+                sight_tiles: 4.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 20.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Basalt Tortoise", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::ShardCrab => EnemyStats {
+                radius: 9.0,
+                health: 75.0,
+                speed: 75.0,
+                dash_speed: 240.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 20.0,
+                contact_damage: 12.0,
+                windup_millis: 600,
+                cooldown_millis: 2_100,
+                attack_range_tiles: 2.5,
+                knockback: 170.0,
+                ..stats("Shard Crab", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::GlintMoth => EnemyStats {
+                radius: 5.0,
+                health: 6.0,
+                speed: 80.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 24.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.4,
+                knockback: 20.0,
+                ..stats("Glint Moth", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::ChimeDrifter => EnemyStats {
+                radius: 9.0,
+                health: 45.0,
+                speed: 30.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 16.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Chime Drifter", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::GeodeMimic => EnemyStats {
+                radius: 11.0,
+                health: 110.0,
+                speed: 55.0,
+                dash_speed: 280.0,
+                sight_tiles: 3.5,
+                hearing_tiles: 3.0,
+                leash_tiles: 14.0,
+                contact_damage: 15.0,
+                windup_millis: 700,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 3.0,
+                knockback: 220.0,
+                ..stats("Geode Mimic", Creature, Walking, AttackStyle::Lunge)
+            },
         }
     }
 
@@ -4268,6 +4539,18 @@ impl EnemyKind {
             Self::Rimeskipper => (9.0, 8.0),
             Self::Rimewolf => (17.0, 10.0),
             Self::Crevassewyrm => (20.0, 10.0),
+            // The frontier worlds (Wave 12): about 85 % of each drawn body.
+            Self::DuneSkipper => (10.0, 8.0),
+            Self::DuneWyrm => (24.0, 12.0),
+            Self::GlassScorpion | Self::ShardCrab => (13.5, 8.5),
+            Self::MirageMoth => (8.5, 6.5),
+            Self::MagmaSlug => (13.5, 7.5),
+            Self::CinderBat => (9.5, 6.0),
+            Self::EmberStrider => (11.5, 10.0),
+            Self::BasaltTortoise => (15.0, 9.5),
+            Self::GlintMoth => (7.5, 6.5),
+            Self::ChimeDrifter => (10.0, 12.0),
+            Self::GeodeMimic => (13.5, 12.0),
         }
     }
 
@@ -4463,6 +4746,19 @@ impl EnemyKind {
             (Self::Shellstrider | Self::Tidesnapper, DamageKind::Kinetic) => 0.6,
             (Self::Trundlehorn | Self::Woolhorn, DamageKind::Kinetic) => 0.7,
             (Self::UpfallBeetle | Self::CableWarden, DamageKind::Kinetic) => 0.7,
+            // The frontier worlds (Wave 12): glass and crystal shells turn bullets and crack
+            // under blasts; the volcanic world's creatures do not burn.
+            (Self::GlassScorpion, DamageKind::Kinetic) => 0.6,
+            (Self::ShardCrab | Self::GeodeMimic, DamageKind::Kinetic) => 0.4,
+            (Self::BasaltTortoise, DamageKind::Kinetic) => 0.3,
+            (
+                Self::GlassScorpion | Self::ShardCrab | Self::GeodeMimic | Self::DuneWyrm,
+                DamageKind::Explosive,
+            ) => 1.6,
+            (
+                Self::MagmaSlug | Self::CinderBat | Self::EmberStrider | Self::BasaltTortoise,
+                DamageKind::Fire,
+            ) => 0.0,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -4582,6 +4878,7 @@ impl EnemyState {
                 | EnemyKind::Angler
                 | EnemyKind::Hangclaw
                 | EnemyKind::ShearMantis
+                | EnemyKind::GeodeMimic
         );
         Self {
             kind,
@@ -5602,6 +5899,45 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         | EnemyKind::Crevassewyrm => add(richer, 1 + extra),
         EnemyKind::Trundlehorn | EnemyKind::Shellstrider | EnemyKind::Woolhorn => {
             add(richer, 2 + extra);
+        }
+        // The frontier worlds (Wave 12): the hunters pay; the fauna carry nothing worth it.
+        EnemyKind::DuneSkipper
+        | EnemyKind::MirageMoth
+        | EnemyKind::EmberStrider
+        | EnemyKind::GlintMoth
+        | EnemyKind::ChimeDrifter => {}
+        EnemyKind::BasaltTortoise | EnemyKind::CinderBat => {
+            if rare < 30 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::DuneWyrm => {
+            add(richer, 2 + extra);
+            if rare < 30 {
+                add(
+                    ItemKind::Artifact(crate::terrain::ArtifactKind::BuriedIdol),
+                    1,
+                );
+            }
+        }
+        EnemyKind::GlassScorpion | EnemyKind::ShardCrab => add(mineral, 1 + extra),
+        EnemyKind::MagmaSlug => {
+            add(mineral, 1);
+            if rare < 10 {
+                add(
+                    ItemKind::Artifact(crate::terrain::ArtifactKind::MantleHeart),
+                    1,
+                );
+            }
+        }
+        EnemyKind::GeodeMimic => {
+            add(richer, 2 + extra);
+            if rare < 25 {
+                add(
+                    ItemKind::Artifact(crate::terrain::ArtifactKind::CrystalPrism),
+                    1,
+                );
+            }
         }
     }
     drops
