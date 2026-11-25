@@ -191,7 +191,7 @@ const POST_CAST: [Cast; 5] = [
 /// Whether `character` of the Archive Post is one of the builders' machines (the keeper, the
 /// sweeper and the curator): the game draws them as automatons.
 #[must_use]
-pub const fn is_automaton(id: VillageId, index: u8) -> bool {
+pub const fn is_automaton(id: VillageId, index: u16) -> bool {
     id.0 == ARCHIVE_POST.0 && matches!(index, 0 | 3 | 4)
 }
 

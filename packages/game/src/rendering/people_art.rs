@@ -356,6 +356,126 @@ fn draw_hive_folk(
     }
 }
 
+/// Whether `character` is one of the Archive Post's builder machines (Wave 10): the keeper,
+/// the sweeper and the curator.
+const fn is_automaton(character: &Character) -> bool {
+    fatherload_simulation::people::deep_folk::is_automaton(character.id.village, character.id.index)
+}
+
+/// The Archive Post's builder machines (Wave 10), feet centre at the pen: the keeper a tall
+/// steel-and-brass figure with one great lens and a ledger, the curator slender in deep blue
+/// with a gold star lens, Sweep a small round machine on a tread with its brush.
+fn draw_automaton(
+    draw: &mut impl RaylibDraw,
+    pen: PersonPen,
+    character: &Character,
+    pose: Pose,
+    seconds: f32,
+) {
+    let f = if pose.facing < 0 { -1 } else { 1 };
+    let mut r = |x: i32, y: i32, w: i32, h: i32, c: Color| {
+        let x = if f > 0 { x } else { -x - w + 1 };
+        pen.rect(draw, x, y, w, h, c);
+    };
+    let step = pose
+        .stride
+        .map(|walked| ((walked / 6.0) as i32).rem_euclid(2));
+    let glow = if pose.talking && ((seconds * 5.0) as i32) % 2 == 0 {
+        ICE
+    } else {
+        MINT
+    };
+    r(-5, 0, 10, 1, with_alpha(INK, 80));
+    match character.id.index {
+        // Sweep: a round little machine on a tread, its brush sweeping.
+        3 => {
+            let brush = ((seconds * 3.0).sin() * 2.0) as i32;
+            r(-5, -3, 10, 3, INK);
+            r(-4, -2, 8, 1, STEEL_DARK);
+            r(-5, -10, 10, 7, INK);
+            r(-4, -9, 8, 5, GOLD);
+            r(-4, -9, 8, 1, CREAM);
+            r(1, -8, 3, 2, INK);
+            r(2, -8, 1, 1, glow);
+            r(5, -5, 3, 1, LOAM);
+            r(7 + brush, -4, 2, 3, SAND);
+        }
+        // The curator: slender, robed in deep blue with gold seams, a star lens.
+        4 => {
+            r(-3, -16, 6, 16, INK);
+            r(-2, -15, 4, 15, DEEP_BLUE);
+            r(-2, -15, 1, 15, OCEAN);
+            r(0, -12, 1, 11, GOLD);
+            r(-3, -21, 6, 5, INK);
+            r(-2, -20, 4, 3, STEEL);
+            r(0, -19, 2, 2, GOLD);
+            r(1, -19, 1, 1, glow);
+            r(3, -12, 2, 1, INK);
+            r(4, -14, 2, 2, SKY_LIGHT);
+        }
+        // The keeper: tall, steel and brass, one great lens, a ledger under its arm.
+        _ => {
+            let lift = i32::from(step == Some(1));
+            r(-4, -5, 3, 5 - lift, INK);
+            r(1, -5 + lift, 3, 5 - lift, INK);
+            r(-3, -5, 1, 4 - lift, STEEL);
+            r(2, -5 + lift, 1, 4 - lift, STEEL);
+            r(-5, -15, 10, 10, INK);
+            r(-4, -14, 8, 8, STEEL);
+            r(-4, -14, 8, 2, STEEL_LIGHT);
+            r(-1, -11, 2, 2, GOLD);
+            r(-4, -21, 8, 6, INK);
+            r(-3, -20, 6, 4, GOLD);
+            r(0, -19, 3, 3, INK);
+            r(1, -18, 1, 1, glow);
+            r(5, -12, 3, 4, MAROON);
+            r(5, -12, 3, 1, CREAM);
+        }
+    }
+}
+
+/// An Archive Post machine's portrait for the talk panel (Wave 10).
+fn draw_automaton_portrait(
+    draw: &mut impl RaylibDraw,
+    pen: PersonPen,
+    character: &Character,
+    talking: bool,
+    seconds: f32,
+) {
+    let size = PORTRAIT_SIZE;
+    pen.rect(draw, 0, 0, size, size, with_alpha(NIGHT, 220));
+    // Lamplight behind: the Archive Post's warm bulbs.
+    for x in [4, 14, 24] {
+        pen.rect(draw, x, 2, 3, 3, with_alpha(AMBER, 90));
+    }
+    let glow = if talking && ((seconds * 5.0) as i32) % 2 == 0 {
+        ICE
+    } else {
+        MINT
+    };
+    let (body, trim) = match character.id.index {
+        3 => (GOLD, CREAM),
+        4 => (DEEP_BLUE, GOLD),
+        _ => (STEEL, GOLD),
+    };
+    // Shoulders.
+    pen.rect(draw, 4, 24, 24, 8, INK);
+    pen.rect(draw, 5, 25, 22, 7, body);
+    pen.rect(draw, 14, 25, 4, 7, trim);
+    // The head: a housing with one great lens.
+    pen.rect(draw, 8, 6, 16, 18, INK);
+    pen.rect(draw, 9, 7, 14, 16, body);
+    pen.rect(draw, 9, 7, 14, 2, trim);
+    pen.rect(draw, 11, 11, 10, 9, INK);
+    pen.rect(draw, 12, 12, 8, 7, TEAL_DARK);
+    pen.rect(draw, 14, 14, 4, 3, glow);
+    pen.px(draw, 13, 12, SKY_LIGHT);
+    // A grille that lights while it speaks.
+    for x in (12..21).step_by(2) {
+        pen.rect(draw, x, 21, 1, 1, if talking { glow } else { STEEL_DARK });
+    }
+}
+
 /// The Amber Court insect's portrait for the talk panel ([`PORTRAIT_SIZE`] art pixels).
 fn draw_hive_portrait(
     draw: &mut impl RaylibDraw,
@@ -431,6 +551,10 @@ pub fn draw_person_posed(
     pose: Pose,
     seconds: f32,
 ) {
+    if is_automaton(character) {
+        draw_automaton(draw, pen, character, pose, seconds);
+        return;
+    }
     if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
         // The Court's insects stand half again as big as people (their logs say "the size of
         // the rig").
@@ -947,6 +1071,10 @@ pub fn draw_portrait(
 ) {
     if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
         draw_hive_portrait(draw, pen, character, talking, seconds);
+        return;
+    }
+    if is_automaton(character) {
+        draw_automaton_portrait(draw, pen, character, talking, seconds);
         return;
     }
     let look = character.appearance;
