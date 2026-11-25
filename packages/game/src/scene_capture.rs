@@ -396,6 +396,7 @@ fn save_framebuffer(
     }
 }
 
+mod ancient_city_scenes;
 mod base_scenes;
 mod cave_scenes;
 mod crust_scenes;
@@ -577,6 +578,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(distortion_scenes::DISTORTION_SCENES)
         .chain(far_strange_scenes::FAR_STRANGE_SCENES)
         .chain(polish_scenes::POLISH_SCENES)
+        .chain(ancient_city_scenes::ANCIENT_CITY_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
