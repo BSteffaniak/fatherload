@@ -180,6 +180,7 @@ impl PolarGround {
     }
 
     /// Whether the polar shader compiled.
+    #[cfg(not(target_os = "emscripten"))]
     #[must_use]
     pub const fn shader_ready(&self) -> bool {
         self.shader.is_some()

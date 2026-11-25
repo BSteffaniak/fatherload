@@ -189,7 +189,8 @@ pub fn draw_nebulae(art: &SpaceArt, view: &SpaceRenderView<'_>, projection: &Pro
         if !projection.visible(point, radius * 1.4) || radius < 2.0 {
             continue;
         }
-        for index in 0..11 {
+        // Eight overlapping clouds: enough depth, little overdraw (software WebGL).
+        for index in 0..8 {
             let h = hash64(&[i64::from(nebula.seed), index]);
             let angle = unit(h, 0) * TAU;
             let distance = radius * 0.6 * unit(h, 16).sqrt();
@@ -511,16 +512,22 @@ fn draw_belt(
         for index in first..=last {
             let wrapped = index.rem_euclid(count);
             let h = hash64(&[i64::from(belt.seed), level, ring, wrapped]);
-            // Denser along the belt's middle, in clumps.
-            let across_mid = ((r0 + cell * 0.5 - radius) / half_width).abs();
+            // In clumps; seen from far off, a cell stands for many rocks: more specks (capped),
+            // so the belt still reads as a dusty ring.
             let clump = 0.4 + 0.9 * f64::from(unit(h, 0));
-            let rocks = (f64::from(belt.density) * clump * (1.0 - across_mid * across_mid) * 0.8
-                + f64::from(unit(h, 16)))
-            .floor() as i64;
+            let far = (cell / 36.0).clamp(1.0, 120.0);
+            let rocks = (f64::from(belt.density) * clump * 0.8 * far + f64::from(unit(h, 16)))
+                .floor() as i64;
             for rock in 0..rocks.max(0) {
                 let hr = hash64(&[h as i64, rock]);
                 let angle = (index as f64 + f64::from(unit(hr, 0))) * step;
-                let r = (r0 + f64::from(unit(hr, 16)) * cell) * tile;
+                let r = r0 + f64::from(unit(hr, 16)) * cell;
+                // Denser along the belt's middle, none outside it.
+                let across = (r - radius) / half_width;
+                if f64::from(unit(hr, 32)) > 1.0 - across * across {
+                    continue;
+                }
+                let r = r * tile;
                 let (x, y) = (
                     (centre.0 + angle.cos() * r) * scale,
                     (centre.1 + angle.sin() * r) * scale,

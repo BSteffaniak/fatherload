@@ -196,7 +196,7 @@ fn draw_haze(
     (abs_x, abs_y): (f64, f64),
     reach: f64,
 ) {
-    const CELL: f64 = 300.0;
+    const CELL: f64 = 420.0;
     let factor = LAYERS[0].factor;
     let (ox, oy) = (abs_x * factor, abs_y * factor);
     let seed = view.sky_seed as i64;

@@ -65,6 +65,7 @@ impl PlanetShader {
         Self { shader, locations }
     }
 
+    #[cfg(not(target_os = "emscripten"))]
     #[must_use]
     pub const fn ready(&self) -> bool {
         self.shader.is_some()

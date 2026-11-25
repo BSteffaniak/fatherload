@@ -220,6 +220,7 @@ impl SpaceRenderer {
     }
 
     /// Whether every space shader compiled (scene capture reports it).
+    #[cfg(not(target_os = "emscripten"))]
     #[must_use]
     pub const fn shaders_ready(&self) -> (bool, bool, bool) {
         (
