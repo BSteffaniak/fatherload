@@ -52,6 +52,16 @@ pub const EXPEDITION_SCENES: &[Scene] = &[
         setup: |stage| residents_scene(stage, DeepSettlement::AmberCourt, Some(Role::ShrineKeeper)),
     },
     Scene {
+        name: "residents_hearts_edge",
+        summary: "Wave 11 carryover: Heart's Edge's residents; the listener, who counts the Heart's hum, talks about her place and remembers the Fathers",
+        setup: |stage| residents_scene(stage, DeepSettlement::HeartsEdge, Some(Role::Storyteller)),
+    },
+    Scene {
+        name: "residents_hearts_edge_hall",
+        summary: "Wave 11 carryover: Heart's Edge's five residents about Descent VIII's outpost hall",
+        setup: |stage| residents_scene(stage, DeepSettlement::HeartsEdge, None),
+    },
+    Scene {
         name: "residents_amber_court_hall",
         summary: "Wave 9: the Amber Court's residents about their comb hall: the elder, the pump tender, the nurse, the guard and the queen's voice",
         setup: |stage| residents_scene(stage, DeepSettlement::AmberCourt, None),
@@ -587,6 +597,9 @@ fn residents_scene(stage: &mut SceneStage<'_>, place: DeepSettlement, role: Opti
     stage.seat(0).village.banner = None;
     match role {
         Some(Role::Healer) => super::people_scenes::open_talk(stage, |c| c.role == Role::Healer),
+        Some(Role::Storyteller) => {
+            super::people_scenes::open_talk(stage, |c| c.role == Role::Storyteller);
+        }
         Some(_) => super::people_scenes::open_talk(stage, |c| c.role == Role::ShrineKeeper),
         None => {
             // Back from the residents so the hall and its people show whole.

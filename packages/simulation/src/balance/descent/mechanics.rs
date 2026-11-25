@@ -301,10 +301,11 @@ pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
             seconds: 133.0,
             hull_left: 0.71,
         }),
-        // The bot fights the Heart with the top railgun, as the probe's rig arrives.
+        // The bot fights the Heart with the top railgun, as the probe's rig arrives. Wave 11
+        // carryover: five beats (the reforge and the eclipse added), re-measured.
         DescentBoss::TheHeart => Some(BotFight {
-            seconds: 69.0,
-            hull_left: 0.63,
+            seconds: 163.0,
+            hull_left: 0.55,
         }),
         DescentBoss::TheSinkhole => None,
     }

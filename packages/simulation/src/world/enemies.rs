@@ -2574,7 +2574,7 @@ impl WorldState {
             return outcome;
         }
         // The Heart's core is sealed behind its coils and armoured between breaths (Wave 10).
-        if let Some(outcome) = self.heart_damage(&state) {
+        if let Some(outcome) = self.heart_damage(id, &state) {
             return outcome;
         }
         // A glassback's mirrored face throws a frontal shot back at its shooter (Wave 9).

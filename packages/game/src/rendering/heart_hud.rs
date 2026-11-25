@@ -22,7 +22,7 @@ use fatherload_simulation::{
     descent::Stratum,
     heart::{
         BreathState, CHAMBER_RADIUS, COIL_COUNT, HeartPhase, PulseState, WEIGHTLESS_LUMPS,
-        beam_angle, beam_strength, breath_at, ending::EndingView, pulse_at,
+        breath_at, ending::EndingView, pulse_at,
     },
     item::ItemKind,
     terrain::TilePosition,
@@ -55,6 +55,8 @@ pub struct FightView {
     pub breath: BreathState,
     /// The ignition's beam angle (radians) and strength (`0..=1`).
     pub beams: Option<(f32, f32)>,
+    /// The core was reforged: its second ignition (Wave 11 carryover).
+    pub rekindled: bool,
 }
 
 /// What a seat reads of Descent VIII (`None` elsewhere, except over the Moon after the ending).
@@ -139,18 +141,25 @@ impl HeartView {
                 phase: fight.phase,
                 coils_left: fight.coils_left(),
                 health,
-                pulse: if fight.phase == HeartPhase::Coils {
+                pulse: if fight.phase.sealed() {
                     pulse_at(elapsed)
                 } else {
                     PulseState::Calm
                 },
-                breath: if fight.phase == HeartPhase::Collapse {
+                breath: if fight.phase.breathing() {
                     breath_at(elapsed)
                 } else {
                     BreathState::Held
                 },
-                beams: (fight.phase == HeartPhase::Ignition)
-                    .then(|| (beam_angle(elapsed), beam_strength(elapsed))),
+                // Wave 11 carryover: the rekindled ignition's and the eclipse's beams too.
+                beams: fatherload_simulation::heart::fight_beams(
+                    fight.phase,
+                    fight.rekindled,
+                    elapsed,
+                )
+                .first()
+                .copied(),
+                rekindled: fight.rekindled,
             }
         });
         Some(Self {
@@ -235,7 +244,11 @@ pub(super) fn draw_heart_hud(
             }
             HeartPhase::Ignition => {
                 lines.push(Line {
-                    text: "IGNITION: strike the open core".to_owned(),
+                    text: if fight.rekindled {
+                        "REKINDLED: the beams turn back. Strike!".to_owned()
+                    } else {
+                        "IGNITION: strike the open core".to_owned()
+                    },
                     color: CREAM,
                 });
                 lines.push(Line {
@@ -260,6 +273,39 @@ pub(super) fn draw_heart_hud(
                     BreathState::Held => Line {
                         text: "Collapse: it pulls and is armoured".to_owned(),
                         color: LAVENDER,
+                    },
+                });
+            }
+            // Wave 11 carryover: the finale's two new beats.
+            HeartPhase::Reforge => {
+                lines.push(Line {
+                    text: format!("Inner coils {}/3: the core resealed", fight.coils_left),
+                    color: AMBER,
+                });
+                lines.push(match fight.pulse {
+                    PulseState::Tell | PulseState::Pull => Line {
+                        text: "The coils glow as it pulls: strike them now!".to_owned(),
+                        color: CREAM,
+                    },
+                    PulseState::Calm => Line {
+                        text: "Shielded: wait for the pull to strike".to_owned(),
+                        color: FOG,
+                    },
+                });
+            }
+            HeartPhase::Eclipse => {
+                lines.push(match fight.breath {
+                    BreathState::Exhale => Line {
+                        text: "IT EXHALES: the beam is dark. Strike!".to_owned(),
+                        color: CREAM,
+                    },
+                    BreathState::Tell => Line {
+                        text: "The core brightens: get ready".to_owned(),
+                        color: GOLD,
+                    },
+                    BreathState::Held => Line {
+                        text: "ECLIPSE: keep out of the turning beam".to_owned(),
+                        color: ORANGE,
                     },
                 });
             }

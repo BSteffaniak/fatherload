@@ -624,10 +624,11 @@ pub const fn heart_cue(what: fatherload_simulation::heart::HeartEvent) -> SoundC
     use fatherload_simulation::heart::HeartEvent as E;
     match what {
         E::DarkMatterMined | E::RigFloating | E::RigSettled => SoundCue::HeartDarkMatter,
-        E::WellCaught | E::HorizonCrush => SoundCue::HeartWellGroan,
+        // Wave 11 carryover: the eclipse begins with a well's deep groan.
+        E::WellCaught | E::HorizonCrush | E::Eclipse => SoundCue::HeartWellGroan,
         E::RailBoost | E::RailCatch => SoundCue::HeartRailZap,
         E::LandmarkFound => SoundCue::AnomalyHum,
-        E::HeartStirred | E::Ignition | E::Collapse => SoundCue::HeartIgnite,
+        E::HeartStirred | E::Ignition | E::Collapse | E::Reforged => SoundCue::HeartIgnite,
         E::CoilBroken => SoundCue::HeartCoilBreak,
         E::PulseTell | E::ExhaleTell => SoundCue::HeartInhale,
         E::Pulse => SoundCue::HeartPull,

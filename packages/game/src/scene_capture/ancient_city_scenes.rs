@@ -561,6 +561,35 @@ fn star_charts(stage: &mut SceneStage<'_>) {
     stage.settle(3);
 }
 
+/// The "Ask Index" page (Wave 11 carryover): the archivist asked about the ore nearby, its
+/// answer under the list and in the speech box.
+fn ask_index(stage: &mut SceneStage<'_>) {
+    archivist(stage);
+    stage.play_on(|world| {
+        let player = world.player_ids().next().unwrap_or(PlayerId::new(0));
+        let mut journal = world.expedition().clone();
+        journal.found = journal.found.max(66);
+        journal.descents = 0b0111_1111;
+        world.set_expedition(journal);
+        let answer = fatherload_simulation::ancient_city::questions::ore_answer(
+            fatherload_simulation::ancient_city::questions::OreFind::Ore(
+                fatherload_simulation::terrain::MineralKind::Mythril,
+            ),
+            5,
+        );
+        world.stage_archivist_line(player, answer);
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::Archivist);
+    seat.selected_menu_item = 0;
+    seat.message.clear();
+    seat.fanfare = None;
+    stage.settle(3);
+    // The journal's milestones were earned long ago: no medal over the page.
+    stage.seat(0).fanfare = None;
+}
+
 /// The alloy portals framing the way in under the seal.
 fn portals(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
@@ -714,6 +743,11 @@ pub const ANCIENT_CITY_SCENES: &[Scene] = &[
         name: "city_orrery",
         summary: "The Orrery: the builders' sky circling on its arms, the hanging stone's line of light, the plinths' gold light, a warden and a spider",
         setup: orrery,
+    },
+    Scene {
+        name: "city_ask_index",
+        summary: "Wave 11 carryover: the Ask Index page: questions for the archivist (ore, finds, the lore it knows) and its answer about the ore under the street",
+        setup: ask_index,
     },
     Scene {
         name: "city_star_charts",

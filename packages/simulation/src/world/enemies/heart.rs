@@ -20,9 +20,16 @@
 //!      light for [`PULSE_TELL_MILLIS`] first). Break all six.
 //!   2. **Ignition**: the core opens. Two beams sweep the chamber ([`beam_angle`], fading in
 //!      for [`BEAM_TELL_MILLIS`] before they burn) and sparks fly. Strike the core.
-//!   3. **Collapse** (below [`COLLAPSE_AT_PERMILLE`]): the core becomes a singularity and pulls
+//!   3. **Reforge** (below [`REFORGE_AT_PERMILLE`], Wave 11 carryover): the core reseals and
+//!      calls three inner coils that orbit close the other way round ([`inner_coil_angle`]),
+//!      firing faster, while the gravity pulses return. Break them and the core **rekindles**:
+//!      a second ignition whose beams turn back the other way, faster.
+//!   4. **Collapse** (below [`COLLAPSE_AT_PERMILLE`]): the core becomes a singularity and pulls
 //!      steadily, armoured except while it exhales ([`breath_at`]: it brightens first, then
 //!      pushes out and can be hurt).
+//!   5. **Eclipse** (below [`ECLIPSE_AT_PERMILLE`], Wave 11 carryover): the breathing goes on,
+//!      and one beam sweeps the chamber while the core holds its breath ([`eclipse_beam`]); the
+//!      exhale, when it can be struck, is also when the beam goes dark.
 //!
 //!   No countdown: with no rig in the chamber for [`SLEEP_MILLIS`] it sinks back to sleep and
 //!   heals. When it falls it **wakes for good**: the cable lights, space opens and every rig
@@ -33,11 +40,13 @@ use crate::{
     entity::{Body, EntityId, EntityState},
     event::{GameplayEventKind, TickOutput},
     heart::{
-        BEAM_DAMAGE_PER_SECOND, BEAM_HALF_WIDTH_TILES, BreathState, CHAMBER_RADIUS, COIL_COUNT,
-        COIL_FIRE_MILLIS, COIL_ORBIT_TILES, COLLAPSE_AT_PERMILLE, COLLAPSE_PULL,
-        CORE_TOUCH_DAMAGE_PER_SECOND, EXHALE_PUSH, HeartEvent, HeartPhase, MAX_SPARKS, PULSE_PULL,
-        PulseState, SLEEP_MILLIS, SPARK_MILLIS, beam_angle, beam_strength, breath_at, coil_angle,
-        pulse_at,
+        BEAM_DAMAGE_PER_SECOND, BEAM_HALF_WIDTH_TILES, BREATHING_MAX_SPARKS,
+        BREATHING_SPARK_MILLIS, BreathState, CHAMBER_RADIUS, COIL_COUNT, COIL_FIRE_MILLIS,
+        COIL_ORBIT_TILES, COLLAPSE_AT_PERMILLE, COLLAPSE_PULL, CORE_TOUCH_DAMAGE_PER_SECOND,
+        ECLIPSE_AT_PERMILLE, EXHALE_PUSH, HeartEvent, HeartPhase, INNER_COIL_COUNT,
+        INNER_FIRE_MILLIS, INNER_ORBIT_TILES, MAX_SPARKS, PULSE_PULL, PulseState,
+        REFORGE_AT_PERMILLE, SLEEP_MILLIS, SPARK_MILLIS, breath_at, coil_angle, fight_beams,
+        inner_coil_angle, pulse_at,
     },
     ids::{PlayerId, SimulationTick},
     item::ItemKind,
@@ -46,7 +55,9 @@ use crate::{
 };
 
 #[cfg(doc)]
-use crate::heart::{BEAM_TELL_MILLIS, PULSE_PERIOD_MILLIS, PULSE_TELL_MILLIS};
+use crate::heart::{
+    BEAM_TELL_MILLIS, PULSE_PERIOD_MILLIS, PULSE_TELL_MILLIS, beam_angle, eclipse_beam,
+};
 
 use super::{Intent, WorldState, direction};
 use crate::world::heart::heart_event;
@@ -316,18 +327,27 @@ impl WorldState {
     }
 
     /// The Heart's say on a hit to enemy `id` (after resistances): the core is sealed while its
-    /// coils orbit and armoured in the collapse except while it exhales.
-    pub(in crate::world) fn heart_damage(&self, state: &EnemyState) -> Option<DamageOutcome> {
-        if state.kind != EnemyKind::StarHeart {
-            return None;
-        }
+    /// coils orbit and armoured in the collapse except while it exhales; the reforge's inner
+    /// coils are shielded except while the drive pulls (Wave 11 carryover: they glow then).
+    pub(in crate::world) fn heart_damage(
+        &self,
+        id: EntityId,
+        state: &EnemyState,
+    ) -> Option<DamageOutcome> {
         let fight = &self.heart.fight;
         let elapsed = self
             .millis_at(self.simulation_tick)
             .saturating_sub(fight.phase_millis);
+        if state.kind == EnemyKind::DriveCoil && fight.inner.contains(&Some(id.get())) {
+            let open = pulse_at(elapsed) != PulseState::Calm;
+            return (!open).then_some(DamageOutcome::Ignored);
+        }
+        if state.kind != EnemyKind::StarHeart {
+            return None;
+        }
         let open = match fight.phase {
             HeartPhase::Ignition => true,
-            HeartPhase::Collapse => breath_at(elapsed) == BreathState::Exhale,
+            HeartPhase::Collapse | HeartPhase::Eclipse => breath_at(elapsed) == BreathState::Exhale,
             _ => false,
         };
         (!open).then_some(DamageOutcome::Ignored)
@@ -344,11 +364,11 @@ impl WorldState {
     ) {
         match kind {
             EnemyKind::DriveCoil => {
-                if let Some(slot) = self
-                    .heart
-                    .fight
+                let fight = &mut self.heart.fight;
+                if let Some(slot) = fight
                     .coils
                     .iter_mut()
+                    .chain(fight.inner.iter_mut())
                     .find(|slot| **slot == Some(id))
                 {
                     *slot = None;
@@ -390,6 +410,147 @@ impl WorldState {
         let (sin, cos) = crate::field::trig::sin_cos(coil_angle(index, elapsed));
         let radius = COIL_ORBIT_TILES * TILE_SIZE;
         (cos.mul_add(radius, centre.0), sin.mul_add(radius, centre.1))
+    }
+
+    /// Where the reforge's inner coil `index` stands at `elapsed` ms into it (local pixels).
+    fn inner_coil_point(centre: (f32, f32), index: usize, elapsed: u64) -> (f32, f32) {
+        let (sin, cos) = crate::field::trig::sin_cos(inner_coil_angle(index, elapsed));
+        let radius = INNER_ORBIT_TILES * TILE_SIZE;
+        (cos.mul_add(radius, centre.0), sin.mul_add(radius, centre.1))
+    }
+
+    /// Moves the coils of `ring` to their orbit points (`point(index)`) and fires each one's
+    /// bolt in turn every `fire_millis` at the nearest rig; a coil gone is forgotten. Returns
+    /// the ring with the gone ones cleared.
+    #[allow(clippy::too_many_arguments, reason = "one ring's beat")]
+    fn turn_coil_ring(
+        &mut self,
+        ring: &[Option<u64>],
+        point: impl Fn(usize) -> (f32, f32),
+        fire_millis: u64,
+        (elapsed, previous): (u64, u64),
+        inside: &[(PlayerId, f32, f32)],
+        output: &mut TickOutput,
+    ) -> Vec<Option<u64>> {
+        let count = ring.len().max(1) as u64;
+        let mut kept = ring.to_vec();
+        for (index, slot) in ring.iter().enumerate() {
+            let Some(id) = *slot else {
+                continue;
+            };
+            let id = EntityId(id);
+            if self.entities.get(id).is_none() {
+                kept[index] = None;
+                continue;
+            }
+            let (x, y) = point(index);
+            self.entities.update(id, |entity| {
+                entity.body.previous_x = entity.body.x;
+                entity.body.previous_y = entity.body.y;
+                entity.body.x = quantize(x);
+                entity.body.y = quantize(y);
+                entity.body.velocity_x = 0.0;
+                entity.body.velocity_y = 0.0;
+            });
+            // Each fires a slow bolt at the nearest rig in turn round the ring.
+            let offset = index as u64 * (fire_millis / count);
+            if (elapsed + offset) / fire_millis != (previous + offset) / fire_millis
+                && elapsed > 2_000
+                && let Some(aim) = Self::nearest(inside, (x, y))
+                && let Some((body, state)) = self.enemy_parts(id)
+            {
+                self.fire(id, &body, &state, ShotKind::Fireball, 1, aim, output);
+            }
+        }
+        kept
+    }
+
+    /// The gravity pulses (the coils' and the reforge's): told, then pulling.
+    fn heart_pulses(
+        &mut self,
+        (elapsed, previous): (u64, u64),
+        inside: &[(PlayerId, f32, f32)],
+        centre: (f32, f32),
+        centre_tile: TilePosition,
+        output: &mut TickOutput,
+    ) {
+        let pulse = pulse_at(elapsed);
+        if pulse != pulse_at(previous) {
+            match pulse {
+                PulseState::Tell => {
+                    output.push_event(heart_event(HeartEvent::PulseTell, None, centre_tile));
+                }
+                PulseState::Pull => {
+                    output.push_event(heart_event(HeartEvent::Pulse, None, centre_tile));
+                }
+                PulseState::Calm => {}
+            }
+        }
+        if pulse == PulseState::Pull {
+            self.pull_rigs(inside, centre, PULSE_PULL * self.timing.delta_seconds);
+        }
+    }
+
+    /// The fight's beams at `elapsed` burn the rigs in their path ([`fight_beams`]).
+    fn heart_beams_burn(
+        &mut self,
+        elapsed: u64,
+        inside: &[(PlayerId, f32, f32)],
+        centre: (f32, f32),
+        scale: f32,
+        output: &mut TickOutput,
+    ) {
+        let fight = &self.heart.fight;
+        let beams = fight_beams(fight.phase, fight.rekindled, elapsed);
+        let seconds = self.timing.delta_seconds;
+        for (angle, strength) in beams {
+            if strength < 1.0 {
+                continue;
+            }
+            let (sin, cos) = crate::field::trig::sin_cos(angle);
+            for (player_id, x, y) in inside {
+                let (dx, dy) = ((*x - centre.0) / TILE_SIZE, (*y - centre.1) / TILE_SIZE);
+                // Along the beam (it runs out from the core, not behind it) and across it.
+                let along = dx.mul_add(cos, dy * sin);
+                let across = dx.mul_add(sin, -dy * cos).abs();
+                #[allow(clippy::cast_precision_loss, reason = "a chamber's radius")]
+                let in_chamber = dx.hypot(dy) <= CHAMBER_RADIUS as f32;
+                if along >= 0.0
+                    && across <= BEAM_HALF_WIDTH_TILES
+                    && in_chamber
+                    && self.damage_player(*player_id, BEAM_DAMAGE_PER_SECOND * scale * seconds)
+                {
+                    output.push_event(GameplayEventKind::PlayerDamaged {
+                        player_id: *player_id,
+                    });
+                }
+            }
+        }
+    }
+
+    /// The core's health share, per mille (0 once it is gone).
+    fn heart_health(&self) -> u16 {
+        self.heart_parts()
+            .map_or(0, |(_, _, state)| health_permille(&state))
+    }
+
+    /// Calls the reforge's inner coils round the core.
+    fn call_inner_coils(&mut self, centre: (f32, f32)) {
+        let Some(centre_tile) = self.heart_centre() else {
+            return;
+        };
+        let tier = self.tier_at(centre_tile);
+        let core = self.heart.fight.entity.map(EntityId);
+        let inner = (0..INNER_COIL_COUNT)
+            .map(|index| {
+                let point = Self::inner_coil_point(centre, index, 0);
+                Some(
+                    self.spawn_enemy_with(EnemyKind::DriveCoil, point, tier, None, core)
+                        .get(),
+                )
+            })
+            .collect();
+        self.heart.fight.inner = inner;
     }
 
     /// One tick of the Heart's fight (see the module docs).
@@ -464,95 +625,55 @@ impl WorldState {
         match phase {
             HeartPhase::Coils => {
                 // The coils ride their orbit; a broken one is gone.
-                let coils = self.heart.fight.coils.clone();
-                for (index, slot) in coils.iter().enumerate() {
-                    let Some(id) = *slot else {
-                        continue;
-                    };
-                    let id = EntityId(id);
-                    if self.entities.get(id).is_none() {
-                        self.heart.fight.coils[index] = None;
-                        continue;
-                    }
-                    let (x, y) = Self::coil_point(centre, index, elapsed);
-                    self.entities.update(id, |entity| {
-                        entity.body.previous_x = entity.body.x;
-                        entity.body.previous_y = entity.body.y;
-                        entity.body.x = quantize(x);
-                        entity.body.y = quantize(y);
-                        entity.body.velocity_x = 0.0;
-                        entity.body.velocity_y = 0.0;
-                    });
-                    // Each fires a slow bolt at the nearest rig in turn round the ring.
-                    #[allow(clippy::cast_possible_truncation, reason = "a coil index")]
-                    let offset = index as u64 * (COIL_FIRE_MILLIS / COIL_COUNT as u64);
-                    if (elapsed + offset) / COIL_FIRE_MILLIS
-                        != (previous + offset) / COIL_FIRE_MILLIS
-                        && elapsed > 2_000
-                        && let Some(aim) = Self::nearest(&inside, (x, y))
-                        && let Some((body, state)) = self.enemy_parts(id)
-                    {
-                        self.fire(id, &body, &state, ShotKind::Fireball, 1, aim, output);
-                    }
-                }
-                // The gravity pulses.
-                let pulse = pulse_at(elapsed);
-                let was = pulse_at(previous);
-                if pulse != was {
-                    match pulse {
-                        PulseState::Tell => {
-                            output.push_event(heart_event(
-                                HeartEvent::PulseTell,
-                                None,
-                                centre_tile,
-                            ));
-                        }
-                        PulseState::Pull => {
-                            output.push_event(heart_event(HeartEvent::Pulse, None, centre_tile));
-                        }
-                        PulseState::Calm => {}
-                    }
-                }
-                if pulse == PulseState::Pull {
-                    self.pull_rigs(&inside, centre, PULSE_PULL * seconds);
-                }
+                let ring = self.heart.fight.coils.clone();
+                self.heart.fight.coils = self.turn_coil_ring(
+                    &ring,
+                    |index| Self::coil_point(centre, index, elapsed),
+                    COIL_FIRE_MILLIS,
+                    (elapsed, previous),
+                    &inside,
+                    output,
+                );
+                self.heart_pulses((elapsed, previous), &inside, centre, centre_tile, output);
                 if self.heart.fight.coils_left() == 0 {
                     self.begin_heart_phase(HeartPhase::Ignition, millis);
                     output.push_event(heart_event(HeartEvent::Ignition, None, centre_tile));
                 }
             }
             HeartPhase::Ignition => {
-                // The beams, once they have faded in.
-                if beam_strength(elapsed) >= 1.0 {
-                    let angle = beam_angle(elapsed);
-                    let (sin, cos) = crate::field::trig::sin_cos(angle);
-                    for (player_id, x, y) in &inside {
-                        let (dx, dy) = ((*x - centre.0) / TILE_SIZE, (*y - centre.1) / TILE_SIZE);
-                        let across = dx.mul_add(sin, -dy * cos).abs();
-                        let reach = dx.hypot(dy);
-                        #[allow(clippy::cast_precision_loss, reason = "a chamber's radius")]
-                        let in_chamber = reach <= CHAMBER_RADIUS as f32;
-                        if across <= BEAM_HALF_WIDTH_TILES
-                            && in_chamber
-                            && self
-                                .damage_player(*player_id, BEAM_DAMAGE_PER_SECOND * scale * seconds)
-                        {
-                            output.push_event(GameplayEventKind::PlayerDamaged {
-                                player_id: *player_id,
-                            });
-                        }
-                    }
-                }
+                // The beams, once they have faded in (back the other way once rekindled).
+                self.heart_beams_burn(elapsed, &inside, centre, scale, output);
                 self.throw_sparks(centre, millis, output, centre_tile);
-                let health = self
-                    .heart_parts()
-                    .map_or(0, |(_, _, state)| health_permille(&state));
-                if health < COLLAPSE_AT_PERMILLE {
+                let health = self.heart_health();
+                if !self.heart.fight.rekindled && health < REFORGE_AT_PERMILLE {
+                    // The core reseals and calls its inner coils.
+                    self.begin_heart_phase(HeartPhase::Reforge, millis);
+                    self.call_inner_coils(centre);
+                    output.push_event(heart_event(HeartEvent::Reforged, None, centre_tile));
+                } else if self.heart.fight.rekindled && health < COLLAPSE_AT_PERMILLE {
                     self.begin_heart_phase(HeartPhase::Collapse, millis);
                     output.push_event(heart_event(HeartEvent::Collapse, None, centre_tile));
                 }
             }
-            HeartPhase::Collapse => {
+            HeartPhase::Reforge => {
+                let ring = self.heart.fight.inner.clone();
+                self.heart.fight.inner = self.turn_coil_ring(
+                    &ring,
+                    |index| Self::inner_coil_point(centre, index, elapsed),
+                    INNER_FIRE_MILLIS,
+                    (elapsed, previous),
+                    &inside,
+                    output,
+                );
+                self.heart_pulses((elapsed, previous), &inside, centre, centre_tile, output);
+                if self.heart.fight.inner.iter().flatten().next().is_none() {
+                    // Rekindled: the second ignition.
+                    self.heart.fight.rekindled = true;
+                    self.begin_heart_phase(HeartPhase::Ignition, millis);
+                    output.push_event(heart_event(HeartEvent::Ignition, None, centre_tile));
+                }
+            }
+            HeartPhase::Collapse | HeartPhase::Eclipse => {
                 let breath = breath_at(elapsed);
                 let was = breath_at(previous);
                 if breath != was {
@@ -566,6 +687,12 @@ impl WorldState {
                         }
                         BreathState::Exhale => {
                             output.push_event(heart_event(HeartEvent::Exhale, None, centre_tile));
+                            // The exhale's ring of light blows the sparks out (Wave 11
+                            // carryover): in the long breathing phases they never swarm, and
+                            // the window to strike is clear of them.
+                            for spark in std::mem::take(&mut self.heart.fight.sparks) {
+                                self.entities.despawn(EntityId(spark));
+                            }
                         }
                         BreathState::Held => {}
                     }
@@ -576,6 +703,12 @@ impl WorldState {
                     self.pull_rigs(&inside, centre, COLLAPSE_PULL * seconds);
                 }
                 self.throw_sparks(centre, millis, output, centre_tile);
+                if phase == HeartPhase::Eclipse {
+                    self.heart_beams_burn(elapsed, &inside, centre, scale, output);
+                } else if self.heart_health() < ECLIPSE_AT_PERMILLE {
+                    self.begin_heart_phase(HeartPhase::Eclipse, millis);
+                    output.push_event(heart_event(HeartEvent::Eclipse, None, centre_tile));
+                }
             }
             HeartPhase::Asleep | HeartPhase::Awakened => {}
         }
@@ -617,8 +750,13 @@ impl WorldState {
             .fight
             .sparks
             .retain(|spark| entities.get(EntityId(*spark)).is_some());
-        if millis.saturating_sub(self.heart.fight.spark_millis) < SPARK_MILLIS
-            || self.heart.fight.sparks.len() >= MAX_SPARKS
+        let (period, most) = if self.heart.fight.phase.breathing() {
+            (BREATHING_SPARK_MILLIS, BREATHING_MAX_SPARKS)
+        } else {
+            (SPARK_MILLIS, MAX_SPARKS)
+        };
+        if millis.saturating_sub(self.heart.fight.spark_millis) < period
+            || self.heart.fight.sparks.len() >= most
         {
             return;
         }
@@ -689,7 +827,7 @@ impl WorldState {
         if let Some(entity) = fight.entity {
             self.entities.despawn(EntityId(entity));
         }
-        for coil in fight.coils.into_iter().flatten() {
+        for coil in fight.coils.into_iter().chain(fight.inner).flatten() {
             self.entities.despawn(EntityId(coil));
         }
         for spark in fight.sparks {
@@ -762,10 +900,19 @@ impl WorldState {
             self.heart.fight.coils = vec![None; COIL_COUNT];
         }
         self.begin_heart_phase(phase, millis.saturating_sub(elapsed));
-        if phase == HeartPhase::Collapse
+        if phase == HeartPhase::Reforge && self.heart.fight.inner.is_empty() {
+            self.call_inner_coils(centre);
+        }
+        let share = match phase {
+            HeartPhase::Collapse => Some(0.4),
+            HeartPhase::Eclipse => Some(0.2),
+            HeartPhase::Reforge => Some(0.75),
+            _ => None,
+        };
+        if let Some(share) = share
             && let Some((id, _, mut state)) = self.heart_parts()
         {
-            state.health = state.max_health * 0.4;
+            state.health = state.max_health * share;
             self.entities.update(id, |entity| {
                 entity.state = EntityState::Enemy(state);
             });

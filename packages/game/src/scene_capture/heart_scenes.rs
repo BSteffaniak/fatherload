@@ -461,6 +461,16 @@ pub const HEART_SCENES: &[Scene] = &[
         setup: |stage| heart_fight(stage, HeartPhase::Collapse, 6_400),
     },
     Scene {
+        name: "heart_phase_reforge",
+        summary: "The Heart, phase 3 (Wave 11 carryover): the reforge, the core resealed and three inner coils orbiting the other way, glowing while the pulse pulls",
+        setup: |stage| heart_fight(stage, HeartPhase::Reforge, 7_400),
+    },
+    Scene {
+        name: "heart_phase_eclipse",
+        summary: "The Heart, phase 5 (Wave 11 carryover): the eclipse, the dark core holding its breath while one beam sweeps the chamber",
+        setup: |stage| heart_fight(stage, HeartPhase::Eclipse, 3_000),
+    },
+    Scene {
         name: "heart_awakening",
         summary: "The Heart wakes: the cable's light leaving the chamber up the cable, the camera pulled back, the title",
         setup: |stage| ending(stage, 4_500, None),

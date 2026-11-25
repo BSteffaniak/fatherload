@@ -444,8 +444,10 @@ fn heart_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState 
     };
     // A pull drags it up toward the core: thrusting would only help it, so it holds the
     // floor; a little hop now and then spoils the bolts' aim.
-    let pulled = world.heart().fight.phase.eq(&HeartPhase::Collapse)
-        || world.heart().fight.phase == HeartPhase::Coils;
+    let pulled = matches!(
+        world.heart().fight.phase,
+        HeartPhase::Collapse | HeartPhase::Eclipse | HeartPhase::Coils | HeartPhase::Reforge
+    );
     let floor = TILE_SIZE.mul_add(
         f32::from(i16::try_from(FLOOR_BELOW_TILES).unwrap()) - 1.0,
         centre.1,
@@ -459,13 +461,33 @@ fn heart_bot(world: &WorldState, target: (f32, f32), tick: u64) -> ControlState 
     })
 }
 
-/// The bot's target: the nearest coil while they orbit, else the core.
+/// The bot's target: the nearest coil while they orbit, else the core; while the core is
+/// armoured (it holds its breath) a spark closing in first, as a player would.
 fn heart_target(world: &WorldState) -> Option<(f32, f32)> {
     let rig = rig_xy(world);
     let fight = &world.heart().fight;
+    let elapsed = world
+        .millis_at(world.simulation_tick())
+        .saturating_sub(fight.phase_millis);
+    let armoured = fight.phase.breathing()
+        && crate::heart::breath_at(elapsed) != crate::heart::BreathState::Exhale;
+    let spark = fight
+        .sparks
+        .iter()
+        .filter_map(|id| world.entities().get(EntityId(*id)))
+        .map(|entity| (entity.body.x, entity.body.y))
+        .min_by(|a, b| {
+            (a.0 - rig.0)
+                .hypot(a.1 - rig.1)
+                .total_cmp(&(b.0 - rig.0).hypot(b.1 - rig.1))
+        });
+    if armoured && let Some(spark) = spark {
+        return Some(spark);
+    }
     let coil = fight
         .coils
         .iter()
+        .chain(fight.inner.iter())
         .flatten()
         .filter_map(|id| world.entities().get(EntityId(*id)))
         .map(|entity| (entity.body.x, entity.body.y))
@@ -484,7 +506,7 @@ fn heart_target(world: &WorldState) -> Option<(f32, f32)> {
 
 #[test]
 #[allow(clippy::too_many_lines, reason = "the whole fight, start to end")]
-fn a_bot_with_full_kit_wakes_the_heart_through_all_three_phases() {
+fn a_bot_with_full_kit_wakes_the_heart_through_all_five_phases() {
     let hz = 30;
     let mut world = world_at(hz);
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
@@ -543,15 +565,20 @@ fn a_bot_with_full_kit_wakes_the_heart_through_all_three_phases() {
         woke,
         "the bot woke the Heart (phases {phases:?}, {count} ticks)"
     );
+    // Wave 11 carryover: the finale's five beats, the ignition coming back rekindled.
     assert_eq!(
         phases,
         vec![
             HeartPhase::Coils,
             HeartPhase::Ignition,
+            HeartPhase::Reforge,
+            HeartPhase::Ignition,
             HeartPhase::Collapse,
+            HeartPhase::Eclipse,
             HeartPhase::Awakened
         ]
     );
+    assert!(seen.contains(&HeartEvent::Reforged) && seen.contains(&HeartEvent::Eclipse));
     assert!(pulse_told && pull_after_tell, "every pull was told first");
     assert!(exhales >= 1, "it was struck while it exhaled");
     assert!(seen.contains(&HeartEvent::CoilBroken));

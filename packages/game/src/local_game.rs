@@ -1770,6 +1770,12 @@ impl LocalGame {
                         E::Collapse => {
                             "The core collapses into a singularity: strike as it exhales."
                         }
+                        E::Reforged => {
+                            "The core reseals: break the inner coils while the drive pulls."
+                        }
+                        E::Eclipse => {
+                            "ECLIPSE: a beam sweeps while it holds its breath. Strike as it exhales."
+                        }
                         E::HeartSlept => "Nobody stayed. The Heart sinks back to sleep.",
                         E::StarDriveFitted => "The Star Drive is your engine now.",
                         E::StarsOpen => "Above the Moon: the stars are open.",

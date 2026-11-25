@@ -26,7 +26,7 @@
 use fatherload_simulation::{
     heart::{
         BEAM_HALF_WIDTH_TILES, BreathState, CHAMBER_RADIUS, Heart, HeartPhase, PULSE_TELL_MILLIS,
-        PulseState, beam_angle, beam_strength, breath_at, ending::beam_climb, pulse_at,
+        PulseState, breath_at, ending::beam_climb, pulse_at,
     },
     terrain::{TILE_SIZE, Terrain, TilePosition},
     world::CablePath,
@@ -249,7 +249,7 @@ pub(super) fn draw_heart(draw: &mut impl RaylibDraw, scene: &HeartScene<'_>) {
     let elapsed = scene.world_millis.saturating_sub(fight.phase_millis);
     let breath = (scene.seconds * 0.9).sin().mul_add(0.5, 0.5);
     let awake = fight.beaten;
-    let collapsing = fight.phase == HeartPhase::Collapse;
+    let collapsing = fight.phase.breathing();
     // The chamber's warm light.
     disc(
         draw,
@@ -284,8 +284,9 @@ pub(super) fn draw_heart(draw: &mut impl RaylibDraw, scene: &HeartScene<'_>) {
             );
         }
     }
-    // The gravity pulse's tell: a ring of light contracting toward the core, then infall.
-    if fight.phase == HeartPhase::Coils {
+    // The gravity pulse's tell: a ring of light contracting toward the core, then infall (the
+    // reforge's too, Wave 11 carryover).
+    if fight.phase.sealed() {
         match pulse_at(elapsed) {
             PulseState::Tell => {
                 let t = (elapsed.saturating_sub(fatherload_simulation::heart::PULSE_FIRST_MILLIS)
@@ -340,14 +341,48 @@ pub(super) fn draw_heart(draw: &mut impl RaylibDraw, scene: &HeartScene<'_>) {
             PulseState::Calm => {}
         }
     }
-    // The ignition's beams: fading in, then burning and turning.
-    if fight.phase == HeartPhase::Ignition {
-        let strength = beam_strength(elapsed);
-        let angle = beam_angle(elapsed);
+    // The reforge's inner coils (Wave 11 carryover): their orbit, and each one shielded by a
+    // copper cage while the drive is calm, glowing gold (open to harm) while it pulls.
+    if fight.phase == HeartPhase::Reforge {
+        let orbit = fatherload_simulation::heart::INNER_ORBIT_TILES * TILE_SIZE;
+        draw.draw_circle_lines(cx as i32, cy as i32, orbit, with_alpha(COPPER, 90));
+        let open = pulse_at(elapsed) != PulseState::Calm;
+        for (index, slot) in fight.inner.iter().enumerate() {
+            if slot.is_none() {
+                continue;
+            }
+            let angle = fatherload_simulation::heart::inner_coil_angle(index, elapsed);
+            let (s, c) = angle.sin_cos();
+            let (x, y) = (cx + c * orbit, cy + s * orbit);
+            if open {
+                disc(draw, x, y, 34, with_alpha(GOLD, 70));
+                disc(draw, x, y, 24, with_alpha(CREAM, 60));
+            } else {
+                for spoke in 0..6 {
+                    let a0 = spoke as f32 / 6.0 * std::f32::consts::TAU + scene.seconds;
+                    let a1 = a0 + std::f32::consts::TAU / 6.0;
+                    draw.draw_line_ex(
+                        Vector2::new(x + a0.cos() * 28.0, y + a0.sin() * 28.0),
+                        Vector2::new(x + a1.cos() * 28.0, y + a1.sin() * 28.0),
+                        3.0,
+                        with_alpha(COPPER, 230),
+                    );
+                }
+            }
+        }
+    }
+    // The beams: fading in, then burning and turning (the ignition's two, back the other way
+    // once rekindled, and the eclipse's one while the core holds its breath; Wave 11 carryover).
+    for (angle, strength) in
+        fatherload_simulation::heart::fight_beams(fight.phase, fight.rekindled, elapsed)
+    {
+        if strength <= 0.0 {
+            continue;
+        }
         let (s, c) = angle.sin_cos();
         let half = BEAM_HALF_WIDTH_TILES * TILE_SIZE;
-        for side in [1.0_f32, -1.0] {
-            let end = Vector2::new(cx + c * chamber * side, cy + s * chamber * side);
+        {
+            let end = Vector2::new(cx + c * chamber, cy + s * chamber);
             let start = Vector2::new(cx, cy);
             let alpha = if strength < 1.0 { strength * 0.5 } else { 1.0 };
             draw.draw_line_ex(
@@ -461,7 +496,7 @@ pub(super) fn draw_heart(draw: &mut impl RaylibDraw, scene: &HeartScene<'_>) {
             with_alpha(BONE, (220.0 * glow) as u8),
         );
         // A sealed core shows its plates while the coils turn.
-        if fight.phase == HeartPhase::Coils || fight.phase == HeartPhase::Asleep {
+        if fight.phase.sealed() || fight.phase == HeartPhase::Asleep {
             for index in 0..6 {
                 let a = index as f32 / 6.0 * std::f32::consts::TAU + spin;
                 let (s, c) = a.sin_cos();

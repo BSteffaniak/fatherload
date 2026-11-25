@@ -3701,7 +3701,9 @@ impl EnemyKind {
             Self::StarHeart => EnemyStats {
                 // The drawn core: its glowing body, which shots hit.
                 radius: 72.0,
-                health: 760.0,
+                // Wave 11 carryover: the finale's five beats share more of it (the reforge and
+                // the eclipse were added; the bot fight takes about two and a half minutes).
+                health: 1_560.0,
                 speed: 0.0,
                 sight_tiles: 40.0,
                 hearing_tiles: 40.0,

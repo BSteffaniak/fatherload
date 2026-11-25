@@ -434,6 +434,11 @@ pub const BEAM_DAMAGE_PER_SECOND: f32 = 26.0;
 pub const MAX_SPARKS: usize = 4;
 /// Time between sparks.
 pub const SPARK_MILLIS: u64 = 7_000;
+/// Time between sparks while the core breathes (the collapse and the eclipse run long; Wave 11
+/// carryover keeps them from swarming).
+pub const BREATHING_SPARK_MILLIS: u64 = 10_000;
+/// Sparks out at most at once while the core breathes.
+pub const BREATHING_MAX_SPARKS: usize = 3;
 /// The collapse's steady pull toward the core, px/s².
 pub const COLLAPSE_PULL: f32 = 300.0;
 /// The collapse's breath: armoured, then a tell, then the exhale (vulnerable, it pushes).
@@ -446,6 +451,24 @@ pub const EXHALE_AT_MILLIS: u64 = 5_600;
 pub const EXHALE_PUSH: f32 = 260.0;
 /// The core's health share (per mille) where the ignition gives way to the collapse.
 pub const COLLAPSE_AT_PERMILLE: u16 = 520;
+/// The core's health share (per mille) where the first ignition gives way to the reforge
+/// (Wave 11 carryover: the finale's longer fight).
+pub const REFORGE_AT_PERMILLE: u16 = 780;
+/// The reforge's inner coils.
+pub const INNER_COIL_COUNT: usize = 3;
+/// The inner coils' orbit radius, tiles (inside the outer ring's, outside the core's touch).
+pub const INNER_ORBIT_TILES: f32 = 6.5;
+/// One turn of the inner coils' orbit (they turn the other way round).
+pub const INNER_ORBIT_MILLIS: u64 = 16_000;
+/// An inner coil fires this often (staggered round the ring).
+pub const INNER_FIRE_MILLIS: u64 = 3_600;
+/// The rekindled ignition's beams turn once in this long, the other way round.
+pub const REKINDLED_BEAM_TURN_MILLIS: u64 = 15_000;
+/// The core's health share (per mille) where the collapse deepens into the eclipse.
+pub const ECLIPSE_AT_PERMILLE: u16 = 260;
+/// The eclipse's single beam turns once in this long (it burns only while the core holds its
+/// breath; the exhale is the safe window to strike).
+pub const ECLIPSE_BEAM_TURN_MILLIS: u64 = 21_000;
 /// With no rig in the chamber this long the Heart sinks back to sleep and heals.
 pub const SLEEP_MILLIS: u64 = 20_000;
 /// Touching the core burns this much hull a second.
@@ -471,6 +494,13 @@ pub enum HeartPhase {
     Collapse,
     /// Awake: the cable lit, the Star Drive is the crew's.
     Awakened,
+    /// The core reseals (Wave 11 carryover): three inner coils orbit close the other way round
+    /// and the gravity pulses return. Break them to rekindle the core (the second ignition's
+    /// beams turn back the other way, faster).
+    Reforge,
+    /// The singularity's last breath (Wave 11 carryover): the collapse's breathing, and one beam
+    /// sweeping the chamber while the core holds its breath. Strike it as it exhales.
+    Eclipse,
 }
 
 impl HeartPhase {
@@ -482,16 +512,21 @@ impl HeartPhase {
             Self::Ignition => "ignition",
             Self::Collapse => "collapse",
             Self::Awakened => "awake",
+            Self::Reforge => "the reforge",
+            Self::Eclipse => "the eclipse",
         }
     }
 
-    /// The phase's number in the fight (1-3), 0 outside it.
+    /// The phase's number in the fight (1-5: coils, ignition, reforge, collapse, eclipse; the
+    /// rekindled ignition counts as the second again), 0 outside it.
     #[must_use]
     pub const fn number(self) -> u8 {
         match self {
             Self::Coils => 1,
             Self::Ignition => 2,
-            Self::Collapse => 3,
+            Self::Reforge => 3,
+            Self::Collapse => 4,
+            Self::Eclipse => 5,
             Self::Asleep | Self::Awakened => 0,
         }
     }
@@ -499,7 +534,22 @@ impl HeartPhase {
     /// Whether the fight is on.
     #[must_use]
     pub const fn fighting(self) -> bool {
-        matches!(self, Self::Coils | Self::Ignition | Self::Collapse)
+        matches!(
+            self,
+            Self::Coils | Self::Ignition | Self::Reforge | Self::Collapse | Self::Eclipse
+        )
+    }
+
+    /// Whether the core is sealed (it ignores every hit): while coils orbit it.
+    #[must_use]
+    pub const fn sealed(self) -> bool {
+        matches!(self, Self::Coils | Self::Reforge)
+    }
+
+    /// Whether the core breathes (the collapse and the eclipse).
+    #[must_use]
+    pub const fn breathing(self) -> bool {
+        matches!(self, Self::Collapse | Self::Eclipse)
     }
 }
 
@@ -562,6 +612,77 @@ pub fn beam_angle(elapsed: u64) -> f32 {
     crate::field::trig::wrap_angle(turn * std::f32::consts::TAU)
 }
 
+/// The rekindled ignition's first beam angle at `elapsed` ms into it (Wave 11 carryover): the
+/// beams turn the other way round, faster.
+#[must_use]
+pub fn rekindled_beam_angle(elapsed: u64) -> f32 {
+    #[allow(clippy::cast_precision_loss, reason = "a turn's milliseconds")]
+    let turn = (elapsed % REKINDLED_BEAM_TURN_MILLIS) as f32 / REKINDLED_BEAM_TURN_MILLIS as f32;
+    crate::field::trig::wrap_angle(-turn * std::f32::consts::TAU)
+}
+
+/// The eclipse's beam angle at `elapsed` ms into it (Wave 11 carryover), and whether it burns:
+/// only while the core holds its breath (never in the exhale, the window to strike).
+#[must_use]
+pub fn eclipse_beam(elapsed: u64) -> (f32, bool) {
+    #[allow(clippy::cast_precision_loss, reason = "a turn's milliseconds")]
+    let turn = (elapsed % ECLIPSE_BEAM_TURN_MILLIS) as f32 / ECLIPSE_BEAM_TURN_MILLIS as f32;
+    let angle = crate::field::trig::wrap_angle(turn * std::f32::consts::TAU);
+    let burning = elapsed >= BEAM_TELL_MILLIS && breath_at(elapsed) != BreathState::Exhale;
+    (angle, burning)
+}
+
+/// The fight's beams at `elapsed` ms into `phase` (Wave 11 carryover).
+///
+/// Each beam's angle from the core and how strong it is (`0..=1`, burning only at 1). Two opposed beams in the
+/// ignition (turning back the other way once `rekindled`), one in the eclipse while the core
+/// holds its breath, none otherwise. The tick and the renderer both read this.
+#[must_use]
+pub fn fight_beams(phase: HeartPhase, rekindled: bool, elapsed: u64) -> Vec<(f32, f32)> {
+    match phase {
+        HeartPhase::Ignition => {
+            let angle = if rekindled {
+                rekindled_beam_angle(elapsed)
+            } else {
+                beam_angle(elapsed)
+            };
+            let strength = beam_strength(elapsed);
+            vec![
+                (angle, strength),
+                (
+                    crate::field::trig::wrap_angle(angle + std::f32::consts::PI),
+                    strength,
+                ),
+            ]
+        }
+        HeartPhase::Eclipse => {
+            let (angle, burning) = eclipse_beam(elapsed);
+            let strength = if burning {
+                1.0
+            } else if breath_at(elapsed) == BreathState::Exhale {
+                0.0
+            } else {
+                beam_strength(elapsed) * 0.99
+            };
+            vec![(angle, strength)]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Inner coil `index`'s angle on its orbit at `elapsed` ms into the reforge, radians (they
+/// turn the other way round from the outer ring).
+#[must_use]
+pub fn inner_coil_angle(index: usize, elapsed: u64) -> f32 {
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a coil index and a turn's milliseconds"
+    )]
+    let turn = index as f32 / INNER_COIL_COUNT as f32
+        - (elapsed % INNER_ORBIT_MILLIS) as f32 / INNER_ORBIT_MILLIS as f32;
+    crate::field::trig::wrap_angle(turn * std::f32::consts::TAU)
+}
+
 /// How strong the ignition's beams are at `elapsed` ms into the phase, `0..=1` (fading in
 /// during the tell; they burn only at 1).
 #[must_use]
@@ -609,6 +730,12 @@ pub struct HeartFight {
     /// Whether the Heart has been woken for good.
     #[serde(default)]
     pub beaten: bool,
+    /// The reforge's inner coils still orbiting (Wave 11 carryover; entity ids by slot).
+    #[serde(default)]
+    pub inner: Vec<Option<u64>>,
+    /// The core has been reforged and rekindled: its second ignition (Wave 11 carryover).
+    #[serde(default)]
+    pub rekindled: bool,
 }
 
 impl HeartFight {
@@ -618,9 +745,12 @@ impl HeartFight {
         *self == Self::default()
     }
 
-    /// Coils still orbiting.
+    /// Coils still orbiting (the outer ring's, or the reforge's inner ones in the reforge).
     #[must_use]
     pub fn coils_left(&self) -> usize {
+        if self.phase == HeartPhase::Reforge {
+            return self.inner.iter().flatten().count();
+        }
         self.coils.iter().flatten().count()
     }
 }
@@ -758,6 +888,10 @@ pub enum HeartEvent {
     EelLeapt,
     /// A null moth drank a lump of dark matter from a rig's bay.
     MothDrank,
+    /// The core resealed and called its inner coils (Wave 11 carryover; netcode 695).
+    Reforged,
+    /// The collapse deepened into the eclipse (Wave 11 carryover; netcode 696).
+    Eclipse,
 }
 
 impl HeartEvent {
