@@ -24,6 +24,7 @@ mod hollow;
 mod old_deep;
 mod story_finale;
 mod systems;
+mod wilds;
 
 use super::{
     analysis,
@@ -541,6 +542,11 @@ patches! {
     SystemsHoleWarning => "systems_hole_warning",
     SystemsTransit => "systems_transit",
     SystemsOreCrunch => "systems_ore_crunch",
+    // The wild worlds (wave 12 planets-a): a bed per theme, and the storm.
+    PlanetJungleLoop => "loop_planet_jungle",
+    PlanetOceanLoop => "loop_planet_ocean",
+    PlanetGlacierLoop => "loop_planet_glacier",
+    PlanetStormLoop => "loop_planet_storm",
 }
 
 /// Playback metadata of a patch.
@@ -1111,7 +1117,12 @@ impl Patch {
             | Self::VoidHumLoop
             | Self::GravityLoop
             | Self::MetalSeaLoop
-            | Self::StarDriveLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            | Self::StarDriveLoop
+            // The wild worlds' beds (Wave 12 planets-a).
+            | Self::PlanetJungleLoop
+            | Self::PlanetOceanLoop
+            | Self::PlanetGlacierLoop
+            | Self::PlanetStormLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
             Self::HeartCableLight => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.6)
@@ -1810,6 +1821,10 @@ impl Patch {
             Self::SystemsHoleWarning => systems::hole_warning(rng),
             Self::SystemsTransit => systems::transit(rng),
             Self::SystemsOreCrunch => systems::ore_crunch(rng),
+            Self::PlanetJungleLoop => wilds::jungle_world_loop(rng),
+            Self::PlanetOceanLoop => wilds::ocean_world_loop(rng),
+            Self::PlanetGlacierLoop => wilds::glacier_world_loop(rng),
+            Self::PlanetStormLoop => wilds::wild_storm_loop(rng),
         }
     }
 }

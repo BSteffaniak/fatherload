@@ -76,6 +76,9 @@ mod tombs;
 mod villages;
 mod weapons;
 
+pub use enemies::{
+    enemy_art_scale, enemy_faces_right, enemy_feet_offset, enemy_sprite, ground_enemy_frame,
+};
 pub use rig::{RigFacings, draw_rig, player_accent};
 
 /// How far above a rig's position its body's middle is drawn (world pixels; the space view

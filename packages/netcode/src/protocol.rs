@@ -296,6 +296,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   with `world::BodyLifeEvent`: weather turned, dawn, dusk, a sale at a body's market).
 ///   A body's clock, weather, climate and prices are pure functions of the world seed, the
 ///   body and world time, so nothing else travels.
+/// * Planets-a (the wild worlds): `TileKind::Wild(WildTile)` tiles (codes `0x2000`) in
+///   terrain ops, chunk refreshes and keyframes (the jungle, ocean archipelago and glacier
+///   worlds' ground), twelve appended `EnemyKind`s (`Trundlehorn` .. `Crevassewyrm`), and the
+///   wild world events 900-919 (`GameplayEventKind::Wilds` with `planet::wilds::WildsEvent`).
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

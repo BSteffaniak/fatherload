@@ -475,6 +475,7 @@ mod tomb_scenes;
 mod touch_scenes;
 mod wave6_scenes;
 mod weapon_scenes;
+mod wilds_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -640,6 +641,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(systems_scenes::SYSTEMS_SCENES)
         .chain(space_scenes::SPACE_SCENES)
         .chain(bodylife_scenes::BODYLIFE_SCENES)
+        .chain(wilds_scenes::WILDS_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

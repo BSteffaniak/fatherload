@@ -623,8 +623,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Hollow(_)
         | TileKind::Warped(_)
         | TileKind::City(_)
-        | TileKind::Core(_)
-        | TileKind::Wild(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Core(_) => base_pixel(host, strata, host, x, y),
+        TileKind::Wild(tile) => wilds_art::rock_pixel(tile, x, y),
     }
 }
 
@@ -813,7 +813,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         _ => {}
     }
     // Ore and artifacts in a biome's ground sit in that ground (mountain ore in granite).
-    let host = ground.unwrap_or_else(|| host_material(band));
+    // On a wild world (Wave 12 planets-a) ore sits in the stratum's own rock.
+    let host = wilds_art::host_rock(terrain, position)
+        .or(ground)
+        .unwrap_or_else(|| host_material(band));
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         // Absolute art pixels key the texture noise; far columns wrap instead of overflowing.

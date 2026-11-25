@@ -448,7 +448,7 @@ impl GameRenderer {
             let centre = space_seat::body_camera_centre(view, scene, body);
             self.live[seat].update(scene.seed, centre);
             self.live[seat].turn_bodies(snapshot.space.millis);
-            let things = space_seat::body_things(view, scene);
+            let things = space_seat::body_things(view, scene, Self::space_seconds(snapshot));
             let px_per_tile = space_seat::ground_px_per_tile(view, density);
             let live = &self.live[seat];
             let picture = space_seat::body_view_of(
@@ -901,7 +901,7 @@ impl GameRenderer {
             && let Some(live) = self.live.get(view.seat_index)
         {
             let density = render_scale_for_draw(draw);
-            let things = space_seat::body_things(view, scene);
+            let things = space_seat::body_things(view, scene, Self::space_seconds(snapshot));
             let picture = space_seat::body_view_of(
                 live,
                 snapshot,

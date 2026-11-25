@@ -5591,8 +5591,10 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
         // The wild worlds (Wave 12 planets-a): small game gives little, the megafauna and
         // hunters give ore; harmless fauna give nothing (TODO-SEAM w12-aliens: hides and
         // shells for alien traders).
-        EnemyKind::Glimmerfin | EnemyKind::Rimeskipper => {}
-        EnemyKind::Sporewing | EnemyKind::Tidesnapper => add(mineral, 1),
+        EnemyKind::Glimmerfin
+        | EnemyKind::Rimeskipper
+        | EnemyKind::Sporewing
+        | EnemyKind::Tidesnapper => add(mineral, 1),
         EnemyKind::Vinestalker
         | EnemyKind::Mossprowler
         | EnemyKind::Sawjaw
@@ -5658,9 +5660,14 @@ mod tests {
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"
             );
-            // The crestback is a gentle mount (Wave 9): it never bites.
+            // The crestback is a gentle mount (Wave 9): it never bites; nor do the wild
+            // worlds' harmless fauna (Wave 12 planets-a).
             assert!(
-                stats.contact_damage > 0.0 || kind == EnemyKind::Crestback,
+                stats.contact_damage > 0.0
+                    || matches!(
+                        kind,
+                        EnemyKind::Crestback | EnemyKind::Glimmerfin | EnemyKind::Rimeskipper
+                    ),
                 "{kind:?}"
             );
             // Every kind takes full (or better) damage from explosives or EMPs: a clear counter.

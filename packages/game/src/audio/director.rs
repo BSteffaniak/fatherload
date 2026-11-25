@@ -384,6 +384,9 @@ enum SeatLoop {
     GravityBed,
     MetalSeaBed,
     StarDriveBed,
+    // The wild worlds (Wave 12 planets-a): the theme's bed, and the storm.
+    WildWorldBed,
+    WildStormBed,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -703,6 +706,58 @@ impl Director {
                 1.0,
                 OPEN_CUTOFF,
             ),
+        );
+    }
+
+    /// A wild world's bed (jungle, ocean archipelago or glacier) under its sky and fading with
+    /// depth, and the storm's wind over the open surface while a squall or blizzard blows
+    /// (Wave 12 planets-a).
+    fn wild_world_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        scene: &crate::render_snapshot::PlaceScene<'_>,
+        millis: u64,
+    ) {
+        use fatherload_simulation::planet::{BodyGround, PlanetThemeId, wilds::life};
+        let planet = scene.terrain.planet_ground();
+        let theme = planet.map(|planet| planet.params().theme);
+        let patch = match theme {
+            Some(PlanetThemeId::JUNGLE) => Some(Patch::PlanetJungleLoop),
+            Some(PlanetThemeId::OCEAN) => Some(Patch::PlanetOceanLoop),
+            Some(PlanetThemeId::GLACIER) => Some(Patch::PlanetGlacierLoop),
+            _ => None,
+        };
+        let (depth, storm) = planet.map_or((0.0, 0.0), |planet| {
+            let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+            #[allow(clippy::cast_precision_loss, reason = "a few hundred rows")]
+            let depth = (tile.y - planet.surface_row(tile.x)).max(0) as f32;
+            let storm = life::weather_at(planet.params(), millis)
+                .filter(|weather| weather.kind.wind() > 0.0)
+                .map_or(0.0, |weather| weather.strength());
+            (depth, storm)
+        });
+        // The bed thins out as the seat digs down (40 rows under, a murmur).
+        let open = (1.0 - depth / 40.0).clamp(0.25, 1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::WildWorldBed,
+            patch.unwrap_or(Patch::PlanetJungleLoop),
+            (
+                if patch.is_some() { 0.34 * open } else { 0.0 },
+                0.0,
+                1.0,
+                OPEN_CUTOFF * open,
+            ),
+        );
+        let surface = if depth < 1.0 { 1.0 } else { 0.0 };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::WildStormBed,
+            Patch::PlanetStormLoop,
+            (storm * surface * 0.45, listener.pan, 1.0, OPEN_CUTOFF),
         );
     }
 
@@ -1068,6 +1123,8 @@ impl Director {
             // rig's.
             let body_life = scene.body.as_ref().and_then(|body| body.life.as_ref());
             self.away_ambience(live, listener, scene.place, body_life);
+            // A wild world's own bed and its storms (Wave 12 planets-a).
+            self.wild_world_ambience(live, listener, scene, snapshot.space.millis);
             state.initialized = true;
             state.velocity_x = velocity_x;
             state.velocity_y = velocity_y;

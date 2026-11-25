@@ -871,6 +871,7 @@ fn upload_texture(
 }
 
 /// One thing on the ground, drawn with its feet at the origin, upright in its own frame.
+#[allow(clippy::too_many_lines, reason = "one arm per kind of thing")]
 fn draw_thing(
     draw: &mut impl RaylibDraw,
     thing: &GroundThing,
@@ -916,6 +917,24 @@ fn draw_thing(
             let (w, h) = (sprite.width() as f32 * art, sprite.height() as f32 * art);
             let tint = shade(Color::WHITE, light);
             sprite::draw_sprite(draw, sprite, frame, Vector2::new(-w * 0.5, -h), art, tint);
+        }
+        GroundThingKind::Enemy { kind, frame, left } => {
+            let sprite = crate::rendering::world::enemy_sprite(kind);
+            let scale = art * crate::rendering::world::enemy_art_scale(kind);
+            let (w, h) = (
+                sprite.width() as f32 * scale,
+                sprite.height() as f32 * scale,
+            );
+            let tint = shade(Color::WHITE, light);
+            sprite::draw_sprite_flipped(
+                draw,
+                sprite,
+                usize::from(frame),
+                Vector2::new(-w * 0.5, -h),
+                scale,
+                left && crate::rendering::world::enemy_faces_right(kind),
+                tint,
+            );
         }
         GroundThingKind::Drop => {
             let size = 6.0 * art;

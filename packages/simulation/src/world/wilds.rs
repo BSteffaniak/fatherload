@@ -71,6 +71,8 @@ pub const ICICLE_REACH: i32 = 8;
 pub const ICICLE_WARNING_MILLIS: u64 = 350;
 const ICICLE_FALL_SPEED: f32 = 140.0;
 const ICICLE_LIFE_MILLIS: u64 = 4_000;
+/// Columns round the settlement site that creatures leave alone.
+pub const WILD_SITE_MARGIN: i32 = 6;
 /// A hazard event repeats at most this often while it lasts.
 const HAZARD_EVENT_MILLIS: u64 = 3_000;
 
@@ -103,6 +105,21 @@ impl WorldState {
         self.wild_world().is_some_and(|(planet, _)| {
             life::is_night(planet.params(), self.millis_at(self.simulation_tick))
         })
+    }
+
+    /// Whether creatures leave `tile` alone on a wild world (`None` elsewhere): only at the
+    /// settlement site (the friendly settlement's ground, a few rows over and under it).
+    #[must_use]
+    pub fn wilds_safe_zone(&self, tile: TilePosition) -> Option<bool> {
+        let (planet, _) = self.wild_world()?;
+        let site = crate::planet::world_of(planet.params().theme)?.settlement_site(planet)?;
+        let width = i64::from(planet.strip_width());
+        let delta =
+            crate::planet::wilds::wrap_delta(i64::from(tile.x), i64::from(site.centre()), width);
+        Some(
+            delta.abs() <= i64::from(site.width / 2 + WILD_SITE_MARGIN)
+                && (site.floor - 30..site.floor + 6).contains(&tile.y),
+        )
     }
 
     /// Whether `player_id`'s planet gear counters `hazard`. TODO-SEAM w12-stations: the

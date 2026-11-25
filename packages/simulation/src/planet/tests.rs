@@ -164,7 +164,10 @@ fn every_theme_generates_and_unknown_ids_fall_back() {
         assert_eq!(usize::from(theme.id.0), index, "ids are indexes");
         let ground = PlanetGround::new(PlanetParams::new(3, 600, theme.id));
         let surface = ground.surface_row(10);
-        assert_eq!(ground.generated_tile(10, surface).kind, theme.crust);
+        // A theme world (Wave 12) puts its own features on the crust (trees, reefs, ice).
+        if super::world_of(theme.id).is_none() {
+            assert_eq!(ground.generated_tile(10, surface).kind, theme.crust);
+        }
         let shares: u32 = theme
             .strata
             .iter()

@@ -101,7 +101,7 @@ pub static JUNGLE_WORLD: JungleWorld = JungleWorld;
 /// Columns per tree cell (one tree at most in each).
 pub const TREE_CELL: i64 = 32;
 /// The Elder Tree's trunk width, height and the level rise it stands on (half width).
-pub const ELDER_TRUNK: i64 = 8;
+pub const ELDER_TRUNK: i64 = 12;
 pub const ELDER_HEIGHT: i32 = 58;
 const ELDER_RISE: i64 = 28;
 /// Extra sky over the hills (the Elder Tree's crown).
@@ -270,8 +270,8 @@ fn elder_tile(ground: &PlanetGround, column: i64, row: i32) -> Option<Tile> {
     let floor = surface(ground, centre);
     let top = floor - ELDER_HEIGHT;
     // The hollow at its foot (a door on the west side) and the seed in it.
-    let hollow = (-3..=2).contains(&dx) && (floor - 6..floor).contains(&row);
-    let door = (-ELDER_TRUNK / 2..-2).contains(&dx) && (floor - 4..floor).contains(&row);
+    let hollow = (-2..=1).contains(&dx) && (floor - 4..floor).contains(&row);
+    let door = (-ELDER_TRUNK / 2..-2).contains(&dx) && (floor - 3..floor).contains(&row);
     if hollow || door {
         if dx == 0 && row == floor - 1 {
             return Some(wild(WildTile::ElderSeed));
@@ -306,11 +306,11 @@ fn elder_tile(ground: &PlanetGround, column: i64, row: i32) -> Option<Tile> {
             }
         }
         if (0..60).contains(&depth) && dx.abs() <= 1 {
-            return Some(wild(WildTile::ElderBark));
+            return Some(wild(WildTile::LivingRoot));
         }
     }
     if (36..60).contains(&depth) && dx.abs() <= 1 {
-        return Some(wild(WildTile::ElderBark));
+        return Some(wild(WildTile::LivingRoot));
     }
     None
 }

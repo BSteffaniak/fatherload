@@ -475,6 +475,13 @@ pub enum GroundThingKind {
     Drop,
     /// A parked rig.
     ParkedRig,
+    /// A live creature of the body (Wave 12 planets-a): its kind's sprite, the frame its pose
+    /// picks, and whether it faces left (its feet at the thing's row).
+    Enemy {
+        kind: fatherload_simulation::enemy::EnemyKind,
+        frame: u8,
+        left: bool,
+    },
 }
 
 /// The seat's view of a body's ground.

@@ -390,6 +390,38 @@ pub(super) fn draw_enemies(draw: &mut impl RaylibDraw, scene: &EnemyScene<'_>) {
     }
 }
 
+/// The frame a creature on a round body's ground shows (the polar renderer, Wave 12
+/// planets-a).
+#[must_use]
+pub fn ground_enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
+    enemy_frame(entity, state, seconds)
+}
+
+/// A kind's art pixel scale relative to the world's (1 for most, 1.5 for the giants).
+#[must_use]
+pub fn enemy_art_scale(kind: EnemyKind) -> f32 {
+    sprite_scale(kind) / ART
+}
+
+/// Whether a kind's art faces right (and mirrors to face left).
+#[must_use]
+pub const fn enemy_faces_right(kind: EnemyKind) -> bool {
+    faces(kind)
+}
+
+/// Pixels from a creature's centre down to where its sprite's bottom is drawn: a walker's
+/// feet, a flyer's or swimmer's lowest point.
+#[must_use]
+pub fn enemy_feet_offset(kind: EnemyKind) -> f32 {
+    let sprite = enemy_sprite(kind);
+    #[allow(clippy::cast_precision_loss, reason = "small art sizes")]
+    let half = sprite.height() as f32 * sprite_scale(kind) * 0.5;
+    match kind.stats().locomotion {
+        fatherload_simulation::enemy::Locomotion::Walking => kind.stats().radius,
+        _ => half,
+    }
+}
+
 /// The frame showing `state` (mode-driven poses, otherwise the loop).
 #[allow(clippy::cast_precision_loss, reason = "per-enemy animation phase")]
 #[allow(clippy::match_same_arms, reason = "one arm per kind's pose rule")]

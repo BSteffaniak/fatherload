@@ -425,6 +425,7 @@ const fn nebula_view(nebula: &space::Nebula) -> NebulaView {
 pub fn ground_things(
     scene: &crate::render_snapshot::PlaceScene<'_>,
     skip_rig: Option<fatherload_simulation::PlayerId>,
+    seconds: f32,
 ) -> Vec<GroundThing> {
     use super::view::GroundThingKind;
     use fatherload_simulation::entity::EntityKind;
@@ -455,6 +456,24 @@ pub fn ground_things(
         });
     }
     for entity in scene.entities.iter() {
+        // The body's creatures (Wave 12 planets-a): their sprites, standing in the local up.
+        if let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state {
+            let feet = crate::rendering::world::enemy_feet_offset(state.kind);
+            let (column, row) = strip(entity.body.x, entity.body.y + feet);
+            things.push(GroundThing {
+                column,
+                row,
+                kind: GroundThingKind::Enemy {
+                    kind: state.kind,
+                    frame: u8::try_from(crate::rendering::world::ground_enemy_frame(
+                        entity, state, seconds,
+                    ))
+                    .unwrap_or(0),
+                    left: state.facing < 0,
+                },
+            });
+            continue;
+        }
         if entity.kind() == EntityKind::Drop {
             let (column, row) = strip(entity.body.x, entity.body.y);
             things.push(GroundThing {

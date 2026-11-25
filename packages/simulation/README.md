@@ -9134,6 +9134,146 @@ pub trait PlanetThemeHooks: Sync {
   weather-turn edge that falls in a skipped tick is not heard (the state itself, a pure
   function of time, is never wrong).
 
+## Wave 12 planets-a: the wild worlds: jungle, ocean archipelago and glacier (`src/planet/wilds/`, `src/planet/world.rs`, `src/world/wilds.rs`, `src/world/enemies/wilds.rs`)
+
+Expansion plan §16 WP-SPACE "planet themes": three planet themes, each a world like the home
+ground level. The space generator's `Theme::Jungle`, `Theme::OceanArchipelago` and
+`Theme::Ice` land on them (`place::planet_theme_of`); the Wave 11 `ICE` placeholder stays
+registered for bodies saved with it.
+
+### Registration (`planet::theme`, `planet::world`)
+
+- **Theme registry** (append only): `PlanetThemeId::JUNGLE` (3), `OCEAN` (4), `GLACIER` (5),
+  each a `PlanetTheme` (palette, crust, three strata with rock, accent and ores, core ore) in
+  `wilds::{jungle, ocean, glacier}`.
+- **Theme worlds** (`planet::world`, new, shared with planets-b and Wave 13): a
+  `ThemeWorld` gives a theme its own `surface_row`, `chunk_tiles` (features over the generic
+  strata, ores, caves and core chamber), `core_floor_row`, `extra_sky_rows`, and the
+  `settlement_site` / `landmark_site` hooks. `world_of(theme)` is the registry (append match
+  arms). `PlanetGround` dispatches to it (`surface_row_of`, `chunk_tiles`, `new`), so every
+  other theme generates bit for bit as before.
+- **Depth** (`wilds::strata_rows`, `core_floor_row`): a planet's strata run 800 rows at
+  radius 1,500 to 2,500 at 8,000 and up (1,715 at 5,000), ending on the core chamber, which
+  sits on the indestructible heart of the body (the rows below it are bedrock); a small body
+  (radius up to 1,000) is strata all the way to its true core. (The space body's own
+  `strata_rows` is not in `PlanetParams`; TODO-SEAM w12-systems if it should drive this.)
+- **Tiles**: `TileKind::Wild(WildTile)`, codes `0x2000 | code` (35 tiles, append only), with
+  hardness, durability, item, `is_slick`, `is_treasure` and `glow`.
+
+### The three worlds
+
+| Theme | Surface | Strata and signature rules | Landmark |
+|---|---|---|---|
+| Jungle | the generic hills under giant trees (one in most 32-column cells: trunk, canopy, vines, a taproot) | **Root Tangle**: living roots snag a rig rubbing against them (`ROOT_GRIP_PER_SECOND`); **Spore Caves**: extra caves floored with puffcaps that burst into spore clouds when drilled (toxic air); **Heartwood Deep**: hard heartwood, amber with fossils, lifesap nodes that mend 12 % of the hull when drilled | the Elder Tree: a 12-wide trunk 58 rows tall on a levelled rise, a crown, giant roots, a hollow with a door and the Elder Tree's seed |
+| Ocean archipelago | one elevation field: islands over a planet-wide sea (fluid water from row 0 to the seabed), reefs, kelp and pearl shells in the shallows | **Reef Shelf**: waterlogged (sea-water pockets flood a shaft); **Drowned Ruins**: every cave flooded, sealed halls of air (ruin stone, glowing glyphs, a relic) in flooded galleries; **The Trench**: black smokers (heat) with rich ore round them, flooded caves, pressure | the Drowned Spire: a ruined tower out in the open sea, flooded below its floor, a dry room with windows, a hole in its roof and a drowned relic |
+| Glacier | terraced ice sheets (5-row steps) under snow, crevasses (a third bridged by rime), ice spires, frozen seas (a sea-ice lid over cold water) | **Glacier Ice**: slick ice (Descent IV's ice physics), tunnels refreeze as rime at night and thaw by day, rime breaks under a resting rig; **Under-Ice Sea**: lenses of water under sea ice, cold water bites three times as hard; **Permafrost Caves**: ice caves lined with blue ice, frost crystals, icicles that crack and fall on a rig passing under them | the Frozen Titan: a beast frozen in clear ice under the glacier (skull, spine, ribs), its tusk breaking the surface, its heart in its ribs |
+
+- **Settlement site** (`ThemeWorld::settlement_site`, for the aliens track): 40 columns of
+  level, dry, clear ground at a seeded column (an island on the ocean, never a crevasse or a
+  tree), eased into the hills over 12 columns. Creatures leave it alone
+  (`WorldState::wilds_safe_zone`); elsewhere a wild world's surface is the creatures' too
+  (the home world's "the surface is safe" rule does not hold there).
+- **Landmark**: half a lap from the settlement. **Secret** (small bodies only, radius up to
+  1,000): a cairn on the surface a quarter lap from the settlement, a chamber 18 rows under it
+  holding a buried cache (`WildTile::Cache`). TODO-SEAM w12-systems: the space generator only
+  makes ice small bodies of these themes; jungle and ocean moons get the secret once it tags
+  them.
+
+### Play (`world/wilds.rs`, `planet::wilds::life`)
+
+- **Hazards** (`PlanetHazard`, tagged for planet gear): jungle toxic air (spore-laden air in
+  the Spore Caves fouls the hull), ocean heat (within 2 tiles of a smoker) and pressure (in
+  the Ruins' and Trench's water), glacier cold everywhere (fuel for the heaters; x2 in a
+  blizzard on the open surface, x3 in water), high gravity on bodies of 1.4 g and up.
+  Counters: the Descent's rig systems (`descent_counter`: Cryo Hull, Bio-Filter, Pressure
+  Hull; the Thermal Hull part takes 75 % of the heat) and `WorldState::planet_gear_counters`
+  (TODO-SEAM w12-stations: the planet gear line answers there). Only rigs feel them.
+- **Submarine mode and slick ice** are Descent IV's movement hooks, switched on for wild
+  worlds (`WorldState::wild_water_rules`); `drowned::is_ice` knows the slick wild tiles.
+- **Vines** are open air a pilot on foot climbs like a ladder (`WorldState::wild_vine_at`,
+  `jungle::vine_at`).
+- **Weather and day** (`life::weather_at`, `is_night`, `day_seconds`): pure functions of the
+  body and world time; one 150 s cycle in three is a storm (downpour, squall or blizzard by
+  theme) that ramps up and down; squalls and blizzards push craft over the open surface; the
+  storm's rise is an event. TODO-SEAM w12-bodylife: the per-body weather and clock replace
+  these schedules (the theme's `WildTheme::weather` is what it should pick; the day should be
+  the space body's `day_seconds`).
+- **Events** (netcode 900-919): `GameplayEventKind::Wilds { what: WildsEvent, .. }`:
+  roots snag, spore burst, lifesap mended, scalded, pressure creak, cold bite, icicle crack,
+  refroze, landmark relic, secret cache, storm rising, rime broke.
+
+### Creatures (`enemy.rs`, `world/enemies/wilds.rs`)
+
+Twelve appended `EnemyKind`s, four per theme, all following the enemy body rules in the
+planet's local frame (spawned through `site_fits`, contact boxes fitted to their art):
+
+| Theme | Neutral | Hostile |
+|---|---|---|
+| Jungle | Trundlehorn (megafauna, herds bed down at night, charges only when struck) | Vinestalker (hangs under the canopy, sees only below, drops), Mossprowler (lies flat until close, pounces), Sporewing (Spore Caves swarm) |
+| Ocean | Shellstrider (great turtle), Glimmerfin (school, scatters) | Sawjaw (circles while its dash recharges), Tidesnapper (beach crab) |
+| Glacier | Woolhorn (megafauna), Rimeskipper (hops away) | Rimewolf (pack circles and leaps together; farther sight in a blizzard), Crevassewyrm (burrows through ice and permafrost only) |
+
+Spawning (`advance_wild_creatures`, every 2 s): up to 6 round each rig within 44 tiles,
+16-34 tiles out (out of view), from the theme's roster by habitat (surface, hanging, water,
+the caves of a stratum); Peaceful spawns only the neutral fauna; creatures 80 tiles from every
+rig leave. Swimmers never leave the water (`wilds_after_move`).
+
+### Game side
+
+- Tile art (`rendering/terrain/tile_art/wilds_art.rs`): every wild tile, the strata's back
+  walls, vines and kelp in the open air, the sea painted into its tiles (the polar renderer
+  has no live fluid pass), snow on the glacier's tops, ore set in the stratum's own rock.
+- Creature sprites (`rendering/pixel_art/sprites/wilds.rs`; the megafauna at 1.5x), drawn on
+  round bodies too: the polar renderer's ground things gained `GroundThingKind::Enemy`.
+- Music (`audio/patch/wilds.rs`, appended at the end of `patches!`): `loop_planet_jungle`
+  (marimba, log drums, frogs, a far trumpeting call), `loop_planet_ocean` (breakers, steel
+  drum, gulls), `loop_planet_glacier` (cold fifths, wind, glass bells, the glacier's groan)
+  and `loop_planet_storm`; the director plays the body's bed under its sky (thinning with
+  depth) and the storm on the open surface (`wild_world_ambience`).
+- Cues and messages for every `WildsEvent`.
+- Scenes (`scene_capture/wilds_scenes.rs`, on the nearest planet of each theme to home on the
+  flight scenes' seed): `wild_<theme>_approach`, `_surface`, `_landmark`, two strata each
+  (`wild_jungle_spore_caves`, `_heartwood`, `wild_ocean_ruins`, `_trench`,
+  `wild_glacier_sea`, `_permafrost`) and creatures (`wild_jungle_creatures`; the ocean and
+  glacier surfaces have theirs).
+- `--space-report` lists the ground theme and strata every tag lands on.
+
+### Formats and digests
+
+- `PROTOCOL_VERSION` 20 (wild tiles, the appended creatures, events 900-919). No save format
+  bump (tile codes and enum variants are additive; no new world sections: everything lives in
+  the terrain and entities).
+- V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` unchanged (space generation is
+  untouched; only the tag-to-ground map moved). The wild worlds are pinned by
+  `GOLDEN_WILDS_DIGESTS` (`planet/wilds/tests.rs`).
+
+### Tests
+
+- `planet::wilds::tests`: registration and purity, golden digests, strata depth (small and
+  big bodies, every stratum on the way down, the core chamber), each theme's features (trees,
+  vines, puffcaps, lifesap, the Elder Tree; sea, islands, ruins, smokers, the spire; frozen
+  seas, crevasses, icicles, the titan), level clear settlement sites, small-body secrets,
+  seamless wrap, hazard tags, weather and day purity, the space tags, `--space-report`.
+- `world::wilds_tests`: a digging bot reaches every stratum and the core chamber of a small
+  (R 640) and a big (R 5,000) world of each theme; deterministic and tick-rate safe; neutral
+  fauna never attack first and fight back; vinestalkers see only below; swimmers stay in the
+  sea; spawns come from the theme's roster (Peaceful: neutral only); the settlement is safe;
+  puffcaps, lifesap, roots, cold (and the Cryo Hull), icicles, refreeze and rime, smoker heat,
+  the frozen sea and the storm's push.
+
+### Seams and known limits
+
+- TODO-SEAM w12-bodylife: weather and day (above). TODO-SEAM w12-stations: planet gear
+  (`planet_gear_counters`). TODO-SEAM w12-aliens: the settlement site is level ground; the
+  aliens track builds the town on `ThemeWorld::settlement_site` (and may want hides and shells
+  from the fauna's loot). TODO-SEAM w12-systems: jungle and ocean small moons, the space
+  body's `strata_rows`.
+- Planets-b registers its themes in the same `world_of` match and theme array (append).
+- Tile-keyed state on a body is still not lap-aware (Wave 11's limit); the refreeze sweep
+  only touches tiles round the rigs.
+- Big features near a ring tile boundary deep down (halls, smokers) can be clipped at their
+  hashed cell's edge; a ring tile of an inner band is still generated whole.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

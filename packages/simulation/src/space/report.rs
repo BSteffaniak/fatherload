@@ -135,6 +135,24 @@ fn report_of(seed: u64, radius: i32, sectors: &[Sector]) -> String {
             }
         }
     }
+    // The ground each tag lands on (the planet theme registry; Wave 12 planets-a).
+    let _ = writeln!(out, "\nground themes (tag -> planet theme: strata):");
+    for theme in Theme::PLANET {
+        let ground = crate::planet::theme(crate::place::planet_theme_of(theme));
+        let strata: Vec<&str> = ground.strata.iter().map(|stratum| stratum.name).collect();
+        let world = if crate::planet::world_of(ground.id).is_some() {
+            " (world)"
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            out,
+            "  {:<18} {}{world}: {}",
+            theme.name(),
+            ground.name,
+            strata.join(", ")
+        );
+    }
     let _ = writeln!(out, "\nradius histogram (tiles):");
     let total = histogram.iter().sum::<usize>().max(1);
     for ((low, high), count) in BUCKETS.iter().zip(histogram) {

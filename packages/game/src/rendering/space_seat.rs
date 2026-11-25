@@ -112,12 +112,16 @@ pub fn strip_actor(view: &ViewSnapshot<'_>, scene: &PlaceScene<'_>) -> ((f64, f6
 
 /// The ground things of a seat's body (everyone but the seat's own rig when it flies it).
 #[must_use]
-pub fn body_things(view: &ViewSnapshot<'_>, scene: &PlaceScene<'_>) -> Vec<GroundThing> {
+pub fn body_things(
+    view: &ViewSnapshot<'_>,
+    scene: &PlaceScene<'_>,
+    seconds: f32,
+) -> Vec<GroundThing> {
     let on_foot = scene
         .pilots
         .iter()
         .any(|pilot| pilot.player_id == view.player_id);
-    ground_things(scene, (!on_foot).then_some(view.player_id))
+    ground_things(scene, (!on_foot).then_some(view.player_id), seconds)
 }
 
 /// A seat on a generated body: its round ground under the craft, the galaxy above.

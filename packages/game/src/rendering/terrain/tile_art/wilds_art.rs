@@ -35,7 +35,7 @@ use fatherload_simulation::{
         BodyGround, PlanetGround, PlanetThemeId,
         wilds::{WildTile, jungle, ocean},
     },
-    terrain::{Terrain, TilePosition},
+    terrain::{Terrain, TileKind, TilePosition},
 };
 
 #[allow(
@@ -60,7 +60,7 @@ const AMBER_RAMP: Ramp = ramp([RUST, ORANGE, AMBER, GOLD]);
 const SAP: Ramp = ramp([MOSS, LEAF, LIME, CREAM]);
 const ELDER: Ramp = ramp([INK, SOIL_DARK, SOIL, FOG]);
 const SAND_RAMP: Ramp = ramp([CLAY, SAND, CREAM, BONE]);
-const LIMESTONE: Ramp = ramp([STONE, STONE_LIGHT, FOG, CREAM]);
+const LIMESTONE: Ramp = ramp([CLAY, SAND, CREAM, BONE]);
 const CORAL: Ramp = ramp([MAROON, ROSE, PINK, CREAM]);
 const BRAIN: Ramp = ramp([TEAL_DARK, TEAL, MINT, BONE]);
 const SILT: Ramp = ramp([INK, NIGHT, DEEP_BLUE, SLATE_DARK]);
@@ -72,7 +72,7 @@ const GLACIER: Ramp = ramp([SKY, SKY_LIGHT, ICE, BONE]);
 const BLUE_ICE: Ramp = ramp([DEEP_BLUE, OCEAN, SKY, ICE]);
 const SEA_ICE: Ramp = ramp([OCEAN, SKY_LIGHT, ICE, BONE]);
 const PERMAFROST: Ramp = ramp([NIGHT, SLATE_DARK, SLATE, FOG]);
-const BONE_RAMP: Ramp = ramp([STONE, FOG, CREAM, BONE]);
+const BONE_RAMP: Ramp = ramp([FOG, MIST, CREAM, BONE]);
 const HEART: Ramp = ramp([MAROON, RED, ROSE, PINK]);
 
 /// Representative colour of a wild tile (drill dust, debris, the map).
@@ -303,12 +303,14 @@ fn paint_water(
             } else {
                 // Deeper is darker; a shimmer of light lines in the body.
                 let depth = (position.y.max(0) * TILE_ART + py) as f32;
-                let shade = noise(gx, gy, 9, 2_041) * 0.4 + (depth / 900.0).min(0.6);
+                let shade = noise(gx / 3, gy, 7, 2_041) * 0.12
+                    + f32::from(bayer4(gx, gy)) / 120.0
+                    + (depth / 480.0).min(0.85);
                 if hash(gx, gy, 2_042).is_multiple_of(71) {
                     ramp[3]
                 } else if shade < 0.35 {
                     ramp[2]
-                } else if shade < 0.75 {
+                } else if shade < 1.0 {
                     ramp[1]
                 } else {
                     ramp[0]
@@ -337,18 +339,26 @@ fn body_pixel(tile: WildTile, x: i32, y: i32, px: i32, py: i32) -> Option<Palett
     let dither = f32::from(bayer4(x, y)) / 40.0;
     Some(match tile {
         WildTile::JungleLoam => {
-            if hash(x, y, 2_101).is_multiple_of(19) {
-                index_of(LEAF)
+            // Dark, rich loam: soft clumps, a few pale grains and the odd green sprout.
+            let value = n(5, 2_102) * 0.6 + n(2, 2_103) * 0.25 + dither * 0.5;
+            if hash(x, y, 2_101).is_multiple_of(41) {
+                index_of(MOSS)
+            } else if hash(x, y, 2_104).is_multiple_of(37) {
+                LOAM[3]
+            } else if value > 0.62 {
+                LOAM[2]
             } else {
-                pick(LOAM, n(5, 2_102) * 0.7 + dither)
+                LOAM[1]
             }
         }
         WildTile::RootSoil => {
             let root = (x + (n(9, 2_103) * 6.0) as i32).rem_euclid(9) == 0 && n(5, 2_104) > 0.45;
             if root {
                 ROOT_SOIL[3]
+            } else if n(4, 2_105) + dither * 0.4 > 0.7 {
+                ROOT_SOIL[1]
             } else {
-                pick(ROOT_SOIL, n(4, 2_105) * 0.75 + dither * 0.6)
+                ROOT_SOIL[0]
             }
         }
         WildTile::LivingRoot => {
@@ -493,21 +503,30 @@ fn body_pixel(tile: WildTile, x: i32, y: i32, px: i32, py: i32) -> Option<Palett
             }
         }
         WildTile::SeaSand => {
-            if hash(x, y, 2_124).is_multiple_of(29) {
+            // Pale sand in soft ripples, a pink shell fleck here and there.
+            let ripple = (y + (n(12, 2_126) * 4.0) as i32 + x / 6).rem_euclid(5) == 0;
+            if hash(x, y, 2_124).is_multiple_of(53) {
                 index_of(ROSE)
+            } else if ripple && n(6, 2_127) > 0.4 {
+                SAND_RAMP[1]
+            } else if hash(x, y, 2_125).is_multiple_of(11) {
+                SAND_RAMP[3]
             } else {
-                pick(SAND_RAMP, n(3, 2_125) * 0.6 + dither * 0.8)
+                SAND_RAMP[2]
             }
         }
         WildTile::Limestone => {
+            // Warm layered limestone with the odd fossil shell spiral.
             let layer = (y + (n(14, 2_126) * 3.0) as i32).rem_euclid(6) == 0;
             let (near, _, _, _) = worley(x, y, 11, 2_127, false);
-            if (3.5..6.0).contains(&near) && hash(x / 3, y / 3, 2_128).is_multiple_of(4) {
-                index_of(STONE)
-            } else if layer {
+            if (4.0..6.5).contains(&near) && hash(x / 4, y / 4, 2_128).is_multiple_of(5) {
                 LIMESTONE[0]
+            } else if layer {
+                LIMESTONE[1]
+            } else if n(5, 2_129) + dither * 0.3 > 0.72 {
+                LIMESTONE[3]
             } else {
-                pick(LIMESTONE, 0.3 + n(5, 2_129) * 0.6)
+                LIMESTONE[2]
             }
         }
         WildTile::Coral => {
@@ -634,13 +653,14 @@ fn body_pixel(tile: WildTile, x: i32, y: i32, px: i32, py: i32) -> Option<Palett
             }
         }
         WildTile::GlacierIce => {
-            let line = (y + (n(24, 2_142) * 4.0) as i32).rem_euclid(7) == 0;
-            if hash(x, y, 2_143).is_multiple_of(61) {
+            // Long, faint annual layers in pale ice; a glint now and then.
+            let line = (y + (n(24, 2_142) * 4.0) as i32).rem_euclid(9) == 0 && n(10, 2_145) > 0.3;
+            if hash(x, y, 2_143).is_multiple_of(97) {
                 index_of(BONE)
-            } else if line {
-                GLACIER[0]
+            } else if line || n(12, 2_144) + dither * 0.3 > 0.82 {
+                GLACIER[1]
             } else {
-                pick(GLACIER, 0.35 + n(8, 2_144) * 0.5)
+                GLACIER[2]
             }
         }
         WildTile::BlueIce | WildTile::FrostCrystal => {
@@ -739,6 +759,24 @@ fn body_pixel(tile: WildTile, x: i32, y: i32, px: i32, py: i32) -> Option<Palett
     })
 }
 
+/// The rock ore sits in at `position` on a wild world (`None` elsewhere).
+#[must_use]
+pub(super) fn host_rock(terrain: &Terrain, position: TilePosition) -> Option<TileKind> {
+    let planet = wild_planet(terrain)?;
+    let theme = fatherload_simulation::planet::theme(planet.params().theme);
+    if position.y < planet.surface_row(position.x) + theme.crust_rows {
+        return Some(theme.crust);
+    }
+    Some(theme.strata[stratum_at(planet, position)].rock)
+}
+
+/// One art pixel of a wild rock (ore's host): its body, solid throughout.
+#[must_use]
+pub(super) fn rock_pixel(tile: WildTile, x: i32, y: i32) -> PaletteIndex {
+    body_pixel(tile, x, y, x.rem_euclid(TILE_ART), y.rem_euclid(TILE_ART))
+        .unwrap_or_else(|| index_of(wild_color(tile)))
+}
+
 /// Paints wild tile `tile` at `position`.
 pub(super) fn paint(
     canvas: &mut TileCanvas,
@@ -759,6 +797,21 @@ pub(super) fn paint(
         for px in 0..TILE_ART {
             let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
             let index = body_pixel(tile, gx, gy, px, py).unwrap_or_else(|| {
+                // Coral and shells buried in the shelf are fossils: limestone round them.
+                if !sky
+                    && matches!(
+                        tile,
+                        WildTile::Coral | WildTile::BrainCoral | WildTile::Pearlshell
+                    )
+                    && terrain
+                        .fluid_at(TilePosition {
+                            x: position.x,
+                            y: position.y - 1,
+                        })
+                        .is_none()
+                {
+                    return rock_pixel(WildTile::Limestone, gx, gy);
+                }
                 open = true;
                 // See-through parts show the sky, the sea or the stratum's back wall.
                 if sky {

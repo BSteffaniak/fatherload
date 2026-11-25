@@ -1807,6 +1807,7 @@ impl LocalGame {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per event family")]
     fn announce_heart(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::heart::HeartEvent as E;
         let mut messages: Vec<(usize, String)> = Vec::new();
@@ -1868,6 +1869,37 @@ impl LocalGame {
                             "TIPPED OVER! Hold the rotation thrusters toward upright to right it."
                         }
                         P::Righted => "Back on the tracks.",
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
+                // The wild worlds (Wave 12 planets-a): what the world just did to the rig.
+                GameplayEventKind::Wilds {
+                    what, player_id, ..
+                } => {
+                    use fatherload_simulation::planet::wilds::WildsEvent as W;
+                    let text = match what {
+                        W::RootsSnag => "Living roots snag the tracks: drill them out of the way.",
+                        W::SporeBurst => {
+                            "The puffcap bursts: spores! (The Bio-Filter keeps them out.)"
+                        }
+                        W::LifesapMended => "Lifesap seeps into the hull's seams: hull mended.",
+                        W::Scalded => "A black smoker's heat scalds the hull. Back off!",
+                        W::PressureCreak => {
+                            "The Trench's water presses on the hull (the Pressure Hull holds it)."
+                        }
+                        W::ColdBite => {
+                            "The cold bites: the heaters burn fuel (a Cryo Hull keeps it out)."
+                        }
+                        W::IcicleCrack => "CRACK! An icicle breaks loose overhead.",
+                        W::Refroze => "Night: the tunnel freezes over with rime.",
+                        W::LandmarkRelic => "A relic of this world's landmark!",
+                        W::SecretCache => "A buried cache: this little world's secret.",
+                        W::StormRising => "A storm is rising.",
+                        W::RimeBroke => "The rime gives way!",
                     };
                     for (seat, player) in players.iter().enumerate() {
                         if player_id.is_none_or(|owner| owner == *player) {

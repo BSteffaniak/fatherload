@@ -51,12 +51,12 @@ fn digest(ground: &PlanetGround) -> u64 {
 /// Pins the wild worlds' generation: a body of each theme at two radii. Change only on
 /// purpose (every wild planet's ground moves with it).
 const GOLDEN_WILDS_DIGESTS: [(PlanetThemeId, u32, u64); 6] = [
-    (PlanetThemeId::JUNGLE, 600, 0),
-    (PlanetThemeId::JUNGLE, 3_000, 0),
-    (PlanetThemeId::OCEAN, 600, 0),
-    (PlanetThemeId::OCEAN, 3_000, 0),
-    (PlanetThemeId::GLACIER, 600, 0),
-    (PlanetThemeId::GLACIER, 3_000, 0),
+    (PlanetThemeId::JUNGLE, 600, 0x268e_3823_337f_ae5d),
+    (PlanetThemeId::JUNGLE, 3_000, 0x3bfd_52f3_998b_86cf),
+    (PlanetThemeId::OCEAN, 600, 0xb9af_1fb5_79ee_2c5a),
+    (PlanetThemeId::OCEAN, 3_000, 0xca05_26f9_ba8a_8283),
+    (PlanetThemeId::GLACIER, 600, 0x4190_2462_e411_cb2e),
+    (PlanetThemeId::GLACIER, 3_000, 0x5a6d_260d_85da_6ebb),
 ];
 
 #[test]
@@ -425,4 +425,46 @@ fn the_space_generators_tags_get_the_wild_worlds() {
         crate::place::planet_theme_of(Theme::Ice),
         PlanetThemeId::GLACIER
     );
+}
+
+#[test]
+fn the_wild_themes_appear_in_the_space_report() {
+    let text = crate::space::report::space_report(0x5EED, 2);
+    for line in [
+        "Jungle World (world): Root Tangle, Spore Caves, Heartwood Deep",
+        "Ocean Archipelago (world): Reef Shelf, Drowned Ruins, The Trench",
+        "Glacier World (world): Glacier Ice, Under-Ice Sea, Permafrost Caves",
+    ] {
+        assert!(text.contains(line), "{line}\n{text}");
+    }
+}
+
+#[test]
+#[ignore = "prints an ASCII map round each landmark"]
+fn print_landmarks() {
+    for theme in THEMES {
+        let planet = ground(theme, 3_000);
+        let centre = landmark_column(&planet);
+        let floor = planet.surface_row(i32::try_from(centre).unwrap_or(0));
+        println!("{theme:?} landmark at {centre}, floor {floor}");
+        for row in floor - 64..floor + 26 {
+            let line: String = (centre - 40..centre + 40)
+                .map(|column| match kind(&planet, column, row) {
+                    TileKind::Air => ' ',
+                    TileKind::Fluid(_) => '~',
+                    TileKind::Wild(
+                        WildTile::ElderBark | WildTile::RuinStone | WildTile::TitanBone,
+                    ) => '#',
+                    TileKind::Wild(WildTile::Canopy) => '*',
+                    TileKind::Wild(WildTile::LivingRoot) => 'r',
+                    TileKind::Wild(
+                        WildTile::ElderSeed | WildTile::RuinRelic | WildTile::TitanHeart,
+                    ) => '@',
+                    TileKind::Wild(WildTile::BlueIce) => 'b',
+                    _ => '.',
+                })
+                .collect();
+            println!("{row:5} {line}");
+        }
+    }
 }
