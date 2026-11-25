@@ -251,6 +251,10 @@ pub const fn living_dark_content(stratum: crate::descent::Stratum) -> (u8, u8) {
 /// Creatures met first there, its signature mechanic, fluids and field physics, its screen effects, landmarks
 /// met first there (set pieces always count), story logs and the workshop recipes it opens.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one block per Descent track's content"
+)]
 pub fn registry_markers() -> Vec<Vec<Novelty>> {
     use crate::descent::{LandmarkKind, Stratum};
     use std::collections::BTreeSet;
@@ -342,6 +346,10 @@ pub fn registry_markers() -> Vec<Vec<Novelty>> {
             }
             // Wave 9 strange-b: the far Strange Layers' own mechanics and set pieces.
             for name in crate::far_strange::authored_content(*stratum).2 {
+                markers.push(Novelty::new(NoveltyKind::Mechanic, *name));
+            }
+            // Wave 10 ancients-a: the buried city's own mechanics and set pieces.
+            for name in crate::ancient_city::authored_content(*stratum).2 {
                 markers.push(Novelty::new(NoveltyKind::Mechanic, *name));
             }
             for recipe in crate::workshop::RECIPES
@@ -490,13 +498,18 @@ impl StratumRegistry for RegistryStrata {
                 let (far_mechanics, far_pieces, _) = crate::far_strange::authored_content(*stratum);
                 // Wave 10 polish: the Living Dark's, which the probe never counted.
                 let (living_mechanics, living_pieces) = living_dark_content(*stratum);
+                // Wave 10 ancients-a: the buried city's too.
+                let (city_mechanics, city_pieces, _) =
+                    crate::ancient_city::authored_content(*stratum);
                 let authored_mechanics = authored_mechanics
                     .saturating_add(far_mechanics)
-                    .saturating_add(living_mechanics);
+                    .saturating_add(living_mechanics)
+                    .saturating_add(city_mechanics);
                 let set_pieces = set_pieces
                     .saturating_add(authored_pieces)
                     .saturating_add(far_pieces)
-                    .saturating_add(living_pieces);
+                    .saturating_add(living_pieces)
+                    .saturating_add(city_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(
                     !def.field.is_neutral()
