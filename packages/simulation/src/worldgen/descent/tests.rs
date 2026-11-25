@@ -588,8 +588,10 @@ fn v11_generation_is_pinned() {
 /// Layers' time pockets, echo hollows, keyed vaults, the Rewrite Hall and the alloy seal, and the
 /// story's logs 31-60 and deeper anomaly rooms kept off them; Wave 10 polish: the Underground
 /// Ocean's basins joined by passages over their water into one sea, a passage's chunk pinned
-/// too).
-const GOLDEN_V11_DIGEST: u64 = 0x3918_28b8_49df_663c;
+/// too; Wave 10 integration: Descent VII's buried city (tiles at 0x1C00), garrison forts, Seal
+/// Gate, Gatekeeper's hall and Heart Seal, Descent VIII's veins, wells, metal sea, rails and
+/// the Heart's chamber (tiles at 0x1A00), and the story's logs 61-80 kept off them all).
+const GOLDEN_V11_DIGEST: u64 = 0xab0f_567c_0490_b4c9;
 
 #[test]
 #[ignore = "debug: prints a V11 world's layout"]
