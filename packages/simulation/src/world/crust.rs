@@ -75,7 +75,8 @@ impl WorldState {
     }
 
     /// Heat units at `tile`: the stratum's own heat (plus a lava tube's) on a Deep Descent
-    /// world, the classic band heat elsewhere.
+    /// world, the classic band heat elsewhere (tests; the tick reads `crust::heat_units`).
+    #[cfg(test)]
     pub(super) fn heat_units_at(&self, tile: TilePosition) -> u8 {
         crust::heat_units(&self.terrain, tile)
     }

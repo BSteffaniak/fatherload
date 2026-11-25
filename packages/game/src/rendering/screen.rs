@@ -1059,7 +1059,13 @@ fn hud_warnings(
     };
     // Heat warns only where it cracks this rig's hull: the heat past its radiator and shielding
     // (Wave 10 polish; the tick's own reading), never where its cooling tier covers it.
-    let hot = depth > 0 && heat_bites(terrain, player);
+    // On foot the badge reads the pilot's suit where the pilot stands (Wave 11 carryover), not
+    // the parked rig's radiator.
+    let hot = depth > 0
+        && view.pilot.as_ref().map_or_else(
+            || heat_bites(terrain, player),
+            |pilot| pilot_heat_bites(terrain, pilot),
+        );
     if hot {
         warnings.push(("HEAT", &icons::HEAT));
     }
@@ -1079,6 +1085,20 @@ fn heat_bites(terrain: &fatherload_simulation::terrain::Terrain, player: &Player
         player.tile_in(crate::view_frame::frame()),
         player.radiator_level,
         player.hazard_gear.heat_shield,
+    ) > 0
+}
+
+/// Whether the heat where `pilot` stands runs past its suit's heat weave (the HEAT badge on foot).
+fn pilot_heat_bites(
+    terrain: &fatherload_simulation::terrain::Terrain,
+    pilot: &crate::render_snapshot::PilotPresentation,
+) -> bool {
+    let chest = pilot.state.height().mul_add(-0.5, pilot.y);
+    let tile = crate::view_frame::frame().tile_at(pilot.x, chest);
+    fatherload_simulation::crust::pilot_heat_danger_levels(
+        terrain,
+        tile,
+        pilot.state.gear.heat_cover(),
     ) > 0
 }
 

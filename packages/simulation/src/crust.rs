@@ -560,6 +560,23 @@ pub fn heat_danger_units(
         .map_or(excess, |cap| excess.min(cap.saturating_sub(cooling)))
 }
 
+/// Heat levels at `tile` past a pilot's suit: what burns a pilot on foot there.
+///
+/// `heat_cover` is the suit's cover ([`crate::pilot::PilotGear::heat_cover`]). The HUD's HEAT
+/// badge reads this on foot, not the parked rig's cooling (Wave 11 carryover). Above ground and
+/// in a tomb run's vault (its own climate) no band heat reaches the pilot.
+#[must_use]
+pub fn pilot_heat_danger_levels(
+    terrain: &crate::terrain::Terrain,
+    tile: TilePosition,
+    heat_cover: u8,
+) -> u8 {
+    if tile.y <= 0 || crate::worldgen::streamed::tomb_sites::in_vault(terrain.settings(), tile) {
+        return 0;
+    }
+    (heat_units(terrain, tile) / crate::protection::HEAT_UNITS_PER_LEVEL).saturating_sub(heat_cover)
+}
+
 /// Heat units of `stratum` on a Deep Descent world.
 ///
 /// The Crust is authored: cool down to the slate, then the first heat in the Basalt Columns

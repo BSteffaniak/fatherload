@@ -545,12 +545,8 @@ impl WorldState {
         // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault. The heat is
         // the rig's (`heat_units_at`): band heat bit for bit on older worlds, each stratum's own
         // on a Deep Descent world (Wave 8), in whole levels.
-        let heat = if tile.y > 0 && !self.in_run_space(tile) {
-            self.heat_units_at(tile) / crate::protection::HEAT_UNITS_PER_LEVEL
-        } else {
-            0
-        };
-        let heat_excess = heat.saturating_sub(state.gear.heat_cover());
+        let heat_excess =
+            crate::crust::pilot_heat_danger_levels(&self.terrain, tile, state.gear.heat_cover());
         let exposure = if cold_excess > 0 {
             1
         } else if heat_excess > 0 {
@@ -568,9 +564,9 @@ impl WorldState {
         if self.damage_immune() {
             return 0.0;
         }
-        (f32::from(cold_excess) * crate::pilot::COLD_DAMAGE_PER_LEVEL
-            + f32::from(heat_excess) * crate::pilot::HEAT_DAMAGE_PER_LEVEL)
-            * dt
+        let cold_rate = f32::from(cold_excess) * crate::pilot::COLD_DAMAGE_PER_LEVEL;
+        let heat_rate = f32::from(heat_excess) * crate::pilot::HEAT_DAMAGE_PER_LEVEL;
+        (cold_rate + heat_rate) * dt
     }
 
     /// The pilot actions that are not about hands (rope, recall); `None`: not one of them.

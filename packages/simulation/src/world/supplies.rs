@@ -35,8 +35,9 @@ use crate::{
     terrain::{TILE_SIZE, TilePosition},
     workshop::{
         BAIT_MILLIS, BAIT_REACH_TILES, BAIT_THROW_TILES, BALLAST_BLOW_HULL_SHARE,
-        BALLAST_BLOW_MILLIS, DeepSupply, FLARE_MILLIS, FLARE_REACH_TILES, LAMP_FILTER_MILLIS,
-        MAX_SUPPLY_LURES, MAX_SUPPLY_STACK, SupplyEffects, SupplyEvent, SupplyLure,
+        BALLAST_BLOW_MILLIS, BaitedHome, DeepSupply, FLARE_MILLIS, FLARE_REACH_TILES,
+        LAMP_FILTER_MILLIS, MAX_SUPPLY_LURES, MAX_SUPPLY_STACK, SupplyEffects, SupplyEvent,
+        SupplyLure,
     },
 };
 
@@ -251,6 +252,7 @@ impl WorldState {
         }
         self.fold_kit_time_bubbles();
         self.sweep_spent_supplies(next_tick);
+        self.glaze_unglazed_lamps(next_tick);
         self.wear_filter_glass(next_tick, output);
         self.blow_ballast(next_tick, output);
         self.throw_bait(next_tick, output);
@@ -280,6 +282,29 @@ impl WorldState {
             if let Some(player) = self.players.get_mut(&player_id) {
                 player.add_explosives(ExplosiveKind::TimeBubble, u32::from(count));
             }
+        }
+    }
+
+    /// A lamp tinted with no glass fitted (an older save's, from before lamps needed Lamp Filter
+    /// glass) gets one set's worth from now, so it wears off like any other instead of staying
+    /// tinted for ever (Wave 11 carryover migration).
+    fn glaze_unglazed_lamps(&mut self, next_tick: SimulationTick) {
+        let unglazed: Vec<PlayerId> = self
+            .far_strange
+            .filters
+            .iter()
+            .filter(|(id, filter)| {
+                **filter != LampFilter::White
+                    && !self.logistics.supply_effects.filter_sets.contains_key(*id)
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        for player_id in unglazed {
+            let until = self.after_millis(next_tick, LAMP_FILTER_MILLIS);
+            self.logistics
+                .supply_effects
+                .filter_sets
+                .insert(player_id, until);
         }
     }
 
@@ -461,8 +486,10 @@ impl WorldState {
         }
     }
 
-    /// Predators on the scent of bait give up their prey and go to it.
+    /// Predators on the scent of bait give up their prey and go to it; a predator whose bait is
+    /// spent (or out of reach) goes back to the home it had before.
     fn hold_baited_beasts(&mut self) {
+        self.release_baited_beasts();
         if self
             .logistics
             .supply_effects
@@ -482,6 +509,18 @@ impl WorldState {
             })
             .collect();
         for (id, bait) in held {
+            let known = self
+                .logistics
+                .supply_effects
+                .baited_homes
+                .iter()
+                .any(|baited| baited.entity == id);
+            if !known && let Some(home) = self.enemy_home(id) {
+                self.logistics
+                    .supply_effects
+                    .baited_homes
+                    .push(BaitedHome { entity: id, home });
+            }
             self.entities.update(id, |entity| {
                 if let EntityState::Enemy(state) = &mut entity.state {
                     state.target = None;
@@ -493,6 +532,45 @@ impl WorldState {
                 }
             });
         }
+    }
+
+    /// The home tile of enemy `id`, if it is one.
+    fn enemy_home(&self, id: crate::entity::EntityId) -> Option<(i32, i32)> {
+        self.entities
+            .get(id)
+            .and_then(|entity| match &entity.state {
+                EntityState::Enemy(state) => Some(state.home),
+                _ => None,
+            })
+    }
+
+    /// Baited predators no longer held by live bait go back to their old homes; records of
+    /// beasts that are gone are dropped.
+    fn release_baited_beasts(&mut self) {
+        if self.logistics.supply_effects.baited_homes.is_empty() {
+            return;
+        }
+        let records = std::mem::take(&mut self.logistics.supply_effects.baited_homes);
+        let mut kept = Vec::with_capacity(records.len());
+        for record in records {
+            let Some((x, y)) = self.entities.get(record.entity).and_then(|entity| {
+                matches!(entity.state, EntityState::Enemy(_))
+                    .then_some((entity.body.x, entity.body.y))
+            }) else {
+                continue;
+            };
+            if self.bait_near(x, y).is_some() {
+                kept.push(record);
+                continue;
+            }
+            self.entities.update(record.entity, |entity| {
+                if let EntityState::Enemy(state) = &mut entity.state {
+                    state.home = record.home;
+                    state.waypoint = None;
+                }
+            });
+        }
+        self.logistics.supply_effects.baited_homes = kept;
     }
 
     // --- Staging (tests, scenes) ------------------------------------------------------------

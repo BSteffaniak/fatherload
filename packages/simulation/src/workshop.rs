@@ -293,13 +293,29 @@ pub struct SupplyEffects {
     /// Rigs whose lamp has a Lamp Filter set fitted, until this tick.
     #[serde(default)]
     pub filter_sets: std::collections::BTreeMap<crate::ids::PlayerId, crate::ids::SimulationTick>,
+    /// Predators on the scent of bait, with the home each had before (Wave 11 carryover): when
+    /// the bait is spent (or the beast is out of its reach) it goes back to that home.
+    #[serde(default)]
+    pub baited_homes: Vec<BaitedHome>,
+}
+
+/// A predator drawn off by Beast Bait and the home it returns to when the bait ends.
+#[derive(Clone, Copy, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
+pub struct BaitedHome {
+    /// The predator.
+    pub entity: crate::entity::EntityId,
+    /// Its home before the bait (the enemy's home tile).
+    pub home: (i32, i32),
 }
 
 impl SupplyEffects {
     /// Whether nothing is at work.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.ballast_blows.is_empty() && self.lures.is_empty() && self.filter_sets.is_empty()
+        self.ballast_blows.is_empty()
+            && self.lures.is_empty()
+            && self.filter_sets.is_empty()
+            && self.baited_homes.is_empty()
     }
 
     /// Whether `player`'s Ballast Tank is blowing at `now`.

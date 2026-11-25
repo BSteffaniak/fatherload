@@ -217,6 +217,55 @@ fn a_covered_rig_loses_no_hull_where_the_heat_warning_stays_off() {
     );
 }
 
+/// Wave 11 carryover: on foot the HEAT reading is the pilot's suit where the pilot stands, not
+/// the parked rig's cooling: a fully cooled rig's pilot still burns in the Sunforge, and the
+/// reading (`pilot_heat_danger_levels`, the HUD badge's) agrees with the burn.
+#[test]
+fn on_foot_the_heat_warning_reads_the_pilots_suit_not_the_rigs_cooling() {
+    let mut world = deep_world(30);
+    let centre = TilePosition {
+        x: FAR,
+        y: middle_row(Stratum::TheSunforge),
+    };
+    room(&mut world, centre, (6, 3), false);
+    let cap = core_tier_cap(4);
+    let _ = pilot_at(
+        &mut world,
+        TilePosition {
+            x: centre.x + 2,
+            y: centre.y + 2,
+        },
+    );
+    {
+        let rig = world.player_mut(PLAYER).expect("rig");
+        rig.radiator_level = cap;
+        rig.hazard_gear.heat_shield = 2;
+    }
+    let (_, body, state) = world.pilot_of(PLAYER).expect("on foot");
+    let (mx, my) = state.middle(body);
+    let tile = world.frame().tile_at(mx, my);
+    let cover = state.gear.heat_cover();
+    assert_eq!(
+        crate::crust::heat_danger_units(world.terrain(), tile, cap, 2),
+        0,
+        "the rig's cooling covers it"
+    );
+    assert!(
+        crate::crust::pilot_heat_danger_levels(world.terrain(), tile, cover) > 0,
+        "a bare suit does not"
+    );
+    let before = world.pilot_of(PLAYER).expect("on foot").2.health;
+    let _ = ticks(&mut world, 30);
+    let after = world.pilot_of(PLAYER).expect("on foot").2.health;
+    assert!(after < before, "and the pilot burns: {before} -> {after}");
+    // A suit woven against it reads no danger, and does not burn.
+    let needed = crate::crust::pilot_heat_danger_levels(world.terrain(), tile, 0);
+    assert_eq!(
+        crate::crust::pilot_heat_danger_levels(world.terrain(), tile, needed),
+        0
+    );
+}
+
 // --- 6. The deep settlements build their own ---------------------------------------------------
 
 #[test]
@@ -434,6 +483,41 @@ fn beast_bait_draws_a_hunting_predator_off_the_rig() {
 }
 
 #[test]
+fn a_baited_predator_goes_back_to_its_old_home_when_the_bait_is_spent() {
+    let mut world = jungle_room(1);
+    let runner_home = |world: &WorldState| {
+        world
+            .enemies()
+            .find(|(_, state)| state.kind == EnemyKind::Fangrunner)
+            .map(|(_, state)| state.home)
+            .expect("the runner")
+    };
+    let first_home = runner_home(&world);
+    let _ = ticks(&mut world, 30 * 8);
+    let bait = world
+        .supply_effects()
+        .lures_of(DeepSupply::BeastBait)
+        .next()
+        .expect("bait lies in the world")
+        .at;
+    assert_eq!(runner_home(&world), (bait.x, bait.y), "on the scent");
+    assert_ne!(first_home, (bait.x, bait.y));
+    assert_eq!(world.supply_effects().baited_homes.len(), 1);
+    // The bait lasts 25 s from its throw; give it all of that and a little more.
+    let _ = ticks(&mut world, 30 * 26);
+    assert!(
+        world
+            .supply_effects()
+            .lures_of(DeepSupply::BeastBait)
+            .next()
+            .is_none(),
+        "the bait is spent"
+    );
+    assert_eq!(runner_home(&world), first_home, "it went home again");
+    assert!(world.supply_effects().baited_homes.is_empty());
+}
+
+#[test]
 fn time_bubble_bombs_are_the_rigs_time_bubble_charges() {
     let mut world = deep_world(30);
     world.progression.deepest_tile_reached = world.descent_layout().floor_row() - 1;
@@ -520,6 +604,38 @@ fn a_tinted_lamp_needs_lamp_filter_glass_and_a_set_wears_out() {
     let events = ticks(&mut world, 3);
     assert!(supply_events(&events).contains(&SupplyEvent::FilterWornOut));
     assert_eq!(world.lamp_filter_of(PLAYER), LampFilter::White);
+}
+
+/// Wave 11 carryover: a lamp an older save tinted before lamps needed glass has no set fitted;
+/// it is given one set's life on the next tick and then wears off like any other.
+#[test]
+fn an_older_saves_tinted_lamp_without_glass_wears_off() {
+    let mut world = deep_world(30);
+    let centre = TilePosition {
+        x: FAR,
+        y: middle_row(Stratum::PrismDesert),
+    };
+    room(&mut world, centre, (4, 3), false);
+    world.set_lamp_filter(PLAYER, LampFilter::Red);
+    assert!(world.supply_effects().filter_sets.is_empty(), "an old save");
+    let _ = ticks(&mut world, 1);
+    let until = *world
+        .supply_effects()
+        .filter_sets
+        .get(&PLAYER)
+        .expect("a set's life is given");
+    assert_eq!(world.lamp_filter_of(PLAYER), LampFilter::Red);
+    // Run the clock to the end of that set: with no glass in the kit the lamp goes white.
+    world
+        .logistics
+        .supply_effects
+        .filter_sets
+        .insert(PLAYER, world.simulation_tick().next());
+    assert!(until > world.simulation_tick());
+    let events = ticks(&mut world, 3);
+    assert!(supply_events(&events).contains(&SupplyEvent::FilterWornOut));
+    assert_eq!(world.lamp_filter_of(PLAYER), LampFilter::White);
+    assert!(world.supply_effects().filter_sets.is_empty());
 }
 
 #[test]
