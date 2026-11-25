@@ -10221,6 +10221,27 @@ troopers are gone.
   independent.
 * Boss lairs are found by scanning rings of sectors once per seed (cached in-process) the
   first time a rig is far enough out.
+* **Lairs are not shown anywhere yet** (TODO-SEAM w12-stations / w12-systems): nothing in the
+  game calls `WorldState::boss_lair`, so a player meets a boss only by flying through its lair
+  (it sits on the line from home to its system, so a direct trip there crosses it). A station
+  rumour, a bounty-board entry or a nav-chart mark should point at it.
+* **Pacing is dense far out** (a balance note for the integrator's play pass): at ring 4 a roll
+  finds a rig about every 35 s of free flight, so with the 60 s rest a system crossing in
+  cruise out there is usually interdicted once. Tune `chance_permille` / `REST_STEPS` if play
+  shows it nags.
+
+### Review fixes (w12-hostiles-review)
+
+* The rest after a fight or an escape jump now covers lairs, bounties and patrols too: the
+  escape jump (30,000 tiles) is shorter than a lair's reach (45,000), so an escaped rig used to
+  meet a fresh boss on the next place check
+  (`a_lair_meets_the_rig_and_an_escape_jump_gets_away_from_it`).
+* An encounter ending for a rig with no combat state yet no longer leaves it a default (empty)
+  deflector and missile rack (paying pirates off emptied both).
+* The game keeps the fight's close view while salvageable wrecks are near (the calm view in
+  open space is zoomed so far out that wrecks were specks under the rig), frames the seat's own
+  attackers within 1,000 px (a machine V held past the combat zoom's edge), keeps framed fights
+  clear of the location plate, and merges off-screen arrows that point the same way.
 
 ## Replication
 
