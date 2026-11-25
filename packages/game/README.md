@@ -354,3 +354,16 @@ Every other state stays near 1-3 ms of frame work on both backends (software Web
 by rasterizing, which happens outside the measured callback). Desktop `--frame-timing` agrees:
 `sky_space` 3.25 ms before and 1.69 ms after, most scenes 1-3 ms, `split_four_mixed` the
 heaviest at about 5.5 ms for four views.
+
+## Wave 11 regions (F11: seats in different places)
+
+Each split-screen seat (and each online client) sees its own place: a seat away from the home
+store gets `ViewSnapshot::place_scene` (its store's terrain, entities, frame, rigs and pilots),
+a camera in that store's frame and the HUD read over that ground. `rendering::world::place_view`
+draws it (one terrain cache per store with the game's tile art, stars fixed to the absolute
+sky, drops, pilots, rigs); it is the stub the space-render track replaces. Audio listens in the
+seat's place (a body's thin wind, free flight's suit hum; the home world's music and ambience
+belong to seats at home). `view_frame::scoped(frame)` draws and listens in another store's
+frame. Body tile changes arrive as `FrameReport::changed_store_tiles`. Save format 15 holds
+every visited body's ground (see the simulation README, "Wave 11 regions"). Scenes:
+`place_body_landed`, `place_free_flight`, `split_two_places`, `split_four_places`.
