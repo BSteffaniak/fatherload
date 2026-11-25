@@ -9273,6 +9273,33 @@ rig leave. Swimmers never leave the water (`wilds_after_move`).
   only touches tiles round the rigs.
 - Big features near a ring tile boundary deep down (halls, smokers) can be clipped at their
   hashed cell's edge; a ring tile of an inner band is still generated whole.
+- **Old saves** (integrator): a body's ground params are recomputed from the space body on
+  load (`place::planet_params_for`), so a Wave 11 save that dug into an ice-, jungle- or
+  ocean-tagged body (ground `ICE` or `BARREN` then) reloads with that body's saved tile edits
+  over the new glacier, jungle or ocean ground (and its new strata depth). Nothing crashes
+  and rigs are freed from rock, but the old tunnels land in new ground. If that matters for
+  released saves, bump the save format once for the wave and drop those bodies' edits.
+- **Ocean fluid cost**: a shaft drilled from the seabed (or into the Reef Shelf's pockets
+  and the Ruins' flooded caves) drains the planet-wide sea through the Wave 7 fluid engine
+  until the shaft is full. Measured with `wild_world_tour` (release, desktop, 30 Hz): about
+  1,000-1,500 woken cells for minutes, 1.3-4.7 ms a tick on average with ticks of 40-140 ms
+  while it drains; every other theme stays under 0.15 ms a tick on average. The step budget
+  (`FLUID_STEP_BUDGET`) bounds it, but the browser should be timed on an ocean dig; a cheaper
+  sea (a level-held sea surface, or a sleeping far sea) is engine work for a later wave.
+
+### Review fixes (Wave 12 planets-a review)
+
+- A storm's rise is told to each rig near the open surface (`WildsEvent::StormRising` now
+  carries the player, never `None`), an icicle's crack to the rig under it; nothing of a
+  body reaches a seat in another place (`a_real_glacier_body_plays_its_rules_for_its_rig_
+  only_while_the_crew_is_split`, a real ice-tagged body of the galaxy in its own store).
+- The glacier's cold (everywhere) reminds every 20 s instead of every 3 s.
+- An idle vinestalker hangs still (dormant) instead of wandering the sky.
+- The game tells a seat each wild stratum's rule the first time its rig enters it
+  (`LocalGame::announce_wild_strata`); wild water is painted with ripples, not star dots;
+  the Frozen Titan's tusk is one two-tile-thick curve.
+- `wild_world_tour` (ignored): a ten-minute bot tour of each theme that prints the strata,
+  encounters, events and tick cost.
 
 ## Replication
 
