@@ -6371,15 +6371,16 @@ The probe (default seed, 60 Hz, this branch; VII-VIII still placeholders):
 | II The Old Deep | 15.9 | 13-18 | 15 | 10 | 1 |
 | III The Living Dark | 24.1 | 22-29 | 17 | 4 | 1 |
 | IV The Drowned and Frozen | 34.4 | 31-40 | 14 | 4 | 1 |
-| V The Hollow World | 45.7 | 42-53 | 14 | 4 | 1 |
-| VI The Strange Layers | 60.6 | 53-66 | 13 | 2 | 1 |
-| VII The Ancients (placeholder) | 70.3 | 66-82 | 13 | 2 | 0 |
-| VIII The Heart (placeholder) | 78.7 | 75-90 | 12 | 2 | 2 |
+| V The Hollow World | 45.3 | 42-53 | 14 | 4 | 1 |
+| VI The Strange Layers | 60.3 | 53-66 | 13 | 2 | 1 |
+| VII The Ancients (placeholder) | 69.9 | 66-82 | 13 | 2 | 0 |
+| VIII The Heart (placeholder) | 78.3 | 75-90 | 12 | 2 | 2 |
 
-Whole run 78.7 h (60-90), 7 deaths. Every Descent I-VI stratum passes the 20-40 minute check
+(Re-run in the Wave 10 review, after the walker hit-area fix re-measured the Mycelial Mind's
+and the Sun Serpent's bot fights.) Whole run 78.3 h (60-90), 7 deaths. Every Descent I-VI stratum passes the 20-40 minute check
 (longest waits 4-16 minutes; the Upside-Down Isles and the Sunforge 16); the balance pass meets
-every target for I-VI. Gate systems: Pressure Hull 14.4 h, Bio-Filter 22.7 h, Cryo Hull 32.4 h,
-Gravity Anchor 43.3 h, Phase Drill 58.2 h. Placeholder strata over 40 minutes: the Archive of
+every target for I-VI. Gate systems: Pressure Hull 14.4 h, Bio-Filter 22.6 h, Cryo Hull 32.4 h,
+Gravity Anchor 42.9 h, Phase Drill 57.9 h. Placeholder strata over 40 minutes: the Archive of
 Stars, Sleeping Garrison and the Seal Gate (the Ancients track fills them).
 
 ### Formats, seams and still open
