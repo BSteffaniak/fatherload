@@ -431,6 +431,7 @@ mod old_deep_scenes;
 mod people_scenes;
 mod pilot_content_scenes;
 mod pilot_scenes;
+mod place_scenes;
 mod polish_scenes;
 mod second_act_scenes;
 mod side_tomb_scenes;
@@ -591,6 +592,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(drowned_scenes::DROWNED_SCENES)
         .chain(hollow_scenes::HOLLOW_SCENES)
         .chain(heart_scenes::HEART_SCENES)
+        .chain(place_scenes::PLACE_SCENES)
         .chain(expedition_scenes::EXPEDITION_SCENES)
         .chain(distortion_scenes::DISTORTION_SCENES)
         .chain(far_strange_scenes::FAR_STRANGE_SCENES)

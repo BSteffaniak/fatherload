@@ -27,6 +27,7 @@ struct Pair {
     client: ClientSession<WorldState>,
     id: ClientId,
     dt: Duration,
+    host_hashes: std::collections::BTreeMap<u64, u64>,
 }
 
 impl Pair {
@@ -51,11 +52,17 @@ impl Pair {
             client,
             id,
             dt: params.tick_duration(),
+            host_hashes: std::collections::BTreeMap::new(),
         }
     }
 
     fn step(&mut self, controls: &ControlState, actions: Vec<PlayerCommand>) {
         let output = self.host.advance(self.dt);
+        if let Some(me) = self.client.player() {
+            let hash = NetSimulation::visible_state_hash(self.host.world(), Some(me));
+            self.host_hashes
+                .insert(NetSimulation::tick(self.host.world()).0, hash);
+        }
         for (client, message) in output.outbound {
             if client == self.id {
                 let bytes = protocol::encode(&message).expect("encode");
@@ -85,10 +92,15 @@ impl Pair {
         self.client.player().expect("joined")
     }
 
+    /// Whether the client's authority hashes like the host's view for its player did at the
+    /// same tick (the host's hashes are recorded every step).
     fn hashes_agree(&self) -> bool {
+        let tick = NetSimulation::tick(self.authority());
         let me = Some(self.me());
-        NetSimulation::visible_state_hash(self.host.world(), me)
-            == NetSimulation::visible_state_hash(self.authority(), me)
+        let Some(host) = self.host_hashes.get(&tick.0) else {
+            return false;
+        };
+        *host == NetSimulation::visible_state_hash(self.authority(), me)
     }
 }
 
@@ -127,7 +139,11 @@ fn a_client_away_on_a_body_gets_that_body_and_not_home() {
     // Warp out, land and dig into the body while the host's own rig digs at home.
     pair.step(&idle, warp(body));
     pair.run(20, &idle);
-    assert_eq!(pair.host.world().place_of(me), body, "the host moved the rig");
+    assert_eq!(
+        pair.host.world().place_of(me),
+        body,
+        "the host moved the rig"
+    );
     assert_eq!(pair.authority().place_of(me), body, "the place replicated");
     pair.host.submit_local_input(PlayerId(0), dig, Vec::new());
     pair.run(240, &dig);
@@ -136,21 +152,22 @@ fn a_client_away_on_a_body_gets_that_body_and_not_home() {
 
     let host = pair.host.world();
     let relevance = pair.host.relevance_for(pair.id).expect("client");
-    assert_eq!(relevance.region, store.code(), "relevance follows the place");
+    assert_eq!(
+        relevance.region,
+        store.code(),
+        "relevance follows the place"
+    );
     let host_body = host.places().store(store).expect("the body's ground");
-    assert!(host_body.terrain().edited_chunk_count() > 0, "the client dug");
+    assert!(
+        host_body.terrain().edited_chunk_count() > 0,
+        "the client dug"
+    );
     let dug = host_body
         .terrain()
         .edited_chunks()
         .next()
         .expect("a dug chunk");
-    assert!(host.chunk_relevant(
-        &StoreChunk {
-            store,
-            chunk: dug
-        },
-        &relevance
-    ));
+    assert!(host.chunk_relevant(&StoreChunk { store, chunk: dug }, &relevance));
     let home_dug = host.terrain().edited_chunks().next().expect("home was dug");
     assert!(
         !host.chunk_relevant(&StoreChunk::home(home_dug), &relevance),
@@ -208,5 +225,8 @@ fn a_finite_relevance_keeps_players_in_other_places_out() {
     );
     let me = pair.host.world().player_pose(pair.me()).expect("pose");
     assert_eq!(me.region, StoreKey::Space.code());
-    assert_eq!(pair.authority().place_of(to_sim_player(pair.me())), Place::Space);
+    assert_eq!(
+        pair.authority().place_of(to_sim_player(pair.me())),
+        Place::Space
+    );
 }

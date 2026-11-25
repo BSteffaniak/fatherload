@@ -7381,6 +7381,200 @@ seed):
 - **The final boss is short**: the bot wins the Heart's fight faster than the Leviathan's.
   It fights with the top railgun, about 11 minutes for a player.
 
+## Wave 11 regions: many places at once (F11, `src/place.rs`, `src/world/places.rs`)
+
+Expansion plan §15 F11. Players can be in different places at once: on the home world (at any
+depth), on the Moon, on a space body, or in free flight, and the host simulates every one of
+them each tick, while places nobody is in stay frozen.
+
+### Vocabulary (`crate::place`, shared with every Wave 11 track)
+
+| Type | Meaning |
+|---|---|
+| `SpaceBodyKey { sector_x, sector_y, system, body }` | a body the space generator placed (TODO-SEAM w11-space-gen: its own id converts into this or replaces it) |
+| `BodyId::{Home, Moon, Space(SpaceBodyKey)}` | a place with its own ground |
+| `Place::{Space, OnBody(BodyId)}` (`Place::HOME`) | where a player is |
+| `StoreKey::{Home, Body(SpaceBodyKey), Space}` | the ground one pass of the tick runs over: terrain, entities, fluids. `Home` is the world's own (the home world, its sky and the Moon); `code()` is the netcode region tag (0 for home) |
+| `RegionId { store, cell_x, cell_y }` | one `SECTOR_TILES` (512)-square cell of a store; the 3 x 3 cells round every occupant are awake (`occupied_cells`, `AWAKE_CELL_RADIUS`) |
+| `BodyGenerator` | `extent()` (columns, rows, `wraps`), `surface_row`, `chunk_tiles(chunk)` (pure), `arrival_tile`, `fingerprint`. `FlatTestGenerator` (a flat dirt-and-stone strip, ±2,048 columns, 256 rows) stands in for every body; `EmptySpaceGenerator` is free flight's vacuum |
+| `generator_for(store, seed)` | the one place the planet track wires its generator in (TODO-SEAM w11-polar: `crate::planet`) |
+| `BodySource` | a store's generator with a small chunk cache; `Terrain::for_body(source, frame, edits)` builds a body's ground |
+
+**The Moon is unchanged.** It still lives in the home terrain above its fixed column and plays
+and generates exactly as before (no digest moved). `BodyId::Moon` only names it:
+`WorldState::place_of` answers `OnBody(Moon)` for a home-store actor in the Moon's footprint
+(`on_moon`); the Moon needs no store of its own.
+
+### The world
+
+`WorldState::places` (`Places`, serde default, saved, hashed only once someone has left the
+home store): the place of every player away from the home store (`players`, pair list; a
+parked player keeps its place) and the ground of every store someone has been to (`stores`:
+`BodyWorld { terrain, entities, fluids }`, created lazily on first arrival from the world seed
+and the key, kept frozen while empty). A body's terrain is a streamed `Terrain` whose chunks
+come from its generator (`Terrain::for_body`); its settings record is the legacy generator's,
+which turns every settings-driven content system (villages, sky, Moon, Descents, tombs, world
+features, caves, POIs) off on the body, and its band/heat rules are the classic ones until the
+planet track gives bodies their own (TODO-SEAM w11-polar). A body's terrain is never saved as a
+`TerrainSnapshot`: `BodyWorld` serializes its store key and seed (the generator is rebuilt from
+them), the generator's fingerprint and the terrain digest (both checked on load; a mismatch is
+an error), its frame, its edited chunks as a `PackedChunks` stream, its entities and fluids.
+
+Queries: `place_of`, `store_of`, `recorded_place`, `players_in(store)`, `store_terrain`,
+`store_entities`, `store_frame`, `store_actor_position`, `rig_world_pos`, `occupied_regions`,
+`active_store()` / `in_ground_pass()` (inside the tick: which ground is swapped in; the seam
+gravity, flight and life support read, TODO-SEAM w11-flight / w11-polar), `ticks_by_region`.
+
+**Travel: `move_to_place(player, place, WorldPos) -> Result<(), PlaceError>`** (used by flight
+and landing, TODO-SEAM w11-flight). Teleport-safe: the rig keeps cargo, fuel, hull, velocity,
+spin and every other piece of state (the whole `Player` is `reframe`d, so its ropes and hooks
+move with it); its pilot on foot goes along at the same offset (moved between entity stores);
+a drill in progress and a cart ride end. An empty destination store's floating frame first
+moves onto the arrival's sector, so the arriving rig's local position is small and exact; the
+chunks round the arrival are generated at once (`ARRIVAL_CHUNK_RADIUS`). Inside the tick the
+move is queued and applied after the tick's last pass (no pass ever sees a player half moved),
+then `GameplayEventKind::PlaceChanged { player_id, from, to }` (netcode code 740) reports it.
+It runs inside the tick on the host and in every client's prediction alike, so it works online.
+`PlaceError::{UnknownPlayer, OutsideGround}`. Test mode: `TestModeAction::WarpToPlace(place)`
+(appended) warps to a place's arrival point (a body's generator's, the Moon's top, the spawn
+point at home, the origin of free flight). `with_store_ground(store, |world| ..)` (doc-hidden,
+outside the tick) swaps a store's ground in for tools, tests and generators that put things on
+a body with the ordinary spawn helpers.
+
+### The tick (`simulate_tick` -> `simulate_places`)
+
+A world that never left the home store and does not tick by region runs its one pass exactly
+as before (`simulate_pass`; the tick counter now advances once in `simulate_tick` after the
+last pass, which is where it always was). Otherwise:
+
+1. **The world pass** over the home store: the players away are stashed out (with their drills
+   and drill timers), the inputs filtered to the players at home, every system runs (clock,
+   economy, world events, Descents, people, quests, milestones, ...).
+2. **One ground pass per other occupied store**: the store's `BodyWorld` is swapped into the
+   world (terrain, entity store, fluid schedule), only its players are in, only the ground
+   systems run (inputs and rig movement, commands, pilots, gas, heat, bombs, drilling, entity
+   phases, pickups, test-mode refills, fluids, the journal and entity waking, chunk streaming
+   with a per-tick budget, the store's own frame recentring). Building, infrastructure, rescue,
+   the Moon's counter, lifts, homes, tombs and beds are `place::home_only_command`s, ignored
+   away from home (TODO-SEAM w11-flight: rescue away from home is life support's). Discovery
+   is the home map's: a body's reveals are dropped (TODO-SEAM w11-space-render: body maps).
+   A store's frame move shifts only its own entities and players (`move_ground_frame`); the
+   world's homes, sites and lost cargo stay in the home frame.
+3. Queued moves apply; `PlaceChanged` events follow.
+
+Entity ids and revisions stay unique across stores: every pass continues the world's counters
+(the home store's `next_id` / `next_revision` are the world's), so replication keys need no
+store. Tile writes of other stores come out of the tick as `TickOutput::store_terrain_ops`
+(tagged with the store; `terrain_ops` stay the home world's). Events of every pass merge in
+order (`TickOutput::merge_pass`).
+
+**Regions: occupied ticking, sleeping frozen.** On V11+ worlds (`ticks_by_region`,
+`GeneratorVersion::has_descents`) every pass computes the awake cells round its occupants (rigs
+and pilots): entities outside them are frozen (`frozen_at`, checked in `advance_entities`):
+kept, not ticked, their revision unchanged (so they cost nothing per tick or on the wire), and
+they wake exactly where they stopped when someone comes back (expiries still fall due by tick).
+A whole store nobody is in is frozen likewise. V1-V10 worlds tick every awake entity as before
+(their golden digests, replays and hashes are untouched; V11's generation digest is unchanged:
+`GOLDEN_V11_DIGEST` stays `0xab0f_567c_0490_b4c9`). Wake and sleep are pure functions of the
+players' positions at the start of the pass, so they are deterministic.
+
+**The per-tick budget** (`place.rs`): at most `MAX_AWAKE_STORES_PER_TICK` (8) stores besides the
+home store get a pass each tick (more can only happen with more than eight players in eight
+different places; the rest wait frozen and are served first next tick, round robin in key order
+through `Places::cursor`, so nobody starves); a store's chunk streaming generates at most
+`STORE_STREAM_CHUNKS_PER_TICK` (24) chunks per tick, nearest first (`Terrain::
+stream_around_budgeted`), after the arrival chunks; inside every store only the 3 x 3 sectors
+round each occupant tick. A tick therefore costs about one ordinary tick per occupied store.
+Measured by `four_players_in_four_places_stay_within_the_tick_budget` (debug, a V11 world,
+loaded machine): one rig at home 0.21 ms/tick; four rigs in four places (town, 3,000 rows
+down, a space body and free flight) 0.51 ms/tick, worst 4.1 ms. The test asserts four places
+stay under ten single-place ticks (plus 4 ms of slack for loaded machines).
+
+### Hashing, replication and saves
+
+* `simulation_state_hash` covers the places of the live players and every store's ground
+  (fingerprint, frame, edits, digest, entities); `visible_state_hash(viewer)` covers the
+  ground of the viewer's own store only (the home terrain's digest and entity records are left
+  out while the viewer is away; the entity counters stay in). Nothing is added while the
+  places are empty: older worlds hash as before.
+* `PlayerTickState::place` (per tick): a rig's place travels with its position (which is in
+  that place's store frame); a replica records it (`set_place_record`, creating the store).
+* `LiveEntities::store_frames`: the frames of the stores the receiver holds (`live_entities_for
+  (store)`), applied before anything else of the frame (creating stores a replica has not seen).
+* Netcode (`fatherload_netcode::world`): chunks are `StoreChunk { store, chunk }`, entity records
+  `PlacedEntity { store, entity }`, other stores' tile writes `WorldOp::StoreTile(store, change)`.
+  A client sees the chunks, ops and entities of its own player's store only (a spectator sees
+  every store), at any relevance radius; ops of other stores are skipped and their chunks marked
+  stale, so coming back refreshes exactly what was missed. Poses carry `region` (`StoreKey::code`)
+  and the store's frame origin; a place change changes the pose mode (the client snaps); a finite
+  relevance never counts a player in another region as near. `region_origin(world, region)`
+  rebases a pose onto its own place's frame. Keyframes carry every store (they are full
+  snapshots); the first relevance frame then drops what the client may not hold.
+* Saves (game format 15): `places` with every body's packed edits; formats 1-14 load into the
+  home world (`Places::default`).
+* Compression: a body's edits use the same in-house `PackedChunks` stream as the home terrain
+  (runs of equal tiles, varints, base64 in JSON): a dug shaft is one run. No compression crate
+  was added: none is in the workspace, the edits are already run-length packed (a lightly dug
+  body is a few dozen bytes), and the browser build gains nothing from a second codec.
+
+### Game side
+
+`ViewSnapshot::{place, place_scene}`: a seat away from the home store gets a `PlaceScene` (its
+store's terrain, entities, frame, rigs and pilots) and a camera in that store's frame; the home
+world's readings (fields, wells, Hollow and Heart views, doors, counters, markers) are cleared
+for it (`away_view`). `RenderSnapshot::players` holds the home store's rigs only.
+`rendering::world::place_view` is the stub hook the space-render track fills (TODO-SEAM
+w11-space-render): stars fixed to the absolute sky, a thin-air glow over a body's horizon, the
+body's ground drawn with the game's own tile art (one terrain cache per store, lit round its
+rigs), drops, pilots and rigs, then the seat's usual HUD. `view_frame::scoped(frame)` draws and
+listens in a place's frame. Audio: an away seat hears its rig and its place (a body's low wind,
+free flight's suit hum; the home world's ambience and music are not its own); `vacuum` follows
+the place. Changed body tiles reach the caches as `FrameReport::changed_store_tiles` (host:
+from `WorldOp::StoreTile`; client: digest-checked store edits). Scenes: `place_body_landed`,
+`place_free_flight`, `split_two_places`, `split_four_places`.
+
+### Tests
+
+* `world::places_tests`: two players in two places both play each tick (a body dug, nothing
+  leaking into home); an empty place freezes and wakes where it stopped, deterministically
+  (two runs agree bit for bit); far home regions freeze on V11 (and never on V10); four
+  players in four places within the budget; more stores than the budget take turns; a world
+  with two bodies (edits, a drop) round-trips JSON and postcard to the same hash and plays on
+  identically; a tampered body is refused; moving keeps cargo and momentum, refuses unknown
+  players and places off the ground, and the test-mode warp goes through the tick; the Moon is
+  a home-store body; entity ids stay unique across stores; a world that never left home hashes
+  as before. `place::tests`: places map to stores, the flat generator is pure and seeded,
+  awake cells.
+* `netcode tests::world_places`: a client warps to a body, digs it while the host digs at home:
+  the body's ground reaches it exactly, the home ops are withheld, only the body's entities are
+  its, its visible hash matches the host's at every compared tick, and coming home refreshes the
+  skipped chunks; a finite relevance keeps players in other places out.
+* Game: `every_supported_save_format_loads_plays_and_round_trips` covers formats 1-15 (older
+  ones load with nobody away; a format 15 world with a dug body plays and round-trips); the
+  place scenes build headlessly (`every_scene_builds_headlessly`).
+
+### Seams and known limits
+
+* TODO-SEAM w11-polar: `generator_for` returns the flat test ground for every body; the
+  polar/planet track's generator replaces it (and decides how a wrapping strip's seam works:
+  `BodyExtent::wraps` is recorded, the terrain does not wrap yet). Bodies' heat and bands are
+  the classic ones; radial gravity reads `active_store()`.
+* TODO-SEAM w11-flight: Star Drive flight, landing and take-off call `move_to_place`; free
+  flight's physics run in the space store's ground pass (today it has ordinary gravity over
+  vacuum, as nothing replaces it yet); rescue and life support away from home.
+* TODO-SEAM w11-space-gen: `SpaceBodyKey` unifies with the space model's body id.
+* TODO-SEAM w11-space-render: `place_view` (space, polar planets, the flight HUD, camera roll
+  away from home), body maps and discovery, place music.
+* One frame per store, anchored on its first occupant: two players far apart in the same store
+  (free flight is one store) keep `f32` precision relative to that anchor, as F7 documented
+  for the home world. Splitting free flight into proximity clusters is a follow-up.
+* A parked player's rig position stays in its store's frame as parked; if the store's frame
+  moves while it is parked, its position is off by that move (rare: an empty store does not
+  move its frame).
+* Infrastructure, scanner markers and collapse warnings are world lists (home only; building
+  away from home is refused).
+* `PROTOCOL_VERSION` 19, save format 15 (one bump each).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

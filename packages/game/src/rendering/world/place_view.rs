@@ -176,7 +176,11 @@ fn draw_backdrop(draw: &mut impl RaylibDraw, scene: &PlaceScene<'_>, visible: Re
             }
             let x = (column as f32).mul_add(cell, ((hash >> 8) % 96) as f32 * 2.0);
             let y = (row as f32).mul_add(cell, ((hash >> 16) % 96) as f32 * 2.0);
-            let size = if (hash >> 24).trailing_zeros() >= 3 { 4.0 } else { 2.0 };
+            let size = if (hash >> 24).trailing_zeros() >= 3 {
+                4.0
+            } else {
+                2.0
+            };
             let colour = match hash >> 28 & 3 {
                 0 => palette::CREAM,
                 1 => palette::ICE,
