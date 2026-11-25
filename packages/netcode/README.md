@@ -44,6 +44,14 @@ per-tick live section (`S::Entities`, which carries the world's frame) **before*
 and entity records, so a frame move shifts the replica first. `PROTOCOL_VERSION` 15 (16 since
 Wave 8: the shared `SectionKey::Expedition` section and the story events 490-493).
 
+**Space flight (wave 11 flight).** A rig away in space keeps its space position in its
+per-tick state (`PlayerTickState::flight`, exact `WorldPos` space coordinates), so it is
+predicted and reconciled like the pose. Its pose is the shared park spot over the Moon with
+`SPACE_POSE_MODE`, so every flyer stays relevant to every other flyer (they see each other fly
+and streak through a warp), and leaving or coming home snaps instead of smoothing. Waypoints,
+systems found and scanner pings travel in the shared `SectionKey::Flight` section; flight
+events are 800-819. `PROTOCOL_VERSION` 19. Test: `world_rigs_fly_in_space_predict_and_converge`.
+
 Each frame is built for one client from its `Relevance` (its player, position and
 `relevance_radius`, infinite by default):
 
