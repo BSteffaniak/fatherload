@@ -454,19 +454,20 @@ fn tracked_section(quest: &ActiveQuest, ui: &UiFrame<'_, '_>) -> Section {
     )
 }
 
-/// The tracked quest's next objective, under the HUD's warning badges.
+/// The tracked quest's next objective, under the HUD's warning badges. Returns the row below
+/// it (`y` when no quest is tracked), where the alien chapters' tracker goes (Wave 12).
 pub(super) fn draw_quest_tracker(
     draw: &mut RaylibDrawHandle<'_>,
     seat: &SeatUi,
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     (x, y, width): (i32, i32, i32),
-) {
+) -> i32 {
     let Some(quest) = tracked_quest(&view.quests, seat.tracked_quest) else {
-        return;
+        return y;
     };
     let Some(def) = quest.def() else {
-        return;
+        return y;
     };
     let line = if quest.ready {
         format!("Turn in to {}", def.giver.name())
@@ -521,6 +522,7 @@ pub(super) fn draw_quest_tracker(
             MIST,
         );
     }
+    y + height + 2
 }
 
 /// Colour of a marker on the maps.

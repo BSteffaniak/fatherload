@@ -15,7 +15,7 @@ use fatherload_simulation::{
     alien::{
         AlienSpecies, AlienState, AlienTown,
         atlas::first_home,
-        state::{AlienHome, SpeciesLog},
+        state::{ActiveChapter, AlienHome, SpeciesLog},
         town::{self, AlienBuildingKind, towns_of},
     },
     entity::{EntityKind, EntityState},
@@ -107,7 +107,61 @@ pub(super) static ALIEN_SCENES: &[Scene] = &[
         summary: "The Siphra town's monument plinth crowned: the memory pylon's heart a chapter raised, standing for everyone",
         setup: |stage| home_and_monument(stage, true),
     },
+    Scene {
+        name: "alien_chapter_tracker",
+        summary: "A Tokkari chapter under way: the HUD tracker spells out the elder's request in plain words, and an escort's traveller rides along",
+        setup: chapter_tracker,
+    },
 ];
+
+/// Two chapters under way (the Tokkari's explore, the Vessi's escort): the HUD's tracker.
+fn chapter_tracker(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        flight_scenes::space_world(world);
+        let seed = world.world_seed();
+        let player = seats[0].player;
+        let Some((id, towns)) = first_towns(seed, AlienSpecies::Tokkari) else {
+            return;
+        };
+        let found = &towns[0];
+        set_down_at(
+            world,
+            player,
+            id,
+            found.site.centre - 20,
+            found.ground_row(),
+        );
+        with_log(world, player, AlienSpecies::Tokkari, |log, _| {
+            log.understanding = 240;
+            log.met_millis = Some(1);
+            log.chapters_done = 1;
+            log.active = Some(ActiveChapter {
+                chapter: 1,
+                town: found.id,
+                body: id,
+                ..ActiveChapter::default()
+            });
+        });
+        if let Some((vessi_id, vessi)) = first_towns(seed, AlienSpecies::Vessi)
+            && let (Some(from), Some(to)) = (vessi.first(), vessi.get(1))
+        {
+            with_log(world, player, AlienSpecies::Vessi, |log, _| {
+                log.understanding = 380;
+                log.met_millis = Some(1);
+                log.chapters_done = 2;
+                log.active = Some(ActiveChapter {
+                    chapter: 2,
+                    town: from.id,
+                    body: vessi_id,
+                    passenger: from.population.characters.last().map(|c| c.id),
+                    destination: Some(to.id),
+                    ..ActiveChapter::default()
+                });
+            });
+        }
+    });
+    stage.settle(60);
+}
 
 /// The first home of `species` in the scene world and its towns.
 fn first_towns(

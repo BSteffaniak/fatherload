@@ -229,11 +229,12 @@ pub(super) fn draw_alien_talk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         } else {
             "under way"
         };
-        sections.push(Section::new(
-            "Their chapter",
-            GOLD,
-            vec![SectionItem::stat(def.title, state, GOLD)],
-        ));
+        let mut chapter_items = vec![SectionItem::stat(def.title, state, GOLD)];
+        // The goal in plain words (the player's own notes), whatever they read of the elder.
+        if let Some((_, objective)) = chapter_objective(world, player, species) {
+            chapter_items.push(SectionItem::text(objective));
+        }
+        sections.push(Section::new("Their chapter", GOLD, chapter_items));
     }
     let title = match page {
         AlienPage::Talk => "Say",
@@ -425,4 +426,112 @@ fn draw_portrait(
         seconds,
     );
     Some(y + card_h)
+}
+
+/// What `player`'s running chapter of `species` asks, as their own notes in plain words (the
+/// elder's request reads only as well as the player knows the tongue, so the goal is written
+/// down plainly): `(title, objective)`.
+#[must_use]
+pub fn chapter_objective(
+    world: &fatherload_simulation::WorldState,
+    player: fatherload_simulation::PlayerId,
+    species: AlienSpecies,
+) -> Option<(&'static str, String)> {
+    use fatherload_simulation::alien::{quest::ChapterGoal, town::town_by_id};
+    let active = world.aliens().log(player, species).active?;
+    let def = chapter(species, active.chapter)?;
+    let town = town_by_id(active.town).map_or_else(|| "the town".to_owned(), |t| t.name.clone());
+    let have = |mineral: fatherload_simulation::terrain::MineralKind| {
+        world
+            .player(player)
+            .map_or(0, |rig| rig.cargo_bay.count(mineral))
+    };
+    let line = if active.reached {
+        format!("Done: tell the elder of {town}")
+    } else {
+        match def.goal {
+            ChapterGoal::Deliver { mineral, count } => format!(
+                "Bring {count} {} to the elder of {town} ({}/{count})",
+                mineral.name(),
+                have(mineral).min(count)
+            ),
+            ChapterGoal::ReachDepth { rows } => format!("Dig {rows} rows down under {town}"),
+            ChapterGoal::ReachFarSide => {
+                format!("Stand on the far side of the world from {town}")
+            }
+            ChapterGoal::Escort => {
+                let traveller = active
+                    .passenger
+                    .and_then(|id| {
+                        town_by_id(id.village)?
+                            .population
+                            .characters
+                            .get(usize::from(id.index))
+                            .map(|character| character.name.short().to_owned())
+                    })
+                    .unwrap_or_else(|| "the traveller".to_owned());
+                let to = active.destination.and_then(town_by_id).map_or_else(
+                    || "the far side of the world".to_owned(),
+                    |t| t.name.clone(),
+                );
+                format!("Carry {traveller} to {to}")
+            }
+            ChapterGoal::Raise {
+                mineral,
+                count,
+                credits,
+            } => format!(
+                "Bring {count} {} ({}/{count}) and {credits} cr to the elder of {town}",
+                mineral.name(),
+                have(mineral).min(count)
+            ),
+            ChapterGoal::Trail => format!("Listen to the elder of {town}"),
+        }
+    };
+    Some((def.title, line))
+}
+
+/// The seat's running alien chapters (Wave 12), under the quest tracker: each title in the
+/// species' ink and its goal in plain words.
+pub(super) fn draw_chapter_tracker(
+    draw: &mut RaylibDrawHandle<'_>,
+    world: &fatherload_simulation::WorldState,
+    player: fatherload_simulation::PlayerId,
+    (x, y, width): (i32, i32, i32),
+) {
+    let mut top = y;
+    for species in AlienSpecies::ALL {
+        let Some((title, line)) = chapter_objective(world, player, species) else {
+            continue;
+        };
+        let inner = width - 12;
+        let mut lines = ui_kit::wrap(&line, inner, TextStyle::Body);
+        lines.truncate(2);
+        let height = 18 + i32::try_from(lines.len()).unwrap_or(1) * TextStyle::Body.line_height();
+        ui_kit::panel(
+            draw,
+            Rectangle::new(x as f32, top as f32, width as f32, height as f32),
+            PanelStyle::Standard,
+        );
+        ui_kit::icon(draw, &menu_icons::CONTRACT, x + 4, top + 4);
+        ui_kit::text(
+            draw,
+            &ui_kit::truncate(title, inner - 14, TextStyle::Bold),
+            x + 18,
+            top + 5,
+            TextStyle::Bold,
+            ink(species),
+        );
+        for (index, text) in lines.iter().enumerate() {
+            ui_kit::text(
+                draw,
+                text,
+                x + 6,
+                top + 16 + i32::try_from(index).unwrap_or(0) * TextStyle::Body.line_height(),
+                TextStyle::Body,
+                MIST,
+            );
+        }
+        top += height + 2;
+    }
 }

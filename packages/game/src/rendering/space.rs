@@ -425,7 +425,7 @@ impl SpaceRenderer {
                 polar.draw(ground, &camera, viewport, sun, blend, view.seconds);
             }
             if blend > 0.5 {
-                polar::PolarGround::draw_things(draw, ground, &camera, sun, view.seconds);
+                polar::PolarGround::draw_things(draw, ground, &camera, viewport, sun, view.seconds);
             }
         }
         motion::draw_motion(draw, view, &projection);

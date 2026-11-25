@@ -582,12 +582,25 @@ impl PolarGround {
         draw: &mut impl RaylibDraw,
         ground: &GroundView<'_>,
         camera: &RingCamera,
+        viewport: Rectangle,
         sun: f32,
         seconds: f32,
     ) {
         let geometry = ground.strip.geometry();
+        // Nothing off the view is drawn: a thing whose feet are farther outside `viewport`
+        // than the largest thing stands (an alien town's building, Wave 12: a dozen tiles)
+        // cannot show. A settled body's towns hold dozens of buildings of hundreds of
+        // rectangles each, most of them round the far side of the ring.
+        let margin = 16.0 * camera.px_per_tile;
         for thing in ground.things {
             let ((x, y), turn) = camera.place(geometry, thing.column, thing.row);
+            if x < viewport.x - margin
+                || x > viewport.x + viewport.width + margin
+                || y < viewport.y - margin
+                || y > viewport.y + viewport.height + margin
+            {
+                continue;
+            }
             let lamp_reach = lamp_radius(camera.px_per_tile);
             let lamp = 1.0
                 - smoothstep(

@@ -449,12 +449,19 @@ fn draw_view_hud_rest(
         badge_x += ui_kit::badge(draw, badge_x, badge_y, sprite, warning) + 2;
         warned = true;
     }
-    quests::draw_quest_tracker(
+    let below = quests::draw_quest_tracker(
         draw,
         shell.seat(view.seat_index),
         snapshot,
         view,
         (left, badge_y + if warned { 16 } else { 0 }, width),
+    );
+    // The friendly aliens' running chapters (Wave 12), their goals in plain words.
+    super::alien_hud::draw_chapter_tracker(
+        draw,
+        snapshot.world,
+        view.player_id,
+        (left, below, width),
     );
 
     if shell.show_details {
