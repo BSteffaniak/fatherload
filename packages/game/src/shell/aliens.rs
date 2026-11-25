@@ -214,7 +214,8 @@ pub fn row_text(
         ),
         AlienRow::Homes => ("Homes for sale".to_owned(), String::new()),
         AlienRow::Gift => ("Give a gift".to_owned(), "from your cargo bay".to_owned()),
-        AlienRow::Goodbye => (species.def().farewell.1.to_owned(), "goodbye".to_owned()),
+        // Their farewell in their own tongue (the meaning ran past the row's width).
+        AlienRow::Goodbye => (species.def().farewell.0.to_owned(), "goodbye".to_owned()),
         AlienRow::Sell(ore, count) => {
             let unit = world.alien_ore_price(player_id, species, ore).unwrap_or(0);
             (
