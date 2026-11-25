@@ -220,7 +220,7 @@ Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes
 | Dawn / dusk themes | the world clock turning to dawn or dusk | `dawn_theme` / `dusk_theme` once, centred, if any seat is out in the open (not in a tomb run or in vacuum), 0.6 s after the turn. It yields to the music the moment already has: no theme within 4 s of `dawn_relief` (the dawn after a night with monsters), `night_skip` or `night_fall`, so pieces never stack. Not on the first frame or after a pause. |
 | Under fluid | each seat whose actor (rig or pilot) is in a fluid cell at least half full (wave 7, F9) | `loop_bubbles` at 0.7, panned with the seat; silent the moment it surfaces. A breach plays `fluid_rush` where it opened, reactions `steam_hiss` or `acid_fizz` where they happened, and a rig going under `rig_splash` (`splash` coming up), from the player. |
 
-Seat loops are keyed per seat in blocks of 32 sources (`SEAT_LOOP_SLOTS`), one per continuous
+Seat loops are keyed per seat in blocks of 128 sources (`SEAT_LOOP_SLOTS`), one per continuous
 sound, so a seat's beds never collide with the next seat's.
 
 Spatialization: interface sounds are centred. A local seat's own sounds pan toward its
