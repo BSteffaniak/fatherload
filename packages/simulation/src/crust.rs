@@ -524,6 +524,13 @@ pub fn lava_tube_at(settings: &WorldSettings, x: i32, y: i32) -> bool {
 /// elsewhere: what the rig's heat damage, a pilot's exposure and the game's heat warnings read.
 #[must_use]
 pub fn heat_units(terrain: &crate::terrain::Terrain, tile: TilePosition) -> u8 {
+    // A frontier world's zones have their own heat (Wave 12 planets-b).
+    if let Some(units) = terrain
+        .planet_ground()
+        .and_then(|ground| crate::frontier::rules::heat_units(ground, tile))
+    {
+        return units;
+    }
     let settings = terrain.settings();
     if !crust_rules(settings) {
         return crate::protection::band_heat_units(terrain.band_at(tile));

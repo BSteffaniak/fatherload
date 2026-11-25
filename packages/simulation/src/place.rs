@@ -519,10 +519,11 @@ pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme
         Theme::Ice => PlanetThemeId::GLACIER,
         Theme::Jungle => PlanetThemeId::JUNGLE,
         Theme::OceanArchipelago => PlanetThemeId::OCEAN,
-        Theme::DesertDunes
-        | Theme::Volcanic
-        | Theme::Crystal
-        | Theme::Fungal
+        // Wave 12 planets-b: the frontier worlds.
+        Theme::DesertDunes => crate::frontier::DUNE_WORLD,
+        Theme::Volcanic => crate::frontier::VOLCANIC_WORLD,
+        Theme::Crystal => crate::frontier::CRYSTAL_WORLD,
+        Theme::Fungal
         | Theme::MachineWorld
         | Theme::GasGiant
         | Theme::TidallyLocked

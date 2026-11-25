@@ -562,6 +562,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::City(_) => 'y',
         TileKind::Core(_) => 'K',
         TileKind::Wild(_) => 'W',
+        TileKind::Frontier(_) => 'Z',
     }
 }
 

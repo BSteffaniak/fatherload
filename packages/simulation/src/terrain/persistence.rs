@@ -972,6 +972,12 @@ impl Tile {
                 Some(tile) => TileKind::Wild(tile),
                 None => return None,
             },
+            0x2400..=0x27FF => match crate::frontier::FrontierTile::from_code(
+                kind_code - crate::frontier::FRONTIER_TILE_CODE_BASE,
+            ) {
+                Some(tile) => TileKind::Frontier(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

@@ -46,6 +46,7 @@ mod deep_art;
 mod distortion_art;
 mod drowned_art;
 mod far_art;
+mod frontier_art;
 mod garrison_art;
 mod heart_art;
 mod hollow_art;
@@ -61,6 +62,8 @@ pub use city_art::city_color;
 pub use crust_art::{crust_color, crust_glow};
 pub use deep_art::deep_color;
 pub use distortion_art::warped_color;
+#[allow(unused_imports, reason = "the frontier world renderer's halos")]
+pub use frontier_art::{frontier_color, frontier_glow};
 pub use heart_art::{core_color, core_glow};
 pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
@@ -437,6 +440,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::City(tile) => return city_art::city_color(tile),
         TileKind::Core(tile) => return heart_art::core_color(tile),
         TileKind::Wild(tile) => return wilds_art::wild_color(tile),
+        TileKind::Frontier(tile) => return frontier_art::frontier_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -625,6 +629,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::City(_)
         | TileKind::Core(_) => base_pixel(host, strata, host, x, y),
         TileKind::Wild(tile) => wilds_art::rock_pixel(tile, x, y),
+        TileKind::Frontier(tile) => frontier_art::base_pixel(tile, x, y),
     }
 }
 
@@ -814,9 +819,16 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     }
     // Ore and artifacts in a biome's ground sit in that ground (mountain ore in granite).
     // On a wild world (Wave 12 planets-a) ore sits in the stratum's own rock.
-    let host = wilds_art::host_rock(terrain, position)
+    let mut host = wilds_art::host_rock(terrain, position)
         .or(ground)
         .unwrap_or_else(|| host_material(band));
+    // A frontier world's tunnels show its stratum's wall and its ore sits in its stratum's
+    // rock (Wave 12 planets-b).
+    let frontier = frontier_art::frontier_place(terrain, position);
+    if let Some((style, zone)) = frontier {
+        strata.back = frontier_art::back_pair(style, zone);
+        host = frontier_art::host(style, zone);
+    }
     let mut canvas = TileCanvas {
         pixels: [TRANSPARENT; TILE_ART_USIZE * TILE_ART_USIZE],
         // Absolute art pixels key the texture noise; far columns wrap instead of overflowing.
@@ -839,6 +851,9 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         }
         if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
+        } else if let Some((style, zone)) = frontier {
+            // A frontier world's tunnels, caves, ruins and tubes (Wave 12 planets-b).
+            frontier_art::paint_back(&mut canvas, style, zone, (up, left, right));
         } else if crust_art::paint_crust_air(&mut canvas, terrain, position, &strata) {
             // The Crust's mine galleries and lava tubes (Wave 8).
         } else if hollow_art::paint_hollow_air(&mut canvas, terrain, position, up, left, right) {
@@ -976,6 +991,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     // The wild worlds' materials (Wave 12 planets-a).
     if let TileKind::Wild(tile) = kind {
         wilds_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+    // The frontier worlds' materials (Wave 12 planets-b).
+    if let TileKind::Frontier(tile) = kind {
+        frontier_art::paint(
             &mut canvas,
             terrain,
             position,
@@ -1217,6 +1249,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         TileKind::Foundation => FOUNDATION[3],
         TileKind::Bedrock => BEDROCK[3],
         TileKind::Lava => index_of(CREAM),
+        TileKind::Frontier(tile) => frontier_art::lip_and_shade(tile).0,
         _ => strata.hard[3],
     };
     let shade = match material {
@@ -1227,6 +1260,7 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         TileKind::Foundation => FOUNDATION[0],
         TileKind::Bedrock => BEDROCK[0],
         TileKind::Lava => index_of(RED),
+        TileKind::Frontier(tile) => frontier_art::lip_and_shade(tile).1,
         _ => strata.hard[0],
     };
     if up == Cell::Sky && kind != TileKind::Foundation {
@@ -1487,6 +1521,7 @@ const fn grows_grass(material: TileKind) -> bool {
     !matches!(
         material,
         TileKind::Surface(_)
+            | TileKind::Frontier(_)
             | TileKind::Lunar(_)
             | TileKind::Deep(_)
             | TileKind::Hollow(_)

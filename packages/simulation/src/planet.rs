@@ -304,10 +304,15 @@ impl PlanetGround {
         a + (b - a) * s / 1_024
     }
 
-    /// Hill height (rows above the datum) at strip column `column`: the theme's surface
-    /// shaper ([`hooks::PlanetThemeHooks::surface_rows`]), kept within the hill limit.
+    /// Hill height (rows above the datum) at strip column `column`: a frontier world's own
+    /// surface (Wave 12 planets-b), or the theme's surface shaper
+    /// ([`hooks::PlanetThemeHooks::surface_rows`]), kept within the hill limit.
     #[must_use]
     pub fn hill(&self, column: i64) -> i32 {
+        // A frontier world's surface has a shape of its own (Wave 12 planets-b).
+        if let Some(style) = crate::frontier::style_of(self.params.theme) {
+            return crate::frontier::generate::surface_height(self, style, column);
+        }
         self.hooks()
             .surface_rows(self, column)
             .clamp(-MAX_HILL_ROWS, self.max_hill_rows())
@@ -329,13 +334,25 @@ impl PlanetGround {
     #[allow(clippy::cast_possible_truncation, reason = "bounded depths")]
     fn stratum_end(&self, index: usize, column: i64) -> i32 {
         let strata = self.hooks().strata();
-        let depth = i64::from(self.core_chamber_top());
+        let depth = i64::from(self.strata_depth());
         let share: i64 = strata[..=index]
             .iter()
             .map(|stratum| i64::from(stratum.share_permille))
             .sum();
         let ragged = self.periodic_noise(10 + index as u64, column, HILL_FINE) * 6 / 1_024 - 3;
         (depth * share / 1_000 + ragged) as i32
+    }
+
+    /// Rows the theme's strata shares divide: down to the core chamber, or a frontier world's
+    /// authored depth ([`crate::frontier::strata_rows`]; its last stratum runs on below it to
+    /// the core chamber).
+    #[must_use]
+    pub fn strata_depth(&self) -> i32 {
+        match crate::frontier::style_of(self.params.theme) {
+            Some(_) => crate::frontier::strata_rows(self.grid.radius())
+                .min(self.core_chamber_top() - CORE_CHAMBER_ROWS),
+            None => self.core_chamber_top(),
+        }
     }
 
     /// The stratum (index into the theme's strata) at strip tile `(column, row)`.
@@ -391,6 +408,11 @@ impl PlanetGround {
                 (column, row, half_width, half_height)
             })
             .collect()
+    }
+
+    /// Whether strip tile `(column, row)` lies in one of `caves` (see [`Self::in_cave`]).
+    pub(crate) fn in_cave_at(&self, caves: &[(i64, i32, i64, i32)], column: i64, row: i32) -> bool {
+        row > 4 && self.in_cave(caves, column, row)
     }
 
     /// Whether strip tile `(column, row)` lies in a cave (its physical shape: an inner ring's
@@ -455,6 +477,14 @@ impl PlanetGround {
         let first_column = i32::try_from(first).unwrap_or(0);
         if let Some(kind) = hooks.feature_tile(self, first_column, row, row - surface) {
             return Self::tile_of_kind(kind);
+        }
+        // A frontier world's own features (Wave 12 planets-b): oases, lava seas, spires,
+        // landmarks, ruins, tubes, geodes, light wells.
+        if let Some(style) = crate::frontier::style_of(self.params.theme)
+            && let Some(tile) =
+                crate::frontier::generate::feature_tile(self, style, caves, first, row, surface)
+        {
+            return tile;
         }
         if row < surface {
             return air;

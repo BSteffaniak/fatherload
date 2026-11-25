@@ -115,6 +115,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Core(tile) => tile.glow() as f32 / 255.0 * 3.0,
         // The wild worlds' lifesap, glyphs, smokers and relics (Wave 12 planets-a).
         TileKind::Wild(tile) => tile.glow() as f32 / 255.0 * 3.0,
+        // The frontier worlds' magma, crystal, glyphs, lenses and receptors (Wave 12).
+        TileKind::Frontier(tile) => tile.glow() as f32 / 255.0 * 3.0,
         _ => 0.0,
     }
 }

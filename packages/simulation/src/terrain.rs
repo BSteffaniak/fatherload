@@ -358,6 +358,10 @@ pub enum TileKind {
     /// heartwood and lifesap; sea sand, reef, ruins and smokers; glacier and sea ice, rime,
     /// permafrost, icicles and the landmarks' relics.
     Wild(crate::planet::wilds::WildTile),
+    /// A tile of a frontier world's ground (Wave 12 planets-b: the desert dunes, volcanic and
+    /// crystal planets; see [`crate::frontier`]): dune sand, ruins, glass, ash, basalt,
+    /// obsidian, magma, crystal, prisms and the light wells' lenses, receptors and seals.
+    Frontier(crate::frontier::FrontierTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -472,6 +476,7 @@ impl TileKind {
             Self::City(tile) => tile.name(),
             Self::Core(tile) => tile.name(),
             Self::Wild(tile) => tile.name(),
+            Self::Frontier(tile) => tile.name(),
         }
     }
 
@@ -573,6 +578,7 @@ impl Tile {
             TileKind::City(tile) => crate::ancient_city::CITY_TILE_CODE_BASE | tile.code(),
             TileKind::Core(tile) => crate::heart::CORE_TILE_CODE_BASE | tile.code(),
             TileKind::Wild(tile) => crate::planet::wilds::WILD_TILE_CODE_BASE | tile.code(),
+            TileKind::Frontier(tile) => crate::frontier::FRONTIER_TILE_CODE_BASE + tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -2287,6 +2293,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Hollow(tile) => tile.indestructible(),
         // The Heart's shell and body, the wells' points, the pylons and the cable (Wave 10).
         TileKind::Core(tile) => tile.indestructible(),
+        // A frontier world's light wells: the lens, receptors and vault seals (Wave 12).
+        TileKind::Frontier(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
         // ... and Descent VII part B's fixtures (Wave 10).
         TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
@@ -2351,6 +2359,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::City(tile) => tile.hardness(),
         TileKind::Core(tile) => tile.hardness(),
         TileKind::Wild(tile) => tile.hardness(),
+        TileKind::Frontier(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2399,6 +2408,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::City(tile) => tile.durability(),
         TileKind::Core(tile) => tile.durability(),
         TileKind::Wild(tile) => tile.durability(),
+        TileKind::Frontier(tile) => tile.durability(),
     }
 }
 

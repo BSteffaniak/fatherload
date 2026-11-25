@@ -39,6 +39,7 @@ pub mod far_strange;
 pub mod field;
 pub mod flight;
 pub mod fluid;
+pub mod frontier;
 pub mod garrison;
 pub mod hash;
 pub mod hazard;

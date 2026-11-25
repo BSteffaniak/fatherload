@@ -169,7 +169,7 @@ const ICE_STRATA: [PlanetStratum; 2] = [
 ];
 
 /// Every theme, by id (append only).
-pub const PLANET_THEMES: [PlanetTheme; 6] = [
+pub const PLANET_THEMES: [PlanetTheme; 9] = [
     PlanetTheme {
         id: PlanetThemeId::BARREN,
         name: "Barren Moon",
@@ -228,6 +228,10 @@ pub const PLANET_THEMES: [PlanetTheme; 6] = [
     crate::planet::wilds::jungle::JUNGLE_THEME,
     crate::planet::wilds::ocean::OCEAN_THEME,
     crate::planet::wilds::glacier::GLACIER_THEME,
+    // Wave 12 planets-b: the frontier worlds (`crate::frontier`).
+    crate::frontier::desert::THEME,
+    crate::frontier::volcanic::THEME,
+    crate::frontier::crystal::THEME,
 ];
 
 /// The theme with id `id` (an unknown id, from a newer build, reads as the first theme).

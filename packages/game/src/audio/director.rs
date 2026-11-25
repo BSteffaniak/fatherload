@@ -178,6 +178,34 @@ impl Material {
                 }
                 _ => Self::Hard,
             },
+            // The frontier worlds (Wave 12 planets-b): sand and ash give, glass, crystal and
+            // the prizes ring, the rest grinds.
+            TileKind::Frontier(tile) => {
+                use fatherload_simulation::frontier::FrontierTile as F;
+                match tile {
+                    F::DuneSand
+                    | F::PackedSand
+                    | F::SaltBed
+                    | F::PalmTrunk
+                    | F::PalmFrond
+                    | F::Ash
+                    | F::Pumice
+                    | F::Cinder
+                    | F::SulphurCrust
+                    | F::QuartzSoil
+                    | F::RuinFloor => Self::Soft,
+                    F::DesertGlass
+                    | F::RuinCache
+                    | F::MagmaHeart
+                    | F::Obsidian
+                    | F::Crystal
+                    | F::SpireCrystal
+                    | F::PrismCw
+                    | F::PrismCcw
+                    | F::GeodeCore => Self::Ore,
+                    _ => Self::Hard,
+                }
+            }
             // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
             // rest grinds.
             TileKind::Core(tile) => match tile {
