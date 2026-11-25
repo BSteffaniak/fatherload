@@ -133,6 +133,19 @@ pub fn target_name(charts: &[StarChart], target: NavTarget) -> String {
     }
 }
 
+/// The name of a nav target, a station's by its own name (Wave 12: "Halcyon Dock", "Tycho
+/// Exchange").
+#[must_use]
+pub fn named(world: &WorldState, charts: &[StarChart], target: NavTarget) -> String {
+    if let NavTarget::Body(body) = target
+        && body.index >= space::STATION_INDEX
+        && let Some(profile) = fatherload_simulation::world::station_profile_at(world, body)
+    {
+        return profile.name;
+    }
+    target_name(charts, target)
+}
+
 /// A system's name: home, the Archive's name for a charted one, else a catalogue name.
 #[must_use]
 pub fn system_name(charts: &[StarChart], system: SystemRef) -> String {

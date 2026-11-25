@@ -104,7 +104,9 @@ fn launch(world: &mut WorldState, player: PlayerId, pos: WorldPos, orientation: 
     heart.star_drive.insert(player);
     world.set_heart(heart);
     let park = world.space_park().unwrap_or((0.0, 0.0));
-    let capacity = world.air_capacity_of(player);
+    let capacity = fatherload_simulation::flight::air_capacity(
+        fatherload_simulation::protection::HazardGear::MAXED.life_support,
+    );
     if let Some(rig) = world.player_mut(player) {
         fatherload_simulation::economy::max_out_upgrades(rig);
         rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
@@ -125,7 +127,7 @@ fn launch(world: &mut WorldState, player: PlayerId, pos: WorldPos, orientation: 
             place: FlightPlace::Space,
             pos,
             drive: StarDrive::Off,
-            air: capacity * 0.8,
+            air: capacity * 0.9,
             exit_column: 120,
             ..RigFlight::default()
         };
@@ -150,6 +152,32 @@ fn outside(stage: &mut SceneStage<'_>, pick: fn(&WorldState) -> StationId, dista
         let reach = space::tiles(distance);
         let pos = port.offset(dx / length * reach, dy / length * reach);
         launch(world, seats[0].player, pos, body.dock_orientation() + 0.1);
+    });
+    stage.settle(8);
+}
+
+/// Beside station `pick(world)`, `distance` tiles off its centre across its port's axis, the
+/// rig turned so the whole station sits beside it in view.
+fn beside(stage: &mut SceneStage<'_>, pick: fn(&WorldState) -> StationId, distance: f32) {
+    stage.play(1, |world, seats| {
+        space_world(world);
+        let body = body_of(world, pick(world));
+        let port = body.port().expect("port");
+        let (dx, dy) = body.centre.delta(port);
+        let length = dx.hypot(dy).max(1.0);
+        let reach = space::tiles(distance);
+        // Across the port's axis, a little toward the port.
+        let pos = body.centre.offset(
+            (-dy / length).mul_add(reach, dx / length * reach * 0.3),
+            (dx / length).mul_add(reach, dy / length * reach * 0.3),
+        );
+        let bearing = fatherload_simulation::flight::nav::bearing(pos, body.centre);
+        launch(
+            world,
+            seats[0].player,
+            pos,
+            bearing - std::f32::consts::FRAC_PI_2,
+        );
     });
     stage.settle(8);
 }
@@ -246,17 +274,17 @@ pub const STATION_SCENES: &[Scene] = &[
     Scene {
         name: "station_exterior_human",
         summary: "Halcyon Dock from outside: a human hub, its solar wings, lit ring and green port light",
-        setup: |stage| outside(stage, |_| HALCYON, 22.0),
+        setup: |stage| beside(stage, |_| HALCYON, 16.0),
     },
     Scene {
         name: "station_exterior_alien",
         summary: "An alien-run station from outside: a grown bulb, curving fins, breathing pods and a violet port",
-        setup: |stage| outside(stage, alien, 22.0),
+        setup: |stage| beside(stage, alien, 16.0),
     },
     Scene {
         name: "station_exterior_derelict",
         summary: "A derelict station: a torn wing, a holed ring, dead windows, one dim lamp and debris adrift",
-        setup: |stage| outside(stage, derelict, 22.0),
+        setup: |stage| beside(stage, derelict, 16.0),
     },
     Scene {
         name: "station_docking",

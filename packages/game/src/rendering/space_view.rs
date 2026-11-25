@@ -59,7 +59,7 @@ use crate::{
     render_snapshot::{Flyer, PlayerPresentation, RenderSnapshot, ViewSnapshot},
     shell::{
         ShellState,
-        flight::{NavRow, nav_rows_for, system_name, target_name},
+        flight::{NavRow, named, nav_rows_for, system_name},
     },
 };
 
@@ -695,6 +695,10 @@ fn draw_alien_station(
             }
         }
     }
+    // The port's stalk, under the bulb.
+    if let Some(port) = body.port() {
+        draw.draw_line_ex(at, frame.project(port), unit * 1.4, PLUM);
+    }
     // The bulb: dark rim, teal body, a lighter crown and a glowing heart.
     fill_disc(draw, frame, at, radius * 1.15, INK);
     fill_disc(draw, frame, at, radius * 1.05, TEAL_DARK);
@@ -725,7 +729,6 @@ fn draw_alien_station(
     }
     if let Some(port) = body.port() {
         let port_at = frame.project(port);
-        draw.draw_line_ex(at, port_at, unit * 1.4, PLUM);
         fill_disc(draw, frame, port_at, unit * 1.1, INK);
         fill_disc(draw, frame, port_at, unit * 0.75, VIOLET);
         fill_disc(
@@ -798,6 +801,10 @@ fn draw_derelict_station(
         rotation,
         STONE_DARK,
     );
+    // The port's spar, under the ring.
+    if let Some(port) = body.port() {
+        draw.draw_line_ex(at, frame.project(port), unit * 1.2, STONE_DARK);
+    }
     // The ring, scorched, with a hole torn in it.
     draw.draw_ring(at, radius * 0.85, radius * 1.2, 0.0, 360.0, 48, INK);
     draw.draw_ring(at, radius * 0.9, radius * 1.15, 0.0, 360.0, 48, STONE);
@@ -847,7 +854,6 @@ fn draw_derelict_station(
     }
     if let Some(port) = body.port() {
         let port_at = frame.project(port);
-        draw.draw_line_ex(at, port_at, unit * 1.2, STONE_DARK);
         let size = (unit * 0.6).max(2.0);
         draw.draw_rectangle_v(
             Vector2::new(port_at.x - size, port_at.y - size),
@@ -1320,15 +1326,15 @@ fn place_line(snapshot: &RenderSnapshot<'_>, flight: &RigFlight) -> String {
         FlightPlace::Home | FlightPlace::Space => format!("OPEN SPACE  {}", system.to_uppercase()),
         FlightPlace::Approach(body) => format!(
             "APPROACH  {}",
-            target_name(charts, NavTarget::Body(body)).to_uppercase()
+            named(snapshot.space.world, charts, NavTarget::Body(body)).to_uppercase()
         ),
         FlightPlace::Landed(body) => format!(
             "LANDED  {}",
-            target_name(charts, NavTarget::Body(body)).to_uppercase()
+            named(snapshot.space.world, charts, NavTarget::Body(body)).to_uppercase()
         ),
         FlightPlace::Docked(body) => format!(
             "DOCKED  {}",
-            target_name(charts, NavTarget::Body(body)).to_uppercase()
+            named(snapshot.space.world, charts, NavTarget::Body(body)).to_uppercase()
         ),
     }
 }
@@ -1561,7 +1567,7 @@ pub(super) fn draw_space_hud(
         if let Some(target) = waypoint
             && let Some(pos) = target.position(&galaxy)
         {
-            let name = target_name(snapshot.space.charts, target);
+            let name = named(snapshot.space.world, snapshot.space.charts, target);
             edge_marker(
                 draw,
                 rect,
@@ -1889,7 +1895,7 @@ fn draw_nav_panel(
         return;
     };
     let name = ui_kit::truncate(
-        &target_name(snapshot.space.charts, target),
+        &named(snapshot.space.world, snapshot.space.charts, target),
         text_width,
         TextStyle::Bold,
     );
@@ -1968,7 +1974,7 @@ pub(super) fn draw_nav_chart(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
         let picked = index == selected;
         let entry = match row {
             NavRow::Target(target) => {
-                let name = target_name(space.charts, *target);
+                let name = named(space.world, space.charts, *target);
                 let pos = target.position(&galaxy);
                 let distance = pos.map_or(f64::INFINITY, |pos| {
                     let (dx, dy) = flight.pos.delta_f64(pos);
