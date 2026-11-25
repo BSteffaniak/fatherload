@@ -379,7 +379,6 @@ fn camp_target(
     ))
 }
 
-/// The giver's own settlement.
 /// The nearest of the Fathers' expedition sites to `origin` (Wave 10): sites in the origin's
 /// own Descent first, then by distance (rows count four times columns: the trail runs down).
 fn fathers_site_target(
@@ -467,6 +466,7 @@ fn deep_seam_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTar
 
 const SALT_DEEP_SEAM: u64 = 0x5745_1001;
 
+/// The giver's own settlement.
 fn home_target(terrain: &Terrain, home: Option<VillageId>) -> (QuestTarget, BoundTarget) {
     let settings = terrain.settings();
     let Some(id) = home else {
