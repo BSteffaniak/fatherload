@@ -166,6 +166,25 @@
 //! | [`EnemyKind::GildedCrawler`] | creature (lunger) | the Seal Gate's ceilings and floors | rears and its gilded back flares, then lunges | sidestep, blasts |
 //! | [`EnemyKind::GatekeeperColossus`] | machine (boss) | the Gatekeeper's hall | a fist rises over a glowing mark before it slams; it roars before the hall collapses | strike the head (its eye), hit fists while they rest |
 //! | [`EnemyKind::ColossusHead`], [`EnemyKind::ColossusFist`], [`EnemyKind::ColossusLegs`] | its parts | on the Colossus | drawn where they are | hits pass to the core |
+//! The Heart's creatures (Wave 10, Descent VIII, [`crate::heart`]); `world/enemies/heart.rs`
+//! gives them their ways and runs the Heart's fight:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::NullMoth`] | creature (thief) | Dark Matter Veins | flutters to the rig carrying the most dark matter; a touch drinks a lump | shoot it on the way in, or carry none |
+//! | [`EnemyKind::UpfallBeetle`] | creature (ambusher) | the roofs of the weightless halls | hangs on the roof (it falls up), drops on a rig below, floats back up | look up; strike while it floats back |
+//! | [`EnemyKind::VeinGnawer`] | creature (burrower) | the veins | chews through the shale toward a drilling rig | listen, blast its tunnel |
+//! | [`EnemyKind::Orbiter`] | creature (slingshot) | round the gravity wells | circles a well, then slings itself out of the orbit at a rig | step out of its line when it breaks orbit |
+//! | [`EnemyKind::AccretionMote`] | creature (swarmer) | in a well's disc | a glowing swirl round the point | anything; keep out of the disc |
+//! | [`EnemyKind::HorizonLurker`] | creature (ranged, rooted) | well rims | its eye brightens before two bolts | cover, kill it from the side |
+//! | [`EnemyKind::MercuryEel`] | creature (swimmer) | the metal sea | a silver back breaks the surface, then it leaps at a rig above | keep moving on the rails; shoot it mid-leap |
+//! | [`EnemyKind::RailLeech`] | creature (crawler) | the rails | crawls along a rail; a riding rig runs into it | shoot ahead down the line |
+//! | [`EnemyKind::SlagSkimmer`] | creature (ranged) | low over the metal sea | glows before it spits molten slag | dodge, return fire |
+//! | [`EnemyKind::CoronaWisp`] | creature (swarmer) | the Heart's rock | a burning wisp of the drive's light | anything; it burns on touch |
+//! | [`EnemyKind::CableWarden`] | machine (guard) | along the cable | its lamp turns red before a volley | cover, EMP |
+//! | [`EnemyKind::StarHeart`] | machine (final boss) | the Heart's chamber | the ring contracts before a pull, the beams fade in, the core brightens before it exhales | break the coils, dodge the beams, strike while it exhales |
+//! | [`EnemyKind::DriveCoil`] | machine (boss part) | orbiting the sleeping drive | glows before its bolt | shoot every coil |
+//! | [`EnemyKind::HeartSpark`] | machine (swarmer) | thrown by the ignited drive | a hot spark | anything |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -455,6 +474,35 @@ pub enum EnemyKind {
     ColossusFist,
     /// The Colossus's hips and legs (gone once it is unbound).
     ColossusLegs,
+    // --- The Heart (Wave 10, Descent VIII, `crate::heart`), appended ---------------------
+    /// Dark Matter Veins: a moth that drinks dark matter out of a rig's bay.
+    NullMoth,
+    /// Dark Matter Veins: a beetle full of dark matter that hangs on roofs and drops on rigs.
+    UpfallBeetle,
+    /// Dark Matter Veins: a burrower that chews the shale toward drilling rigs.
+    VeinGnawer,
+    /// Singularity Fields: circles a well, then slings itself out at a rig.
+    Orbiter,
+    /// Singularity Fields: a glowing mote of a well's accretion disc.
+    AccretionMote,
+    /// Singularity Fields: a rooted eye on a well's rim that fires bolts.
+    HorizonLurker,
+    /// Core Ocean: an eel that swims in the liquid metal and leaps at rigs above it.
+    MercuryEel,
+    /// Core Ocean: a leech that crawls along the magnetic rails.
+    RailLeech,
+    /// Core Ocean: a skimmer low over the metal that spits slag.
+    SlagSkimmer,
+    /// The Heart: a burning wisp of the drive's light.
+    CoronaWisp,
+    /// The Heart: a builder guard machine along the cable.
+    CableWarden,
+    /// The Descent VIII gate boss and the last fight: the Star Drive's core.
+    StarHeart,
+    /// A drive coil orbiting the sleeping Star Drive (the first phase).
+    DriveCoil,
+    /// A spark the ignited Star Drive throws out.
+    HeartSpark,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -918,7 +966,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 136] = [
+    pub const ALL: [Self; 150] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1055,7 +1103,43 @@ impl EnemyKind {
         Self::ColossusHead,
         Self::ColossusFist,
         Self::ColossusLegs,
+        Self::NullMoth,
+        Self::UpfallBeetle,
+        Self::VeinGnawer,
+        Self::Orbiter,
+        Self::AccretionMote,
+        Self::HorizonLurker,
+        Self::MercuryEel,
+        Self::RailLeech,
+        Self::SlagSkimmer,
+        Self::CoronaWisp,
+        Self::CableWarden,
+        Self::StarHeart,
+        Self::DriveCoil,
+        Self::HeartSpark,
     ];
+
+    /// Whether this is one of the Heart's creatures (Wave 10, Descent VIII).
+    #[must_use]
+    pub const fn is_heart(self) -> bool {
+        matches!(
+            self,
+            Self::NullMoth
+                | Self::UpfallBeetle
+                | Self::VeinGnawer
+                | Self::Orbiter
+                | Self::AccretionMote
+                | Self::HorizonLurker
+                | Self::MercuryEel
+                | Self::RailLeech
+                | Self::SlagSkimmer
+                | Self::CoronaWisp
+                | Self::CableWarden
+                | Self::StarHeart
+                | Self::DriveCoil
+                | Self::HeartSpark
+        )
+    }
 
     /// Whether this is one of the Hollow World's creatures (Wave 9, Descent V).
     #[must_use]
@@ -1177,6 +1261,8 @@ impl EnemyKind {
                 | Self::LureAngler
                 | Self::GulperEel
                 | Self::Leviathan
+                // The Heart's metal sea (Wave 10).
+                | Self::MercuryEel
         )
     }
 
@@ -1258,6 +1344,11 @@ impl EnemyKind {
             Self::SealWarden => 2.2,
             Self::GatekeeperColossus => 4.5,
             Self::ColossusHead => 2.5,
+            // The Heart (Wave 10): dark matter's violet, the wells' discs, the drive's light.
+            Self::NullMoth | Self::AccretionMote | Self::HeartSpark => 1.2,
+            Self::CoronaWisp => 2.2,
+            Self::HorizonLurker | Self::SlagSkimmer | Self::DriveCoil => 1.6,
+            Self::StarHeart => 8.0,
             _ => 0.0,
         }
     }
@@ -3430,6 +3521,228 @@ impl EnemyKind {
                 knockback: 200.0,
                 ..stats("Colossus Legs", Machine, Stationary, AttackStyle::Contact)
             },
+            // --- The Heart (Wave 10) -----------------------------------------------------
+            Self::NullMoth => EnemyStats {
+                radius: 7.0,
+                health: 26.0,
+                speed: 95.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 30.0,
+                contact_damage: 3.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 60.0,
+                ..stats("Null Moth", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::UpfallBeetle => EnemyStats {
+                radius: 9.0,
+                health: 90.0,
+                speed: 50.0,
+                dash_speed: 420.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 14.0,
+                contact_damage: 16.0,
+                windup_millis: 450,
+                cooldown_millis: 3_400,
+                attack_range_tiles: 9.0,
+                knockback: 230.0,
+                // It hangs on roofs and floats back up (`world/enemies/heart.rs`).
+                ..stats("Upfall Beetle", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::VeinGnawer => EnemyStats {
+                radius: 9.0,
+                health: 120.0,
+                speed: 40.0,
+                dash_speed: 260.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 10.0,
+                leash_tiles: 20.0,
+                contact_damage: 14.0,
+                windup_millis: 500,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 3.0,
+                knockback: 200.0,
+                ..stats("Vein Gnawer", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::Orbiter => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 110.0,
+                dash_speed: 460.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 30.0,
+                contact_damage: 13.0,
+                windup_millis: 600,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 10.0,
+                knockback: 220.0,
+                // It circles its well between slings (`world/enemies/heart.rs`).
+                ..stats("Orbiter", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::AccretionMote => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 140.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 18.0,
+                contact_damage: 3.0,
+                windup_millis: 0,
+                cooldown_millis: 900,
+                attack_range_tiles: 0.6,
+                knockback: 50.0,
+                ..stats("Accretion Mote", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::HorizonLurker => EnemyStats {
+                radius: 10.0,
+                health: 110.0,
+                speed: 0.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 0.0,
+                leash_tiles: 0.0,
+                contact_damage: 6.0,
+                windup_millis: 900,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 12.0,
+                ..stats(
+                    "Horizon Lurker",
+                    Creature,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::Bolt, 2),
+                )
+            },
+            Self::MercuryEel => EnemyStats {
+                radius: 10.0,
+                health: 130.0,
+                speed: 90.0,
+                dash_speed: 480.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 17.0,
+                windup_millis: 650,
+                cooldown_millis: 3_800,
+                attack_range_tiles: 9.0,
+                knockback: 260.0,
+                // It swims in the metal and leaps (`world/enemies/heart.rs`).
+                ..stats("Mercury Eel", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::RailLeech => EnemyStats {
+                radius: 7.0,
+                health: 50.0,
+                speed: 55.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 6.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 120.0,
+                ..stats("Rail Leech", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::SlagSkimmer => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 100.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 34.0,
+                contact_damage: 8.0,
+                windup_millis: 700,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 11.0,
+                knockback: 140.0,
+                ..stats(
+                    "Slag Skimmer",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Fireball, 1),
+                )
+            },
+            Self::CoronaWisp => EnemyStats {
+                radius: 8.0,
+                health: 60.0,
+                speed: 105.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 26.0,
+                contact_damage: 9.0,
+                windup_millis: 0,
+                cooldown_millis: 1_300,
+                attack_range_tiles: 0.7,
+                knockback: 120.0,
+                ..stats("Corona Wisp", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::CableWarden => EnemyStats {
+                radius: 12.0,
+                health: 220.0,
+                speed: 45.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 20.0,
+                contact_damage: 12.0,
+                windup_millis: 800,
+                cooldown_millis: 2_400,
+                attack_range_tiles: 12.0,
+                knockback: 200.0,
+                elite: true,
+                ..stats(
+                    "Cable Warden",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Bolt, 3),
+                )
+            },
+            Self::StarHeart => EnemyStats {
+                // The drawn core: its glowing body, which shots hit.
+                radius: 72.0,
+                health: 760.0,
+                speed: 0.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 20.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.5,
+                knockback: 420.0,
+                elite: true,
+                // The fight moves it and its parts (`world/enemies/heart.rs`).
+                ..stats("The Heart", Machine, Stationary, AttackStyle::Contact)
+            },
+            Self::DriveCoil => EnemyStats {
+                radius: 20.0,
+                health: 80.0,
+                speed: 0.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 10.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 0.6,
+                knockback: 200.0,
+                ..stats("Drive Coil", Machine, Stationary, AttackStyle::Contact)
+            },
+            Self::HeartSpark => EnemyStats {
+                radius: 6.0,
+                health: 22.0,
+                speed: 125.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 0.0,
+                contact_damage: 6.0,
+                windup_millis: 0,
+                cooldown_millis: 1_100,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Heart Spark", Machine, Flying, AttackStyle::Contact)
+            },
         }
     }
 
@@ -3665,6 +3978,21 @@ impl EnemyKind {
             Self::ColossusHead => (30.0, 30.0),
             Self::ColossusFist => (27.0, 27.0),
             Self::ColossusLegs => (45.0, 42.0),
+            // The Heart (Wave 10), sized to their art.
+            Self::NullMoth => (11.0, 8.0),
+            Self::UpfallBeetle => (14.0, 10.0),
+            Self::VeinGnawer => (15.0, 9.0),
+            Self::Orbiter => (13.0, 11.0),
+            Self::AccretionMote => (6.0, 6.0),
+            Self::HorizonLurker => (12.0, 13.0),
+            Self::MercuryEel => (20.0, 9.0),
+            Self::RailLeech => (11.0, 6.0),
+            Self::SlagSkimmer => (14.0, 9.0),
+            Self::CoronaWisp => (10.0, 11.0),
+            Self::CableWarden => (17.0, 18.0),
+            Self::StarHeart => (76.0, 76.0),
+            Self::DriveCoil => (26.0, 26.0),
+            Self::HeartSpark => (7.0, 7.0),
         }
     }
 
@@ -3844,6 +4172,14 @@ impl EnemyKind {
             (Self::SiegeWalker, DamageKind::Kinetic) => 0.6,
             (Self::SiegeWalker | Self::GildedCrawler, DamageKind::Explosive) => 1.5,
             (Self::GatekeeperColossus, DamageKind::Kinetic) => 0.85,
+            // The Heart (Wave 10): its light shrugs off fire; the boss feels no EMP stun
+            // (`world/enemies/heart.rs` keeps it on its beats) but takes the hit.
+            (
+                Self::CoronaWisp | Self::HeartSpark | Self::StarHeart | Self::DriveCoil,
+                DamageKind::Fire,
+            ) => 0.2,
+            (Self::NullMoth | Self::AccretionMote, DamageKind::Fire) => 1.6,
+            (Self::UpfallBeetle | Self::CableWarden, DamageKind::Kinetic) => 0.7,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -4939,6 +5275,36 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
                 add(ItemKind::Layer(crate::descent::Stratum::ArchiveOfStars), 1);
             }
         }
+        // The Heart (Wave 10): the layer resources of their strata, the boss's star shards.
+        EnemyKind::NullMoth | EnemyKind::UpfallBeetle | EnemyKind::VeinGnawer => {
+            add(ItemKind::Layer(crate::descent::Stratum::DarkMatterVeins), 1);
+            if rare < 50 {
+                add(richer, 1 + extra);
+            }
+        }
+        EnemyKind::Orbiter | EnemyKind::AccretionMote | EnemyKind::HorizonLurker => {
+            add(
+                ItemKind::Layer(crate::descent::Stratum::SingularityFields),
+                1,
+            );
+            if rare < 50 {
+                add(richer, 1 + extra);
+            }
+        }
+        EnemyKind::MercuryEel | EnemyKind::RailLeech | EnemyKind::SlagSkimmer => {
+            add(ItemKind::Layer(crate::descent::Stratum::CoreOcean), 1);
+            add(richer, 1 + extra);
+        }
+        EnemyKind::CoronaWisp | EnemyKind::HeartSpark => add(mineral, 1),
+        EnemyKind::CableWarden | EnemyKind::DriveCoil => {
+            add(richer, 2 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+        }
+        EnemyKind::StarHeart => {
+            add(richer, 16 + extra);
+            add(ItemKind::Layer(crate::descent::Stratum::TheHeart), 8);
+            add(ItemKind::Material(StrategicResourceKind::CoreShard), 4);
+        }
     }
     drops
 }
@@ -4987,10 +5353,11 @@ mod tests {
             let stats = kind.stats();
             assert!(stats.health > 0.0, "{kind:?}");
             // The Leviathan's great body is an exception (Wave 9), and so are the Gatekeeper
-            // Colossus's core and parts (Wave 10), scripted in their own hall.
+            // Colossus's core and parts and the Heart's core (Wave 10), scripted in their own halls.
             let giant = kind == EnemyKind::Leviathan
                 || kind == EnemyKind::GatekeeperColossus
-                || kind.is_colossus_part();
+                || kind.is_colossus_part()
+                || kind == EnemyKind::StarHeart;
             assert!(
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"

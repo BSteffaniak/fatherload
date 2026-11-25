@@ -485,4 +485,5 @@ pub const fn is_plain_rock(kind: TileKind) -> bool {
                     | crate::cave::CaveTile::PillowBasalt
             )
     ) || matches!(kind, TileKind::Hollow(tile) if tile.plain_rock())
+        || matches!(kind, TileKind::Core(tile) if tile.plain_rock())
 }

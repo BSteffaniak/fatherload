@@ -260,6 +260,7 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
                     | LandmarkGenerator::FarStrange
                     | LandmarkGenerator::AncientCity
                     | LandmarkGenerator::Garrison
+                    | LandmarkGenerator::Heart
             ));
         }
         let field = def.field;
@@ -352,6 +353,18 @@ fn every_field_of_every_stratum_is_filled_and_resolves() {
             // So do the Sleeping Garrison and the Seal Gate (Wave 10 ancients-b).
             assert!(
                 matches!(def.music, MusicCue::SleepingGarrison | MusicCue::SealGate),
+                "{stratum:?}"
+            );
+        } else if def.descent == Descent::Heart {
+            // The Heart's strata have pieces of their own (Wave 10).
+            assert!(
+                matches!(
+                    def.music,
+                    MusicCue::DarkMatterVeins
+                        | MusicCue::SingularityFields
+                        | MusicCue::CoreOcean
+                        | MusicCue::TheHeart
+                ),
                 "{stratum:?}"
             );
         } else {

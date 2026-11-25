@@ -24,7 +24,7 @@ use fatherload_simulation::{
 
 use crate::rendering::{
     pixel_art::palette::{
-        AMBER, CREAM, ICE, LEAF, MINT, OCEAN, ORANGE, SKY_LIGHT, TEAL_DARK, with_alpha,
+        AMBER, CREAM, GOLD, ICE, LEAF, MINT, OCEAN, RUST, SKY_LIGHT, TEAL_DARK, with_alpha,
     },
     terrain::tile_art::{fluid_color, hash},
 };
@@ -85,10 +85,11 @@ const fn look(kind: FluidKind) -> FluidLook {
             wave: (0.6, 1.6),
         },
         FluidKind::LiquidMetal => FluidLook {
-            shallow: fluid_color(FluidKind::LiquidMetal),
-            deep: ORANGE,
+            // Molten core metal (Wave 10 look): a bright skin over a deep orange-red glow.
+            shallow: AMBER,
+            deep: RUST,
             highlight: CREAM,
-            fleck: AMBER,
+            fleck: GOLD,
             alpha: (215, 245),
             bubbles: 0.7,
             bubble_tiles: 3,

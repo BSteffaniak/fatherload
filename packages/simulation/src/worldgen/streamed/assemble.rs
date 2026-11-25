@@ -444,6 +444,30 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
             }
         }
     }
+    if let Some(layout) = &ctx.descent {
+        // The Heart (V11, Wave 10, Descent VIII): weightless halls and the Upfall, the gravity
+        // wells and the Lens, the metal sea and its rails, the cable and the Heart's chamber.
+        use crate::worldgen::descent::heart;
+        let (top, bottom) = heart::pass_rows(layout);
+        if rect.max.y >= top && rect.min.y <= bottom {
+            let context = heart::chunk_context(&ctx.settings, layout, &rect);
+            for position in rect.positions() {
+                let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
+                    continue;
+                };
+                if let Some(kind) = heart::heart_pass_tile(
+                    &ctx.settings,
+                    layout,
+                    &context,
+                    position.x,
+                    position.y,
+                    chunk_kinds.kinds[slot],
+                ) {
+                    chunk_kinds.kinds[slot] = kind;
+                }
+            }
+        }
+    }
     // The Fathers' expedition (V11, Wave 8 story): its log sites and the anomaly rooms, a pass
     // of their own after the landmarks and under the builders' cable.
     let story = crate::expedition::sites::story_stamps(&ctx.settings, &rect);

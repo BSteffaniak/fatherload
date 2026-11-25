@@ -122,6 +122,25 @@ pub(super) fn draw_view_hud(
     let rect = view_rect(view);
     let (left, top) = (rect.x as i32 + 4, rect.y as i32 + 4);
     let split = snapshot.views.len() > 1;
+    // The ending (Wave 10): the seat's own sequence over its view; the cutaway, the credits
+    // and the epilogue cover it (and its HUD), the awakening plays over the world.
+    if view.ending.is_some_and(|ending| ending.phase.playing()) {
+        let device = shell.prompt_device(view.seat_index);
+        let confirm =
+            crate::input::prompts::inline_text(crate::input::prompts::Prompt::Confirm, device)
+                .unwrap_or_else(|| "Confirm".to_owned());
+        let pause =
+            crate::input::prompts::inline_text(crate::input::prompts::Prompt::Pause, device)
+                .unwrap_or_else(|| "Pause".to_owned());
+        let skip = format!("{confirm} or {pause}");
+        super::ending::draw_ending(draw, view, rect, &skip);
+        if view
+            .ending
+            .is_some_and(|ending| ending.phase.covers_screen())
+        {
+            return;
+        }
+    }
 
     // Stats: hull, fuel, cargo, block hopper.
     let width = stats_panel_width(rect.width);
@@ -208,6 +227,10 @@ pub(super) fn draw_view_hud(
     super::ancient_city_hud::draw_archivist_line(draw, snapshot, view, rect);
     // Descent VII part B (Wave 10): the fort's waves, the gate's keys, the Colossus's stage.
     super::garrison_hud::draw_garrison_hud(draw, snapshot, view, rect, top + 124);
+    // Descent VIII (Wave 10): dark matter's weight, the wells, the rails, the Heart's fight;
+    // over the Moon after the ending, the open stars.
+    super::heart_hud::draw_heart_hud(draw, view, rect, top + 124);
+    super::heart_hud::draw_stars_open(draw, view, rect);
     // Tomb runs (WP-TOMBS): the run banner, or the entrance banner at a site's door.
     // It keeps clear of the stats panel, the wallet column (with its clock badge) and the
     // phone's top-row buttons, dropping below them where the view is too narrow.
@@ -1084,6 +1107,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Hollow(tile) => super::terrain::tile_art::hollow_color(tile),
         TileKind::Warped(tile) => super::terrain::tile_art::warped_color(tile),
         TileKind::City(tile) => super::terrain::tile_art::city_color(tile),
+        TileKind::Core(tile) => super::terrain::tile_art::core_color(tile),
     }
 }
 

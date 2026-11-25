@@ -47,6 +47,9 @@ pub enum StoryMomentKind {
     StrangePlace,
     /// The builders' own voices, below the inner sun (Wave 9 story).
     BuilderEcho,
+    /// A place of the Heart found (Wave 10: the Upfall, the Lens, the Ferry Terminal, the
+    /// Heart's chamber).
+    HeartPlace,
 }
 
 /// A card across the seat's view telling a moment of a story.

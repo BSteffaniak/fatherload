@@ -203,6 +203,26 @@ impl WorldState {
             });
         // Wave 9: an amber sloth's touch holds the rig in amber (slow motion, slow burn).
         let ambered = self.far_strange.is_ambered(player_id, self.simulation_tick);
+        // Wave 10, the Heart: dark matter's negative mass (1000 with none aboard: the classic
+        // physics) and the Star Drive's boost in the sky.
+        let mass = if settings.generator.has_descents() {
+            self.cargo_mass_of(player_id)
+        } else {
+            1_000
+        };
+        let dark_units = if mass == 1_000 {
+            0
+        } else {
+            self.players.get(&player_id).map_or(0, |player| {
+                player.cargo_bay.count(crate::item::ItemKind::Layer(
+                    crate::descent::Stratum::DarkMatterVeins,
+                ))
+            })
+        };
+        let star_boost = self
+            .players
+            .get(&player_id)
+            .map_or(1.0, |player| self.star_drive_boost(player_id, player.y));
         let player = self.players.get_mut(&player_id)?;
         // Field effects (F9): neutral everywhere without zones or stratum profiles.
         let mut field = crate::field::sample_in(
@@ -222,6 +242,18 @@ impl WorldState {
         }
         if ambered {
             field.time_scale *= crate::far_strange::AMBER_TEMPO;
+        }
+        if mass != 1_000 {
+            // Dark matter makes the rig lighter: its gravity scales with its weight, and past
+            // weightless it falls up. Light, it turns freely (the player rolls it over to
+            // thrust "down"; nothing turns it for them).
+            #[allow(clippy::cast_precision_loss, reason = "a per mille weight")]
+            let scale = mass as f32 / 1_000.0;
+            field.gravity_x *= scale;
+            field.gravity_y *= scale;
+            if mass < crate::heart::FREE_TURN_BELOW_PERMILLE {
+                field.free_rotation = 1.0;
+            }
         }
         let attitude_before = player.attitude;
         let level = field.down_angle();
@@ -309,7 +341,9 @@ impl WorldState {
             clippy::cast_precision_loss,
             reason = "bounded cargo counts intentionally become a movement load ratio"
         )]
-        let cargo_ratio = player.cargo_used() as f32 / effective_cargo_capacity.max(1) as f32;
+        // Dark matter weighs nothing on the drive (it lightens the rig instead, above).
+        let cargo_ratio = player.cargo_used().saturating_sub(dark_units) as f32
+            / effective_cargo_capacity.max(1) as f32;
         let cargo_pressure = if parts.contains(&RigPartKind::HaulerEngine) {
             0.08
         } else if parts.contains(&RigPartKind::LightweightEngine) {
@@ -331,6 +365,8 @@ impl WorldState {
         if parts.contains(&RigPartKind::CargoBalloon) {
             engine_multiplier *= 0.88;
         }
+        // The Star Drive's boost in the sky (Wave 10): 1 everywhere else.
+        engine_multiplier *= star_boost;
         // Top speed, spool-up and braking all scale with the engine tier (see `drive`); rig
         // parts and the cargo load scale the tier's top speed as they scale its thrust.
         let drive_modifier = engine_multiplier / engine_power(player.engine_level);
@@ -348,7 +384,7 @@ impl WorldState {
         };
         let tuning = DriveTuning::new(top, grounded);
         // The top engines lift far more, but climb speed is capped (higher in god mode).
-        let climb = engine_multiplier.min(ENGINE_CLIMB_CAP) * god_thrust;
+        let climb = engine_multiplier.min(ENGINE_CLIMB_CAP * star_boost) * god_thrust;
         // A rig only dents itself on a wall when flung into it faster than it can drive.
         let wall_crash_speed = (AUTHORITATIVE_SAFE_LANDING_SPEED * 0.75).max(ground_top * 1.1);
         let thrusting = thrust && player.fuel > 0.0;

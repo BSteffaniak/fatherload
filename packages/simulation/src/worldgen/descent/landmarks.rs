@@ -61,6 +61,8 @@ pub enum LandmarkGenerator {
     /// Descent VII part B's forts, the Seal Court, the Gatekeeper's hall and the Heart Seal
     /// ([`super::garrison`], Wave 10).
     Garrison,
+    /// The Heart's halls, wells, metal sea, rails, cable and chamber ([`super::heart`], Wave 10).
+    Heart,
 }
 
 /// The generator behind `kind`.
@@ -82,6 +84,7 @@ pub const fn landmark_generator(kind: LandmarkKind) -> LandmarkGenerator {
         LandmarkKind::FarStrange => LandmarkGenerator::FarStrange,
         LandmarkKind::AncientCity => LandmarkGenerator::AncientCity,
         LandmarkKind::Garrison => LandmarkGenerator::Garrison,
+        LandmarkKind::Heart => LandmarkGenerator::Heart,
     }
 }
 
@@ -429,6 +432,7 @@ pub const fn landmark_tile(landmark: &Landmark, x: i32, y: i32) -> Option<TileKi
         | LandmarkKind::Distortion
         | LandmarkKind::FarStrange
         | LandmarkKind::AncientCity
-        | LandmarkKind::Garrison => return None,
+        | LandmarkKind::Garrison
+        | LandmarkKind::Heart => return None,
     })
 }

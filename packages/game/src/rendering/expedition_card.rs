@@ -114,6 +114,21 @@ pub(super) fn decorate(
             }
         }
         StoryMomentKind::BuilderEcho => builder_echo(draw, (x, y, width, height), age, color),
+        StoryMomentKind::HeartPlace => {
+            // The builders' cable down the card's left edge, a star burning at its foot.
+            let (cx, top) = (x + 10, y + 4);
+            draw.draw_rectangle(cx, top, 2, height - 12, STEEL);
+            draw.draw_rectangle(cx, top, 1, height - 12, GOLD);
+            let pulse = ((age as f32 / 20.0).sin() * 1.5) as i32;
+            draw.draw_circle(
+                cx + 1,
+                y + height - 8,
+                (4 + pulse) as f32,
+                with_alpha(GOLD, 120),
+            );
+            draw.draw_circle(cx + 1, y + height - 8, 2.5, CREAM);
+            let _ = width;
+        }
         StoryMomentKind::Begun
         | StoryMomentKind::Climax
         | StoryMomentKind::Ended

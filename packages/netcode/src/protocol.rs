@@ -248,6 +248,15 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * the `Garrison` world field and `SectionKey::Garrison` section (forts and waves, defences,
 ///   the Seal Gate, the Colossus's fight, falling stones, landmarks found);
 /// * the Descent VII part B events 650-669 (`GameplayEventKind::Garrison`).
+///
+/// Version 18 (Wave 10: Descents VII-VIII and the ending; the integration collapses the
+/// tracks' bumps into this one):
+/// * The Heart (Descent VIII): `TileKind::Core(CoreTile)` tiles (codes `0x1A00`) in terrain
+///   ops, chunk refreshes and keyframes, fourteen appended `EnemyKind`s (`NullMoth` ..
+///   `HeartSpark`) in entity records, `ScreenEffect` levels unchanged, the `Heart` world field
+///   and `SectionKey::Heart` section (floating rigs, wells, landmarks found, the Heart's fight,
+///   `space_unlocked`, the Star Drives, the ending's start), and the Heart events 670-699
+///   (`GameplayEventKind::Heart`, `HeartLandmarkFound`).
 pub const PROTOCOL_VERSION: u8 = 18;
 
 /// One client input frame: the controls and actions for exactly one tick.

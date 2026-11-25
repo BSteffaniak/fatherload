@@ -163,6 +163,19 @@ impl Material {
                 | fatherload_simulation::distortion::WarpedTile::ShearPlate
                 | fatherload_simulation::distortion::WarpedTile::RotBlock => Self::Hard,
             },
+            // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
+            // rest grinds.
+            TileKind::Core(tile) => match tile {
+                fatherload_simulation::heart::CoreTile::MagRail
+                | fatherload_simulation::heart::CoreTile::MagSwitch
+                | fatherload_simulation::heart::CoreTile::MagBooster
+                | fatherload_simulation::heart::CoreTile::VeinShale => Self::Soft,
+                fatherload_simulation::heart::CoreTile::DarkMatter
+                | fatherload_simulation::heart::CoreTile::EventGlass
+                | fatherload_simulation::heart::CoreTile::CoreMetal
+                | fatherload_simulation::heart::CoreTile::StarShard => Self::Ore,
+                _ => Self::Hard,
+            },
             // The Old Deep (Wave 8): shale and amber give, crystal and gems ring, the rest grinds.
             TileKind::Deep(tile) => match tile {
                 fatherload_simulation::old_deep::DeepTile::Shale
@@ -344,6 +357,18 @@ enum SeatLoop {
     AbColossusMusic,
     AbBarracksBed,
     AbSealHallBed,
+    // Descent VIII's music and beds (Wave 10): a piece and a bed per stratum, the Heart's
+    // fight, the ending.
+    DarkMatterMusic,
+    SingularityMusic,
+    CoreOceanMusic,
+    HeartMusic,
+    HeartFightMusic,
+    EndingMusic,
+    VoidHumBed,
+    GravityBed,
+    MetalSeaBed,
+    StarDriveBed,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -976,6 +1001,7 @@ impl Director {
         self.far_strange_music(live, listener, snapshot);
         self.ancient_city_music(live, listener, snapshot);
         self.garrison_music(live, listener, snapshot);
+        self.heart_music(live, listener, snapshot);
 
         state.initialized = true;
         state.velocity_x = velocity_x;
@@ -1994,6 +2020,125 @@ impl Director {
         );
     }
 
+    /// Descent VIII's music (Wave 10): each stratum's piece and bed while the seat is in it,
+    /// the Heart's fight theme while it is awake and the seat is in its chamber, and the
+    /// ending's theme over everything while the seat's ending plays (each seat its own, so a
+    /// seat that skipped hears the world again).
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one table row per stratum's piece and bed"
+    )]
+    fn heart_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+    ) {
+        use fatherload_simulation::descent::MusicCue;
+        let terrain = snapshot.terrain;
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let cue = terrain
+            .settings()
+            .generator
+            .has_descents()
+            .then(|| terrain.stratum_at(tile).def().music);
+        let ending = snapshot.views.iter().any(|view| {
+            view.seat_index == listener.seat && view.ending.is_some_and(|e| e.phase.playing())
+        });
+        let fighting = !ending
+            && snapshot.heart.fight.phase.fighting()
+            && snapshot.heart_centre.is_some_and(|centre| {
+                let (dx, dy) = (tile.x - centre.x, tile.y - centre.y);
+                dx * dx + dy * dy <= 30 * 30
+            });
+        let pieces = [
+            (
+                MusicCue::DarkMatterVeins,
+                SeatLoop::DarkMatterMusic,
+                Patch::DarkMatterLoop,
+                0.4,
+            ),
+            (
+                MusicCue::SingularityFields,
+                SeatLoop::SingularityMusic,
+                Patch::SingularityLoop,
+                0.38,
+            ),
+            (
+                MusicCue::CoreOcean,
+                SeatLoop::CoreOceanMusic,
+                Patch::CoreOceanLoop,
+                0.4,
+            ),
+            (
+                MusicCue::TheHeart,
+                SeatLoop::HeartMusic,
+                Patch::HeartLoop,
+                0.42,
+            ),
+        ];
+        let beds = [
+            (
+                MusicCue::DarkMatterVeins,
+                SeatLoop::VoidHumBed,
+                Patch::VoidHumLoop,
+                0.3,
+            ),
+            (
+                MusicCue::SingularityFields,
+                SeatLoop::GravityBed,
+                Patch::GravityLoop,
+                0.32,
+            ),
+            (
+                MusicCue::CoreOcean,
+                SeatLoop::MetalSeaBed,
+                Patch::MetalSeaLoop,
+                0.32,
+            ),
+            (
+                MusicCue::TheHeart,
+                SeatLoop::StarDriveBed,
+                Patch::StarDriveLoop,
+                0.3,
+            ),
+        ];
+        for (piece, slot, patch, gain) in pieces {
+            let playing = cue == Some(piece) && !fighting && !ending;
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        for (piece, slot, patch, gain) in beds {
+            let playing = cue == Some(piece) && !ending;
+            self.loop_command(
+                live,
+                listener,
+                slot,
+                patch,
+                (if playing { gain } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            );
+        }
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::HeartFightMusic,
+            Patch::HeartFightLoop,
+            (if fighting { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::EndingMusic,
+            Patch::EndingLoop,
+            (if ending { 0.6 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
     /// A side-view tomb's music (WP-TOMBS T28): the run loop while the seat's player explores
     /// one, the guardian's theme instead while its guardian is awake. Crypts (T29) bring their
     /// own.
@@ -2812,6 +2957,7 @@ mod tests {
         assert!((SeatLoop::PrismBed as u32) < SEAT_LOOP_SLOTS);
         assert!((SeatLoop::StacksBed as u32) < SEAT_LOOP_SLOTS);
         assert!((SeatLoop::AbSealHallBed as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::StarDriveBed as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

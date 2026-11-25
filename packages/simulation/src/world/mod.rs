@@ -113,6 +113,10 @@ mod god_mode_tests;
 #[cfg(test)]
 mod hazard_counter_tests;
 mod hazards;
+mod heart;
+#[cfg(test)]
+mod heart_tests;
+pub use heart::CablePath;
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;
@@ -553,6 +557,11 @@ pub struct WorldState {
     /// world, never hashed or replicated.
     #[serde(default)]
     garrison_schedule: crate::garrison::GarrisonSchedule,
+    /// Descent VIII's shared state (Wave 10, see [`crate::heart`]): floating rigs, wells, the
+    /// landmarks found, the Heart's fight, `space_unlocked`, the Star Drives and the ending's
+    /// start.
+    #[serde(default)]
+    heart: crate::heart::Heart,
 }
 
 impl WorldState {

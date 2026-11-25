@@ -332,6 +332,16 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SealSocket => Patch::AbSocketChime,
         SoundCue::SealDoorGrind => Patch::AbDoorGrind,
         SoundCue::SealTremor => Patch::AbTremor,
+        SoundCue::HeartCableLight => Patch::HeartCableLight,
+        SoundCue::HeartInhale => Patch::HeartInhale,
+        SoundCue::HeartPull => Patch::HeartPull,
+        SoundCue::HeartIgnite => Patch::HeartIgnite,
+        SoundCue::HeartExhale => Patch::HeartExhale,
+        SoundCue::HeartCoilBreak => Patch::HeartCoilBreak,
+        SoundCue::HeartDarkMatter => Patch::HeartDarkMatter,
+        SoundCue::HeartRailZap => Patch::HeartRailZap,
+        SoundCue::HeartWellGroan => Patch::HeartWellGroan,
+        SoundCue::HeartMetalSplash => Patch::HeartMetalSplash,
     }
 }
 
@@ -603,6 +613,29 @@ pub const fn city_cue(what: fatherload_simulation::ancient_city::CityEvent) -> S
         E::LandmarkFound => SoundCue::AnomalyHum,
         E::CargoStolen => SoundCue::CityCargoSnatch,
         E::FuelJolted => SoundCue::CitySparkZap,
+    }
+}
+
+/// The sound of a Heart event (Wave 10; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn heart_cue(what: fatherload_simulation::heart::HeartEvent) -> SoundCue {
+    use fatherload_simulation::heart::HeartEvent as E;
+    match what {
+        E::DarkMatterMined | E::RigFloating | E::RigSettled => SoundCue::HeartDarkMatter,
+        E::WellCaught | E::HorizonCrush => SoundCue::HeartWellGroan,
+        E::RailBoost | E::RailCatch => SoundCue::HeartRailZap,
+        E::LandmarkFound => SoundCue::AnomalyHum,
+        E::HeartStirred | E::Ignition | E::Collapse => SoundCue::HeartIgnite,
+        E::CoilBroken => SoundCue::HeartCoilBreak,
+        E::PulseTell | E::ExhaleTell => SoundCue::HeartInhale,
+        E::Pulse => SoundCue::HeartPull,
+        E::Exhale => SoundCue::HeartExhale,
+        E::SparkBorn => SoundCue::FireWhoosh,
+        E::HeartSlept => SoundCue::UiBack,
+        E::HeartAwakened | E::CableLit => SoundCue::HeartCableLight,
+        E::StarDriveFitted | E::SpaceUnlocked | E::StarsOpen => SoundCue::MilestoneFanfare,
+        E::EelLeapt => SoundCue::HeartMetalSplash,
+        E::MothDrank => SoundCue::MothFlutter,
     }
 }
 
@@ -1115,6 +1148,9 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Drowned { what, .. } => Some(drowned_cue(*what)),
         // The Hollow World (Wave 9).
         GameplayEventKind::Hollow { what, .. } => Some(hollow_cue(*what)),
+        // Descent VIII, the Heart (Wave 10).
+        GameplayEventKind::Heart { what, .. } => Some(heart_cue(*what)),
+        GameplayEventKind::HeartLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1460,7 +1496,9 @@ mod tests {
             | GameplayEventKind::FarStrange { .. }
             | GameplayEventKind::Supply { .. }
             | GameplayEventKind::AncientCity { .. }
-            | GameplayEventKind::Garrison { .. } => {}
+            | GameplayEventKind::Garrison { .. }
+            | GameplayEventKind::Heart { .. }
+            | GameplayEventKind::HeartLandmarkFound { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2565,6 +2603,16 @@ mod tests {
             SoundCue::SealSocket,
             SoundCue::SealDoorGrind,
             SoundCue::SealTremor,
+            SoundCue::HeartCableLight,
+            SoundCue::HeartInhale,
+            SoundCue::HeartPull,
+            SoundCue::HeartIgnite,
+            SoundCue::HeartExhale,
+            SoundCue::HeartCoilBreak,
+            SoundCue::HeartDarkMatter,
+            SoundCue::HeartRailZap,
+            SoundCue::HeartWellGroan,
+            SoundCue::HeartMetalSplash,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

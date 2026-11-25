@@ -111,6 +111,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Warped(tile) => tile.glow() as f32 / 64.0,
         // The buried city's lamps, cores, plinths and star glass (Wave 10).
         TileKind::City(tile) => tile.glow() as f32 / 255.0 * 3.4,
+        // Descent VIII's dark matter, glass, rails, shards and the cable (Wave 10).
+        TileKind::Core(tile) => tile.glow() as f32 / 255.0 * 3.0,
         _ => 0.0,
     }
 }

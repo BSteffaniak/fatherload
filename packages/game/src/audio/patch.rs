@@ -19,6 +19,7 @@ mod distortion;
 mod drowned;
 mod far_strange;
 mod garrison;
+mod heart;
 mod hollow;
 mod old_deep;
 
@@ -507,6 +508,28 @@ patches! {
     AbColossusLoop => "loop_ab_colossus",
     AbBarracksLoop => "loop_ab_barracks",
     AbSealHallLoop => "loop_ab_seal_hall",
+    // Descent VIII, the Heart (wave 10), appended at the end so every earlier patch keeps its
+    // seeds.
+    HeartCableLight => "heart_cable_light",
+    HeartInhale => "heart_inhale",
+    HeartPull => "heart_pull",
+    HeartIgnite => "heart_ignite",
+    HeartExhale => "heart_exhale",
+    HeartCoilBreak => "heart_coil_break",
+    HeartDarkMatter => "heart_dark_matter",
+    HeartRailZap => "heart_rail_zap",
+    HeartWellGroan => "heart_well_groan",
+    HeartMetalSplash => "heart_metal_splash",
+    DarkMatterLoop => "loop_dark_matter_veins",
+    SingularityLoop => "loop_singularity_fields",
+    CoreOceanLoop => "loop_core_ocean",
+    HeartLoop => "loop_the_heart",
+    HeartFightLoop => "loop_heart_awakening",
+    EndingLoop => "loop_ending",
+    VoidHumLoop => "loop_void_hum",
+    GravityLoop => "loop_gravity",
+    MetalSeaLoop => "loop_metal_sea",
+    StarDriveLoop => "loop_star_drive",
 }
 
 /// Playback metadata of a patch.
@@ -1036,6 +1059,46 @@ impl Patch {
                 .send(0.4)
                 .jitter(0.03, 0.6)
                 .priority(6),
+            // Descent VIII (Wave 10): its music and beds loop; the cable's light is the
+            // game's biggest moment and hushes everything; the drive's beats are set pieces;
+            // dark matter, rails, wells and the metal are heard where they happen.
+            Self::DarkMatterLoop
+            | Self::SingularityLoop
+            | Self::CoreOceanLoop
+            | Self::HeartLoop
+            | Self::HeartFightLoop
+            | Self::EndingLoop
+            | Self::VoidHumLoop
+            | Self::GravityLoop
+            | Self::MetalSeaLoop
+            | Self::StarDriveLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::HeartCableLight => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.6)
+                .jitter(0.0, 0.0)
+                .ducking(0.5)
+                .priority(10),
+            Self::HeartIgnite => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.02, 0.4)
+                .ducking(0.3)
+                .priority(8),
+            Self::HeartInhale | Self::HeartPull => {
+                PatchInfo::new(Alarm).instances(1).send(0.4).jitter(0.0, 0.0)
+            }
+            Self::HeartExhale | Self::HeartWellGroan => PatchInfo::new(Feedback)
+                .instances(2)
+                .send(0.4)
+                .jitter(0.03, 0.6),
+            Self::HeartCoilBreak | Self::HeartMetalSplash => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.35)
+                .jitter(0.04, 0.8),
+            Self::HeartDarkMatter | Self::HeartRailZap => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.3)
+                .jitter(0.03, 0.8),
             // A boot on the Moon: soft, frequent, never in the way.
             Self::MoonStep => PatchInfo::new(Feedback)
                 .instances(2)
@@ -1680,6 +1743,26 @@ impl Patch {
             Self::AbColossusLoop => garrison::colossus_loop(rng),
             Self::AbBarracksLoop => garrison::barracks_bed(rng),
             Self::AbSealHallLoop => garrison::seal_hall_bed(rng),
+            Self::HeartCableLight => heart::cable_light(rng),
+            Self::HeartInhale => heart::heart_inhale(rng),
+            Self::HeartPull => heart::heart_pull(rng),
+            Self::HeartIgnite => heart::heart_ignite(rng),
+            Self::HeartExhale => heart::heart_exhale(rng),
+            Self::HeartCoilBreak => heart::coil_break(rng),
+            Self::HeartDarkMatter => heart::dark_matter_chime(rng),
+            Self::HeartRailZap => heart::rail_zap(rng),
+            Self::HeartWellGroan => heart::well_groan(rng),
+            Self::HeartMetalSplash => heart::metal_splash(rng),
+            Self::DarkMatterLoop => heart::dark_matter_loop(rng),
+            Self::SingularityLoop => heart::singularity_loop(rng),
+            Self::CoreOceanLoop => heart::core_ocean_loop(rng),
+            Self::HeartLoop => heart::heart_loop(rng),
+            Self::HeartFightLoop => heart::heart_fight_loop(rng),
+            Self::EndingLoop => heart::ending_loop(rng),
+            Self::VoidHumLoop => heart::void_hum_loop(rng),
+            Self::GravityLoop => heart::gravity_loop(rng),
+            Self::MetalSeaLoop => heart::metal_sea_loop(rng),
+            Self::StarDriveLoop => heart::star_drive_loop(rng),
         }
     }
 }

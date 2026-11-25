@@ -135,9 +135,13 @@ impl WorldState {
             // fight are the world's.
             garrison,
             garrison_schedule,
+            // A leaving rig's float and well go with it; the Star Drive and the fight are the
+            // crew's (Wave 10).
+            heart,
         } = self;
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
+        heart.forget(player_id);
         hollow.forget(player_id);
         distortion.forget(player_id);
         logistics.forget_transient(player_id);

@@ -332,6 +332,9 @@ pub const DEEPER_SET_PIECES: &[SetPieceQuery] = &[
     crosses_drowned,
     // The builders' buried city (Wave 10 ancients-a): avenues, towers, engine halls, vaults.
     crosses_ancient_city,
+    // Descent VIII (Wave 10): the weightless halls and the Upfall, the wells and the Lens, the
+    // metal sea's band and the Ferry Terminal, the Heart's chamber.
+    crate::heart::crosses_set_pieces,
 ];
 
 /// Whether `area` crosses one of the buried city's set pieces (Wave 10 ancients-a).

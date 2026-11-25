@@ -23,6 +23,7 @@ mod counters;
 mod crypt_map;
 mod descent_hud;
 pub mod drowned_hud;
+mod ending;
 mod expedition_card;
 mod expedition_hud;
 pub mod far_strange_hud;
@@ -30,6 +31,7 @@ pub mod far_strange_hud;
 mod gallery;
 mod garage;
 pub mod garrison_hud;
+pub mod heart_hud;
 pub mod hollow_hud;
 mod homes;
 mod interior;
@@ -585,6 +587,19 @@ impl GameRenderer {
                 player: view.player,
             };
             let _ = layout::take_last_dialog_rect();
+            // The ending's cutaway, credits and epilogue cover the seat's view and its cards
+            // (Wave 10).
+            if view
+                .ending
+                .is_some_and(|ending| ending.phase.covers_screen())
+            {
+                if split {
+                    end_view_clip();
+                }
+                layout::set_counter_sheet_top(None);
+                self.end_ui(owner);
+                return;
+            }
             if let Some(modal) = seat.modal {
                 draw_modal(draw, &ui, modal);
             } else if shell.run_mode == RunMode::Playing
@@ -802,6 +817,10 @@ impl GameRenderer {
                 view.player,
                 snapshot.crust.deep_claim,
             )),
+            heart: snapshot.heart,
+            heart_centre: snapshot.heart_centre,
+            cable: snapshot.cable,
+            cable_rows: snapshot.cable_rows,
         };
         if let Some(plan) = plan {
             let split = snapshot.views.len() > 1;
@@ -827,6 +846,12 @@ impl GameRenderer {
         let _canvas = UiCanvasScope::begin(draw);
         draw_heat_warning_for_view(draw, snapshot.terrain, view);
         draw_view_hud(draw, shell, snapshot, view);
+        if view
+            .ending
+            .is_some_and(|ending| ending.phase.covers_screen())
+        {
+            return;
+        }
         if let Some(preview) = &view.build_preview {
             build::draw_build_bar(draw, view, preview, shell.prompt_device(view.seat_index));
         }

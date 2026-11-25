@@ -230,6 +230,7 @@ impl WorldState {
             city_schedule: crate::ancient_city::CitySchedule::default(),
             garrison: crate::garrison::Garrison::default(),
             garrison_schedule: crate::garrison::GarrisonSchedule::default(),
+            heart: crate::heart::Heart::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

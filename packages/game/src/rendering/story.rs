@@ -244,6 +244,7 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::DeepLore => ("THE DROWNED AND FROZEN", MINT, PanelStyle::Accent),
         StoryMomentKind::StrangePlace => ("A STRANGE PLACE", ICE, PanelStyle::Accent),
         StoryMomentKind::BuilderEcho => ("A BUILDER ECHO", TEAL, PanelStyle::Accent),
+        StoryMomentKind::HeartPlace => ("THE HEART", GOLD, PanelStyle::Accent),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
     lines.truncate(match moment.kind {
@@ -253,7 +254,8 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         | StoryMomentKind::BuilderEcho
         | StoryMomentKind::Remembered
         | StoryMomentKind::DeepLore
-        | StoryMomentKind::StrangePlace => 8,
+        | StoryMomentKind::StrangePlace
+        | StoryMomentKind::HeartPlace => 8,
         _ => 6,
     });
     let heading_y = 6;

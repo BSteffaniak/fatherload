@@ -852,6 +852,27 @@ pub enum SoundCue {
     SealSocket,
     SealDoorGrind,
     SealTremor,
+    // Descent VIII, the Heart (Wave 10).
+    /// The cable to the Moon lighting up: the ending's sting.
+    HeartCableLight,
+    /// The drive inhaling before a gravity pulse.
+    HeartInhale,
+    /// A gravity pulse pulling.
+    HeartPull,
+    /// The drive igniting (and collapsing, and stirring).
+    HeartIgnite,
+    /// The collapse's exhale.
+    HeartExhale,
+    /// A drive coil breaking.
+    HeartCoilBreak,
+    /// Dark matter: an inverted chime.
+    HeartDarkMatter,
+    /// A booster rail or the magnetic catch.
+    HeartRailZap,
+    /// A gravity well catching a rig.
+    HeartWellGroan,
+    /// A mercury eel breaking the metal.
+    HeartMetalSplash,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1270,6 +1291,9 @@ pub struct SeatUi {
     /// The deep settlement and world day whose memory of the Fathers this seat was last told
     /// (Wave 8 integration: one card a settlement a day).
     pub remembered: Option<(fatherload_simulation::expedition::memories::Settlement, u32)>,
+    /// The seat's own view of the ending (Wave 10): what it skipped (every seat skips only its
+    /// own; the world only says when the cable lit).
+    pub ending: fatherload_simulation::heart::ending::EndingView,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1317,6 +1341,7 @@ impl SeatUi {
             home: homes::SeatHome::new(),
             journal: SeatJournal::new(),
             story_moment: None,
+            ending: fatherload_simulation::heart::ending::EndingView::new(),
             tomb: tombs::SeatTomb::new(),
             logistics: logistics::SeatLogistics::new(),
             remembered: None,
@@ -1387,6 +1412,21 @@ impl SeatUi {
         self.pickup_armed = (self.pickup_armed - delta_seconds).max(0.0);
         self.village.tick_pending();
         self.home.tick_pending();
+        // The ending (Wave 10): confirm, back or pause skips the seat's own sequence (to the
+        // epilogue, then closes it); while it covers the screen nothing else takes input.
+        if let Some(elapsed) = ctx.world.ending_elapsed() {
+            let phase = self.ending.phase(elapsed);
+            if phase.playing() {
+                let skip =
+                    input.confirm || input.interact || input.back || input.cancel || input.pause;
+                if skip && self.ending.skip(elapsed) {
+                    cues.push(SoundCue::Ui);
+                }
+                if phase.covers_screen() || skip {
+                    return false;
+                }
+            }
+        }
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }

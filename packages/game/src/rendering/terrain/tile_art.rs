@@ -47,6 +47,7 @@ mod distortion_art;
 mod drowned_art;
 mod far_art;
 mod garrison_art;
+mod heart_art;
 mod hollow_art;
 mod living_art;
 mod lunar_art;
@@ -59,6 +60,7 @@ pub use city_art::city_color;
 pub use crust_art::{crust_color, crust_glow};
 pub use deep_art::deep_color;
 pub use distortion_art::warped_color;
+pub use heart_art::{core_color, core_glow};
 pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
@@ -431,6 +433,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Hollow(tile) => return hollow_art::hollow_color(tile),
         TileKind::Warped(tile) => return distortion_art::warped_color(tile),
         TileKind::City(tile) => return city_art::city_color(tile),
+        TileKind::Core(tile) => return heart_art::core_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -616,7 +619,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Deep(_)
         | TileKind::Hollow(_)
         | TileKind::Warped(_)
-        | TileKind::City(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::City(_)
+        | TileKind::Core(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -833,6 +837,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             // The distortion strata's halls of mirrors, tipped strata and rot (Wave 9), over
             // whatever cave biome the base layer put there.
             distortion_art::paint_back(&mut canvas, terrain, position, stratum, (up, left, right));
+        } else if let Some(stratum) = heart_art::heart_stratum(terrain, position) {
+            // Descent VIII's walls (Wave 10): violet shale, the wells' dark, the hot rock over
+            // the metal sea, the Heart's lattice.
+            heart_art::paint_back(&mut canvas, stratum, (up, left, right));
         } else if !cave_art::paint_cave_air(&mut canvas, terrain, position, &strata, band, up) {
             // The Living Dark's open ground shows its stratum's own wall (Wave 8), and so does
             // the far Strange Layers' (Wave 9).
@@ -942,6 +950,24 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     if let TileKind::City(tile) = kind {
         city_art::paint(
             &mut canvas,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // Descent VIII's materials and set pieces (Wave 10).
+    if let TileKind::Core(tile) = kind {
+        heart_art::paint(
+            &mut canvas,
+            terrain,
+            position,
             tile,
             &strata,
             Edges {
@@ -1434,6 +1460,7 @@ const fn grows_grass(material: TileKind) -> bool {
             | TileKind::Hollow(_)
             | TileKind::Warped(_)
             | TileKind::City(_)
+            | TileKind::Core(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

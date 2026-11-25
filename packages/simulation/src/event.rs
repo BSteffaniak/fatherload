@@ -1301,6 +1301,20 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The Heart (Wave 10, Descent VIII; netcode codes 670-699).
+    /// Something of Descent VIII happened at tile `(x, y)`; `player_id` is whose deed or whom
+    /// it concerns, if anyone's.
+    Heart {
+        what: crate::heart::HeartEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
+    /// The crew found one of Descent VIII's landmarks (its story card shows; netcode 699).
+    HeartLandmarkFound {
+        player_id: PlayerId,
+        landmark: crate::heart::HeartLandmark,
+    },
 }
 
 /// What a weapon shot struck.

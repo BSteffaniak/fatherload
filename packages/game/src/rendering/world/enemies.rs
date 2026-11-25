@@ -28,8 +28,8 @@ use crate::rendering::pixel_art::{
     sprites::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
         drowned as drowned_art, enemies as art, far_strange as far_art, garrison as garrison_art,
-        hollow as hollow_art, living as living_art, moon as moon_art, old_deep as deep_art,
-        tomb as tomb_art,
+        heart as heart_art, hollow as hollow_art, living as living_art, moon as moon_art,
+        old_deep as deep_art, tomb as tomb_art,
     },
 };
 
@@ -185,6 +185,21 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::ColossusHead => &garrison_art::COLOSSUS_HEAD,
         EnemyKind::ColossusFist => &garrison_art::COLOSSUS_FIST,
         EnemyKind::ColossusLegs => &garrison_art::COLOSSUS_LEGS,
+        // Descent VIII, the Heart (Wave 10).
+        EnemyKind::NullMoth => &heart_art::NULL_MOTH,
+        EnemyKind::UpfallBeetle => &heart_art::UPFALL_BEETLE,
+        EnemyKind::VeinGnawer => &heart_art::VEIN_GNAWER,
+        EnemyKind::Orbiter => &heart_art::ORBITER,
+        EnemyKind::AccretionMote => &heart_art::ACCRETION_MOTE,
+        EnemyKind::HorizonLurker => &heart_art::HORIZON_LURKER,
+        EnemyKind::MercuryEel => &heart_art::MERCURY_EEL,
+        EnemyKind::RailLeech => &heart_art::RAIL_LEECH,
+        EnemyKind::SlagSkimmer => &heart_art::SLAG_SKIMMER,
+        EnemyKind::CoronaWisp => &heart_art::CORONA_WISP,
+        EnemyKind::CableWarden => &heart_art::CABLE_WARDEN,
+        EnemyKind::StarHeart => &heart_art::STAR_HEART,
+        EnemyKind::DriveCoil => &heart_art::DRIVE_COIL,
+        EnemyKind::HeartSpark => &heart_art::HEART_SPARK,
     }
 }
 
@@ -811,6 +826,44 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         EnemyKind::ColossusHead => usize::from(state.mode == EnemyMode::Windup),
         EnemyKind::ColossusFist => usize::from(((phase * 6.0) as usize).is_multiple_of(4)),
         EnemyKind::ColossusLegs => 0,
+        // Descent VIII (Wave 10): wings, rings and flames loop; hangers, eels and gnawers
+        // strike in a pose of their own; the lurker blinks and glares.
+        EnemyKind::NullMoth
+        | EnemyKind::Orbiter
+        | EnemyKind::AccretionMote
+        | EnemyKind::RailLeech
+        | EnemyKind::CoronaWisp
+        | EnemyKind::DriveCoil
+        | EnemyKind::HeartSpark
+        | EnemyKind::StarHeart => sprite.frame_at(phase),
+        EnemyKind::UpfallBeetle => {
+            if matches!(state.mode, EnemyMode::Strike | EnemyMode::Recover) {
+                2
+            } else {
+                ((phase * 1.5) as usize) % 2
+            }
+        }
+        EnemyKind::VeinGnawer | EnemyKind::MercuryEel | EnemyKind::CableWarden => {
+            if attacking {
+                2
+            } else {
+                ((phase * 4.0) as usize) % 2
+            }
+        }
+        EnemyKind::SlagSkimmer => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else {
+                ((phase * 2.5) as usize) % 2
+            }
+        }
+        EnemyKind::HorizonLurker => {
+            if state.mode == EnemyMode::Windup {
+                2
+            } else {
+                usize::from((phase * 0.7).fract() > 0.92)
+            }
+        }
     }
 }
 
@@ -841,6 +894,9 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::ColossusLegs => ART * 1.5,
         // The Leviathan towers over the submarine (Wave 9).
         EnemyKind::Leviathan => ART * 2.0,
+        // Descent VIII (Wave 10): the warden and the coils loom over a rig.
+        EnemyKind::CableWarden => ART * 1.25,
+        EnemyKind::DriveCoil => ART * 1.5,
         // The Sun Serpent's coils loom large too (Wave 9); the jungle's giants share the
         // bosses' scale above.
         EnemyKind::SerpentCoil => ART * 1.25,
@@ -942,6 +998,12 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::SiegeWalker
             | EnemyKind::LancerDrone
             | EnemyKind::GildedCrawler
+            // Descent VIII's (Wave 10) asymmetric kinds.
+            | EnemyKind::VeinGnawer
+            | EnemyKind::MercuryEel
+            | EnemyKind::RailLeech
+            | EnemyKind::SlagSkimmer
+            | EnemyKind::CableWarden
     )
 }
 
@@ -1012,6 +1074,10 @@ fn draw_enemy(
     // A moth swarm is a whirl of moths round its centre (WP-NIGHT).
     if state.kind == EnemyKind::MothSwarm {
         draw_moth_swarm(draw, state, x, y, seconds, world_tick);
+        return;
+    }
+    // The Heart (Wave 10) is drawn at full size by its own renderer (`world/heart.rs`).
+    if state.kind == EnemyKind::StarHeart {
         return;
     }
     let hurt = state.hurt_until.get() > world_tick;
@@ -1276,6 +1342,37 @@ fn draw_enemy(
                 y - ART * 2.0,
                 12,
                 with_alpha(prism_color(shell), 40),
+            );
+        }
+        // Descent VIII (Wave 10): violet dark matter, the wells' pink, the drive's gold.
+        EnemyKind::NullMoth | EnemyKind::UpfallBeetle => {
+            let pulse = ((seconds * 3.0 + state.seed as f32 * 0.07).sin() * 1.5) as i32;
+            disc(draw, x, y, 10 + pulse, with_alpha(VIOLET, 34));
+        }
+        EnemyKind::Orbiter | EnemyKind::AccretionMote | EnemyKind::HorizonLurker => {
+            let pulse = ((seconds * 4.0 + state.seed as f32 * 0.05).sin() * 1.5) as i32;
+            disc(draw, x, y, 9 + pulse, with_alpha(PINK, 30));
+        }
+        EnemyKind::SlagSkimmer => {
+            disc(draw, x, y + ART * 3.0, 9, with_alpha(ORANGE, 34));
+        }
+        EnemyKind::CoronaWisp | EnemyKind::HeartSpark => {
+            let pulse = ((seconds * 7.0 + state.seed as f32 * 0.1).sin() * 2.0) as i32;
+            disc(draw, x, y, 12 + pulse, with_alpha(GOLD, 36));
+            disc(draw, x, y, 6, with_alpha(CREAM, 50));
+        }
+        EnemyKind::DriveCoil => {
+            let pulse = ((seconds * 5.0 + state.seed as f32 * 0.1).sin() * 3.0) as i32;
+            disc(draw, x, y, 26 + pulse, with_alpha(TEAL, 40));
+            disc(draw, x, y, 14, with_alpha(MINT, 46));
+        }
+        EnemyKind::CableWarden => {
+            disc(
+                draw,
+                x + f32::from(state.facing) * ART * 5.0,
+                y - ART * 7.0,
+                6,
+                with_alpha(MINT, 36),
             );
         }
         EnemyKind::ShadowHound => {

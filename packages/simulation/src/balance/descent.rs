@@ -281,8 +281,12 @@ pub fn registry_markers() -> Vec<Vec<Novelty>> {
                 }
             }
             markers.push(Novelty::new(NoveltyKind::Mechanic, def.signature));
-            // The distortion strata's authored rules and places (Wave 9).
-            for (what, place) in crate::distortion::novelties(*stratum) {
+            // The distortion strata's authored rules and places (Wave 9), and the Heart's
+            // (Wave 10).
+            for (what, place) in crate::distortion::novelties(*stratum)
+                .iter()
+                .chain(crate::heart::novelties(*stratum))
+            {
                 let kind = if *place {
                     NoveltyKind::Landmark
                 } else {
@@ -483,6 +487,7 @@ impl StratumRegistry for RegistryStrata {
                                     | LandmarkKind::Distortion
                                     | LandmarkKind::FarStrange
                                     | LandmarkKind::Garrison
+                                    | LandmarkKind::Heart
                             )
                         })
                         .count(),
@@ -518,17 +523,21 @@ impl StratumRegistry for RegistryStrata {
                 // Wave 10 ancients-b: the garrison's and the gate's too.
                 let (garrison_mechanics, garrison_pieces, _) =
                     crate::garrison::authored_content(*stratum);
+                // Wave 10 heart: the Heart's mechanics and set pieces.
+                let (heart_mechanics, heart_pieces) = crate::heart::authored_content(*stratum);
                 let authored_mechanics = authored_mechanics
                     .saturating_add(far_mechanics)
                     .saturating_add(living_mechanics)
                     .saturating_add(city_mechanics)
-                    .saturating_add(garrison_mechanics);
+                    .saturating_add(garrison_mechanics)
+                    .saturating_add(heart_mechanics);
                 let set_pieces = set_pieces
                     .saturating_add(authored_pieces)
                     .saturating_add(far_pieces)
                     .saturating_add(living_pieces)
                     .saturating_add(city_pieces)
-                    .saturating_add(garrison_pieces);
+                    .saturating_add(garrison_pieces)
+                    .saturating_add(heart_pieces);
                 // A field or fluid mechanic, or the authored Crust's signature rule (Wave 8).
                 let mechanic = u8::from(
                     !def.field.is_neutral()

@@ -40,6 +40,7 @@ pub mod fluid;
 pub mod garrison;
 pub mod hash;
 pub mod hazard;
+pub mod heart;
 pub mod hollow;
 pub mod home;
 pub mod ids;

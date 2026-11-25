@@ -298,7 +298,26 @@ mod tests {
                 | Patch::AbBarracksLoop
                 | Patch::AbSealGateLoop
                 | Patch::AbSealHallLoop
-                | Patch::AbColossusLoop => (40.0, 3_000.0),
+                | Patch::AbColossusLoop
+                // The Heart (wave 10): the drive's pull and ignition, a well's groan, the
+                // metal's plunge, and the deep beds (the void's hum, the wells' groan, the
+                // metal sea, the drive's breath, the bending drone, the heartbeat and the
+                // fight's drums).
+                | Patch::HeartPull
+                | Patch::HeartIgnite
+                | Patch::HeartWellGroan
+                | Patch::HeartMetalSplash
+                | Patch::HeartInhale
+                | Patch::VoidHumLoop
+                | Patch::GravityLoop
+                | Patch::MetalSeaLoop
+                | Patch::StarDriveLoop
+                | Patch::SingularityLoop
+                | Patch::HeartLoop
+                | Patch::HeartFightLoop
+                | Patch::CoreOceanLoop
+                | Patch::DarkMatterLoop
+                | Patch::EndingLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

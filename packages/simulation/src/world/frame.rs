@@ -189,6 +189,8 @@ impl WorldState {
             // Forts, defences, the gate and the fight are tiles, ticks and entity ids (Wave 10).
             garrison: _,
             garrison_schedule: _,
+            // Descent VIII's state is player ids, entity ids and world times (Wave 10).
+            heart: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

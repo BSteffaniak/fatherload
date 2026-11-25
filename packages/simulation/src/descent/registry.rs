@@ -9,6 +9,7 @@
 use crate::{
     cave::CaveTile,
     enemy::EnemyKind,
+    heart::CoreTile,
     hollow::HollowTile,
     terrain::{DeepStratum, MineralKind, StrategicResourceKind, TileKind},
     worldgen::{Band, HazardKind},
@@ -27,12 +28,11 @@ use super::{
 
 use DescentKey as Key;
 use EnemyKind::{
-    AcidLancer, AcidSpitter, AncientGuardian, Angler, BarkBeetle, BilePolyp, Bitworm, Burrower,
-    CapCrawler, CaveBat, DeadPixel, FossilEel, Gazer, Glassback, Glitchling, GlowGnat, GlowGrub,
-    GlowJelly, HiveDrone, HiveSoldier, JetRay, Leechling, Lodestar, LureFish, MagmaSalamander,
-    MagmaWisp, MawWorm, MiningDrone, MirrorTwin, PistonWarden, PrismMoth, RockMimic,
-    RogueExcavator, RootSnapper, SentryTurret, ShearMantis, Shellback, SporePuffer, ThornWisp,
-    Tumbler, VoidJelly,
+    AcidLancer, AcidSpitter, Angler, BarkBeetle, BilePolyp, Bitworm, Burrower, CapCrawler, CaveBat,
+    DeadPixel, FossilEel, Gazer, Glassback, Glitchling, GlowGnat, GlowGrub, GlowJelly, HiveDrone,
+    HiveSoldier, JetRay, Leechling, Lodestar, LureFish, MagmaSalamander, MagmaWisp, MawWorm,
+    MiningDrone, MirrorTwin, PistonWarden, PrismMoth, RockMimic, RogueExcavator, RootSnapper,
+    SentryTurret, ShearMantis, Shellback, SporePuffer, ThornWisp, Tumbler, VoidJelly,
 };
 // The Hollow World's creatures (Wave 9).
 use EnemyKind::{
@@ -1618,58 +1618,93 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         }),
         ..TEMPLATE
     },
-    // --- Descent VIII: The Heart --------------------------------------------------------------
+    // --- Descent VIII: The Heart (Wave 10, authored: `crate::heart`) -------------------------
     StratumDef {
         stratum: Stratum::DarkMatterVeins,
         descent: Descent::Heart,
         name: "Dark Matter Veins",
-        signature: "Negative-mass ore: the rig gets lighter the more it carries.",
+        signature: "Negative-mass ore: every lump of dark matter in the bay makes the rig \
+                    lighter; carry too much and it falls up onto the ceilings.",
         share_per_mille: 270,
         host_band: deep(DeepStratum::VoidGeodeFields),
+        soft: TileKind::Core(CoreTile::VeinShale),
+        hard: TileKind::Core(CoreTile::NullStone),
         palette: palette(
-            Rgb(52, 36, 80),
-            Rgb(36, 24, 60),
-            Rgb(8, 4, 18),
-            Some(Rgb(180, 120, 255)),
+            Rgb(88, 62, 122),
+            Rgb(40, 30, 58),
+            Rgb(16, 10, 30),
+            Some(Rgb(196, 140, 255)),
         ),
-        ores: &[ore(Mythril, 500, 800, 70), ore(Uranium, 500, 600, 30)],
+        ores: &[
+            ore(Mythril, 500, 800, 60),
+            ore(Uranium, 500, 600, 30),
+            ore(Diamond, 600, 500, 20),
+        ],
         layer_resource: resource("Dark Matter", StrategicResourceKind::VoidGlass),
-        creatures: &[(MagmaWisp, 3), (MiningDrone, 3), (RockMimic, 3)],
-        hazards: &[(Pressure, 5), (Lava, 3)],
+        creatures: &[
+            (EnemyKind::NullMoth, 5),
+            (EnemyKind::UpfallBeetle, 3),
+            (EnemyKind::VeinGnawer, 2),
+        ],
+        hazards: &[(Pressure, 5), (Gas, 2)],
         field: FieldProfile {
-            screen: &[screen(ScreenEffect::Vignette, 300)],
+            light_permille: 820,
+            screen: &[
+                screen(ScreenEffect::Vignette, 260),
+                screen(ScreenEffect::ColourGrade, 180),
+            ],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::Heart,
-        ambience: AmbienceCue::Strange,
-        landmarks: WITH_OUTPOST,
+        music: MusicCue::DarkMatterVeins,
+        ambience: AmbienceCue::VoidHum,
+        landmarks: &[
+            LandmarkKind::Outpost,
+            LandmarkKind::Heart,
+            LandmarkKind::Prefabs,
+            LandmarkKind::CaveEcosystems,
+        ],
         variants: &["Black Veins", "Weightless Halls"],
-        fluids: &[FluidPocketRule::sealed(Acid, 120)],
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::SingularityFields,
         descent: Descent::Heart,
         name: "Singularity Fields",
-        signature: "Gravity wells pull everything in, and light bends.",
+        signature: "Gravity wells pull rigs, drops and creatures in, and bend the light; the \
+                    horizon at a well's heart crushes hulls.",
         share_per_mille: 250,
         host_band: deep(DeepStratum::VoidGeodeFields),
+        soft: TileKind::Core(CoreTile::EventShale),
+        hard: TileKind::Core(CoreTile::HorizonRock),
         palette: palette(
-            Rgb(28, 24, 40),
-            Rgb(60, 40, 90),
-            Rgb(4, 2, 10),
-            Some(Rgb(255, 200, 255)),
+            Rgb(44, 28, 64),
+            Rgb(28, 24, 44),
+            Rgb(6, 4, 14),
+            Some(Rgb(255, 196, 255)),
         ),
         ores: &[ore(Mythril, 600, 800, 70), ore(Diamond, 400, 600, 30)],
         layer_resource: resource("Event Glass", StrategicResourceKind::VoidGlass),
-        creatures: &[(MagmaWisp, 4), (RogueExcavator, 3)],
-        hazards: &[(Pressure, 6), (Lava, 3)],
+        creatures: &[
+            (EnemyKind::Orbiter, 4),
+            (EnemyKind::AccretionMote, 5),
+            (EnemyKind::HorizonLurker, 2),
+        ],
+        hazards: &[(Pressure, 6), (Gas, 2)],
         field: FieldProfile {
-            screen: &[screen(ScreenEffect::Lensing, 500)],
+            // A faint bend everywhere; the wells' own field bends far more near them.
+            screen: &[
+                screen(ScreenEffect::Lensing, 120),
+                screen(ScreenEffect::Vignette, 220),
+            ],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::Heart,
-        ambience: AmbienceCue::Strange,
+        music: MusicCue::SingularityFields,
+        ambience: AmbienceCue::Gravity,
+        landmarks: &[
+            LandmarkKind::Heart,
+            LandmarkKind::Prefabs,
+            LandmarkKind::CaveEcosystems,
+        ],
         variants: &["Wells", "Lens Fields"],
         ..TEMPLATE
     },
@@ -1677,53 +1712,80 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
         stratum: Stratum::CoreOcean,
         descent: Descent::Heart,
         name: "Core Ocean",
-        signature: "A liquid metal sea; ride magnetic rails over it.",
+        signature: "A liquid metal sea under a rock sky, crossed on magnetic rails: switches to \
+                    the low line, boosters, jumps and the magnetic catch.",
         share_per_mille: 260,
         host_band: deep(DeepStratum::MantleStormZone),
+        soft: TileKind::Core(CoreTile::CoreBasalt),
+        hard: TileKind::Core(CoreTile::IronCrust),
         palette: palette(
-            Rgb(180, 190, 203),
-            Rgb(197, 107, 53),
-            Rgb(70, 40, 30),
-            Some(Rgb(255, 230, 160)),
+            Rgb(112, 72, 84),
+            Rgb(76, 60, 56),
+            Rgb(40, 22, 18),
+            Some(Rgb(255, 214, 150)),
         ),
-        ores: &[ore(Mythril, 500, 800, 80), ore(Platinum, 500, 600, 40)],
+        ores: &[ore(Platinum, 500, 800, 60), ore(Mythril, 500, 600, 40)],
         layer_resource: resource("Core Metal", StrategicResourceKind::CoreShard),
-        creatures: &[(MagmaWisp, 5), (RogueExcavator, 3)],
-        hazards: &[(Lava, 8), (MagmaVent, 3)],
-        music: MusicCue::Heart,
-        ambience: AmbienceCue::Lava,
-        variants: &["Mercury Shallows", "Rail Spans"],
-        fluids: &[
-            FluidPocketRule::sealed(LiquidMetal, 240),
-            FluidPocketRule::cave_pools(LiquidMetal, 200),
+        creatures: &[
+            (EnemyKind::MercuryEel, 4),
+            (EnemyKind::RailLeech, 3),
+            (EnemyKind::SlagSkimmer, 3),
         ],
+        hazards: &[(Lava, 5), (MagmaVent, 3)],
+        field: FieldProfile {
+            light_permille: 1_100,
+            screen: &[
+                screen(ScreenEffect::Wobble, 160),
+                screen(ScreenEffect::ColourGrade, 160),
+            ],
+            ..FieldProfile::NEUTRAL
+        },
+        music: MusicCue::CoreOcean,
+        ambience: AmbienceCue::MetalSea,
+        landmarks: &[
+            LandmarkKind::Heart,
+            LandmarkKind::Prefabs,
+            LandmarkKind::CaveEcosystems,
+        ],
+        variants: &["Mercury Shallows", "Rail Spans"],
+        fluids: &[FluidPocketRule::cave_pools(LiquidMetal, 120)],
         ..TEMPLATE
     },
     StratumDef {
         stratum: Stratum::TheHeart,
         descent: Descent::Heart,
         name: "The Heart",
-        signature: "The sleeping Star Drive at the planet's centre.",
+        signature: "The sleeping Star Drive at the planet's centre, at the root of the \
+                    builders' cable: wake it.",
         share_per_mille: 220,
         host_band: deep(DeepStratum::MantleStormZone),
+        soft: TileKind::Core(CoreTile::StarRock),
+        hard: TileKind::Core(CoreTile::DriveAlloy),
         palette: palette(
-            Rgb(240, 220, 160),
-            Rgb(200, 160, 90),
-            Rgb(90, 60, 30),
-            Some(Rgb(255, 255, 255)),
+            Rgb(196, 140, 40),
+            Rgb(150, 122, 82),
+            Rgb(70, 44, 26),
+            Some(Rgb(255, 250, 220)),
         ),
-        ores: &[ore(Mythril, 700, 800, 90), ore(Uranium, 300, 600, 40)],
+        ores: &[ore(Mythril, 700, 800, 70), ore(Diamond, 300, 600, 40)],
         layer_resource: resource("Star Shard", StrategicResourceKind::CoreShard),
-        creatures: &[(MagmaWisp, 4), (AncientGuardian, 2)],
-        hazards: &[(Lava, 6), (MagmaVent, 4)],
+        creatures: &[(EnemyKind::CoronaWisp, 5), (EnemyKind::CableWarden, 2)],
+        hazards: &[(Lava, 4), (MagmaVent, 4)],
         field: FieldProfile {
-            light_permille: 1_500,
-            screen: &[screen(ScreenEffect::Bloom, 400)],
+            light_permille: 1_300,
+            screen: &[
+                screen(ScreenEffect::Bloom, 320),
+                screen(ScreenEffect::ColourGrade, 140),
+            ],
             ..FieldProfile::NEUTRAL
         },
-        music: MusicCue::Heart,
-        ambience: AmbienceCue::Living,
-        landmarks: WITH_GATE,
+        music: MusicCue::TheHeart,
+        ambience: AmbienceCue::StarDrive,
+        landmarks: &[
+            LandmarkKind::GateChamber,
+            LandmarkKind::Heart,
+            LandmarkKind::Prefabs,
+        ],
         variants: &["Drive Chamber", "Cable Root"],
         gate: Some(GateDef {
             boss: DescentBoss::TheHeart,
@@ -1733,7 +1795,6 @@ pub const STRATA: [StratumDef; super::STRATUM_COUNT] = [
             ],
             rewards: &[Key::StarDrive],
         }),
-        fluids: &[FluidPocketRule::sealed(LiquidMetal, 120)],
         ..TEMPLATE
     },
 ];

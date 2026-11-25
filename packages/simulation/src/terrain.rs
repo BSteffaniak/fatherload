@@ -347,6 +347,11 @@ pub enum TileKind {
     /// rails, archivist cores, engine plating, belts, piston housings, archive stone and
     /// shelving, star glass and star chart plinths.
     City(crate::ancient_city::CityTile),
+    /// A tile of the Heart's strata (Wave 10, Descent VIII of
+    /// [`GeneratorVersion::V11`](worldgen::GeneratorVersion::V11) worlds; see [`crate::heart`]):
+    /// vein shale and dark matter, event glass and singularities, the metal sea's rails and
+    /// pylons, star rock, the Heart's shell and seal, the builders' cable.
+    Core(crate::heart::CoreTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -459,6 +464,7 @@ impl TileKind {
             Self::Hollow(tile) => tile.name(),
             Self::Warped(tile) => tile.name(),
             Self::City(tile) => tile.name(),
+            Self::Core(tile) => tile.name(),
         }
     }
 
@@ -558,6 +564,7 @@ impl Tile {
             TileKind::Hollow(tile) => crate::hollow::HOLLOW_TILE_CODE_BASE | tile.code(),
             TileKind::Warped(tile) => crate::distortion::WARPED_TILE_CODE_BASE | tile.code(),
             TileKind::City(tile) => crate::ancient_city::CITY_TILE_CODE_BASE | tile.code(),
+            TileKind::Core(tile) => crate::heart::CORE_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1885,6 +1892,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         // The Star Core arena, the shielded core and the Cathedral Lift's fixtures (Wave 8).
         TileKind::Deep(tile) => tile.indestructible(),
         TileKind::Hollow(tile) => tile.indestructible(),
+        // The Heart's shell and body, the wells' points, the pylons and the cable (Wave 10).
+        TileKind::Core(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
         // ... and Descent VII part B's fixtures (Wave 10).
         TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
@@ -1947,6 +1956,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Hollow(tile) => tile.hardness(),
         TileKind::Warped(tile) => tile.hardness(),
         TileKind::City(tile) => tile.hardness(),
+        TileKind::Core(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -1993,6 +2003,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Hollow(tile) => tile.durability(),
         TileKind::Warped(tile) => tile.durability(),
         TileKind::City(tile) => tile.durability(),
+        TileKind::Core(tile) => tile.durability(),
     }
 }
 

@@ -385,6 +385,11 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Garrison {
             what, player_id, ..
         } => (650 + what.code() as u32, player_id),
+        // The Heart (wave 10, Descent VIII): 670-699.
+        GameplayEventKind::Heart {
+            what, player_id, ..
+        } => (670 + what.code() as u32, player_id),
+        GameplayEventKind::HeartLandmarkFound { player_id, .. } => (699, Some(player_id)),
     }
 }
 

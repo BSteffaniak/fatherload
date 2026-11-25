@@ -913,6 +913,10 @@ impl Tile {
                 Some(tile) => TileKind::City(tile),
                 None => return None,
             },
+            0x1A00..=0x1AFF => match crate::heart::CoreTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Core(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

@@ -72,6 +72,7 @@ mod distortion;
 mod drowned;
 mod far_strange;
 mod garrison;
+mod heart;
 pub(super) mod hollow;
 mod living;
 mod sky;
@@ -689,10 +690,14 @@ impl WorldState {
             || !Self::hollow_spawn_allowed(kind)
             || !Self::far_spawn_allowed(kind)
             || !Self::garrison_spawn_allowed(kind)
+            || !Self::heart_spawn_allowed(kind)
         {
             return false;
         }
         if let Some(fits) = self.hollow_habitat(kind, tile) {
+            return fits;
+        }
+        if let Some(fits) = self.heart_habitat(kind, tile) {
             return fits;
         }
         let spec = kind.stats();
@@ -1196,6 +1201,10 @@ impl WorldState {
         if start_kind.is_distortion() && self.advance_distortion_creature(id, now, output) {
             return;
         }
+        // The Heart's core and coils (Wave 10) are carried by its fight (`world/enemies/heart.rs`).
+        if Self::heart_holds(start_kind) {
+            return;
+        }
         let Some((start_body, start_state)) = self.enemy_parts(id) else {
             return;
         };
@@ -1369,6 +1378,12 @@ impl WorldState {
         // The Hollow World's creatures have ways of their own (Wave 9).
         if state.kind.is_hollow()
             && let Some(intent) = self.hollow_behave(body, state, now)
+        {
+            return intent;
+        }
+        // And the Heart's (Wave 10): moths to dark matter, beetles to roofs, orbits, eels.
+        if state.kind.is_heart()
+            && let Some(intent) = self.heart_behave(body, state, now)
         {
             return intent;
         }
@@ -2162,6 +2177,10 @@ impl WorldState {
                 // Frost, ink and gulps (Wave 9, the Drowned and Frozen).
                 self.drowned_bite(body, state, player_id, now, output);
             }
+            if landed && state.kind.is_heart() {
+                // A null moth drinks dark matter (Wave 10, the Heart).
+                self.heart_bite(body, state, player_id, now, output);
+            }
             (landed, at)
         } else if let Some((pilot, middle)) = self
             .pilots_near(body.x, body.y, spec.radius + PILOT_HALF_WIDTH + 14.0)
@@ -2554,6 +2573,10 @@ impl WorldState {
         {
             return outcome;
         }
+        // The Heart's core is sealed behind its coils and armoured between breaths (Wave 10).
+        if let Some(outcome) = self.heart_damage(&state) {
+            return outcome;
+        }
         // A glassback's mirrored face throws a frontal shot back at its shooter (Wave 9).
         if let Some(at) =
             self.glassback_reflects(&body, &state, damage.source.player(), damage.kind)
@@ -2716,6 +2739,11 @@ impl WorldState {
             // A fort's wave thins, the Colossus falls (Wave 10).
             let tile = self.frame().tile_at(body.x, body.y);
             self.garrison_kill(id.get(), state.kind, tile, state.last_attacker, output);
+        }
+        if state.kind.is_heart() {
+            // The Heart's coils and sparks, and the Heart waking for good (Wave 10).
+            let tile = self.frame().tile_at(body.x, body.y);
+            self.heart_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -2987,5 +3015,19 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::ColossusHead
         | EnemyKind::ColossusFist
         | EnemyKind::ColossusLegs => false,
+        // The Heart (Wave 10): fliers roost in caves, the gnawer tunnels, the lurker and the
+        // warden nest; the eels live in the metal sea and the leeches on the rails (the Heart's
+        // own roster places them); the boss and its parts live only in the chamber.
+        EnemyKind::NullMoth | EnemyKind::AccretionMote | EnemyKind::CoronaWisp => tags.swarmers,
+        EnemyKind::VeinGnawer => tags.burrowers,
+        EnemyKind::UpfallBeetle | EnemyKind::Orbiter | EnemyKind::SlagSkimmer => {
+            tags.swarmers || tags.nests
+        }
+        EnemyKind::HorizonLurker | EnemyKind::CableWarden => tags.nests || tags.machines,
+        EnemyKind::MercuryEel
+        | EnemyKind::RailLeech
+        | EnemyKind::StarHeart
+        | EnemyKind::DriveCoil
+        | EnemyKind::HeartSpark => false,
     }
 }

@@ -49,6 +49,7 @@ mod far_strange;
 mod fluids;
 mod fx;
 pub mod garrison;
+mod heart;
 mod hollow;
 mod homes;
 mod lighting;
@@ -237,6 +238,11 @@ pub(super) struct WorldScene<'a> {
     pub seal_door: Option<fatherload_simulation::worldgen::TileRect>,
     /// The Seal Gate's keys the view's rig carries.
     pub seal_keys: Option<[bool; 6]>,
+    /// Descent VIII (Wave 10): the Heart's fight and the cable's light.
+    pub heart: &'a fatherload_simulation::heart::Heart,
+    pub heart_centre: Option<fatherload_simulation::terrain::TilePosition>,
+    pub cable: Option<fatherload_simulation::world::CablePath>,
+    pub cable_rows: Option<(i32, i32)>,
 }
 
 impl WorldScene<'_> {
@@ -511,6 +517,22 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     logistics::draw_logistics(draw, &logistics_scene);
     // The Sun Well's flares and the Sun Serpent's body behind its sprites (Wave 9).
     hollow::draw_sun_well(draw, &hollow_scene);
+    // Descent VIII (Wave 10): the wells' horizons, the builders' cable and its light, the Star
+    // Drive in its chamber.
+    let wells = heart::wells_in_view(scene.terrain, scene.visible);
+    let heart_scene = heart::HeartScene {
+        terrain: scene.terrain,
+        heart: scene.heart,
+        visible: scene.visible,
+        world_millis: scene.world_millis,
+        seconds,
+        effects_strength: scene.effects_strength,
+        wells: &wells,
+        centre: scene.heart_centre,
+        cable: scene.cable,
+        cable_rows: scene.cable_rows,
+    };
+    heart::draw_heart_world(draw, &heart_scene);
     // The Fathers' expedition (Wave 8 story): camps, wrecks, cairns and anomaly rooms.
     let expedition_scene = expedition::ExpeditionScene {
         settings: scene.terrain.settings(),
@@ -758,6 +780,8 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
     );
     // The Echo Caves' dark: only sonar shows the cave (Wave 9).
     far_strange::draw_echo_darkness(draw, &far_scene);
+    // The builders' cable lit from the Heart to the Moon, over the dark (Wave 10).
+    heart::draw_cable_light(draw, &heart_scene);
     // The Mycelial Mind's nerves: wired to its nodes while they shield it, a raw core when
     // exposed (Wave 8).
     living_dark::draw_mind_nerves(draw, scene.enemies, seconds, scene.effects_strength);

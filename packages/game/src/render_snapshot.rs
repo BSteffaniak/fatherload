@@ -576,6 +576,14 @@ pub struct ViewSnapshot<'w> {
     pub roll: f32,
     /// What the seat reads of the Hollow World (Wave 9; `None` elsewhere).
     pub hollow: Option<crate::rendering::hollow_hud::HollowView>,
+    /// What the seat reads of Descent VIII (Wave 10; `None` elsewhere).
+    pub heart: Option<crate::rendering::heart_hud::HeartView>,
+    /// The seat's ending sequence (set by the game loop from the seat's skips; `None` before
+    /// the Heart woke).
+    pub ending: Option<crate::rendering::heart_hud::EndingSeat>,
+    /// The gravity well bending the seat's view (Wave 10): its point and horizon reach in
+    /// world pixels and how hard it bends (`0..=1`), for the lensing pass.
+    pub lens: Option<(f32, f32, f32, f32)>,
 }
 
 impl ViewSnapshot<'_> {
@@ -829,6 +837,14 @@ pub struct RenderSnapshot<'w> {
     pub seal_door: Option<fatherload_simulation::worldgen::TileRect>,
     /// The forts near the local seats (their walls, bays and pylons; Wave 10).
     pub forts: Vec<fatherload_simulation::worldgen::descent::garrison::Fort>,
+    /// Descent VIII's shared state (Wave 10): the Heart's fight, the cable's light.
+    pub heart: &'w fatherload_simulation::heart::Heart,
+    /// The Heart chamber's middle, on Deep Descent worlds.
+    pub heart_centre: Option<TilePosition>,
+    /// The builders' cable from the Heart to the Moon, on Deep Descent worlds.
+    pub cable: Option<fatherload_simulation::world::CablePath>,
+    /// The rows the cable runs down through rock to the Heart.
+    pub cable_rows: Option<(i32, i32)>,
 }
 
 /// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
@@ -1003,6 +1019,17 @@ impl<'w> RenderSnapshot<'w> {
             colossus_hall: world.colossus_hall(),
             seal_door: world.seal_door(),
             forts,
+            heart: world.heart(),
+            heart_centre: world.heart_centre(),
+            cable: world.cable_path(),
+            cable_rows: world.world_settings().generator.has_descents().then(|| {
+                let layout =
+                    fatherload_simulation::descent::fields::cached_layout(world.world_settings());
+                fatherload_simulation::worldgen::descent::heart::cable_rows(
+                    world.world_settings(),
+                    &layout,
+                )
+            }),
             expedition_lead: crate::shell::expedition::next_lead(world),
             people_day: world.people_clock().day,
             powered_modules: world
@@ -1201,10 +1228,42 @@ fn view_snapshot(
         player_id,
         crate::view_frame::frame().tile_at(focus_x, focus_y),
     );
+    // Descent VIII (Wave 10): the Heart's chamber and its awakening are seen wide.
+    let heart = crate::rendering::heart_hud::HeartView::of(
+        world,
+        player_id,
+        crate::view_frame::frame().tile_at(focus_x, focus_y),
+    );
     let world_scale = world_scale
         * hollow
             .as_ref()
-            .map_or(1.0, crate::rendering::hollow_hud::HollowView::zoom);
+            .map_or(1.0, crate::rendering::hollow_hud::HollowView::zoom)
+        * heart
+            .as_ref()
+            .map_or(1.0, crate::rendering::heart_hud::HeartView::zoom);
+    // In the Heart's chamber the camera leans toward the Star Drive, so the fight is framed.
+    let (focus_x, focus_y) = match (heart.as_ref(), world.heart_centre()) {
+        (Some(view), Some(centre)) if view.arena > 0.0 => {
+            let (cx, cy) = crate::view_frame::frame().tile_center(centre);
+            // Only once well inside (it eases in steeply at the shell).
+            let lean = 0.7 * view.arena.powi(6);
+            (
+                lean.mul_add(cx - focus_x, focus_x),
+                lean.mul_add(cy - focus_y, focus_y),
+            )
+        }
+        _ => (focus_x, focus_y),
+    };
+    // The well bending the view (its point, its reach, how hard), for the lensing pass.
+    let lens = world.well_at(focus_x, focus_y).map(|(well, weight)| {
+        let (x, y) = crate::view_frame::frame().tile_center(well.centre);
+        (
+            x,
+            y,
+            fatherload_simulation::heart::HORIZON_TILES * fatherload_simulation::terrain::TILE_SIZE,
+            weight,
+        )
+    });
     let camera = camera_for(viewport, world_scale, focus_x, focus_y);
     #[allow(
         clippy::cast_possible_truncation,
@@ -1268,6 +1327,9 @@ fn view_snapshot(
         fields,
         roll,
         hollow,
+        heart,
+        ending: None,
+        lens,
         aim_preview: None,
         reticle: None,
         build_preview: None,

@@ -691,6 +691,9 @@ pub const STRATUM_FIELD_SOURCES: &[StratumFieldSource] = &[
     // Wave 9 strange-b: the Time Sludge's slow pools, fast lanes and the clock hall's stripes
     // (inside them only; they blend the stratum's own field in themselves).
     crate::worldgen::descent::far_strange::far_field_source,
+    // Wave 10: the Singularity Fields' gravity wells (inside a well's reach only; they blend
+    // the stratum's own field in themselves).
+    crate::heart::fields::well_field_source,
     crate::descent::fields::stratum_field_source,
 ];
 

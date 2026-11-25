@@ -248,6 +248,11 @@ impl WorldState {
         if !self.garrison.is_empty() {
             hash.write_serialized(&self.garrison);
         }
+        // Absent until something happens in Descent VIII (Wave 10), so older worlds keep their
+        // hashes.
+        if !self.heart.is_empty() {
+            hash.write_serialized(&self.heart);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

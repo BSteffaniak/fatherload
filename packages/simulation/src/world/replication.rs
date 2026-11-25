@@ -251,6 +251,9 @@ pub enum SectionKey {
     /// Gate, the Gatekeeper Colossus's fight, falling stones and landmarks found (Wave 10
     /// ancients-b; the hall's collapses travel as terrain ops).
     Garrison,
+    /// Descent VIII (Wave 10): floating rigs, wells, landmarks, the Heart's fight,
+    /// `space_unlocked`, the Star Drives and the ending's start.
+    Heart,
 }
 
 impl SectionKey {
@@ -270,7 +273,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 30] = [
+    pub const SHARED: [Self; 31] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -305,6 +308,8 @@ impl SectionKey {
         Self::AncientCity,
         // Descent VII part B (Wave 10 ancients-b).
         Self::Garrison,
+        // The Heart (Wave 10).
+        Self::Heart,
     ];
 }
 
@@ -343,6 +348,7 @@ pub enum SectionPayload {
     FarStrange(Box<crate::far_strange::FarStrange>),
     AncientCity(Box<crate::ancient_city::AncientCity>),
     Garrison(Box<crate::garrison::Garrison>),
+    Heart(Box<crate::heart::Heart>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -549,6 +555,7 @@ impl WorldState {
             city_schedule: _,
             garrison,
             garrison_schedule: _,
+            heart,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -657,6 +664,7 @@ impl WorldState {
             SectionKey::FarStrange => SectionPayload::FarStrange(Box::new(far_strange.clone())),
             SectionKey::AncientCity => SectionPayload::AncientCity(Box::new(ancient_city.clone())),
             SectionKey::Garrison => SectionPayload::Garrison(Box::new(garrison.clone())),
+            SectionKey::Heart => SectionPayload::Heart(Box::new(heart.clone())),
         })
     }
 
@@ -849,6 +857,9 @@ impl WorldState {
             }
             (SectionKey::Garrison, SectionPayload::Garrison(garrison)) => {
                 self.garrison = *garrison;
+            }
+            (SectionKey::Heart, SectionPayload::Heart(heart)) => {
+                self.heart = *heart;
             }
             (SectionKey::Bases, SectionPayload::Bases(bases)) => {
                 self.bases = *bases;

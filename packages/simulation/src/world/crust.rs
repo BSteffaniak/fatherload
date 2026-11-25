@@ -91,11 +91,8 @@ impl WorldState {
     /// Whether `at` is a rail a cart can roll onto: a rail bed with open ground over it (or the
     /// main line's own rail, where a branch dives under it at a junction).
     fn rail_open(&self, at: TilePosition) -> bool {
-        let rail = |at: TilePosition| {
-            self.terrain
-                .tile(at)
-                .is_some_and(|tile| tile.kind == TileKind::Crust(CrustTile::Rail))
-        };
+        // The Crust's rails and the Heart's magnetic rails (Wave 10) ride alike.
+        let rail = |at: TilePosition| self.terrain.tile(at).is_some_and(|tile| is_rail(tile.kind));
         let above = TilePosition {
             x: at.x,
             y: at.y - 1,
@@ -184,7 +181,6 @@ impl WorldState {
     ) {
         if !crust_rules(self.terrain.settings())
             || thrust
-            || horizontal.abs() < 0.5
             || self.riding_cart(player_id)
             || self.active_drills.contains_key(&player_id)
             || self.logistics.is_riding(player_id)
@@ -194,10 +190,22 @@ impl WorldState {
         let Some((rail, kind)) = self.ground_under(player_id) else {
             return;
         };
-        if kind != TileKind::Crust(CrustTile::Rail) {
+        if !is_rail(kind) {
             return;
         }
-        let dir: i8 = if horizontal > 0.0 { 1 } else { -1 };
+        // The magnetic catch (Wave 10): a magnetic rail grabs a rig touching down on it at
+        // speed, stick or no stick, and keeps it going the way it was.
+        let sliding = self
+            .players
+            .get(&player_id)
+            .map_or(0.0, |player| player.velocity_x);
+        let catch =
+            is_mag_rail(kind) && sliding.abs() >= crate::heart::CATCH_SPEED_TILES * TILE_SIZE;
+        if horizontal.abs() < 0.5 && !catch {
+            return;
+        }
+        let along = if catch { sliding } else { horizontal };
+        let dir: i8 = if along > 0.0 { 1 } else { -1 };
         let Some(next) = crust::next_rail(|at| self.rail_open(at), rail, dir, false) else {
             return;
         };
@@ -217,6 +225,13 @@ impl WorldState {
             speed: speed.max(CART_BOARD_SPEED),
         });
         output.push_event(GameplayEventKind::CartBoarded { player_id });
+        if catch {
+            output.push_event(crate::world::heart::heart_event(
+                crate::heart::HeartEvent::RailCatch,
+                Some(player_id),
+                rail,
+            ));
+        }
     }
 
     /// One tick of a cart ride: the fixed cart steps due by `next_tick`, then the rig is set on
@@ -249,19 +264,47 @@ impl WorldState {
         };
         let mut ended = None;
         let mut switched = false;
+        let mut boosted = false;
         if thrust {
             ended = Some(ride.speed * i32::from(ride.dir));
         } else {
             for _ in 0..due {
-                match crust::step_cart(&mut ride, stick, |at| self.rail_open(at)) {
+                // The Heart's magnetic rails ride fast and nearly free (Wave 10).
+                let kind = self.terrain.tile(ride.rail).map(|tile| tile.kind);
+                let tuning = if kind.is_some_and(is_mag_rail) {
+                    crate::heart::MAG_RAIL
+                } else {
+                    crust::MINE_CART
+                };
+                match crust::step_cart_tuned(&mut ride, stick, |at| self.rail_open(at), &tuning) {
                     CartStep::Rolled => {}
-                    CartStep::Advanced { switched: took } => switched |= took,
+                    CartStep::Advanced { switched: took } => {
+                        switched |= took;
+                        // A booster rail throws the rig up to speed (unless it brakes).
+                        let braking = i32::from(stick.horizontal) * i32::from(ride.dir) < 0;
+                        if !braking
+                            && self.terrain.tile(ride.rail).is_some_and(|tile| {
+                                tile.kind == TileKind::Core(crate::heart::CoreTile::MagBooster)
+                            })
+                            && ride.speed < crate::heart::BOOSTER_SPEED
+                        {
+                            ride.speed = crate::heart::BOOSTER_SPEED;
+                            boosted = true;
+                        }
+                    }
                     CartStep::Ended { velocity } => {
                         ended = Some(velocity);
                         break;
                     }
                 }
             }
+        }
+        if boosted {
+            output.push_event(crate::world::heart::heart_event(
+                crate::heart::HeartEvent::RailBoost,
+                Some(player_id),
+                ride.rail,
+            ));
         }
         let frame = self.frame();
         let (x_milli, y_milli) = ride.point_milli();
@@ -853,4 +896,14 @@ impl WorldState {
             }
         }
     }
+}
+
+/// Whether a cart rolls on `kind`: the Crust's rails and the Heart's magnetic rails (Wave 10).
+const fn is_rail(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Crust(CrustTile::Rail)) || is_mag_rail(kind)
+}
+
+/// Whether `kind` is one of the Heart's magnetic rails (Wave 10).
+const fn is_mag_rail(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Core(tile) if tile.is_mag_rail())
 }

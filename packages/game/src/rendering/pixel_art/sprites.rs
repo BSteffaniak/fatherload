@@ -12,6 +12,7 @@ pub mod enemies;
 pub mod explosives;
 pub mod far_strange;
 pub mod garrison;
+pub mod heart;
 pub mod hollow;
 pub mod icons;
 pub mod interior;
@@ -594,6 +595,21 @@ pub const ALL: &[&SpriteDef] = &[
     &deep_supplies::TIME_BUBBLE_BOMB,
     &deep_supplies::ECHO_CHARGE,
     &deep_supplies::LAMP_FILTER,
+    // Descent VIII, the Heart (Wave 10).
+    &heart::NULL_MOTH,
+    &heart::UPFALL_BEETLE,
+    &heart::VEIN_GNAWER,
+    &heart::ORBITER,
+    &heart::ACCRETION_MOTE,
+    &heart::HORIZON_LURKER,
+    &heart::MERCURY_EEL,
+    &heart::RAIL_LEECH,
+    &heart::SLAG_SKIMMER,
+    &heart::CORONA_WISP,
+    &heart::CABLE_WARDEN,
+    &heart::DRIVE_COIL,
+    &heart::HEART_SPARK,
+    &heart::STAR_HEART,
 ];
 
 #[cfg(test)]

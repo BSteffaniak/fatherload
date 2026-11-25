@@ -144,6 +144,9 @@ const fn lives_underground(kind: EnemyKind) -> bool {
         // So do Descent VII part B's (Wave 10,
         // `garrison_tests::the_garrison_creatures_keep_the_body_rules`).
         && !kind.is_garrison()
+        // So do the Heart's (Wave 10, `heart_tests::the_hearts_creatures_keep_the_body_rules`;
+        // its eels live in the metal sea, its boss in its chamber).
+        && !kind.is_heart()
 }
 
 /// One of every cave kind at an open spot in the arena.

@@ -411,10 +411,20 @@ impl LocalGame {
         snapshot.apply_camera_leads(&self.camera_leads);
         let mut anchors = self.view_anchors.borrow_mut();
         anchors.clear();
+        let ending_elapsed = self.runtime.world().ending_elapsed();
         for view in &mut snapshot.views {
             if anchors.len() <= view.seat_index {
                 anchors.resize(view.seat_index + 1, None);
             }
+            // The seat's own ending (Wave 10): its phase from the world's clock and its skips.
+            view.ending = ending_elapsed.map(|elapsed| {
+                let seat_view = self.shell.seat(view.seat_index).ending;
+                crate::rendering::heart_hud::EndingSeat {
+                    phase: seat_view.phase(elapsed),
+                    elapsed,
+                    view: seat_view,
+                }
+            });
             // The rolled camera (F9) turns about the seat's rig as drawn.
             let pivot = snapshot
                 .players
@@ -549,6 +559,7 @@ impl LocalGame {
         self.announce_supplies(&players);
         self.announce_ancient_city(&players);
         self.announce_garrison(&players);
+        self.announce_heart(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1607,6 +1618,63 @@ impl LocalGame {
                 lore.title(),
                 lore.text(),
             );
+        }
+    }
+
+    /// Descent VIII's news for each local seat (Wave 10): dark matter's weight, wells, rails,
+    /// the Heart's beats; a story card when the crew finds one of its places.
+    fn announce_heart(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::heart::HeartEvent as E;
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        let mut cards: Vec<(usize, &'static str, &'static str)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            match gameplay.kind {
+                GameplayEventKind::HeartLandmarkFound { landmark, .. } => {
+                    // The crew's find: every local seat reads the place's story.
+                    for seat in 0..players.len() {
+                        cards.push((seat, landmark.name(), landmark.story()));
+                    }
+                }
+                GameplayEventKind::Heart {
+                    what, player_id, ..
+                } => {
+                    let text = match what {
+                        E::RigFloating => {
+                            "Too much dark matter: the rig falls UP. Roll over and thrust, or load ore."
+                        }
+                        E::RigSettled => "Heavy enough again: the rig falls the right way.",
+                        E::WellCaught => "A gravity well has you: thrust out before the horizon.",
+                        E::HorizonCrush => "THE HORIZON is crushing the hull!",
+                        E::RailCatch => "The magnetic rail catches the rig.",
+                        E::MothDrank => "A null moth drank a lump of dark matter from the bay.",
+                        E::HeartStirred => "The Star Drive stirs. Its coils begin to turn.",
+                        E::Ignition => "IGNITION: the core is open. Strike it!",
+                        E::Collapse => {
+                            "The core collapses into a singularity: strike as it exhales."
+                        }
+                        E::HeartSlept => "Nobody stayed. The Heart sinks back to sleep.",
+                        E::StarDriveFitted => "The Star Drive is your engine now.",
+                        E::StarsOpen => "Above the Moon: the stars are open.",
+                        _ => continue,
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+        for (seat, title, text) in cards {
+            self.shell
+                .story_moment(seat, crate::shell::StoryMomentKind::HeartPlace, title, text);
         }
     }
 

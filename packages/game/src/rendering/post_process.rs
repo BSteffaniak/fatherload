@@ -59,6 +59,10 @@ pub struct ViewPlan {
     pub zoom: f32,
     /// One art pixel in physical pixels (pixelation blocks and scanline pitch).
     pub art_pixel: f32,
+    /// A gravity well's lens (Wave 10): its point on the view (`0..=1` of the view's width and
+    /// height), its horizon's reach (a share of the view's height) and its strength (`0..=1`;
+    /// 0: the plain centred lensing).
+    pub lens: [f32; 4],
 }
 
 impl ViewPlan {
@@ -99,6 +103,7 @@ struct Locations {
     grade: i32,
     fog: i32,
     size: i32,
+    lens: i32,
 }
 
 /// The pipeline: the effect shader and each seat's targets, levels and plan.
@@ -132,6 +137,7 @@ impl PostProcess {
                 grade: location("uGrade"),
                 fog: location("uFogColor"),
                 size: location("uSize"),
+                lens: location("uLens"),
             };
             (Some(shader), locations)
         };
@@ -231,6 +237,25 @@ impl PostProcess {
                     .min(MAX_TARGET_SIDE);
                 (side, side)
             };
+            // A gravity well's lens (Wave 10): its point on the view, turned with the roll.
+            // Its strength is the eased lensing level, so the accessibility setting governs it.
+            let lens = view.lens.map_or([0.0; 4], |(wx, wy, reach, _weight)| {
+                let (mut px, mut py) = ((wx - view.camera.x) * zoom, (wy - view.camera.y) * zoom);
+                if roll != 0.0 {
+                    let (sin, cos) = (-roll).sin_cos();
+                    let (dx, dy) = (px - pivot.0, py - pivot.1);
+                    px = pivot.0 + dx * cos - dy * sin;
+                    py = pivot.1 + dx * sin + dy * cos;
+                }
+                let height = view_size.1.max(1) as f32;
+                [
+                    px / view_size.0.max(1) as f32,
+                    // The picture's texture rows run bottom up in the effect pass.
+                    1.0 - py / height,
+                    (reach * zoom / height).min(0.5),
+                    fx.level(ScreenEffect::Lensing).clamp(0.0, 1.0),
+                ]
+            });
             let targets = &mut self.targets[seat];
             ensure_target(raylib, thread, &mut targets.world, world_size);
             if roll != 0.0 {
@@ -248,6 +273,7 @@ impl PostProcess {
                 view_size,
                 zoom,
                 art_pixel: crate::pixel_scale::WORLD_PIXELS_PER_ART_PIXEL * zoom,
+                lens,
             });
         }
     }
@@ -439,6 +465,12 @@ impl PostProcess {
                 size.as_ptr().cast(),
                 ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC2 as i32,
             );
+            ffi::SetShaderValue(
+                **shader,
+                self.locations.lens,
+                plan.lens.as_ptr().cast(),
+                ffi::ShaderUniformDataType::SHADER_UNIFORM_VEC4 as i32,
+            );
         }
     }
 }
@@ -511,6 +543,8 @@ uniform vec4 uE;
 uniform vec3 uGrade;
 uniform vec3 uFogColor;
 uniform vec2 uSize;
+// a gravity well's lens (Wave 10): point (uv), horizon reach (share of height), strength
+uniform vec4 uLens;
 
 vec3 fetch(vec2 uv) {
     return TEX(texture0, clamp(uv, vec2(0.0), vec2(1.0))).rgb;
@@ -522,8 +556,19 @@ void main() {
     vec2 centred = uv - vec2(0.5);
     float dist = length(centred * vec2(aspect, 1.0));
 
-    // Lensing: the picture bulges around the centre.
-    if (uC.y > 0.0) {
+    // Lensing round a gravity well (Wave 10): a point lens. Light from behind the well is
+    // bent round it into a ring, the far side shows through the near side, and inside the
+    // ring is the dark of the horizon. Elsewhere, the picture bulges round the centre.
+    float lensShadow = 0.0;
+    if (uLens.w > 0.0) {
+        vec2 offset = (uv - uLens.xy) * vec2(aspect, 1.0);
+        float r = max(length(offset), 0.0001);
+        float ring = uLens.z * (0.35 + 0.35 * uLens.w);
+        float bend = (ring * ring) / (r * r) * uLens.w;
+        vec2 source = offset * (1.0 - min(bend, 2.0));
+        uv = uLens.xy + source / vec2(aspect, 1.0);
+        lensShadow = (1.0 - smoothstep(ring * 0.3, ring * 0.7, r)) * uLens.w;
+    } else if (uC.y > 0.0) {
         float r2 = dist * dist;
         uv = vec2(0.5) + centred * (1.0 - uC.y * 0.3 * exp(-r2 * 5.0));
     }
@@ -643,6 +688,10 @@ void main() {
     if (uC.w > 0.0) {
         colour *= 1.0 - uC.w * 0.85 * smoothstep(0.3, 0.95, dist);
     }
+    // The horizon's dark inside a well's ring.
+    if (lensShadow > 0.0) {
+        colour *= 1.0 - 0.9 * lensShadow;
+    }
     OUT = vec4(clamp(colour, 0.0, 1.0), 1.0) * colDiffuse * fragColor;
 }
 ";
@@ -672,6 +721,7 @@ mod tests {
                 "uGrade",
                 "uFogColor",
                 "uSize",
+                "uLens",
                 "texture0",
             ] {
                 assert!(source.contains(&format!(" {uniform};")), "{uniform}");
@@ -714,6 +764,7 @@ mod tests {
             view_size: (1_280, 720),
             zoom: 2.0,
             art_pixel: 6.0,
+            lens: [0.0; 4],
         };
         let rect = plan.world_rect((0.0, 0.0), (1_000.0, 500.0));
         assert!((rect.x + rect.width * 0.5 - 1_000.0).abs() < 1e-3);

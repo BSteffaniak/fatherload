@@ -527,6 +527,9 @@ impl WorldState {
                 MineResult::Mined(TileKind::Deep(tile)) => {
                     self.mined_deep_tile(player_id, target, tile, &mut output);
                 }
+                MineResult::Mined(TileKind::Core(tile)) => {
+                    Self::mined_core_tile(player_id, target, tile, &mut output);
+                }
                 MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
                     self.open_cave_cache(player_id, target, tile, &mut output);
                 }
@@ -597,6 +600,9 @@ impl WorldState {
         self.advance_hollow(next_tick, &mut output);
         // Deep supplies at work (Wave 10 polish): ballast blows, flares, bait, filter glass.
         self.advance_supplies(next_tick, &mut output);
+        // Descent VIII (Wave 10): dark matter's weight, the wells, landmarks, the Star Drive
+        // and the Heart's fight.
+        self.advance_heart(next_tick, &mut output);
         self.advance_vault_relays(next_tick, &mut output);
         self.track_poi_visits(&mut output);
         self.track_cave_discoveries(&mut output);

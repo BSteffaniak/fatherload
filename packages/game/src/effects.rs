@@ -1171,7 +1171,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::PistonStruck { player_id }
         | GameplayEventKind::DeepLogRead { player_id, .. }
         | GameplayEventKind::StarCoreBeaten { player_id }
-        | GameplayEventKind::GlowmotherDefeated { player_id } => Some(player_id),
+        | GameplayEventKind::GlowmotherDefeated { player_id }
+        | GameplayEventKind::HeartLandmarkFound { player_id, .. } => Some(player_id),
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }
@@ -1191,7 +1192,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::FarStrange { player_id, .. }
         | GameplayEventKind::Supply { player_id, .. }
         | GameplayEventKind::AncientCity { player_id, .. }
-        | GameplayEventKind::Garrison { player_id, .. } => player_id,
+        | GameplayEventKind::Garrison { player_id, .. }
+        | GameplayEventKind::Heart { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

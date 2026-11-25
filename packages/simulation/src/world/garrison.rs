@@ -213,14 +213,17 @@ impl WorldState {
     // --- Hooks --------------------------------------------------------------------------------
 
     /// Whether the Heart Seal refuses `player_id`'s drill on a `kind` tile (it yields only to a
-    /// rig carrying the Heart Key, the Colossus's reward).
+    /// rig carrying the Heart Key, the Colossus's reward): the seal over Descent VIII and the
+    /// Heart's own chamber seal (Wave 10 heart) alike.
     #[must_use]
     pub(super) fn heart_seal_refuses(&self, player_id: PlayerId, kind: TileKind) -> bool {
-        kind == TileKind::Cave(CaveTile::HeartSeal)
-            && !self
-                .players
-                .get(&player_id)
-                .is_some_and(|player| player.hazard_gear.has_system(RigSystem::HeartKey))
+        matches!(
+            kind,
+            TileKind::Cave(CaveTile::HeartSeal) | TileKind::Core(crate::heart::CoreTile::HeartSeal)
+        ) && !self
+            .players
+            .get(&player_id)
+            .is_some_and(|player| player.hazard_gear.has_system(RigSystem::HeartKey))
     }
 
     /// A siege shell burst at local point `(x, y)`: it breaks the defences it lands among.

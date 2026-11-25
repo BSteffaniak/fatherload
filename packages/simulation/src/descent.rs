@@ -685,6 +685,19 @@ pub enum MusicCue {
     SealGate,
     /// The Gatekeeper Colossus's theme: huge drums and brass, heavier with every stage.
     GatekeeperColossus,
+    // --- The Heart's own pieces (Wave 10 heart), appended -----------------------------------
+    /// Dark Matter Veins: a weightless waltz; low notes drift upward, a slow celesta falls up.
+    DarkMatterVeins,
+    /// Singularity Fields: a bending, pitch-sliding drone, notes stretched near the wells.
+    SingularityFields,
+    /// Core Ocean: a rolling, metallic barcarolle over a humming rail rhythm.
+    CoreOcean,
+    /// The Heart: a slow, enormous heartbeat under rising choir pads; the drive breathing.
+    TheHeart,
+    /// The Heart's fight: the drive waking, pulse by pulse, into a full theme.
+    HeartAwakening,
+    /// The ending and the credits: the cable lights, the theme climbs to the Moon.
+    Ending,
 }
 
 /// A stratum's ambience bed.
@@ -772,6 +785,15 @@ pub enum AmbienceCue {
     Barracks,
     /// A sealed hall: deep resonance, trickling dust, a slow grinding far behind the stone.
     SealHall,
+    // --- The Heart (Wave 10 heart), appended ---------------------------------------------
+    /// A deep, weightless hum; grit falling upward.
+    VoidHum,
+    /// Groaning, stretched rock; the wells' low pull.
+    Gravity,
+    /// The metal sea: heavy slow waves, the rails' electric hum.
+    MetalSea,
+    /// The Star Drive's breath: a vast, slow in-and-out and a crackle of light.
+    StarDrive,
 }
 
 /// What kind of landmark a stratum holds; every kind has a generator
@@ -825,10 +847,14 @@ pub enum LandmarkKind {
     /// Bastion, the Seal Court and the Processional Way, the Gatekeeper's hall and the Heart
     /// Seal ([`crate::worldgen::descent::garrison`]).
     Garrison,
+    /// The Heart's set pieces (Wave 10): weightless halls and the Upfall, the gravity wells and
+    /// the Lens, the metal sea, its rails and the Ferry Terminal, the cable and the Heart's
+    /// chamber ([`crate::worldgen::descent::heart`]).
+    Heart,
 }
 
 impl LandmarkKind {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Outpost,
         Self::GateChamber,
         Self::HollowCavern,
@@ -844,6 +870,7 @@ impl LandmarkKind {
         Self::FarStrange,
         Self::AncientCity,
         Self::Garrison,
+        Self::Heart,
     ];
 }
 
