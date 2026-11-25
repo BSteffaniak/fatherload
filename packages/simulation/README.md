@@ -9748,6 +9748,27 @@ each gated by understanding (`CHAPTER_NEEDS` 0 / 150 / 300 / 450 / 600):
 - Alien homes have no interior screen yet (the `Home` is kept for one); home-world `Home`
   commands stay home-only.
 
+### Review pass (Wave 12 aliens review)
+
+- **Escorts**: a traveller aboard (`AlienState::passengers`) is no longer about in their town:
+  the people pass despawns them and does not spawn them again until delivered (tested in the
+  bot's arc). There is still no figure riding in the rig; the panel and the HUD tracker say
+  who rides along.
+- **Chapter goals in plain words**: an elder's request is shown through the language filter,
+  so a chapter taken at Fragments could not be re-read. The game's HUD shows each running
+  chapter under the quest tracker (`alien_hud::draw_chapter_tracker`: title in the species'
+  ink, the goal with cargo counts, the escort's traveller and destination), and the talk
+  panel's chapter section gives the same line (`alien_hud::chapter_objective`).
+- **Art**: the Vessi portrait is a close-up of its own (the standing figure's head is three
+  pixels on a long neck); the Vessi script is note heads with stems and flags (the full-cell
+  rings all read as the same Latin "o"/"Q" at text size); the owner's pennant is a short
+  staff by the door.
+- **Rendering cost**: the polar ground renderer culls ground things outside the seat's
+  viewport (`PolarGround::draw_things` takes the viewport): every building of every town on
+  the body was drawn each frame, most of them round the far side of the ring.
+- Scenes: `alien_home_and_monument` now centres on the home (the monument stands too far
+  away for one view); new `alien_monument_raised` and `alien_chapter_tracker`.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

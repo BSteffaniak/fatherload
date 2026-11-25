@@ -376,7 +376,11 @@ impl WorldState {
         let keep =
             self.settlements_near_actors((DESPAWN_MARGIN_COLUMNS, NEAR_ROWS + KEEP_EXTRA_ROWS));
         // Site crews (WP-HOME) are managed by `world/homes.rs`; their village copies step aside.
-        let crew = self.crew_characters();
+        // So do the travellers riding along on escort chapters (Wave 12 aliens): aboard a rig,
+        // they are not about in their town (nor spawned there) until delivered.
+        let aboard = self.aliens().passengers();
+        let mut crew = self.crew_characters();
+        crew.extend(aboard.iter().copied());
         let mut leaving = BTreeSet::new();
         let mut present = BTreeSet::new();
         for entity in self.entities.of_kind(EntityKind::Npc) {
@@ -405,7 +409,7 @@ impl WorldState {
         for settlement in spawn.values() {
             for index in 0..settlement.residents.len() {
                 let character = settlement.residents[index].character;
-                if present.contains(&character) {
+                if present.contains(&character) || aboard.contains(&character) {
                     continue;
                 }
                 let Some(stop) = settlement.stop_at(index, time) else {

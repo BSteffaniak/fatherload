@@ -431,6 +431,17 @@ impl AlienState {
         self.homes.iter().filter(move |home| home.owner == player)
     }
 
+    /// The residents riding along on players' escort chapters: aboard a rig, not about in
+    /// their towns until delivered (the people pass keeps them out).
+    #[must_use]
+    pub fn passengers(&self) -> BTreeSet<CharacterId> {
+        self.players
+            .values()
+            .flat_map(|log| log.species.values())
+            .filter_map(|log| log.active.and_then(|active| active.passenger))
+            .collect()
+    }
+
     /// Forgets a player who left the world for good (their homes stay: deeds outlive visits).
     pub fn forget(&mut self, player: PlayerId) {
         self.players.remove(&player);

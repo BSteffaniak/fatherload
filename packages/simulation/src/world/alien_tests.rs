@@ -340,6 +340,13 @@ fn play_arc(world: &mut WorldState, species: AlienSpecies) {
                     .log(PLAYER, species)
                     .active
                     .expect("under way");
+                // The traveller is aboard: no longer about in town.
+                let traveller = active.passenger.expect("a traveller aboard");
+                run(world, 20);
+                assert!(
+                    npc_of(world, traveller).is_none(),
+                    "{species:?}: the traveller rides along, not in town"
+                );
                 let destination = active.destination.expect("the next town");
                 let next = towns
                     .iter()
