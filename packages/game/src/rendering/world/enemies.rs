@@ -28,9 +28,9 @@ use crate::rendering::pixel_art::{
     sprites::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
         drowned as drowned_art, enemies as art, far_strange as far_art, frontier as frontier_art,
-        garrison as garrison_art, heart as heart_art, hollow as hollow_art, hostiles as hostile_art,
-        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
-        wilds as wilds_art,
+        garrison as garrison_art, heart as heart_art, hollow as hollow_art,
+        hostiles as hostile_art, living as living_art, moon as moon_art, old_deep as deep_art,
+        tomb as tomb_art, wilds as wilds_art,
     },
 };
 

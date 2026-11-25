@@ -349,7 +349,9 @@ impl LocalGame {
                         });
                     if beam && sampled.fire {
                         frame.controls.weapon.fire = true;
-                    } else if !on_foot && !away && crate::weapon_aim::trigger_thrusts(sampled, player)
+                    } else if !on_foot
+                        && !away
+                        && crate::weapon_aim::trigger_thrusts(sampled, player)
                     {
                         frame.controls.thrust = true;
                     }

@@ -20,8 +20,8 @@ use fatherload_simulation::{
 pub mod alien_art;
 pub mod alien_hud;
 pub mod ancient_city_hud;
-mod body_map;
 mod body_life;
+mod body_map;
 mod build;
 mod counters;
 mod crypt_map;
