@@ -330,7 +330,12 @@ mod tests {
                 | Patch::PbDuneWindLoop
                 | Patch::PbDuneMusicLoop
                 | Patch::PbFloorCrumble
-                | Patch::PbLavaBomb => (40.0, 3_000.0),
+                | Patch::PbLavaBomb
+                // Space combat (wave 12): a ship breaking up, a boss's horn and its war-drum
+                // theme.
+                | Patch::HxShipBoom
+                | Patch::HxBossAppear
+                | Patch::HxBossLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }
