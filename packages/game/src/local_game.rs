@@ -2599,11 +2599,12 @@ mod tests {
             game.shell.selected_menu_item, 1,
             "Down highlights Fullscreen"
         );
-        // Screen effects, gyro stabiliser and horizon hold (F9), then Back.
-        for _ in 0..4 {
+        // Screen effects, gyro stabiliser and horizon hold (F9), auto-land and space thrust
+        // (Wave 11), then Back.
+        for _ in 0..6 {
             let _ = press(game, down());
         }
-        assert_eq!(game.shell.selected_menu_item, 5, "Down highlights Back");
+        assert_eq!(game.shell.selected_menu_item, 7, "Down highlights Back");
         let fullscreen = game.shell.fullscreen;
         let _ = press(game, confirm_input());
         assert_eq!(game.shell.modal, None, "confirming Back closes Options");

@@ -3851,7 +3851,8 @@ mod tests {
             (shell.master_volume - 0.5).abs() < 1e-5,
             "and leaves the volume"
         );
-        shell.selected_menu_item = 5;
+        // Back is the last row (after the flight rows of Wave 11).
+        shell.selected_menu_item = shell.options_rows().len() - 1;
         shell.update(
             &[PlayerInput {
                 confirm: true,

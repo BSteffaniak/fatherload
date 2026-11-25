@@ -340,9 +340,10 @@ pub fn touch_context(
             || view.home_door.is_some()
             || view.plot_board.is_some(),
         kits: kits.map(|count| count > 0),
+        // In space there is nowhere to climb out to (Wave 11).
         pilot: TouchPilot::new(
             view.pilot.is_some(),
-            view.can_exit,
+            view.can_exit && !player.flight.away(),
             view.can_board && !view.fixture_first,
         ),
         pilot_armed: !player.pilot_arsenal.owned.is_empty(),

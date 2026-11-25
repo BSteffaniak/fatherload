@@ -36,9 +36,12 @@ const fn settings() -> WorldSettings {
     }
 }
 
-/// A Deep Descent world after the ending: space open, a few charts read.
+/// A Deep Descent world after the ending: space open, a few charts read, ten minutes on the
+/// clock (so a warp can be staged part way through).
 fn space_world(world: &mut WorldState) {
     *world.terrain_mut() = Terrain::generate(&settings());
+    let hz = u64::from(world.tick_rate_hz());
+    world.set_simulation_tick(fatherload_simulation::SimulationTick::new(600 * hz));
     world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Peaceful);
     let mut heart = world.heart().clone();
     heart.space_unlocked = true;
@@ -72,7 +75,9 @@ fn launch(
     heart.star_drive.insert(player);
     world.set_heart(heart);
     let park = world.space_park().unwrap_or((0.0, 0.0));
-    let capacity = world.air_capacity_of(player);
+    let capacity = fatherload_simulation::flight::air_capacity(
+        fatherload_simulation::protection::HazardGear::MAXED.life_support,
+    );
     if let Some(rig) = world.player_mut(player) {
         fatherload_simulation::economy::max_out_upgrades(rig);
         rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
@@ -244,20 +249,6 @@ fn nav_hud(stage: &mut SceneStage<'_>) {
             true,
         );
         set_waypoint(world, player, NavTarget::System(target));
-        // A crewmate a little way off, and one far out (an edge arrow).
-        for (index, offset) in [(1_u64, (900.0, 500.0)), (2, (-300_000.0, -900_000.0))] {
-            let mate = PlayerId::new(index);
-            world.add_player(mate);
-            launch(
-                world,
-                mate,
-                start.offset(offset.0, offset.1),
-                1.2,
-                (200.0, 40.0),
-                StarDrive::Off,
-                true,
-            );
-        }
     });
     stage.settle(20);
     stage.play_on(|world| {
@@ -266,13 +257,13 @@ fn nav_hud(stage: &mut SceneStage<'_>) {
         };
         let centre = world
             .rig_flight(player)
-            .map_or(WorldPos::default(), |flight| flight.pos);
+            .map_or_else(WorldPos::default, |flight| flight.pos);
         let now = world.millis_at(world.simulation_tick());
         let mut shared = world.flight_shared().clone();
         shared.pings.insert(
             player,
             ScanPing {
-                at: now.saturating_sub(900),
+                at: now.saturating_sub(450),
                 centre,
                 range: nav::ping_range(3, false),
                 fogged: false,
@@ -358,9 +349,10 @@ fn landed(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         space_world(world);
         let planet = home_planet(world);
-        let pos = planet
-            .centre
-            .offset(0.0, -(planet.radius + fatherload_simulation::flight::RIG_CONTACT));
+        let pos = planet.centre.offset(
+            0.0,
+            -(planet.radius + fatherload_simulation::flight::RIG_CONTACT),
+        );
         launch(
             world,
             seats[0].player,
