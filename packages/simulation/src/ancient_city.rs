@@ -530,6 +530,7 @@ impl crate::position::Reframe for AncientCity {
             let (x, y) = shift.point((archivist.x, archivist.y));
             archivist.x = x;
             archivist.y = y;
+            archivist.from = shift.point(archivist.from);
         }
     }
 }

@@ -592,7 +592,10 @@ pub(super) fn draw_archivists(draw: &mut impl RaylibDraw, scene: &CityScene<'_>)
         };
         let width = art::ARCHIVIST.width() as f32 * ART;
         let height = art::ARCHIVIST.height() as f32 * ART;
-        let (x, y) = (drone.x, drone.y + bob);
+        // Gliding from its last point to its newest over the quarter second between them.
+        let glide = (millis % archivist::STEP_MILLIS) as f32 / archivist::STEP_MILLIS as f32;
+        let x = (drone.x - drone.from.0).mul_add(glide, drone.from.0);
+        let y = (drone.y - drone.from.1).mul_add(glide, drone.from.1) + bob;
         disc(
             draw,
             x,

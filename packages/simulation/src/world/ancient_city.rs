@@ -64,8 +64,8 @@ const VAULT_OPEN_REACH: f32 = 6.0;
 const VAULT_OPEN_REACH_TILES: i32 = 6;
 /// A rig or pilot this close (tiles, centre to centre) to a plinth reads its chart.
 const PLINTH_READ_REACH: f32 = 1.75;
-/// The archivist looks around this often.
-const ARCHIVIST_STEP_MILLIS: u64 = 250;
+/// The archivist moves and looks around this often.
+const ARCHIVIST_STEP_MILLIS: u64 = archivist::STEP_MILLIS;
 /// Creatures an archivist remarks on are this close (tiles).
 const CREATURE_REMARK_TILES: f32 = 9.0;
 /// Machinery an archivist hints at is this close (tiles).
@@ -936,9 +936,16 @@ impl WorldState {
         if self.ancient_city.archivists.is_empty() {
             return;
         }
-        let dt = self.timing.delta_seconds;
         let previous = self.millis_at(self.simulation_tick);
+        // The drones move (and look round) on whole quarter seconds of world time: the same
+        // steps at every tick rate, and the shared section changes four times a second, not
+        // every tick (the game draws each drone gliding between its last two points).
         let look = millis / ARCHIVIST_STEP_MILLIS != previous / ARCHIVIST_STEP_MILLIS;
+        if !look {
+            return;
+        }
+        #[allow(clippy::cast_precision_loss, reason = "a quarter second")]
+        let step = ARCHIVIST_STEP_MILLIS as f32 / 1_000.0;
         let owners: Vec<PlayerId> = self.ancient_city.archivists.keys().copied().collect();
         for player_id in owners {
             if !self.players.contains_key(&player_id) {
@@ -950,14 +957,13 @@ impl WorldState {
             let facing = self.actor_facing(player_id);
             let target = archivist::hover_point(x, y, facing);
             if let Some(archivist) = self.ancient_city.archivists.get_mut(&player_id) {
-                let (nx, ny) = archivist::follow_step((archivist.x, archivist.y), target, dt);
+                let (nx, ny) = archivist::follow_step((archivist.x, archivist.y), target, step);
+                archivist.from = (archivist.x, archivist.y);
                 archivist.x = quantize(nx);
                 archivist.y = quantize(ny);
             }
-            if look {
-                self.archivist_scan(player_id, next_tick, millis, output);
-                self.archivist_look_around(player_id, millis, output);
-            }
+            self.archivist_scan(player_id, next_tick, millis, output);
+            self.archivist_look_around(player_id, millis, output);
         }
     }
 

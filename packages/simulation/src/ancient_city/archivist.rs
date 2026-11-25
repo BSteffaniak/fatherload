@@ -28,6 +28,8 @@ use super::CityLandmark;
 
 /// The archivist's name, as it gives it.
 pub const ARCHIVIST_NAME: &str = "Index";
+/// The drone moves and looks round on this step of world time.
+pub const STEP_MILLIS: u64 = 250;
 /// A rig or pilot wakes an archivist core this close (tiles: from the Archive Post's floor to
 /// the core in its ceiling).
 pub const WAKE_REACH_TILES: f32 = 9.0;
@@ -52,7 +54,7 @@ pub const HOVER_OFFSET: (f32, f32) = (22.0, -30.0);
 /// Its top speed (px/s).
 pub const FOLLOW_SPEED: f32 = 520.0;
 /// How quickly it closes the gap (per second, a share of the distance).
-pub const FOLLOW_RATE: f32 = 5.0;
+pub const FOLLOW_RATE: f32 = 2.6;
 /// Further than this from its rig it blinks back to it (tiles: a beacon jump, a lift ride).
 pub const FOLLOW_SNAP_TILES: f32 = 18.0;
 
@@ -61,9 +63,13 @@ pub const FOLLOW_SNAP_TILES: f32 = 18.0;
 pub struct Archivist {
     /// When it woke.
     pub woke: SimulationTick,
-    /// Where its drone hovers (local pixels of the world's frame).
+    /// Where its drone hovers (local pixels of the world's frame), stepped every
+    /// [`STEP_MILLIS`] of world time.
     pub x: f32,
     pub y: f32,
+    /// Where it was a step ago (the game draws it gliding from there).
+    #[serde(default)]
+    pub from: (f32, f32),
     /// The lines it has said (by id).
     #[serde(default)]
     pub said: BTreeSet<u16>,
@@ -88,6 +94,7 @@ impl Archivist {
             woke: at,
             x,
             y,
+            from: (x, y),
             scan_tick: at,
             ..Self::default()
         }
@@ -734,8 +741,8 @@ mod tests {
     #[test]
     fn the_drone_follows_and_blinks_back_when_left_behind() {
         let mut at = (0.0, 0.0);
-        for _ in 0..120 {
-            at = follow_step(at, (100.0, 0.0), 1.0 / 60.0);
+        for _ in 0..12 {
+            at = follow_step(at, (100.0, 0.0), 0.25);
         }
         assert!((at.0 - 100.0).abs() < 2.0, "{at:?}");
         assert_eq!(
