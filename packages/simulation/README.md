@@ -6402,6 +6402,200 @@ Stars, Sleeping Garrison and the Seal Gate (the Ancients track fills them).
 - **Still open**: expeditions are not yet stressful past Descent I (2-10 % of the tank: the
   deep tanks dwarf a Descent's climb; making them bite is a fuel economy change, reported by
   `balance_warnings`); the new settlements' quest arcs (a content track's).
+## Wave 10 ancients-a: Descent VII part A, the builders' buried city (`src/ancient_city.rs`, `src/ancient_city/{movers,archivist}.rs`, `src/star_chart.rs`, `src/world/ancient_city.rs`, `src/world/enemies/ancient_city.rs`, `src/worldgen/descent/ancient_city.rs`)
+
+Expansion plan §13-§14, Descent VII strata 1-3: the builders' buried world, where the story
+climax approaches. Everything is V11 only (`has_descents()`); V1-V10 digests, hashes and
+replays are unchanged. Under the far track's alloy seal (only the Phase Drill cuts it), builder
+alloy portals frame the way into a city that still keeps order.
+
+### The strata (registry, `descent/registry.rs`)
+
+| Stratum | Signature rule (gently, then pushed) | Creatures | Set pieces | Ores, resource | Music / ambience |
+|---|---|---|---|---|---|
+| Buried Megacity | **a city that keeps order**: avenues on fixed levels (`avenue_levels`, 38 or 44 rows apart by variant), many with a **tram line** that runs a timetable, **towers** between one avenue and the next whose **lifts** call at the upper street, every floor and the lower street; drilling the city's fabric (paving, tower glass, lamps) raises the **city alarm** (`CityAlarm`: +140 a tile, cools 45/s; at 400 the city watches, at 1000 it **hunts** for 20 s). Deeper levels are more broken ("Fallen Towers" more gaps and rubble, "Tram Avenues" more lines) | maintenance drone (mends the city; hunts only an alarmed rig or one that shot it), scrap crawler (its bite carries off the best ore in the bay; kill it and the ore drops), street sentinel (sees only what its searchlight cone shows, fires bolts) | the **Lantern Library** (the archivist's tower beside the cable), the **Archive Post** (Descent VII's outpost with residents), alloy portals under the seal | mythril, platinum; Ancient Alloy (alloy ore) | `BuriedMegacity` (a lonely civic anthem) / `CityHum` |
+| Engine Halls | **the Great Engine's beat**: every piston, crusher and belt runs on one stroke (`engine_beat_millis`, 4.4 s at the top to 3.0 s at the bottom). **Pistons** lift a rig resting on their heads (drive off at the top onto a ledge, or **thrust off a rising head to be thrown** past it); **crushers** glow amber for 1.2 s before every slam (16 hull scaled, once a slam, shoved out); **belts** carry. The music's groove follows the beat | cog roller (charges along floors), spark wisp (its jolt drains fuel), rivet hound (pounces from afar) | **engine halls** (piston staircases to a cache, belts, crushers over them), **piston shafts** (a zig-zag of pistons and ledges; "Piston Shafts" leans to them), **crusher lines** (a wave of crushers over a belt; "Crusher Lines"), the **Great Engine** (two staircases to a gallery relic under a turning flywheel) | uranium, mythril; Engine Core | `EngineHalls` (a machine groove at the beat) / `EngineBeat` |
+| The Archive of Stars | **sealed vaults**: rooms of the builders' unbreakable masonry whose locks are puzzles of the existing mechanisms (`VaultKind`): a **plate** that holds its gate open a breath after the weight leaves (rest, then dash), a **lever up a crawlway** only a pilot fits (WP-PILOT's rig vault), **coloured glass** opened by the rig's lamp filter (the far track's keyed walls), and the deep **grand vault** (plate, gate, plate, gate, red, green, blue). Each holds a **star chart** on a plinth; shallow vaults are simple, deep ones grand | page moth (nibbles), index spider (drops from the shelving), archive warden (slow, armoured, reads a rig with a beam before it fires) | **stacks** (shelf halls with mezzanines), vaults, the **Orrery** (the builders' sky; three free charts) | diamond, mythril; Star Glass | `ArchiveOfStars` (starlit chimes, a choir pad) / `Stacks` |
+
+The Archive's light is dimmed to 760 per mille with a deep blue grade; the Engine Halls have a
+light heat haze and vignette that deepen; the Megacity a warm lamp grade.
+
+### The archivist (`ancient_city::archivist`, the companion)
+
+A builder machine, **Index**, keeper of the Lantern Library. It wakes for a player whose rig
+or pilot comes within 9 tiles of an archivist core (the Library's, on its top floor, or the
+Archive Post's, in the outpost hall's ceiling) and from then on **follows** that player as a
+little drone (`Archivist`: a frame-relative point stepped every tick towards a spot behind and
+above its rig or pilot on whole quarter seconds of world time, so every tick rate agrees and the section changes four times a second; the game draws it gliding between its last two points; it blinks back past 18 tiles). Each player has their
+own (`AncientCity::archivists`, keyed by player, kept when the player leaves so it is waiting
+when they return), saved and replicated in the shared section, so split-screen seats and online
+partners each see theirs and everyone else's.
+
+- **It talks** (`LINES`, 62 authored lines with stable ids, each said once): a greeting
+  ("You are late."), hints at the machinery (trams, lifts, pistons, crushers) and each kind of
+  vault, a word on each of the nine creatures it first sees, the strata as they come (through
+  the Heart), the alarm, low fuel and hull, the landmarks, the first, third, sixth and tenth
+  star charts, the Fathers' logs 61-73 as the crew reads them (Ines asking what the trams are
+  for, Amos's leg, Ines staying in the Archive), and, after 150 s of quiet in the builders'
+  world, musings in order. Lines are spaced 12 s apart (3.5 s for news that cannot wait) and
+  chosen in the tick from what is happening, so every peer agrees; the event
+  `ArchivistSpoke` carries the line id and the game shows it in the seat's speech box.
+- **It scans** every 18 s: the three most valuable ore tiles (or caches) within 9 tiles are
+  marked for 7 s (`Archivist::scan`); a changed scan chirps.
+
+### Star charts (`crate::star_chart`, the seam for Wave 11's space generator)
+
+A chart is read when a rig or pilot comes within 1.75 tiles of an unread plinth (the plinth
+turns read by rule, a terrain op). Everything about a chart is a pure function of the world
+seed and the plinth's tile (`chart_at_site`): a stable system id (`system_id`, never zero), a
+galactic sector relative to home (`HOME_SECTOR` (0, 0); the ring `CHART_RING` 3-48 sectors,
+deeper plinths further out; integer maths so every peer agrees), a star class (`StarClass`:
+yellow, red, blue, white, twin, nebula) and how many worlds circle it (at least one), and the
+builders' name (`star_name`). The crew's list is per world, in the order found, never shrinks
+or reorders (`AncientCity::charts`, at most `MAX_CHARTS` 512); `WorldState::star_charts()` and
+`star_chart_known(system)` read it. **Wave 11**: seed a system from `StarChart::system`, place
+it at `sector`, honour `class` and `worlds`. The game's **star charts page**
+(`ModalScreen::StarCharts`, after the codex in the map's page cycle) lists them and draws the
+charted sky beside the dialog.
+
+### Generation (V11 only; `worldgen/descent/ancient_city.rs`, a pass of `streamed::assemble` after the far Strange Layers and before the story)
+
+`plan_for` gathers a chunk's stamps (towers and the library first, then avenues, then the
+engine and archive set pieces, rolled per `ENGINE_REGION` 64 x 48 and `ARCHIVE_REGION` 60 x 40
+cell, likelier deeper) and `city_tile` answers per tile; city rock dresses plain rock (alloy ore
+veins, pipes and engine core ore, star glass specks and archive stone). Everything keeps clear
+of the cable and the outpost halls' columns (`clear_columns`) and the Descent landmarks; the
+engine and archive set pieces and towers give way to V9's pilot-only spaces (unbreakable
+masonry), and the library cuts through one. Vaults are hand-authored layouts
+(`vault_layout`, mirrored by seed). Movers come from the same stamps (`movers_with`,
+`mover_at`). The story's sites keep off every stamp (`sites::DEEPER_SET_PIECES` gains
+`crosses_ancient_city`). **`GOLDEN_V11_DIGEST` is updated**; V1-V10 digests unchanged.
+
+### The machinery (`ancient_city::movers`; pure functions of world time)
+
+- A tram car or lift cab runs a `Track` (stops, speed, a dwell at each stop, a phase seeded
+  per line): out to the last stop and back, each leg eased (fixed-point smoothstep), positions
+  in integer milli-tiles from world milliseconds. Trams cruise 9 tiles/s (half again faster
+  mid-leg) and wait 3.6 s; lifts 6 tiles/s and wait 2.8 s.
+- A piston or crusher runs a `Cycle` of its hall's beat with a phase per machine (a staircase
+  rises in turn; a crusher line slams in a wave): pistons rest (the last 0.9 s hissing), rise,
+  hold high, fall; crushers rest (the last 1.2 s their lamp warming), slam (accelerating), hold
+  down, rise.
+- **Rides** (`CityRide`, in the shared section): a rig resting in a car or cab while it waits
+  at a stop, or on a piston's head, boards; the movement step and the drill are skipped while
+  aboard (like a lift ride) and `advance_ancient_city` carries it to the mover's place every
+  tick, with or without input; the stick walks it along the car, cab or head (off a piston's
+  edge any time, off a car or cab only at a stop), thrust jumps off (a rising head throws it:
+  1.6x the head's speed plus 180 px/s). A pilot cannot climb out mid-ride. Every tick
+  rate agrees (tests compare 20 and 60 Hz).
+
+### State, events, formats
+
+- `AncientCity` (world field, appended shared `SectionKey::AncientCity`, serde defaults, hashed
+  once non-empty): rides, alarms, archivists, charts, vaults opened, landmarks found.
+  `CitySchedule` (saved, never hashed or replicated, cleared in client keyframes): crusher
+  hits, the ore crawlers carry, launches, the logs each archivist has remarked on, and the
+  tick's ride sticks (not saved).
+- Tiles: `TileKind::City(CityTile)`, a new family at code base **`0x1A00`** (19 tiles; the
+  machinery's fixed parts and the plinths are indestructible and blast-proof).
+- Appended: nine `EnemyKind`s (`MaintenanceDrone` .. `IndexSpider`, with contact boxes matching
+  their sprites), two `ShotKind`s (`SentinelBolt`, `ReadingBeam`), `MusicCue::{BuriedMegacity,
+  EngineHalls, ArchiveOfStars}`, `AmbienceCue::{CityHum, EngineBeat, Stacks}`,
+  `LandmarkKind::AncientCity`, `memories::Settlement::ArchivePost` (10 lines; the story track
+  may re-key the last two to logs 64 and 66 once they exist), `DeepSettlement::ArchivePost`
+  (`ARCHIVE_POST` village id `0x3FFF_FC00`).
+- Events: `GameplayEventKind::AncientCity { what, player_id, x, y, detail }`, netcode codes
+  `630 + CityEvent::code()` (630-647).
+- **`PROTOCOL_VERSION` 18** (one bump for the track). **No save format bump.**
+- Shared-file edits (additive): the far track's keyed walls and lamp-filter swap also work in
+  the Archive of Stars (`world/far_strange.rs`); `simulate_tick` skips drill and movement for a
+  city rider and records its stick; `can_exit_rig` refuses mid-ride; enemy notice, strike and
+  kill hooks; the descent probe reads `ancient_city::authored_content`.
+- Dev and scene seams: `wake_archivist_for`, `stage_archivist_line`, `stage_star_chart`,
+  `set_ancient_city`, `stage_city_alarm`, `city_movers_near`, `city_stamps_near`,
+  `city_landmark_bounds`, `archivist_cores`, `lantern_library`.
+
+### The Archive Post (`people::deep_folk`)
+
+Descent VII's outpost hall is a third deep settlement: **Keeper-Unit Nine** (quartermaster, a
+builder machine), **Ada Lantry** (lamplighter), **Pell Corran** (tinker), **Sweep** (a
+cleaning machine) and **Curator Thessaly** (a builder machine who watched Ines Calloway stay to
+read the Archive). The Lamplighters' grandparents came down after a crew that never went home
+and kept the street lamps burning. They live in the half of the hall away from the lift's door
+and tell their own memories of the Fathers in conversation (`Settlement::ArchivePost`, ids
+`archive_post.*`), registered by name (`"The Archive Post"`, `"Megacity Archive Post"`).
+`deep_folk::is_automaton` names the machines (the game may draw them so).
+
+### Game side
+
+- Tile art (`tile_art/city_art.rs`): pale city stone blocks, tower glass with lit windows, tram
+  rails and yellow-edged platforms, hanging lamps, alloy ore, lift rails, the archivist's
+  core; riveted engine plating, belts with chevrons, hazard-striped housings, glowing engine
+  core ore, copper pipes; book-spine shelving, starred archive stone, star glass and chart
+  plinths. Back walls: a night city of lit facades on the avenues, panelled tower interiors,
+  dark plating with pipes and gauges in the halls, a starry blue in the Archive.
+- World (`rendering/world/ancient_city.rs`): tram cars in cream and teal under their wire,
+  lift cabs on their cables, piston heads on their rams with steam and an amber lamp before
+  they rise, crushers with guide rods and a warning lamp (amber warming, red falling), belts'
+  chevrons running, the Great Engine's flywheel turning on the beat, the Orrery's spheres, the
+  plinths' gold light, every player's archivist drone (lens lit and a speech glyph while it
+  talks) and the seat's own scan brackets. Slow, low contrast, scaled by the effects setting.
+- Sprites (`pixel_art/sprites/ancient_city.rs`): nine creatures, two shots and the archivist.
+- HUD (`rendering/ancient_city_hud.rs`): per seat, the Megacity's alarm (HUNTED in red), the
+  ride's next stop, the Engine Halls' beat as a sweeping metronome bar, the charts read; the
+  archivist's words in a speech box with its portrait; the star charts page.
+- News and cards (`local_game::announce_ancient_city`): landmarks' beats and each star chart
+  as cards on every local seat; the alarm, a crusher, a theft, a jolt and a launch for the
+  seat concerned.
+- Audio (appended at the end of `patches!`, `audio/patch/ancient_city.rs`, `city_*` names):
+  twelve one-shots (tram bell, lift chime, piston hiss and thump, crusher slam, archivist chirp
+  and scan, chart chord, vault lock, the alarm's soft two-tone call, a crawler's snatch, a
+  wisp's zap), three music beds (the Engine Halls' at the beat: `ancient_city_music`) and three
+  ambience beds. `SEAT_LOOP_SLOTS` grew to 128 (64 were all used).
+- Scenes: `city_megacity_avenue`, `city_tram_ride`, `city_tower_lift`,
+  `city_lantern_library`, `city_lantern_library_hall`, `city_archivist`, `city_alarm_hunt`,
+  `city_archive_post`, `city_archive_post_talk`, `city_portals`, `city_engine_hall`,
+  `city_crusher_line`, `city_piston_shaft`, `city_great_engine`, `city_archive_stacks`,
+  `city_vault_plate`, `city_vault_lever`, `city_vault_light`, `city_vault_grand`,
+  `city_orrery`, `city_star_charts`.
+
+### Tests
+
+`world/ancient_city_tests.rs`: a rig boards a tram at a station, rides it to the next and steps
+off onto the platform, in the same places at 20 and 60 Hz; a lift carries a rig from one avenue
+down to the next; a piston lifts a rig on its head alike at 20 and 60 Hz, and thrusting off a
+rising head throws the rig past the stroke; a crusher strikes a rig under it once a slam and
+shoves it out; belts carry; cutting city glass raises the alarm, it cools, a calm city's drone
+ignores the rig and a full alarm sets it on; the archivist wakes by its core (its greeting), not
+for a partner far away, follows its rig (alike at 20 and 60 Hz), marks ore, is saved, travels in
+the section, and wakes separately for the partner at the Archive Post; the Orrery's plinths
+chart stars that are kept, saved and shared, never twice; **bots solve a plate vault (rest,
+dash), a light vault (filters red, green, blue) and a grand vault**, and a lever vault's gate
+and plinth work; a scrap crawler steals ore and drops it when killed, a spark wisp drinks fuel;
+the nine creatures keep the body rules in their own arena; older worlds keep their hashes and
+the city is deterministic. `worldgen::descent::ancient_city::tests`: vault layouts well formed
+(every gate's mechanism in reach), avenues, trams, towers and lifts with room to move, the
+library's core and lift, engine machinery with room and on the beat, every kind of vault
+carved whole, the Orrery's plinths, portals, older worlds untouched; plus the pure maths in
+`ancient_city::{tests, movers::tests, archivist::tests}` and `star_chart::tests`, the Archive
+Post's residents in `people::deep_folk` and `world::deep_folk_tests`.
+
+### The descent probe (this track alone, default seed, 60 Hz)
+
+| Stratum | Minutes | Leaves at (h) | Longest gap (min) |
+|---|---|---|---|
+| VII Buried Megacity | 163 | 62.6 | 11 |
+| VII Engine Halls | 148 | 65.1 | 13 |
+| VII The Archive of Stars | 148 | 67.6 | 15 |
+
+Descent VII ends at 71.4 h (target 66-82) and the whole run at 79.8 h (75-90), 7 deaths; every
+stratum brings something new within 40 minutes (the placeholder Sleeping Garrison and Seal Gate
+wait 38, for part B). The Heart Key lands at 69.6 h. No retune was needed.
+
+### Still open
+
+- The archivist's lines are its own table (`archivist::LINES`), not yet routed through the
+  story track's journal; the story track may key the Fathers' log remarks to its log ids.
 
 ## Replication
 
