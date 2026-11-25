@@ -1,0 +1,1537 @@
+//! Space on screen (Wave 11 flight): a seat whose rig is away from home sees space instead of
+//! the home world, with the flight HUD, the nav HUD and the nav chart and station dialogs.
+//!
+//! **Placeholder art** until the space-render track's (TODO-SEAM(w11-space-render): its polar
+//! shader draws the round worlds and their ground; this view keeps the HUD and the flight
+//! cues). Everything is drawn from the seat's rig outward:
+//!
+//! * **The camera is locked to the craft**: the rig is drawn upright in the middle of the view
+//!   and space turns around it (the screen-relative accessibility scheme keeps the chart up
+//!   instead and turns the rig). The HUD always stays upright.
+//! * **The view zooms with the nearest surface**: far from everything the stars and worlds
+//!   are a map; approaching a world (or a station's port) it closes in to one to one.
+//! * A parallax starfield (streaking at speed), each body as a lit disc (stars with coronas,
+//!   worlds with an atmosphere's glow, the home world with its Moon), stations with their
+//!   port's light, the other flyers (streaks in warp), a warp's tunnel of light, re-entry
+//!   plasma, and the scanner ping's ring.
+//! * The HUD: where the rig is and its drive, hull, fuel, air and heat bars with early
+//!   warnings, the docking guide, the button prompts and, with a nav suite, the nav panel
+//!   (systems around, the waypoint, distance and ETA, the warp's alignment) and arrows to the
+//!   waypoint and the crew at the view's edge.
+
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "screen layout mixes whole pixels and float positions"
+)]
+
+use fatherload_simulation::{
+    PlayerId,
+    flight::{
+        BodyKind, FlightBody, FlightPlace, RigFlight, SpaceQuery, StarDrive,
+        nav::{self, NavTarget},
+        physics::{WARP_ABORT_ANGLE, WARP_ALIGN, WARP_SPOOL_MILLIS},
+        space::{self, nearest_surface},
+    },
+    position::WorldPos,
+    terrain::TILE_SIZE,
+};
+use raylib::prelude::*;
+
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout},
+    pixel_art::sprites::{icons, menu_icons},
+    prompts::hint,
+    screen::UiFrame,
+    ui_kit::{self, PanelStyle, TextStyle},
+};
+use crate::{
+    input::prompts::Prompt,
+    render_snapshot::{Flyer, PlayerPresentation, RenderSnapshot, ViewSnapshot},
+    shell::{
+        ShellState,
+        flight::{NavRow, StationRow, nav_rows_for, station_rows, system_name, target_name},
+    },
+};
+
+/// Deep space's backdrop.
+const SPACE: Color = Color::new(8, 7, 20, 255);
+/// Where the drawn rig sits in the sky (high, in open air, so it draws flying).
+const RIG_SKY_Y: f32 = -200_000.0;
+
+/// How space maps to the seat's view this frame.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct SpaceFrame {
+    /// The rig's space position (the view's middle).
+    pub origin: WorldPos,
+    /// The view's middle, physical pixels.
+    pub centre: Vector2,
+    /// Physical pixels per space pixel.
+    pub scale: f32,
+    /// The view's turn (the rig's orientation when the camera is locked to it, else 0).
+    pub roll: f32,
+    /// The physical viewport.
+    pub rect: Rectangle,
+}
+
+impl SpaceFrame {
+    /// `pos` on screen (physical pixels).
+    pub fn project(&self, pos: WorldPos) -> Vector2 {
+        let (dx, dy) = self.origin.delta(pos);
+        self.offset_to_screen(dx, dy)
+    }
+
+    /// A space offset from the rig on screen.
+    pub fn offset_to_screen(&self, dx: f32, dy: f32) -> Vector2 {
+        let (x, y) = self.turn(dx, dy);
+        Vector2::new(
+            x.mul_add(self.scale, self.centre.x),
+            y.mul_add(self.scale, self.centre.y),
+        )
+    }
+
+    /// A space direction turned into the view's (unscaled).
+    pub fn turn(&self, dx: f32, dy: f32) -> (f32, f32) {
+        let (sin, cos) = (-self.roll).sin_cos();
+        (dx.mul_add(cos, -dy * sin), dx.mul_add(sin, dy * cos))
+    }
+
+    fn visible(&self, at: Vector2, radius: f32) -> bool {
+        at.x + radius >= self.rect.x
+            && at.x - radius <= self.rect.x + self.rect.width
+            && at.y + radius >= self.rect.y
+            && at.y - radius <= self.rect.y + self.rect.height
+    }
+}
+
+/// The view's zoom (a share of one to one) `gap` space pixels from the nearest surface, with
+/// `visible` space pixels of view height at one to one.
+#[must_use]
+pub fn zoom_for(gap: f32, visible: f32) -> f32 {
+    (visible * 0.32 / gap.max(1.0)).clamp(1.0 / 6_000.0, 1.0)
+}
+
+/// The space frame for `view` (see the module docs).
+pub(super) fn space_frame(
+    shell: &ShellState,
+    view: &ViewSnapshot<'_>,
+    bodies: &[FlightBody],
+    density: f32,
+) -> SpaceFrame {
+    let flight = view.player.flight;
+    let rect = Rectangle::new(
+        view.viewport.x as f32 * density,
+        view.viewport.y as f32 * density,
+        view.viewport.width as f32 * density,
+        view.viewport.height as f32 * density,
+    );
+    let (gap, _) = nearest_surface(bodies, flight.pos);
+    let visible = view.viewport.height as f32 / view.world_scale.max(0.01);
+    let zoom = zoom_for(gap, visible);
+    SpaceFrame {
+        origin: flight.pos,
+        centre: Vector2::new(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5),
+        scale: view.world_scale * density * zoom,
+        roll: if shell.flight.screen_relative {
+            0.0
+        } else {
+            view.player.attitude.orientation
+        },
+        rect,
+    }
+}
+
+/// Draws space for a seat whose rig is away (the world part, physical pixels), then returns
+/// the frame for the HUD.
+#[allow(clippy::too_many_arguments, reason = "one view's scene")]
+pub(super) fn draw_space_world(
+    draw: &mut RaylibDrawHandle<'_>,
+    terrain: &fatherload_simulation::terrain::Terrain,
+    facings: &super::world::RigFacings,
+    shell: &ShellState,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    density: f32,
+) -> SpaceFrame {
+    let galaxy = snapshot.space.galaxy();
+    let flight = view.player.flight;
+    let bodies = galaxy.bodies_near(flight.pos);
+    let frame = space_frame(shell, view, &bodies, density);
+    let strength = match snapshot.effects {
+        crate::screen_fx::EffectsIntensity::Full => 1.0,
+        crate::screen_fx::EffectsIntensity::Reduced => 0.5,
+        crate::screen_fx::EffectsIntensity::Off => 0.25,
+    };
+    let ticks = shell.update_ticks;
+    draw.draw_rectangle_rec(frame.rect, SPACE);
+    draw_starfield(draw, &frame, &flight, ticks, strength);
+    // Biggest first: stars, then worlds, then stations on top.
+    let mut order: Vec<&FlightBody> = bodies.iter().collect();
+    order.sort_by(|a, b| b.approach.total_cmp(&a.approach));
+    for body in order {
+        draw_body(draw, &frame, body, &bodies, ticks);
+    }
+    draw_ping(draw, &frame, snapshot, view.player_id);
+    for flyer in &snapshot.space.flyers {
+        if flyer.player_id == view.player_id {
+            continue;
+        }
+        draw_flyer(draw, terrain, facings, &frame, snapshot, view, flyer, ticks);
+    }
+    if let StarDrive::Warp(run) = flight.drive {
+        draw_warp_tunnel(draw, &frame, &flight, snapshot, run.target, ticks, strength);
+    }
+    draw_own_rig(draw, terrain, facings, &frame, snapshot, view, ticks);
+    frame
+}
+
+/// A star field in three parallax layers; at speed the stars streak along the motion.
+fn draw_starfield(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    flight: &RigFlight,
+    ticks: u64,
+    strength: f32,
+) {
+    let (ax, ay) = flight.pos.px_f64();
+    let diagonal = frame.rect.width.hypot(frame.rect.height);
+    let cell = (40.0 * (frame.rect.height / 720.0).max(1.0)).max(24.0);
+    let reach = (diagonal * 0.5 / cell).ceil() as i64 + 1;
+    let speed = flight.speed();
+    // Speed on screen: a streak's length (motion's direction turned into the view).
+    let (vx, vy) = frame.turn(flight.velocity_x, flight.velocity_y);
+    let moving = speed > 1.0;
+    let (ux, uy) = if moving {
+        (vx / speed, vy / speed)
+    } else {
+        (0.0, 0.0)
+    };
+    for (layer, parallax) in [0.000_05_f64, 0.000_2, 0.000_8].into_iter().enumerate() {
+        let shift_x = ax * parallax;
+        let shift_y = ay * parallax;
+        let base_x = (shift_x / f64::from(cell)).floor() as i64;
+        let base_y = (shift_y / f64::from(cell)).floor() as i64;
+        let streak =
+            (f64::from(speed) * parallax * 6.0).min(f64::from(cell) * 3.0) as f32 * strength;
+        for j in -reach..=reach {
+            for i in -reach..=reach {
+                let (cx, cy) = (base_x + i, base_y + j);
+                let hash = space::hash64(0x57A2_F1E1, layer as u64, cx, cy);
+                if hash.is_multiple_of(3) {
+                    continue;
+                }
+                let fx = (hash & 0xFFFF) as f32 / 65_536.0;
+                let fy = ((hash >> 16) & 0xFFFF) as f32 / 65_536.0;
+                let local_x = ((cx as f64 + f64::from(fx)) * f64::from(cell) - shift_x) as f32;
+                let local_y = ((cy as f64 + f64::from(fy)) * f64::from(cell) - shift_y) as f32;
+                let (x, y) = frame.turn(local_x, local_y);
+                let at = Vector2::new(frame.centre.x + x, frame.centre.y + y);
+                if !frame.visible(at, streak + 2.0) {
+                    continue;
+                }
+                let bright = (hash >> 40) % 5;
+                // A slow, gentle twinkle on a few (never a flash).
+                let twinkle =
+                    (hash >> 44).is_multiple_of(7) && (ticks / 40 + hash).is_multiple_of(4);
+                let colour = match (layer, bright) {
+                    (2, 0) => CREAM,
+                    (2, _) => BONE,
+                    (1, 0) => SKY_LIGHT,
+                    (1, _) => MIST,
+                    (_, 0) => LAVENDER,
+                    _ => FOG,
+                };
+                let colour = if twinkle {
+                    with_alpha(colour, 150)
+                } else {
+                    colour
+                };
+                let size = if layer == 2 && bright == 0 { 2 } else { 1 };
+                if moving && streak > 1.5 {
+                    draw.draw_line_ex(
+                        at,
+                        Vector2::new(at.x - ux * streak, at.y - uy * streak),
+                        size as f32,
+                        with_alpha(colour, 170),
+                    );
+                }
+                draw.draw_rectangle(at.x as i32, at.y as i32, size, size, colour);
+            }
+        }
+    }
+}
+
+/// The worlds' colour sets: (base, lit, detail, air).
+const BODY_COLOURS: [(Color, Color, Color, Color); 6] = [
+    (RUST, COPPER, SAND, ORANGE),
+    (MOSS, LEAF, LIME, MINT),
+    (TEAL_DARK, TEAL, MINT, ICE),
+    (PLUM, VIOLET, LAVENDER, PINK),
+    (STONE_DARK, STONE, STONE_LIGHT, MIST),
+    (DEEP_BLUE, OCEAN, ICE, SKY_LIGHT),
+];
+
+/// A body's colours: (base, lit, detail, air).
+fn body_colours(body: &FlightBody) -> (Color, Color, Color, Color) {
+    if body.kind == BodyKind::Home {
+        return (OCEAN, SKY, LEAF, SKY_LIGHT);
+    }
+    let roll = space::hash64(body.body.system.id, 0xC010, i64::from(body.body.index), 0);
+    BODY_COLOURS[(roll % 6) as usize]
+}
+
+/// A filled disc that stays round however large (huge discs draw only the arc near the view).
+fn fill_disc(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    at: Vector2,
+    radius: f32,
+    colour: Color,
+) {
+    if radius <= 0.5 {
+        return;
+    }
+    if !frame.visible(at, radius) {
+        return;
+    }
+    let screen = frame.rect.width.hypot(frame.rect.height);
+    if radius < screen * 2.0 {
+        let segments = ((radius * 0.6) as i32).clamp(18, 256);
+        draw.draw_circle_sector(at, radius, 0.0, 360.0, segments, colour);
+        return;
+    }
+    // Only the arc facing the view: a fan around the direction to the view's middle.
+    let to_view = (frame.centre.y - at.y)
+        .atan2(frame.centre.x - at.x)
+        .to_degrees();
+    let half = ((screen * 1.2 / radius).min(std::f32::consts::PI)).to_degrees();
+    draw.draw_circle_sector(at, radius, to_view - half, to_view + half, 160, colour);
+}
+
+/// One body.
+fn draw_body(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    body: &FlightBody,
+    bodies: &[FlightBody],
+    ticks: u64,
+) {
+    let at = frame.project(body.centre);
+    let radius = body.radius * frame.scale;
+    match body.kind {
+        BodyKind::Star => {
+            let [r, g, b] = body.class.colour();
+            let colour = Color::new(r, g, b, 255);
+            let glow = radius.max(2.0);
+            fill_disc(draw, frame, at, glow * 3.0, with_alpha(colour, 14));
+            fill_disc(draw, frame, at, glow * 2.0, with_alpha(colour, 30));
+            fill_disc(draw, frame, at, glow * 1.4, with_alpha(colour, 70));
+            fill_disc(draw, frame, at, radius.max(1.5), colour);
+            fill_disc(draw, frame, at, radius * 0.72, with_alpha(CREAM, 200));
+        }
+        BodyKind::Planet | BodyKind::Home => {
+            let (base, lit, detail, air) = body_colours(body);
+            if body.atmosphere > 0.0 {
+                let top = (body.radius + body.atmosphere) * frame.scale;
+                fill_disc(draw, frame, at, top, with_alpha(air, 26));
+                fill_disc(
+                    draw,
+                    frame,
+                    at,
+                    radius + (top - radius) * 0.35,
+                    with_alpha(air, 60),
+                );
+            }
+            if radius < 1.5 {
+                draw.draw_rectangle(at.x as i32, at.y as i32, 2, 2, lit);
+                return;
+            }
+            fill_disc(draw, frame, at, radius, base);
+            // Lit toward the system's star.
+            let star = bodies.iter().find(|other| other.kind == BodyKind::Star);
+            let (lx, ly) = star.map_or((0.0, -1.0), |star| {
+                let (dx, dy) = body.centre.delta(star.centre);
+                let length = dx.hypot(dy).max(1.0);
+                frame.turn(dx / length, dy / length)
+            });
+            let lit_at = Vector2::new(
+                lx.mul_add(radius * 0.22, at.x),
+                ly.mul_add(radius * 0.22, at.y),
+            );
+            fill_disc(draw, frame, lit_at, radius * 0.78, lit);
+            // A few lands and seas.
+            for patch in 0..5_u64 {
+                let roll = space::hash64(
+                    body.body.system.id,
+                    0xDE7A,
+                    i64::from(body.body.index),
+                    patch as i64,
+                );
+                let angle = (roll & 0xFFFF) as f32 / 65_536.0 * std::f32::consts::TAU - frame.roll;
+                let reach = ((roll >> 16) & 0xFF) as f32 / 255.0 * 0.55 * radius;
+                let size = (((roll >> 24) & 0xFF) as f32 / 255.0).mul_add(0.12, 0.1) * radius;
+                let spot = Vector2::new(
+                    angle.cos().mul_add(reach, at.x),
+                    angle.sin().mul_add(reach, at.y),
+                );
+                fill_disc(draw, frame, spot, size, with_alpha(detail, 150));
+            }
+            if body.kind == BodyKind::Home {
+                // The Moon stays as it is (part of the home sky); seen from space it hangs by
+                // the home world.
+                let moon = Vector2::new(at.x + radius * 0.95, at.y - radius * 0.62);
+                fill_disc(draw, frame, moon, (radius * 0.12).max(1.0), STEEL_LIGHT);
+                fill_disc(
+                    draw,
+                    frame,
+                    Vector2::new(moon.x + radius * 0.02, moon.y + radius * 0.02),
+                    (radius * 0.08).max(0.8),
+                    STEEL,
+                );
+            }
+        }
+        BodyKind::Station => draw_station(draw, frame, body, at, radius, ticks),
+    }
+}
+
+/// A station: a hub, a ring, solar wings and the docking port's light.
+fn draw_station(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    body: &FlightBody,
+    at: Vector2,
+    radius: f32,
+    ticks: u64,
+) {
+    if !frame.visible(at, radius * 4.0 + 8.0) {
+        return;
+    }
+    if radius < 3.0 {
+        draw.draw_rectangle(at.x as i32 - 1, at.y as i32 - 1, 3, 3, STEEL_LIGHT);
+        draw.draw_rectangle(at.x as i32, at.y as i32, 1, 1, MINT);
+        return;
+    }
+    let rotation = (body.port_angle - frame.roll).to_degrees();
+    let unit = radius / 5.0;
+    // The solar wings, the hub and its ring.
+    for side in [-1.0_f32, 1.0] {
+        let wing = Rectangle::new(at.x + side * unit * 7.5, at.y, unit * 5.0, unit * 2.6);
+        draw.draw_rectangle_pro(
+            wing,
+            Vector2::new(unit * 2.5, unit * 1.3),
+            rotation,
+            DEEP_BLUE,
+        );
+        let cells = Rectangle::new(at.x + side * unit * 7.5, at.y, unit * 4.4, unit * 2.0);
+        draw.draw_rectangle_pro(cells, Vector2::new(unit * 2.2, unit * 1.0), rotation, OCEAN);
+    }
+    let spar = Rectangle::new(at.x, at.y, unit * 13.0, unit * 0.8);
+    draw.draw_rectangle_pro(
+        spar,
+        Vector2::new(unit * 6.5, unit * 0.4),
+        rotation,
+        STEEL_DARK,
+    );
+    draw.draw_ring(at, radius * 0.9, radius * 1.15, 0.0, 360.0, 48, STEEL);
+    fill_disc(draw, frame, at, radius * 0.7, STEEL_LIGHT);
+    fill_disc(draw, frame, at, radius * 0.45, STEEL_DARK);
+    // The port: a collar and a green light (steady; it brightens with a slow pulse).
+    if let Some(port) = body.port() {
+        let port_at = frame.project(port);
+        let pulse = 160 + ((ticks % 120) as i32 - 60).unsigned_abs() as u8;
+        draw.draw_line_ex(at, port_at, unit * 1.2, STEEL);
+        fill_disc(
+            draw,
+            frame,
+            port_at,
+            (unit * 0.9).max(1.5),
+            with_alpha(MINT, pulse),
+        );
+        // The approach guide: a dashed line out of the port.
+        let (dx, dy) = (port_at.x - at.x, port_at.y - at.y);
+        let length = dx.hypot(dy).max(1.0);
+        for dash in 1..8 {
+            let from = dash as f32 * unit * 2.0;
+            let start = Vector2::new(
+                port_at.x + dx / length * from,
+                port_at.y + dy / length * from,
+            );
+            let end = Vector2::new(
+                port_at.x + dx / length * (from + unit),
+                port_at.y + dy / length * (from + unit),
+            );
+            draw.draw_line_ex(start, end, (unit * 0.3).max(1.0), with_alpha(MINT, 110));
+        }
+    }
+}
+
+/// The scanner ping's ring (for a few seconds after it went out).
+fn draw_ping(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    snapshot: &RenderSnapshot<'_>,
+    player: PlayerId,
+) {
+    let Some(ping) = snapshot.space.shared.pings.get(&player) else {
+        return;
+    };
+    let age = snapshot.space.millis.saturating_sub(ping.at);
+    if age > 3_000 {
+        return;
+    }
+    let share = age as f32 / 3_000.0;
+    let at = frame.project(ping.centre);
+    let reach = (ping.range * frame.scale * share).min(frame.rect.width.hypot(frame.rect.height));
+    let alpha = (220.0 * (1.0 - share)) as u8;
+    let colour = if ping.fogged { LAVENDER } else { MINT };
+    draw.draw_ring(
+        at,
+        reach - 2.0,
+        reach,
+        0.0,
+        360.0,
+        96,
+        with_alpha(colour, alpha),
+    );
+}
+
+/// The rig sprite drawn at `at`, turned `turn` radians on screen, at the view's rig scale.
+#[allow(clippy::too_many_arguments, reason = "one rig at one place")]
+fn draw_rig_at(
+    draw: &mut RaylibDrawHandle<'_>,
+    terrain: &fatherload_simulation::terrain::Terrain,
+    facings: &super::world::RigFacings,
+    presentation: &PlayerPresentation,
+    at: Vector2,
+    turn: f32,
+    zoom: f32,
+    ticks: u64,
+) {
+    let mut rig = presentation.clone();
+    rig.x = 0.0;
+    rig.y = RIG_SKY_Y;
+    rig.velocity_x = 0.0;
+    rig.velocity_y = 0.0;
+    rig.active_drill = None;
+    let camera = Camera2D {
+        offset: at,
+        target: Vector2::new(0.0, RIG_SKY_Y + super::world::RIG_BODY_CENTRE_Y),
+        rotation: turn.to_degrees(),
+        zoom,
+    };
+    let mut scene = draw.begin_mode2D(camera);
+    super::world::draw_rig(&mut scene, terrain, &rig, facings, ticks);
+}
+
+/// Another flyer: its rig (and a streak while it warps or cruises fast).
+#[allow(clippy::too_many_arguments, reason = "one flyer in one view")]
+fn draw_flyer(
+    draw: &mut RaylibDrawHandle<'_>,
+    terrain: &fatherload_simulation::terrain::Terrain,
+    facings: &super::world::RigFacings,
+    frame: &SpaceFrame,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    flyer: &Flyer,
+    ticks: u64,
+) {
+    let at = frame.project(flyer.flight.pos);
+    let speed = flyer.flight.speed();
+    if speed > 2_000.0 && frame.visible(at, 400.0) {
+        let (vx, vy) = frame.turn(flyer.flight.velocity_x, flyer.flight.velocity_y);
+        let length = (speed * frame.scale * 0.1).clamp(30.0, 600.0);
+        let colour = if matches!(flyer.flight.drive, StarDrive::Warp(_)) {
+            ICE
+        } else {
+            SKY_LIGHT
+        };
+        for (width, alpha) in [(6.0, 40), (3.0, 110), (1.0, 230)] {
+            draw.draw_line_ex(
+                at,
+                Vector2::new(at.x - vx / speed * length, at.y - vy / speed * length),
+                width,
+                with_alpha(colour, alpha),
+            );
+        }
+    }
+    if !frame.visible(at, 40.0) {
+        return;
+    }
+    let Some(presentation) = snapshot
+        .players
+        .iter()
+        .find(|player| player.player_id == flyer.player_id)
+    else {
+        return;
+    };
+    let density = frame.rect.height / view.viewport.height.max(1) as f32;
+    let roll = frame.roll;
+    draw_rig_at(
+        draw,
+        terrain,
+        facings,
+        presentation,
+        at,
+        flyer.orientation - roll,
+        view.world_scale * density,
+        ticks,
+    );
+}
+
+/// The seat's own rig in the middle, upright (or turned, chart-up), with its drive's glow and
+/// re-entry plasma.
+fn draw_own_rig(
+    draw: &mut RaylibDrawHandle<'_>,
+    terrain: &fatherload_simulation::terrain::Terrain,
+    facings: &super::world::RigFacings,
+    frame: &SpaceFrame,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    ticks: u64,
+) {
+    let density = frame.rect.height / view.viewport.height.max(1) as f32;
+    let zoom = view.world_scale * density;
+    let flight = view.player.flight;
+    let turn = view.player.attitude.orientation - frame.roll;
+    // The drive's glow behind the rig (cruise) and its spool's ring.
+    let (sin, cos) = turn.sin_cos();
+    let back = Vector2::new(-sin, cos);
+    match flight.drive {
+        StarDrive::Cruise { speed } => {
+            let length = (speed / 400.0).clamp(4.0, 40.0) * zoom;
+            for (width, alpha) in [(10.0, 40), (5.0, 110), (2.0, 230)] {
+                draw.draw_line_ex(
+                    Vector2::new(
+                        frame.centre.x + back.x * 8.0 * zoom,
+                        frame.centre.y + back.y * 8.0 * zoom,
+                    ),
+                    Vector2::new(
+                        frame.centre.x + back.x * (8.0 * zoom + length),
+                        frame.centre.y + back.y * (8.0 * zoom + length),
+                    ),
+                    width * zoom * 0.5,
+                    with_alpha(SKY_LIGHT, alpha),
+                );
+            }
+        }
+        StarDrive::Spool { since, .. } => {
+            let share = (snapshot.space.millis.saturating_sub(since) as f32
+                / WARP_SPOOL_MILLIS as f32)
+                .clamp(0.0, 1.0);
+            let reach = (1.0 - share).mul_add(60.0, 18.0) * zoom;
+            draw.draw_ring(
+                frame.centre,
+                reach - 2.0 * zoom,
+                reach,
+                0.0,
+                360.0,
+                64,
+                with_alpha(ICE, (80.0 + 150.0 * share) as u8),
+            );
+        }
+        StarDrive::Off | StarDrive::Warp(_) => {}
+    }
+    if flight.heat > 0.15 {
+        // Plasma on the leading face, brighter as the hull heats.
+        let speed = flight.speed().max(1.0);
+        let (vx, vy) = frame.turn(flight.velocity_x / speed, flight.velocity_y / speed);
+        let glow = (flight.heat / 1.5).clamp(0.0, 1.0);
+        let lead = Vector2::new(
+            frame.centre.x + vx * 14.0 * zoom,
+            frame.centre.y + vy * 14.0 * zoom,
+        );
+        for (reach, alpha) in [(22.0, 50.0), (16.0, 110.0), (10.0, 190.0)] {
+            draw.draw_circle_sector(
+                lead,
+                reach * zoom,
+                vy.atan2(vx).to_degrees() - 70.0,
+                vy.atan2(vx).to_degrees() + 70.0,
+                24,
+                with_alpha(
+                    if reach > 18.0 { RED } else { ORANGE },
+                    (alpha * glow) as u8,
+                ),
+            );
+        }
+    }
+    if let Some(presentation) = snapshot
+        .players
+        .iter()
+        .find(|player| player.player_id == view.player_id)
+    {
+        draw_rig_at(
+            draw,
+            terrain,
+            facings,
+            presentation,
+            frame.centre,
+            turn,
+            zoom,
+            ticks,
+        );
+    }
+}
+
+/// A warp's tunnel: lines of light rushing past along the motion, tinted by the target star.
+#[allow(clippy::too_many_arguments, reason = "one view's tunnel")]
+fn draw_warp_tunnel(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    flight: &RigFlight,
+    snapshot: &RenderSnapshot<'_>,
+    target: fatherload_simulation::flight::SystemRef,
+    ticks: u64,
+    strength: f32,
+) {
+    let speed = flight.speed();
+    if speed <= 1.0 {
+        return;
+    }
+    let galaxy = snapshot.space.galaxy();
+    let tint = galaxy.system(target).map_or(ICE, |system| {
+        let [r, g, b] = system.class.colour();
+        Color::new(r, g, b, 255)
+    });
+    let (ux, uy) = frame.turn(flight.velocity_x / speed, flight.velocity_y / speed);
+    // Lines across the view, rushing against the motion.
+    let (px, py) = (-uy, ux);
+    let span = frame.rect.width.hypot(frame.rect.height);
+    let count = (90.0 * strength) as u64 + 10;
+    let pace = (speed / 200_000.0).clamp(0.5, 6.0);
+    for line in 0..count {
+        let roll = space::hash64(0x3A_7B, line, 0, 0);
+        let lateral = ((roll & 0xFFFF) as f32 / 65_536.0 - 0.5) * span;
+        let phase = ((roll >> 16) & 0xFFFF) as f32 / 65_536.0;
+        let travel = ((ticks as f32 * 0.02 * pace + phase) % 1.0 - 0.5) * span * 1.4;
+        let length =
+            (((roll >> 32) & 0xFF) as f32 / 255.0).mul_add(0.25, 0.08) * span * pace.min(2.0) * 0.5;
+        let start = Vector2::new(
+            frame.centre.x + px * lateral - ux * travel,
+            frame.centre.y + py * lateral - uy * travel,
+        );
+        let end = Vector2::new(start.x - ux * length, start.y - uy * length);
+        let colour = if (roll >> 40).is_multiple_of(4) { tint } else { BONE };
+        draw.draw_line_ex(
+            start,
+            end,
+            1.5,
+            with_alpha(colour, (140.0 * strength.max(0.5)) as u8),
+        );
+    }
+    // A soft tint of the star ahead at the view's edge (steady, never flashing).
+    draw.draw_rectangle_gradient_v(
+        frame.rect.x as i32,
+        frame.rect.y as i32,
+        frame.rect.width as i32,
+        (frame.rect.height * 0.3) as i32,
+        with_alpha(tint, 50),
+        with_alpha(tint, 0),
+    );
+}
+
+// --- The HUD ----------------------------------------------------------------------------------
+
+/// Where the rig is, in words.
+fn place_line(snapshot: &RenderSnapshot<'_>, flight: &RigFlight) -> String {
+    let charts = snapshot.space.charts;
+    let galaxy = snapshot.space.galaxy();
+    let system = galaxy
+        .system_at(space::galaxy_sector_of(flight.pos))
+        .map_or_else(
+            || "Deep space".to_owned(),
+            |system| system_name(charts, system.system),
+        );
+    match flight.place {
+        FlightPlace::Home | FlightPlace::Space => format!("OPEN SPACE  {}", system.to_uppercase()),
+        FlightPlace::Approach(body) => format!(
+            "APPROACH  {}",
+            target_name(charts, NavTarget::Body(body)).to_uppercase()
+        ),
+        FlightPlace::Landed(body) => format!(
+            "LANDED  {}",
+            target_name(charts, NavTarget::Body(body)).to_uppercase()
+        ),
+        FlightPlace::Docked(body) => format!(
+            "DOCKED  {}",
+            target_name(charts, NavTarget::Body(body)).to_uppercase()
+        ),
+    }
+}
+
+/// The drive's mode and speed, in words.
+fn drive_line(snapshot: &RenderSnapshot<'_>, flight: &RigFlight) -> (String, Color) {
+    let tiles = flight.speed() / TILE_SIZE;
+    match flight.drive {
+        StarDrive::Off => (format!("IMPULSE  {tiles:.0} t/s"), MIST),
+        StarDrive::Cruise { .. } => (format!("CRUISE  {} t/s", thousands(tiles)), SKY_LIGHT),
+        StarDrive::Spool { since, .. } => {
+            let left =
+                WARP_SPOOL_MILLIS.saturating_sub(snapshot.space.millis.saturating_sub(since));
+            (format!("WARP SPOOLING  {:.1}s", left as f32 / 1_000.0), ICE)
+        }
+        StarDrive::Warp(run) => {
+            let share = snapshot.space.millis.saturating_sub(run.start) as f32
+                / run.duration_millis.max(1) as f32;
+            (format!("WARP  {:.0}%", (share * 100.0).min(100.0)), ICE)
+        }
+    }
+}
+
+/// `value` with thousands separators.
+fn thousands(value: f32) -> String {
+    let whole = value.max(0.0).round() as u64;
+    let digits = whole.to_string();
+    let mut out = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    out
+}
+
+/// Draws the flight HUD for `view` (UI canvas, after the space world).
+#[allow(clippy::too_many_lines, reason = "the flight HUD's panels in order")]
+pub(super) fn draw_space_hud(
+    draw: &mut RaylibDrawHandle<'_>,
+    shell: &ShellState,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    frame: &SpaceFrame,
+) {
+    let rect = super::screen::view_rect(view);
+    let flight = view.player.flight;
+    let player = view.player;
+    let ui_per_physical = rect.width / frame.rect.width.max(1.0);
+    // Where the rig is and the drive, top middle.
+    let place = place_line(snapshot, &flight);
+    let (drive, drive_colour) = drive_line(snapshot, &flight);
+    let width = ui_kit::text_width(&place, TextStyle::Bold)
+        .max(ui_kit::text_width(&drive, TextStyle::Body))
+        + 16;
+    let banner_plate = Rectangle::new(
+        rect.x + (rect.width - width as f32) * 0.5,
+        rect.y + 4.0,
+        width as f32,
+        28.0,
+    );
+    ui_kit::panel(draw, banner_plate, PanelStyle::Standard);
+    ui_kit::text_centred(
+        draw,
+        &place,
+        (banner_plate.x + banner_plate.width * 0.5) as i32,
+        banner_plate.y as i32 + 4,
+        TextStyle::Bold,
+        GOLD,
+    );
+    ui_kit::text_centred(
+        draw,
+        &drive,
+        (banner_plate.x + banner_plate.width * 0.5) as i32,
+        banner_plate.y as i32 + 15,
+        TextStyle::Body,
+        drive_colour,
+    );
+    // The meters, bottom left.
+    let capacity = fatherload_simulation::flight::air_capacity(player.hazard_gear.life_support);
+    let meters = Rectangle::new(rect.x + 4.0, rect.y + rect.height - 72.0, 150.0, 68.0);
+    ui_kit::panel(draw, meters, PanelStyle::Standard);
+    let (x, mut y) = (meters.x as i32 + 5, meters.y as i32 + 5);
+    let row_width = meters.width as i32 - 10;
+    y += ui_kit::stat_bar(
+        draw,
+        x,
+        y,
+        row_width,
+        &icons::HULL,
+        "HULL",
+        player.hull,
+        player.max_hull(),
+        ui_kit::BarColors::HULL,
+        0.3,
+    );
+    y += ui_kit::stat_bar(
+        draw,
+        x,
+        y,
+        row_width,
+        &icons::FUEL,
+        "FUEL",
+        player.fuel,
+        player.fuel_capacity,
+        ui_kit::BarColors::FUEL,
+        0.2,
+    );
+    y += ui_kit::stat_bar(
+        draw,
+        x,
+        y,
+        row_width,
+        &icons::OXYGEN,
+        "AIR",
+        flight.air,
+        capacity,
+        ui_kit::BarColors::AIR,
+        0.25,
+    );
+    let _ = ui_kit::stat_bar(
+        draw,
+        x,
+        y,
+        row_width,
+        &icons::HEAT,
+        "HEAT",
+        flight.heat * 100.0,
+        150.0,
+        ui_kit::BarColors::DANGER,
+        0.0,
+    );
+    // Warnings, early and plain.
+    let air_share = flight.air / capacity.max(1.0);
+    let warning = if flight.heat > fatherload_simulation::flight::HEAT_WARNING {
+        Some(("HULL HEATING: level out and slow down", ORANGE))
+    } else if air_share <= 0.25 {
+        Some((
+            "AIR LOW: dock, land somewhere breathable, or call the beacon",
+            ORANGE,
+        ))
+    } else if player.fuel <= 0.0 {
+        Some((
+            "OUT OF FUEL: the emergency beacon is on the nav chart",
+            ORANGE,
+        ))
+    } else {
+        None
+    };
+    if let Some((text, colour)) = warning {
+        let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
+        let banner = Rectangle::new(
+            rect.x + (rect.width - width as f32) * 0.5,
+            banner_plate.y + banner_plate.height + 4.0,
+            width as f32,
+            15.0,
+        );
+        ui_kit::panel(draw, banner, PanelStyle::Standard);
+        ui_kit::text_centred(
+            draw,
+            text,
+            (banner.x + banner.width * 0.5) as i32,
+            banner.y as i32 + 4,
+            TextStyle::Bold,
+            colour,
+        );
+    }
+    let galaxy = snapshot.space.galaxy();
+    let bodies = galaxy.bodies_near(flight.pos);
+    draw_docking_guide(draw, rect, view, &bodies);
+    let nav = player.hazard_gear.flight.nav_suite > 0;
+    let waypoint = snapshot
+        .space
+        .shared
+        .waypoints
+        .get(&view.player_id)
+        .copied()
+        .or(snapshot.space.shared.crew_waypoint);
+    if nav {
+        draw_nav_panel(draw, rect, snapshot, view, frame, waypoint);
+        // Arrows to the waypoint and the crew at the view's edge.
+        if let Some(target) = waypoint
+            && let Some(pos) = target.position(&galaxy)
+        {
+            let name = target_name(snapshot.space.charts, target);
+            edge_marker(
+                draw,
+                rect,
+                frame,
+                flight.pos,
+                pos,
+                &name,
+                GOLD,
+                ui_per_physical,
+            );
+        }
+        for flyer in &snapshot.space.flyers {
+            if flyer.player_id == view.player_id {
+                continue;
+            }
+            let name = format!("P{}", flyer.player_id.get() + 1);
+            edge_marker(
+                draw,
+                rect,
+                frame,
+                flight.pos,
+                flyer.flight.pos,
+                &name,
+                MINT,
+                ui_per_physical,
+            );
+        }
+    } else {
+        ui_kit::text(
+            draw,
+            "No nav suite: dock at a station to fit one",
+            rect.x as i32 + 6,
+            meters.y as i32 - 11,
+            TextStyle::Body,
+            FOG,
+        );
+    }
+    // The buttons that mean something out here.
+    let mut hints = vec![
+        hint(
+            Prompt::Anchor,
+            if flight.drive.engaged() {
+                "drop cruise"
+            } else {
+                "cruise"
+            },
+        ),
+        hint(Prompt::Map, "nav chart"),
+        hint(Prompt::Scan, "ping"),
+    ];
+    if nav && matches!(waypoint, Some(NavTarget::System(_))) {
+        hints.push(hint(Prompt::Bomb, "warp"));
+    }
+    if matches!(flight.place, FlightPlace::Docked(_)) {
+        hints.push(hint(Prompt::Use, "undock"));
+    }
+    let device = shell.prompt_device(view.seat_index);
+    let width = super::prompts::bar_width(&hints, device);
+    if !(view.seat_index == 0 && super::touch_controls::active()) {
+        super::prompts::draw_bar(
+            draw,
+            (rect.x + rect.width - width as f32 - 6.0) as i32,
+            (rect.y + rect.height - 16.0) as i32,
+            &hints,
+            device,
+            MIST,
+        );
+    }
+}
+
+/// The docking guide near a station's port: range, speed and alignment, each ticked off.
+fn draw_docking_guide(
+    draw: &mut RaylibDrawHandle<'_>,
+    rect: Rectangle,
+    view: &ViewSnapshot<'_>,
+    bodies: &[FlightBody],
+) {
+    use fatherload_simulation::flight::{DOCK_ALIGN, DOCK_RANGE, DOCK_SPEED};
+    let flight = view.player.flight;
+    if matches!(flight.place, FlightPlace::Docked(_)) {
+        return;
+    }
+    let Some((station, port)) = bodies
+        .iter()
+        .filter_map(|body| Some((body, body.port()?)))
+        .find(|(_, port)| flight.pos.distance(*port) < 40.0 * TILE_SIZE)
+    else {
+        return;
+    };
+    let range = flight.pos.distance(port);
+    let speed = flight.speed();
+    let lean = fatherload_simulation::field::trig::wrap_angle(
+        view.player.attitude.orientation - station.dock_orientation(),
+    );
+    let checks = [
+        (
+            format!("RANGE {:.1} t", range / TILE_SIZE),
+            range <= DOCK_RANGE,
+        ),
+        (format!("SPEED {speed:.0}"), speed <= DOCK_SPEED),
+        (
+            format!("ALIGN {:+.0}\u{b0}", lean.to_degrees()),
+            lean.abs() <= DOCK_ALIGN,
+        ),
+    ];
+    let panel = Rectangle::new(
+        rect.x + rect.width * 0.5 - 70.0,
+        rect.y + rect.height - 74.0,
+        140.0,
+        52.0,
+    );
+    ui_kit::panel(draw, panel, PanelStyle::Standard);
+    ui_kit::text(
+        draw,
+        "DOCKING",
+        panel.x as i32 + 6,
+        panel.y as i32 + 4,
+        TextStyle::Bold,
+        MINT,
+    );
+    for (index, (text, ok)) in checks.iter().enumerate() {
+        let y = panel.y as i32 + 15 + index as i32 * 10;
+        ui_kit::text(
+            draw,
+            if *ok { "+" } else { "-" },
+            panel.x as i32 + 6,
+            y,
+            TextStyle::Bold,
+            if *ok { LIME } else { RED },
+        );
+        ui_kit::text(
+            draw,
+            text,
+            panel.x as i32 + 16,
+            y,
+            TextStyle::Body,
+            if *ok { BONE } else { FOG },
+        );
+    }
+    if checks.iter().all(|(_, ok)| *ok) {
+        let hints = [hint(Prompt::Use, "dock")];
+        super::prompts::draw_bar(
+            draw,
+            panel.x as i32 + 74,
+            panel.y as i32 + 15,
+            &hints,
+            super::prompts::menu_device(),
+            LIME,
+        );
+    }
+}
+
+/// An arrow at the view's edge toward `to` (or a ring on it when it is in view), with a name
+/// and distance.
+#[allow(clippy::too_many_arguments, reason = "one marker")]
+fn edge_marker(
+    draw: &mut RaylibDrawHandle<'_>,
+    rect: Rectangle,
+    frame: &SpaceFrame,
+    from: WorldPos,
+    to: WorldPos,
+    name: &str,
+    colour: Color,
+    ui_per_physical: f32,
+) {
+    let (dx, dy) = from.delta_f64(to);
+    let distance = dx.hypot(dy);
+    let at = frame.project(to);
+    let centre = Vector2::new(rect.x + rect.width * 0.5, rect.y + rect.height * 0.5);
+    let ui = Vector2::new(
+        rect.x + (at.x - frame.rect.x) * ui_per_physical,
+        rect.y + (at.y - frame.rect.y) * ui_per_physical,
+    );
+    let label = format!("{name} {}", nav::format_distance(distance));
+    let inside = ui.x > rect.x + 20.0
+        && ui.x < rect.x + rect.width - 20.0
+        && ui.y > rect.y + 40.0
+        && ui.y < rect.y + rect.height - 30.0;
+    if inside && distance.is_finite() {
+        draw.draw_ring(ui, 5.0, 6.5, 0.0, 360.0, 24, colour);
+        ui_kit::text(
+            draw,
+            &label,
+            ui.x as i32 + 9,
+            ui.y as i32 - 3,
+            TextStyle::Body,
+            colour,
+        );
+        return;
+    }
+    let (tx, ty) = frame.turn(dx as f32, dy as f32);
+    let length = tx.hypot(ty).max(1.0);
+    let (ux, uy) = (tx / length, ty / length);
+    // Onto the view's edge, inset.
+    let half_w = rect.width * 0.5 - 18.0;
+    let half_h = rect.height * 0.5 - 30.0;
+    let reach = (half_w / ux.abs().max(1e-3)).min(half_h / uy.abs().max(1e-3));
+    let tip = Vector2::new(centre.x + ux * reach, centre.y + uy * reach);
+    let left = Vector2::new(tip.x - ux * 9.0 - uy * 5.0, tip.y - uy * 9.0 + ux * 5.0);
+    let right = Vector2::new(tip.x - ux * 9.0 + uy * 5.0, tip.y - uy * 9.0 - ux * 5.0);
+    draw.draw_triangle(tip, right, left, colour);
+    draw.draw_triangle(tip, left, right, colour);
+    let text_x = (tip.x - ux * 16.0 - ui_kit::text_width(&label, TextStyle::Body) as f32 * 0.5)
+        .clamp(
+            rect.x + 2.0,
+            rect.x + rect.width - ui_kit::text_width(&label, TextStyle::Body) as f32 - 2.0,
+        );
+    ui_kit::text(
+        draw,
+        &label,
+        text_x as i32,
+        (tip.y - uy * 16.0 - 4.0) as i32,
+        TextStyle::Body,
+        colour,
+    );
+}
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::many_single_char_names,
+    reason = "the nav panel's chart and readouts in order"
+)]
+/// The nav panel: the systems around on a little chart, the waypoint with its distance and ETA,
+/// the warp's alignment.
+fn draw_nav_panel(
+    draw: &mut RaylibDrawHandle<'_>,
+    rect: Rectangle,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    frame: &SpaceFrame,
+    waypoint: Option<NavTarget>,
+) {
+    let flight = view.player.flight;
+    let size = 96.0;
+    let panel = Rectangle::new(
+        rect.x + rect.width - size - 10.0,
+        rect.y + 36.0,
+        size + 6.0,
+        size + 40.0,
+    );
+    ui_kit::panel(draw, panel, PanelStyle::Standard);
+    let chart = Rectangle::new(panel.x + 3.0, panel.y + 3.0, size, size);
+    draw.draw_rectangle_rec(chart, SPACE);
+    let centre = Vector2::new(chart.x + size * 0.5, chart.y + size * 0.5);
+    // Three galactic sectors each way fill the chart.
+    let reach = (3.5 * space::GALAXY_SECTOR_TILES as f32) * TILE_SIZE;
+    let scale = size * 0.5 / reach;
+    for ring in 1..=3 {
+        draw.draw_circle_lines(
+            centre.x as i32,
+            centre.y as i32,
+            size * 0.5 * ring as f32 / 3.5,
+            with_alpha(SLATE, 160),
+        );
+    }
+    let galaxy = snapshot.space.galaxy();
+    let known = &snapshot.space.known;
+    for system in galaxy.systems_near(flight.pos, 3) {
+        let (dx, dy) = flight.pos.delta(system.star);
+        let (x, y) = frame.turn(dx * scale, dy * scale);
+        if x.abs() > size * 0.5 - 2.0 || y.abs() > size * 0.5 - 2.0 {
+            continue;
+        }
+        let [r, g, b] = system.class.colour();
+        let colour = if known.contains(&system.system) {
+            Color::new(r, g, b, 255)
+        } else {
+            with_alpha(SLATE_LIGHT, 200)
+        };
+        let point = Vector2::new(centre.x + x, centre.y + y);
+        draw.draw_rectangle(point.x as i32 - 1, point.y as i32 - 1, 2, 2, colour);
+        if waypoint.is_some_and(|target| target.system() == system.system) {
+            draw.draw_ring(point, 3.0, 4.0, 0.0, 360.0, 16, GOLD);
+        }
+    }
+    // The rig, pointing up the panel when the camera is locked to it.
+    let turn = view.player.attitude.orientation - frame.roll;
+    let (sin, cos) = turn.sin_cos();
+    let tip = Vector2::new(centre.x + sin * 4.0, centre.y - cos * 4.0);
+    draw.draw_line_ex(centre, tip, 2.0, MINT);
+    draw.draw_rectangle(centre.x as i32 - 1, centre.y as i32 - 1, 2, 2, BONE);
+    let text_x = panel.x as i32 + 4;
+    let mut y = (chart.y + size) as i32 + 3;
+    let Some(target) = waypoint else {
+        ui_kit::text(draw, "No waypoint", text_x, y, TextStyle::Body, FOG);
+        ui_kit::text(
+            draw,
+            "set one on the chart",
+            text_x,
+            y + 10,
+            TextStyle::Body,
+            FOG,
+        );
+        return;
+    };
+    let name = ui_kit::truncate(
+        &target_name(snapshot.space.charts, target),
+        size as i32,
+        TextStyle::Bold,
+    );
+    ui_kit::text(draw, &name, text_x, y, TextStyle::Bold, GOLD);
+    y += 10;
+    let Some(pos) = target.position(&galaxy) else {
+        return;
+    };
+    let (dx, dy) = flight.pos.delta_f64(pos);
+    let distance = dx.hypot(dy);
+    let far = matches!(target, NavTarget::System(system) if space::galaxy_sector_of(flight.pos) != system.sector);
+    let eta = nav::eta_seconds(distance, far);
+    ui_kit::text(
+        draw,
+        &format!(
+            "{}  ETA {}",
+            nav::format_distance(distance),
+            nav::format_eta(eta)
+        ),
+        text_x,
+        y,
+        TextStyle::Body,
+        BONE,
+    );
+    y += 10;
+    if far {
+        let off = fatherload_simulation::field::trig::wrap_angle(
+            view.player.attitude.orientation - nav::bearing(flight.pos, pos),
+        );
+        let (text, colour) = if off.abs() <= WARP_ALIGN {
+            ("ALIGNED: warp ready".to_owned(), LIME)
+        } else if off.abs() <= WARP_ABORT_ANGLE {
+            (format!("ALIGN {:+.0}\u{b0}", off.to_degrees()), AMBER)
+        } else {
+            (format!("TURN {:+.0}\u{b0}", off.to_degrees()), FOG)
+        };
+        ui_kit::text(draw, &text, text_x, y, TextStyle::Body, colour);
+    }
+}
+
+// --- The dialogs -------------------------------------------------------------------------------
+
+/// The nav chart (the map button in space).
+#[allow(clippy::too_many_lines, reason = "one dialog's rows")]
+pub(super) fn draw_nav_chart(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let space = &ui.snapshot.space;
+    let galaxy = space.galaxy();
+    let player = ui.player;
+    let waypoint = space
+        .shared
+        .waypoints
+        .get(&ui.view.player_id)
+        .copied()
+        .or(space.shared.crew_waypoint);
+    let rows = nav_rows_for(player, &space.known, waypoint, &galaxy);
+    let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
+    let flight = player.flight;
+    let mut systems = Vec::new();
+    let mut bodies = Vec::new();
+    let mut actions = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        let picked = index == selected;
+        let entry = match row {
+            NavRow::Target(target) => {
+                let name = target_name(space.charts, *target);
+                let pos = target.position(&galaxy);
+                let distance = pos.map_or(f64::INFINITY, |pos| {
+                    let (dx, dy) = flight.pos.delta_f64(pos);
+                    dx.hypot(dy)
+                });
+                let detail = match target {
+                    NavTarget::System(system) => {
+                        galaxy.system(*system).map_or_else(String::new, |found| {
+                            format!("{}, {} worlds", found.class.name(), found.worlds)
+                        })
+                    }
+                    NavTarget::Body(_) => String::new(),
+                };
+                let is_waypoint = waypoint == Some(*target);
+                ItemEntry {
+                    icon: Some(match target {
+                        NavTarget::System(_) => &menu_icons::GLOBE,
+                        NavTarget::Body(_) => &menu_icons::FLAG,
+                    }),
+                    label: if is_waypoint {
+                        format!("{name}  (waypoint)")
+                    } else {
+                        name
+                    },
+                    detail,
+                    value: if distance.is_finite() {
+                        nav::format_distance(distance)
+                    } else {
+                        String::new()
+                    },
+                    value_color: if is_waypoint { GOLD } else { MIST },
+                    coin: false,
+                    selected: picked,
+                    disabled: false,
+                }
+            }
+            NavRow::Warp => action_entry(
+                &menu_icons::ROCKET,
+                "Warp to the waypoint",
+                "Face it, clear of gravity wells",
+                picked,
+            ),
+            NavRow::Share => action_entry(
+                &menu_icons::SIGNAL,
+                "Share the waypoint with the crew",
+                "",
+                picked,
+            ),
+            NavRow::Clear => action_entry(&menu_icons::BACK, "Clear the waypoint", "", picked),
+            NavRow::Station => action_entry(
+                &menu_icons::DOOR,
+                "Station services",
+                "Fuel, repairs, flight gear",
+                picked,
+            ),
+            NavRow::Beacon => {
+                let fee = fatherload_simulation::flight::beacon_fee(player.credits);
+                action_entry(
+                    &menu_icons::INSURANCE,
+                    "Emergency beacon",
+                    &format!("Towed home for {fee} credits"),
+                    picked,
+                )
+            }
+            NavRow::Close => action_entry(&menu_icons::BACK, "Close", "", picked),
+        };
+        match row {
+            NavRow::Target(NavTarget::System(_)) => systems.push(SectionItem::item(entry)),
+            NavRow::Target(NavTarget::Body(_)) => bodies.push(SectionItem::item(entry)),
+            _ => actions.push(SectionItem::item(entry)),
+        }
+    }
+    let mut sections = Vec::new();
+    if !systems.is_empty() {
+        sections.push(Section::new(
+            format!("Star systems ({})", systems.len()),
+            GOLD,
+            systems,
+        ));
+    }
+    if !bodies.is_empty() {
+        sections.push(Section::new("Nearby", SKY_LIGHT, bodies));
+    }
+    sections.push(Section::new("", FOG, actions));
+    let footer = if player.hazard_gear.flight.nav_suite == 0 {
+        "No nav suite fitted: only the way home is charted. Stations sell one.".to_owned()
+    } else {
+        "Pick a waypoint: the HUD points to it with its distance and ETA. Ping (the scanner) to \
+         find more stars."
+            .to_owned()
+    };
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Nav Chart",
+        "Where to next?",
+        &ModalContent::new(sections)
+            .footer(Some(footer))
+            .compact()
+            .prompts(&[
+                super::prompts::hint(Prompt::Navigate, "pick"),
+                super::prompts::hint(Prompt::Confirm, "set"),
+                super::prompts::hint(Prompt::Back, "close"),
+            ]),
+    );
+}
+
+fn action_entry(
+    icon: &'static super::pixel_art::sprite::SpriteDef,
+    label: &str,
+    detail: &str,
+    selected: bool,
+) -> ItemEntry {
+    ItemEntry {
+        icon: Some(icon),
+        label: label.to_owned(),
+        detail: detail.to_owned(),
+        value: String::new(),
+        value_color: GOLD,
+        coin: false,
+        selected,
+        disabled: false,
+    }
+}
+
+/// A docked station's counter (the stub Wave 12 fills).
+pub(super) fn draw_station_counter(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    use fatherload_simulation::flight::{STATION_FUEL_PRICE, STATION_REPAIR_PRICE};
+    let player = ui.player;
+    let rows = station_rows();
+    let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
+    let mut services = Vec::new();
+    let mut gear = Vec::new();
+    let mut leave = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
+        let picked = index == selected;
+        match row {
+            StationRow::Refuel => {
+                let missing = (player.fuel_capacity - player.fuel).max(0.0).ceil() as u32;
+                services.push(SectionItem::item(ItemEntry {
+                    icon: Some(&icons::FUEL),
+                    label: "Refuel".to_owned(),
+                    detail: format!("{missing} units"),
+                    value: (missing * STATION_FUEL_PRICE).to_string(),
+                    value_color: GOLD,
+                    coin: true,
+                    selected: picked,
+                    disabled: missing == 0,
+                }));
+            }
+            StationRow::Repair => {
+                let missing = (player.max_hull() - player.hull).max(0.0).ceil() as u32;
+                services.push(SectionItem::item(ItemEntry {
+                    icon: Some(&icons::HULL),
+                    label: "Repair".to_owned(),
+                    detail: format!("{missing} hull"),
+                    value: (missing * STATION_REPAIR_PRICE).to_string(),
+                    value_color: GOLD,
+                    coin: true,
+                    selected: picked,
+                    disabled: missing == 0,
+                }));
+            }
+            StationRow::Buy(kind) => {
+                let level = kind.level(&player.hazard_gear);
+                let maxed = level >= kind.max_level();
+                gear.push(SectionItem::item(ItemEntry {
+                    icon: Some(&menu_icons::GEAR),
+                    label: kind.name().to_owned(),
+                    detail: if kind.max_level() > 1 {
+                        format!("tier {level}/{}", kind.max_level())
+                    } else if maxed {
+                        "fitted (switch it on in Options)".to_owned()
+                    } else {
+                        "not fitted".to_owned()
+                    },
+                    value: if maxed {
+                        "MAX".to_owned()
+                    } else {
+                        kind.price(level).to_string()
+                    },
+                    value_color: GOLD,
+                    coin: !maxed,
+                    selected: picked,
+                    disabled: maxed || player.credits < kind.price(level),
+                }));
+            }
+            StationRow::Save => leave.push(SectionItem::item(action_entry(
+                &menu_icons::DISK,
+                "Save the game",
+                "",
+                picked,
+            ))),
+            StationRow::Undock => leave.push(SectionItem::item(action_entry(
+                &menu_icons::ROCKET,
+                "Undock",
+                "",
+                picked,
+            ))),
+            StationRow::Close => leave.push(SectionItem::item(action_entry(
+                &menu_icons::BACK,
+                "Close",
+                "",
+                picked,
+            ))),
+        }
+    }
+    let name = match player.flight.place {
+        FlightPlace::Docked(body) => target_name(ui.snapshot.space.charts, NavTarget::Body(body)),
+        _ => "Station".to_owned(),
+    };
+    UiLayout::screen(draw).modal_with_render_plan(
+        &name,
+        "Docked. The air is topped up.",
+        &ModalContent::new(vec![
+            Section::new("Services", SKY_LIGHT, services),
+            Section::new("Flight gear", GOLD, gear),
+            Section::new("", FOG, leave),
+        ])
+        .footer(Some(format!("Credits: {}", player.credits)))
+        .compact()
+        .prompts(&[
+            super::prompts::hint(Prompt::Navigate, "pick"),
+            super::prompts::hint(Prompt::Confirm, "buy"),
+            super::prompts::hint(Prompt::Back, "close"),
+        ]),
+    );
+}

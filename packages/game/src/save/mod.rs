@@ -149,6 +149,10 @@ pub struct SettingsFile {
     /// default and in older settings.
     #[serde(default)]
     pub assists: fatherload_simulation::attitude::AttitudeAssists,
+    /// Space flight's switches (Wave 11): auto-land and screen-relative thrust. Off by default
+    /// and in older settings.
+    #[serde(default)]
+    pub flight: fatherload_simulation::flight::FlightControls,
 }
 
 impl Default for SettingsFile {
@@ -162,6 +166,10 @@ impl Default for SettingsFile {
             assists: fatherload_simulation::attitude::AttitudeAssists {
                 gyro: false,
                 horizon: false,
+            },
+            flight: fatherload_simulation::flight::FlightControls {
+                auto_land: false,
+                screen_relative: false,
             },
         }
     }

@@ -205,6 +205,13 @@ pub struct TouchContext {
     /// In the rig with the Gravity Anchor fitted (Wave 9): the ANCHOR button shows under the
     /// rotation pair.
     pub anchor: bool,
+    /// The rig is away in space (Wave 11): the cluster flies the Star Drive (CRUISE, PING,
+    /// WARP, DOCK) instead of the home world's tools.
+    pub space: bool,
+    /// In space with a star system as the waypoint and a nav suite: WARP shows.
+    pub warp: bool,
+    /// In space at a station's port, or docked: DOCK shows.
+    pub dock: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -323,6 +330,12 @@ pub enum TouchControl {
     RotateRight,
     /// The Gravity Anchor (Wave 9): tap to engage it or let it go (shown once the rig has it).
     Anchor,
+    /// In space (Wave 11): engage the Star Drive's cruise, or drop back to the thrusters.
+    Cruise,
+    /// In space: spool a warp to the waypoint's star system.
+    Warp,
+    /// In space: dock at the station's port in reach, or undock.
+    Dock,
 }
 
 /// Where the controls are this frame.
@@ -421,6 +434,8 @@ impl TouchLayout {
                     layout.push_crypt(cluster, context);
                 } else if context.pilot.on_foot() {
                     layout.push_foot(cluster, context);
+                } else if context.space {
+                    layout.push_space(cluster, context);
                 } else if tools_open {
                     // The fan takes the thumb corner over; only its own button stays.
                     layout
@@ -431,7 +446,7 @@ impl TouchLayout {
                     layout.push_play(cluster, settings, context);
                 }
                 if !context.pilot.on_foot() {
-                    layout.push_rotation(settings.left_handed, context.anchor);
+                    layout.push_rotation(settings.left_handed, context.anchor && !context.space);
                 }
                 if context.prompt {
                     let (x, y) = safe.centre();
@@ -577,6 +592,24 @@ impl TouchLayout {
         }
         if settings.thrust_button {
             push(TouchControl::Thrust, FAR_DIAGONAL);
+        }
+    }
+
+    /// In space (Wave 11): CRUISE under the thumb, PING beside it, WARP above when a star
+    /// system is the waypoint, DOCK on the diagonal at a station's port. The stick thrusts
+    /// (up forward, down back, sideways strafes); the rotation pair turns the rig.
+    fn push_space(&mut self, cluster: Cluster, context: TouchContext) {
+        let mut push = |control, slot| self.controls.push((control, cluster.place(slot)));
+        push(TouchControl::Cruise, PRIMARY);
+        push(TouchControl::Scan, SIDE);
+        if context.warp {
+            push(TouchControl::Warp, UPPER);
+        }
+        if context.dock {
+            push(TouchControl::Dock, DIAGONAL);
+        }
+        if context.armed {
+            push(TouchControl::Fire, FAR_SIDE);
         }
     }
 
@@ -980,7 +1013,9 @@ impl TouchInput {
             TouchControl::CycleWeapon => input.cycle_weapon = true,
             TouchControl::CycleExplosive => input.cycle_explosive = true,
             TouchControl::Scan => input.scan = true,
-            TouchControl::Anchor => input.anchor = true,
+            TouchControl::Anchor | TouchControl::Cruise => input.anchor = true,
+            TouchControl::Warp => input.bomb = true,
+            TouchControl::Dock => input.interact = true,
             TouchControl::Tools => self.tools_open = !self.tools_open,
             TouchControl::Kit(slot) => {
                 self.tools_open = false;

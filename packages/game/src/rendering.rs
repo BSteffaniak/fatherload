@@ -51,6 +51,7 @@ mod rewards;
 pub mod rig_art;
 mod screen;
 mod sky_hud;
+mod space_view;
 mod story;
 pub mod terrain;
 mod title;
@@ -574,6 +575,20 @@ impl GameRenderer {
                     split.then_some(view.seat_index),
                 );
             }
+        } else if view.player.flight.away() {
+            // Space flight (Wave 11): space instead of the home world.
+            let density = render_scale_for_draw(draw);
+            let frame = space_view::draw_space_world(
+                draw,
+                snapshot.terrain,
+                &self.rig_facings,
+                shell,
+                snapshot,
+                view,
+                density,
+            );
+            let _canvas = UiCanvasScope::begin(draw);
+            space_view::draw_space_hud(draw, shell, snapshot, view, &frame);
         } else {
             self.render_world(draw, shell, snapshot, view);
         }

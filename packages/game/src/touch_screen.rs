@@ -362,5 +362,30 @@ pub fn touch_context(
         anchor: player
             .hazard_gear
             .has_system(fatherload_simulation::depth_progression::RigSystem::GravityAnchor),
+        space: player.flight.away(),
+        warp: space_warp_ready(view),
+        dock: space_dock_ready(view),
     }
+}
+
+/// In space with a nav suite and a star system elsewhere as the waypoint (Wave 11).
+fn space_warp_ready(view: &ViewSnapshot<'_>) -> bool {
+    let flight = view.player.flight;
+    flight.away()
+        && view.player.hazard_gear.flight.nav_suite > 0
+        && matches!(
+            view.space_waypoint,
+            Some(fatherload_simulation::flight::nav::NavTarget::System(system))
+                if fatherload_simulation::flight::space::galaxy_sector_of(flight.pos)
+                    != system.sector
+        )
+}
+
+/// Docked, or near a station's port (Wave 11).
+const fn space_dock_ready(view: &ViewSnapshot<'_>) -> bool {
+    let flight = view.player.flight;
+    matches!(
+        flight.place,
+        fatherload_simulation::flight::FlightPlace::Docked(_)
+    ) || view.near_port
 }

@@ -30,6 +30,7 @@ impl PauseOption {
                     Self::PlaceFieldZone,
                     Self::ClearFieldZones,
                     Self::PourTestPools,
+                    Self::GrantStarDrive,
                 ],
             );
         }

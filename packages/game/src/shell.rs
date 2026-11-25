@@ -30,6 +30,7 @@ mod colony;
 mod crew;
 mod descent;
 pub mod expedition;
+pub mod flight;
 mod garage;
 pub mod homes;
 pub mod hopper;
@@ -182,6 +183,13 @@ pub enum ModalScreen {
     /// ([`SeatUi::selected_menu_item`] is the beat). Opens on every local seat when the Heart
     /// wakes; confirm (or a tap) turns the page, back closes it.
     Ending,
+    /// The nav chart (Wave 11, `shell/flight.rs`): the map button in space. Known systems and
+    /// nearby bodies to set a waypoint on, the warp, the crew's waypoint, the station's
+    /// services when docked and the emergency beacon.
+    NavChart,
+    /// A docked station's counter (Wave 11 stub, `shell/flight.rs`): fuel, repairs, flight
+    /// gear, a save, undocking. Opens on docking.
+    Station,
 }
 
 impl ModalScreen {
@@ -241,6 +249,8 @@ pub enum PauseOption {
     /// Test mode: carve a row of test pools (water, acid, brine, liquid metal) beside this
     /// seat's rig (Part III F9).
     PourTestPools,
+    /// Test mode (Wave 11): fit this seat's rig with the Star Drive and open space.
+    GrantStarDrive,
 }
 
 impl PauseOption {
@@ -311,6 +321,7 @@ impl PauseOption {
             Self::PlaceFieldZone => "Place Field Zone",
             Self::ClearFieldZones => "Clear Field Zones",
             Self::PourTestPools => "Pour Test Pools",
+            Self::GrantStarDrive => "Grant Star Drive",
         }
     }
 }
@@ -1452,7 +1463,17 @@ impl SeatUi {
             self.selected_menu_item = 0;
         }
         toggle_modal(&mut self.modal, input.inventory, ModalScreen::Inventory);
-        toggle_modal(&mut self.modal, input.map, ModalScreen::Map);
+        // In space the map button opens the nav chart (Wave 11).
+        let in_space = ctx.player.is_some_and(|player| ctx.world.in_space(player));
+        toggle_modal(
+            &mut self.modal,
+            input.map,
+            if in_space {
+                ModalScreen::NavChart
+            } else {
+                ModalScreen::Map
+            },
+        );
         toggle_modal(&mut self.modal, input.help, ModalScreen::Help);
         if self.home.interior.is_some() {
             return self.handle_home_interior(input, delta_seconds, ctx, cues, requests);
@@ -1744,6 +1765,14 @@ impl SeatUi {
             self.handle_star_charts(input, ctx.world, cues);
             return true;
         }
+        if modal == ModalScreen::NavChart {
+            self.handle_nav_chart(input, ctx, cues, requests);
+            return true;
+        }
+        if modal == ModalScreen::Station {
+            self.handle_station(input, ctx, cues, requests);
+            return true;
+        }
         if modal == ModalScreen::DescentProgress {
             self.handle_descent_progress(input, ctx.world, cues);
             return true;
@@ -1977,7 +2006,9 @@ impl SeatUi {
             | ModalScreen::ExpeditionCodex
             | ModalScreen::StarCharts
             | ModalScreen::DescentProgress
-            | ModalScreen::Ending => None,
+            | ModalScreen::Ending
+            | ModalScreen::NavChart
+            | ModalScreen::Station => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1
@@ -2463,6 +2494,9 @@ pub struct ShellState {
     pub effects: crate::screen_fx::EffectsIntensity,
     /// Craft rotation assists switched on (F9, Options; they work once fitted).
     pub assists: fatherload_simulation::attitude::AttitudeAssists,
+    /// Space flight's switches (Wave 11, Options): auto-land (works once fitted) and the
+    /// screen-relative thrust scheme (an accessibility option). Off by default.
+    pub flight: fatherload_simulation::flight::FlightControls,
     /// Touch control preferences (Options; persisted with settings).
     pub touch: crate::input::touch::TouchSettings,
     /// A touch screen has driven the first seat this run (Options then shows its rows).
@@ -2528,6 +2562,7 @@ impl ShellState {
             touch: settings.touch,
             effects: settings.effects,
             assists: settings.assists,
+            flight: settings.flight,
             next_field_preset: 0,
             touch_seen: false,
             settings_dirty: false,
@@ -2619,6 +2654,7 @@ impl ShellState {
             touch: self.touch,
             effects: self.effects,
             assists: self.assists,
+            flight: self.flight,
         }
     }
 
@@ -3270,6 +3306,16 @@ impl ShellState {
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
             PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
                 self.field_zone_action(options[self.selected_pause_item], requests);
+            }
+            PauseOption::GrantStarDrive => {
+                requests.push(ShellRequest::Action {
+                    seat: self.menu_seat,
+                    command: PlayerCommand::TestMode(
+                        fatherload_simulation::TestModeAction::GrantStarDrive,
+                    ),
+                });
+                self.run_mode = RunMode::Playing;
+                "Star Drive fitted: fly up past the Moon into space.".clone_into(&mut self.message);
             }
             PauseOption::PourTestPools => {
                 requests.push(ShellRequest::Action {

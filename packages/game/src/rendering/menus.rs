@@ -175,7 +175,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::CopySeed => &menu_icons::KEY,
         PauseOption::WarpToLayer => &menu_icons::ROCKET,
         PauseOption::ToggleInvulnerable => &icons::HULL,
-        PauseOption::ToggleInfiniteFuel => &icons::FUEL,
+        PauseOption::ToggleInfiniteFuel | PauseOption::GrantStarDrive => &icons::FUEL,
         PauseOption::ToggleNoClip | PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
             &menu_icons::GHOST
         }
@@ -396,6 +396,22 @@ pub(super) fn draw_options(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
                     .detail("Levels the rig in flight when you let go (once fitted)")
                     .value(text, color)
             }
+            OptionsRow::AutoLand => {
+                let (text, color) = on_off(ui.shell.flight.auto_land);
+                Entry::new(&menu_icons::SCREEN, "Auto-land")
+                    .detail("Holds the last metres of a landing in space (once fitted)")
+                    .value(text, color)
+            }
+            OptionsRow::FlightThrust => Entry::new(&menu_icons::SCREEN, "Space thrust")
+                .detail("Craft: push where the rig points. Screen: push where you press")
+                .value(
+                    if ui.shell.flight.screen_relative {
+                        "SCREEN"
+                    } else {
+                        "CRAFT"
+                    },
+                    GOLD,
+                ),
             OptionsRow::Back => Entry::new(&menu_icons::BACK, "Back"),
         })
         .collect();

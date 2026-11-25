@@ -340,6 +340,12 @@ impl LocalGame {
                     if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
                         frame.controls.thrust = true;
                     }
+                    // Space flight (Wave 11): the seat's flight switches, and the rig's
+                    // buttons fly the Star Drive while it is away.
+                    frame.controls = frame.controls.with_flight(self.shell.flight);
+                    if player.is_some_and(|player| player.flight.away()) {
+                        crate::input_mapping::space_actions(sampled, &mut frame.actions);
+                    }
                     frame
                         .actions
                         .extend(crate::weapon_aim::cycle_command(sampled, player, on_foot));
@@ -566,6 +572,7 @@ impl LocalGame {
         self.announce_ancient_city(&players);
         self.announce_garrison(&players);
         self.announce_heart(&players);
+        self.announce_flight(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1672,6 +1679,65 @@ impl LocalGame {
 
     /// Descent VIII's news for each local seat (Wave 10): dark matter's weight, wells, rails,
     /// the Heart's beats; a story card when the crew finds one of its places.
+    /// Space flight for local seats (Wave 11): the seat whose rig it was hears what happened
+    /// (a refused warp says why; low air says what to do), and docking opens the station's
+    /// counter.
+    fn announce_flight(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::flight::{FlightEvent, WarpRefusal};
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut news: Vec<(usize, FlightEvent, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Flight {
+                what,
+                player_id,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let Some(seat) = seat_of(player_id) else {
+                continue;
+            };
+            let message = match what {
+                FlightEvent::WarpRefused => format!(
+                    "Warp unavailable: {}.",
+                    WarpRefusal::from_code(detail).map_or("not now", WarpRefusal::reason)
+                ),
+                FlightEvent::AirLow => format!(
+                    "Air at {detail}%: dock at a station, land somewhere breathable, or call \
+                     the emergency beacon (nav chart)."
+                ),
+                FlightEvent::BeaconReturn => {
+                    format!("Emergency beacon: towed home for {detail} credits.")
+                }
+                FlightEvent::EnteredSpace => {
+                    "Open space. The map button opens the nav chart; the anchor button cruises."
+                        .to_owned()
+                }
+                FlightEvent::ScannerPing => format!("Scanner ping: {detail} new star systems."),
+                FlightEvent::WarpInterrupted if detail == 1 => {
+                    "Warp interrupted: a gravity well pulled you out.".to_owned()
+                }
+                FlightEvent::CruiseDropped if detail == 1 => {
+                    "Cruise needs open space: too close to a body.".to_owned()
+                }
+                other => other.headline().to_owned(),
+            };
+            news.push((seat, what, message));
+        }
+        for (seat, what, message) in news {
+            let ui = self.shell.seat_mut(seat);
+            ui.message = message;
+            if what == FlightEvent::Docked && ui.modal.is_none() {
+                ui.modal = Some(crate::shell::ModalScreen::Station);
+                ui.selected_menu_item = 0;
+            }
+        }
+    }
+
     fn announce_heart(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::heart::HeartEvent as E;
         let mut messages: Vec<(usize, String)> = Vec::new();

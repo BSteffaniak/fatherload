@@ -1428,6 +1428,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::StarCharts => super::ancient_city_hud::draw_star_charts(draw, ui),
         ModalScreen::DescentProgress => super::expedition_hud::draw_descent_progress(draw, ui),
         ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
+        ModalScreen::NavChart => super::space_view::draw_nav_chart(draw, ui),
+        ModalScreen::Station => super::space_view::draw_station_counter(draw, ui),
     }
 }
 

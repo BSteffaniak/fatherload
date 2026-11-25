@@ -199,6 +199,35 @@ pub fn gameplay_actions(input: &PlayerInput, explosives: ExplosiveSelection) -> 
     actions
 }
 
+/// A seat's one-shot actions for a rig away in space (Wave 11): the anchor button toggles the
+/// Star Drive's cruise, the bomb button warps to the waypoint, use docks or undocks, and the
+/// home world's tools (explosives, the detonator, kits) do nothing. Held thrust stays as it is
+/// (forward, back and strafe along the craft; the scanner pings).
+pub fn space_actions(input: &PlayerInput, actions: &mut Vec<PlayerCommand>) {
+    use fatherload_simulation::flight::FlightCommand;
+    let mut warp = false;
+    actions.retain_mut(|command| match command {
+        PlayerCommand::Logistics(fatherload_simulation::logistics::LogisticsCommand::Hollow(
+            fatherload_simulation::hollow::HollowAction::ToggleAnchor,
+        )) => {
+            *command = PlayerCommand::Flight(FlightCommand::ToggleCruise);
+            true
+        }
+        PlayerCommand::PlaceBomb | PlayerCommand::DeployExplosive { .. } => {
+            warp = true;
+            false
+        }
+        PlayerCommand::RemoteDetonate { .. } | PlayerCommand::PlaceInfrastructure { .. } => false,
+        _ => true,
+    });
+    if warp {
+        actions.push(PlayerCommand::Flight(FlightCommand::Warp));
+    }
+    if input.interact {
+        actions.push(PlayerCommand::Flight(FlightCommand::Use));
+    }
+}
+
 /// A seat's full gameplay input with plain bombs selected.
 #[must_use]
 #[cfg(test)]
@@ -352,6 +381,31 @@ mod tests {
         assert_eq!(
             gameplay_actions(&sequence, selection),
             vec![PlayerCommand::RemoteDetonate { sequenced: true }]
+        );
+    }
+
+    #[test]
+    fn in_space_the_rig_buttons_fly_the_star_drive() {
+        use fatherload_simulation::flight::FlightCommand;
+        let input = PlayerInput {
+            anchor: true,
+            bomb: true,
+            detonate: true,
+            scan: true,
+            interact: true,
+            place_relay: true,
+            ..PlayerInput::default()
+        };
+        let mut actions = gameplay_actions(&input, ExplosiveSelection::new());
+        space_actions(&input, &mut actions);
+        assert_eq!(
+            actions,
+            vec![
+                PlayerCommand::UseScanner,
+                PlayerCommand::Flight(FlightCommand::ToggleCruise),
+                PlayerCommand::Flight(FlightCommand::Warp),
+                PlayerCommand::Flight(FlightCommand::Use),
+            ]
         );
     }
 

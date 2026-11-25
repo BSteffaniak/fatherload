@@ -579,6 +579,10 @@ pub struct ViewSnapshot<'w> {
     /// The use button opens the lunar colony's counter: the pilot in the colony or the rig on
     /// its pad (`WorldState::at_colony_counter`, its use prompt; WP-MOON).
     pub in_colony: bool,
+    /// In space (Wave 11): the seat's waypoint (its own, else the crew's).
+    pub space_waypoint: Option<fatherload_simulation::flight::nav::NavTarget>,
+    /// In space: the rig is within reach of a station's port (the touch DOCK button).
+    pub near_port: bool,
     /// The use prompt at a depth logistics stop the rig stands at (an outpost, a lift station,
     /// its own beacon; Part III F10).
     pub logistics_stop: Option<String>,
@@ -926,6 +930,41 @@ pub struct RenderSnapshot<'w> {
     pub cable: Option<fatherload_simulation::world::CablePath>,
     /// The rows the cable runs down through rock to the Heart.
     pub cable_rows: Option<(i32, i32)>,
+    /// Space flight (Wave 11): every rig away, the crew's waypoints and finds, the galaxy's
+    /// seed and charts.
+    pub space: SpaceSnapshot<'w>,
+}
+
+/// One rig away in space, as drawn.
+#[derive(Clone, Copy, Debug)]
+pub struct Flyer {
+    pub player_id: PlayerId,
+    pub flight: fatherload_simulation::flight::RigFlight,
+    /// Orientation (radians, clockwise from up).
+    pub orientation: f32,
+}
+
+/// What the space view and the nav HUD read (Wave 11).
+#[derive(Clone, Debug)]
+pub struct SpaceSnapshot<'w> {
+    /// The world seed (the galaxy is a pure function of it and the charts).
+    pub seed: u64,
+    pub charts: &'w [fatherload_simulation::star_chart::StarChart],
+    pub shared: &'w fatherload_simulation::flight::FlightShared,
+    /// Every system the crew knows.
+    pub known: Vec<fatherload_simulation::flight::SystemRef>,
+    /// Every rig away from home.
+    pub flyers: Vec<Flyer>,
+    /// World milliseconds of the snapshot's tick.
+    pub millis: u64,
+}
+
+impl SpaceSnapshot<'_> {
+    /// The galaxy (TODO-SEAM(w11-space-gen): the generator's query).
+    #[must_use]
+    pub const fn galaxy(&self) -> fatherload_simulation::flight::PlaceholderSpace<'_> {
+        fatherload_simulation::flight::PlaceholderSpace::new(self.seed, self.charts)
+    }
 }
 
 /// Where Descent IV's set pieces stand (Wave 9; `None` in worlds without them).
@@ -1107,6 +1146,23 @@ impl<'w> RenderSnapshot<'w> {
             heart: world.heart(),
             heart_centre: world.heart_centre(),
             cable: world.cable_path(),
+            space: SpaceSnapshot {
+                seed: world.world_settings().seed,
+                charts: world.star_charts(),
+                shared: world.flight_shared(),
+                known: world.known_systems(),
+                flyers: world
+                    .players()
+                    .iter()
+                    .filter(|(_, player)| player.flight.away())
+                    .map(|(id, player)| Flyer {
+                        player_id: *id,
+                        flight: player.flight,
+                        orientation: player.attitude.orientation,
+                    })
+                    .collect(),
+                millis: world.millis_at(world.simulation_tick()),
+            },
             cable_rows: world.world_settings().generator.has_descents().then(|| {
                 let layout =
                     fatherload_simulation::descent::fields::cached_layout(world.world_settings());
@@ -1479,6 +1535,15 @@ fn view_snapshot(
             .and_then(|id| world.bases().module(id))
             .map(|module| module.kind),
         in_colony: world.at_colony_counter(player_id),
+        space_waypoint: world.waypoint_of(player_id),
+        near_port: world.rig_flight(player_id).is_some_and(|flight| {
+            flight.away()
+                && world.space_bodies_near(flight.pos).iter().any(|body| {
+                    body.port().is_some_and(|port| {
+                        flight.pos.distance(port) < 8.0 * fatherload_simulation::TILE_SIZE
+                    })
+                })
+        }),
         // A deep hall's resident in reach takes the use prompt from its counter (Wave 9).
         logistics_stop: crate::shell::logistics::stop_prompt(world, player_id)
             .filter(|_| crate::shell::deep_resident_in_reach(world, player_id).is_none()),

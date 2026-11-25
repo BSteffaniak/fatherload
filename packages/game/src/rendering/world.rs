@@ -76,7 +76,13 @@ mod tombs;
 mod villages;
 mod weapons;
 
-pub use rig::{RigFacings, player_accent};
+pub use rig::{RigFacings, draw_rig, player_accent};
+
+/// How far above a rig's position its body's middle is drawn (world pixels; the space view
+/// turns the rig about it, Wave 11).
+#[allow(clippy::cast_precision_loss, reason = "a small art size")]
+pub const RIG_BODY_CENTRE_Y: f32 =
+    rig::FOOT_OFFSET - crate::rendering::rig_art::BODY_HEIGHT as f32 * ART * 0.5;
 pub use sky::SkyArt;
 
 /// World pixels per art pixel.

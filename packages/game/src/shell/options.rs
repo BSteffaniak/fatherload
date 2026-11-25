@@ -23,6 +23,11 @@ pub enum OptionsRow {
     GyroAssist,
     /// The horizon hold assist (F9; works once fitted).
     HorizonHold,
+    /// Auto-land in space (Wave 11; works once fitted).
+    AutoLand,
+    /// Thrust along the craft (default) or the screen (Wave 11 accessibility: the camera stays
+    /// chart-up in space too).
+    FlightThrust,
     Back,
 }
 
@@ -36,6 +41,8 @@ impl ShellState {
             OptionsRow::ScreenEffects,
             OptionsRow::GyroAssist,
             OptionsRow::HorizonHold,
+            OptionsRow::AutoLand,
+            OptionsRow::FlightThrust,
         ];
         if self.touch_seen {
             rows.extend([
@@ -85,6 +92,10 @@ impl ShellState {
             OptionsRow::ScreenEffects => self.effects = self.effects.step(step >= 0),
             OptionsRow::GyroAssist => self.assists.gyro = !self.assists.gyro,
             OptionsRow::HorizonHold => self.assists.horizon = !self.assists.horizon,
+            OptionsRow::AutoLand => self.flight.auto_land = !self.flight.auto_land,
+            OptionsRow::FlightThrust => {
+                self.flight.screen_relative = !self.flight.screen_relative;
+            }
             OptionsRow::Volume | OptionsRow::Fullscreen | OptionsRow::Back => return false,
         }
         self.settings_dirty = true;
@@ -109,11 +120,17 @@ mod tests {
                 OptionsRow::ScreenEffects,
                 OptionsRow::GyroAssist,
                 OptionsRow::HorizonHold,
+                OptionsRow::AutoLand,
+                OptionsRow::FlightThrust,
                 OptionsRow::Back
             ]
         );
+        assert!(
+            !shell.flight.auto_land && !shell.flight.screen_relative,
+            "flight assists start off"
+        );
         shell.touch_seen = true;
-        assert_eq!(shell.options_rows().len(), 9);
+        assert_eq!(shell.options_rows().len(), 11);
         assert_eq!(shell.options_rows().last(), Some(&OptionsRow::Back));
     }
 

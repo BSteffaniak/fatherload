@@ -23,6 +23,9 @@ const PLAY: TouchContext = TouchContext {
     usable: false,
     crypt: false,
     anchor: false,
+    space: false,
+    warp: false,
+    dock: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -560,7 +563,29 @@ fn contexts() -> Vec<TouchContext> {
                     pilot,
                     crypt: false,
                     anchor: bits & 8 != 0,
+                    space: false,
+                    warp: false,
+                    dock: false,
                 });
+                if !pilot.on_foot() && mode == TouchMode::Play {
+                    // Space flight (Wave 11): the Star Drive's cluster.
+                    contexts.push(TouchContext {
+                        mode,
+                        armed: bits & 1 != 0,
+                        charges_out: false,
+                        prompt: false,
+                        pilot_armed: false,
+                        rope: false,
+                        usable: false,
+                        kits: [false; KIT_COUNT],
+                        pilot,
+                        crypt: false,
+                        anchor: bits & 8 != 0,
+                        space: true,
+                        warp: bits & 2 != 0,
+                        dock: bits & 4 != 0,
+                    });
+                }
                 if pilot.on_foot() && mode == TouchMode::Play {
                     contexts.push(TouchContext {
                         mode,
@@ -574,6 +599,9 @@ fn contexts() -> Vec<TouchContext> {
                         pilot,
                         crypt: true,
                         anchor: false,
+                        space: false,
+                        warp: false,
+                        dock: false,
                     });
                 }
             }
@@ -892,4 +920,40 @@ fn a_crypt_stick_walks_eight_ways_without_the_drill_lock() {
         .frame(&[(1, (base.0 + radius * 0.3, base.1 + radius * 0.9))])
         .input;
     assert!(down.drill_down && down.horizontal > 0.1, "{down:?}");
+}
+
+#[test]
+fn in_space_the_cluster_flies_the_star_drive() {
+    let space = TouchContext {
+        space: true,
+        warp: true,
+        dock: true,
+        anchor: true,
+        ..PLAY
+    };
+    let layout = TouchLayout::compute(PHONE, TouchSettings::default(), space, false);
+    for control in [
+        TouchControl::Cruise,
+        TouchControl::Scan,
+        TouchControl::Warp,
+        TouchControl::Dock,
+        TouchControl::RotateLeft,
+        TouchControl::RotateRight,
+        TouchControl::Map,
+    ] {
+        assert!(layout.rect(control).is_some(), "{control:?} shows in space");
+    }
+    for control in [
+        TouchControl::Bomb,
+        TouchControl::Tools,
+        TouchControl::Anchor,
+    ] {
+        assert!(layout.rect(control).is_none(), "{control:?} hides in space");
+    }
+    let mut input = TouchInput::default();
+    let mut pressed = PlayerInput::default();
+    input.press(TouchControl::Cruise, &mut pressed);
+    input.press(TouchControl::Warp, &mut pressed);
+    input.press(TouchControl::Dock, &mut pressed);
+    assert!(pressed.anchor && pressed.bomb && pressed.interact);
 }
