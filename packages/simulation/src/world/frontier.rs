@@ -17,8 +17,8 @@
 //! | regrowth | every [`REGROWTH_MILLIS`] | open air touching two crystals round a rig in the Growing Geodes grows crystal (never into a body) |
 //! | toxic air, cold | each tick | hull damage through the planet gear's share |
 //! | heavy lattice | each tick | an extra pull through the planet gear's share |
-//! | tube draughts | each tick | rigs and pilots in a lava tube are pushed along it |
-//! | sandstorms | each tick | rigs and pilots on the surface are pushed with the wind |
+//! | tube draughts | each tick | rigs and pilots in a lava tube are carried along it |
+//! | sandstorms | each tick | rigs and pilots in the open on the surface are carried with the wind |
 //! | eruptions | each tick | bombs land where the schedule says (shadows shown first), hurting what is under them and leaving cinders |
 //!
 //! Heat is the classic heat model's: a frontier zone's heat units come from
@@ -32,9 +32,9 @@ use crate::{
         generate::{LightWell, light_wells, tube_way},
         planet_gear_tier,
         rules::{
-            BOMB_DAMAGE, BOMB_RADIUS_TILES, EruptionPhase, SANDSTORM_ACCEL, SANDSTORM_TOP_SPEED,
-            WeatherPhase, Zone, bombs_landing, cones_near, eruption_at, exposure_at, rule_at,
-            trace_beam, unprotected_share, weather_at, zone_at,
+            BOMB_DAMAGE, BOMB_RADIUS_TILES, EruptionPhase, SANDSTORM_SPEED, WeatherPhase, Zone,
+            bombs_landing, cones_near, eruption_at, exposure_at, rule_at, trace_beam,
+            unprotected_share, weather_at, zone_at,
         },
         style_of_ground,
     },
@@ -44,7 +44,11 @@ use crate::{
     terrain::{TILE_SIZE, TileKind, TilePosition},
 };
 
-use super::{WorldState, enemies::RIG_CONTACT_HALF, movement::AUTHORITATIVE_RIG_GRAVITY};
+use super::{
+    WorldState,
+    enemies::RIG_CONTACT_HALF,
+    movement::{AUTHORITATIVE_RIG_GRAVITY, authoritative_player_collides},
+};
 
 /// Milliseconds between loose sand's steps.
 pub const LOOSE_MILLIS: u64 = 150;
@@ -62,9 +66,9 @@ pub const SHATTER_MAX: usize = 24;
 pub const GLASS_SHARD_DAMAGE: f32 = 0.6;
 /// Hull obsidian's splinters take off a driller with no boulder deflector.
 pub const SPLINTER_DAMAGE: f32 = 1.5;
-/// Hot draughts' push along a lava tube, pixels per second squared, and their top speed.
-pub const DRAUGHT_ACCEL: f32 = 260.0;
-pub const DRAUGHT_TOP_SPEED: f32 = 210.0;
+/// How fast hot draughts carry a rig or a pilot along a lava tube, pixels per second (on top
+/// of its own motion: thrust against it to go upwind).
+pub const DRAUGHT_SPEED: f32 = 150.0;
 /// Columns and rows round a rig the loose-sand and regrowth rules look at.
 const LOOSE_REACH: (i32, i32) = (14, 10);
 const REGROWTH_REACH: i32 = 6;
@@ -80,7 +84,12 @@ type BodyBox = ((f32, f32), (f32, f32));
 impl WorldState {
     /// The frontier worlds' rules for this pass (see the module docs). Does nothing on any
     /// other ground.
-    pub(super) fn advance_frontier(&mut self, next_tick: SimulationTick, output: &mut TickOutput) {
+    pub(super) fn advance_frontier(
+        &mut self,
+        next_tick: SimulationTick,
+        inputs: &crate::TickInputs,
+        output: &mut TickOutput,
+    ) {
         let Some(ground) = self.terrain.planet_ground().copied() else {
             return;
         };
@@ -95,7 +104,18 @@ impl WorldState {
                 .is_multiple_of(world.timing.ticks_for_millis(millis).max(1))
         };
         self.frontier_weather_events(&ground, style, before, now, output);
-        self.frontier_exposure(&ground, style, now, output);
+        // A rig steering or drilling braces against the draughts and the wind.
+        let bracing: Vec<PlayerId> = inputs
+            .players
+            .iter()
+            .filter(|(_, input)| {
+                input.controls.is_some_and(|controls| {
+                    controls.drill_down || controls.horizontal().abs() > 0.1
+                })
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        self.frontier_exposure(&ground, style, now, &bracing, output);
         if every(self, LOOSE_MILLIS) {
             self.frontier_loose_ground(output);
         }
@@ -483,6 +503,7 @@ impl WorldState {
         ground: &PlanetGround,
         style: FrontierStyle,
         now: u64,
+        bracing: &[PlayerId],
         output: &mut TickOutput,
     ) {
         let dt = self.timing.delta_seconds;
@@ -517,7 +538,10 @@ impl WorldState {
             }
             let heavy = exposure.heavy
                 * unprotected_share(planet_gear_tier(&gear, PlanetHazard::HighGravity));
-            let push_x = self.frontier_push(ground, style, zone, tile, weather);
+            let carry = self.frontier_carry(ground, style, zone, tile, weather);
+            let drilling =
+                self.active_drills.contains_key(&player_id) || bracing.contains(&player_id);
+            let terrain = &self.terrain;
             if let Some(rig) = self.players.get_mut(&player_id) {
                 if heavy > 0.0 {
                     rig.velocity_y = quantize(
@@ -525,8 +549,13 @@ impl WorldState {
                             .mul_add(dt, rig.velocity_y),
                     );
                 }
-                if let Some((accel, top)) = push_x {
-                    rig.velocity_x = quantize(push_velocity(rig.velocity_x, accel, top, dt));
+                // Carried along (never into rock): a conveyor the rig's own motion rides on. A
+                // rig drilling or steering braces against it.
+                if let Some(speed) = carry.filter(|_| !drilling) {
+                    let x = quantize(speed.mul_add(dt, rig.x));
+                    if !authoritative_player_collides(terrain, x, rig.y) {
+                        rig.x = x;
+                    }
                 }
             }
         }
@@ -540,31 +569,35 @@ impl WorldState {
             .collect();
         for (id, tile) in pilots {
             let zone = zone_at(ground, tile);
-            if let Some((accel, top)) = self.frontier_push(ground, style, zone, tile, weather) {
+            if let Some(speed) = self.frontier_carry(ground, style, zone, tile, weather) {
                 self.entities.update(id, |entity| {
-                    entity.body.velocity_x =
-                        quantize(push_velocity(entity.body.velocity_x, accel, top, dt));
+                    entity.body.velocity_x = quantize(push_velocity(
+                        entity.body.velocity_x,
+                        speed * 4.0,
+                        speed,
+                        dt,
+                    ));
                 });
             }
         }
     }
 
-    /// The sideways push at `tile` (accel and top speed, signed): a lava tube's draught, a
-    /// sandstorm's wind on the surface.
-    fn frontier_push(
+    /// The sideways carry at `tile` (signed pixels per second): a lava tube's draught, a
+    /// sandstorm's wind in the open on the surface.
+    fn frontier_carry(
         &self,
         ground: &PlanetGround,
         style: FrontierStyle,
         zone: Zone,
         tile: TilePosition,
         weather: crate::frontier::rules::Weather,
-    ) -> Option<(f32, f32)> {
+    ) -> Option<f32> {
         match (style, zone) {
             (FrontierStyle::Volcanic, Zone::Stratum(1)) => {
                 let way = tube_way(ground, i64::from(tile.x), tile.y)?;
                 #[allow(clippy::cast_precision_loss, reason = "a sign")]
                 let way = way as f32;
-                Some((way * DRAUGHT_ACCEL, way * DRAUGHT_TOP_SPEED))
+                Some(way * DRAUGHT_SPEED)
             }
             (FrontierStyle::Desert, Zone::Surface)
                 if weather.phase == WeatherPhase::Storm
@@ -576,10 +609,7 @@ impl WorldState {
             {
                 let strength = f32::from(weather.strength_permille) / 1_000.0;
                 let way = f32::from(weather.wind);
-                Some((
-                    way * SANDSTORM_ACCEL * strength,
-                    way * SANDSTORM_TOP_SPEED * strength,
-                ))
+                Some(way * SANDSTORM_SPEED * strength)
             }
             _ => None,
         }

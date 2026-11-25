@@ -46,6 +46,12 @@ pub const DRIFTER_RING_TILES: i32 = 3;
 pub const GALLERY_HEARING: f32 = 3.0;
 /// Speed (pixels per second) at which a rig's tracks on the sand reach a wyrm.
 const WYRM_FEELS_SPEED: f32 = 40.0;
+/// Rows up and down a column the spawner looks for an underground spot.
+const SPAWN_ROWS: i32 = 12;
+/// Columns either side of a settlement site its safety reaches.
+const SETTLEMENT_MARGIN: i32 = 16;
+/// Rows under a settlement site's ground its safety reaches.
+const SETTLEMENT_SAFE_ROWS: i32 = 12;
 /// Chance per mille each second that a creature appears round a rig (below its cap).
 const SPAWN_PER_MILLE: u16 = 400;
 /// Tiles from a rig a creature appears (out of its view).
@@ -122,6 +128,30 @@ impl WorldState {
             .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
             .map(|(_, id)| id);
         Some(heard)
+    }
+
+    /// Whether `tile` of a frontier world is safe from its hunters (`None` on any other
+    /// ground): its surface is no refuge, only its settlement (the aliens' town, TODO-SEAM
+    /// w12-aliens), claimed bases and placed infrastructure are.
+    pub(in crate::world) fn frontier_safe_zone(&self, tile: TilePosition) -> Option<bool> {
+        let ground = self.terrain.planet_ground()?;
+        style_of_ground(ground)?;
+        let settlement = settlement_site(ground).is_some_and(|site| {
+            let width = ground.strip_width();
+            let dx = (tile.x - site.column).rem_euclid(width);
+            (dx < site.width + SETTLEMENT_MARGIN || dx > width - SETTLEMENT_MARGIN)
+                && tile.y < site.surface_row + SETTLEMENT_SAFE_ROWS
+        });
+        let near_infrastructure = self.infrastructure.iter().any(|item| {
+            (item.position.x - tile.x).abs() <= super::BASE_SAFE_TILES
+                && (item.position.y - tile.y).abs() <= super::BASE_SAFE_TILES
+        });
+        Some(
+            settlement
+                || near_infrastructure
+                || self.bases.is_safe_zone(tile)
+                || self.homes.is_safe_zone(tile),
+        )
     }
 
     /// The frontier creatures' say on where `kind` can appear: `Some(fits)` decides, `None`
@@ -293,7 +323,6 @@ impl WorldState {
         }
         let rigs = self.rig_tiles();
         let seed = ground.params().seed;
-        let settlement = settlement_site(&ground);
         for (index, (player_id, tile)) in rigs.iter().enumerate() {
             if self.entities.count_of(EntityKind::Enemy) >= MAX_ENEMIES {
                 break;
@@ -341,14 +370,8 @@ impl WorldState {
             let Some(site) = self.frontier_site(&ground, kind, zone, *tile, roll, &rigs) else {
                 continue;
             };
-            // No hunter appears at a settlement (TODO-SEAM w12-aliens: its town's safe zone).
-            if !kind.is_frontier_fauna()
-                && settlement.is_some_and(|site_at| {
-                    let width = ground.strip_width();
-                    let dx = (site.x - site_at.column).rem_euclid(width);
-                    dx < site_at.width + 16 || dx > width - 16
-                })
-            {
+            // No hunter appears where it may not hunt (the settlement, bases).
+            if !kind.is_frontier_fauna() && self.enemy_safe_zone(site) {
                 continue;
             }
             let tier = self.tier_at(site);
@@ -380,7 +403,7 @@ impl WorldState {
         rigs: &[(PlayerId, TilePosition)],
     ) -> Option<TilePosition> {
         let flying = matches!(kind.stats().locomotion, Locomotion::Flying);
-        for attempt in 0..16_u64 {
+        for attempt in 0..8_u64 {
             let hash = hash2(
                 roll,
                 SALT_FRONTIER_SPAWN + 1,
@@ -406,8 +429,17 @@ impl WorldState {
                     y: floor - if flying { 4 } else { 1 },
                 }
             } else {
-                let dy = i32::try_from((hash >> 16) % 17).unwrap_or(0) - 8;
-                TilePosition { x, y: tile.y + dy }
+                // The nearest open spot up or down the column that suits it (a cave, a
+                // tunnel, a tube; a burrower's own sand).
+                let _ = hash >> 16;
+                let found = (0..=SPAWN_ROWS).flat_map(|dy| [dy, -dy]).find_map(|dy| {
+                    let at = TilePosition { x, y: tile.y + dy };
+                    (Self::out_of_view(at, rigs) && self.site_fits(kind, at)).then_some(at)
+                });
+                match found {
+                    Some(at) => at,
+                    None => continue,
+                }
             };
             if !Self::out_of_view(candidate, rigs) {
                 continue;

@@ -292,10 +292,9 @@ pub const fn weather_hazard(style: FrontierStyle) -> Option<PlanetHazard> {
     }
 }
 
-/// A sandstorm's push on the surface at full strength, pixels per second squared.
-pub const SANDSTORM_ACCEL: f32 = 200.0;
-/// The fastest a sandstorm carries a rig or pilot sideways, pixels per second.
-pub const SANDSTORM_TOP_SPEED: f32 = 150.0;
+/// How fast a sandstorm at full strength carries a rig or a pilot in the open on the
+/// surface, pixels per second (on top of its own motion).
+pub const SANDSTORM_SPEED: f32 = 90.0;
 
 // ---------------------------------------------------------------------------------------------
 // Eruptions.

@@ -642,7 +642,7 @@ impl WorldState {
             self.advance_pilot_pickups(&mut output);
             self.apply_test_mode_refills();
             // A frontier world's rules, weather, volcanoes and creatures (Wave 12).
-            self.advance_frontier(next_tick, &mut output);
+            self.advance_frontier(next_tick, inputs, &mut output);
             self.advance_fluids(next_tick, &mut output);
             // A body's round ground: take-offs into space and life support (Wave 11).
             self.advance_body_flight(&mut output);
@@ -732,7 +732,7 @@ impl WorldState {
         self.apply_test_mode_refills();
         self.advance_sky_isles(&mut output);
         // A world that is a frontier planet (Wave 12): its rules, weather and creatures.
-        self.advance_frontier(next_tick, &mut output);
+        self.advance_frontier(next_tick, inputs, &mut output);
         // Last before the journal closes: every terrain write this tick wakes its fluid.
         self.advance_fluids(next_tick, &mut output);
         output.terrain_ops = self.terrain.finish_journal();

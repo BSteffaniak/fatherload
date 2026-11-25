@@ -397,6 +397,10 @@ impl WorldState {
         if let Some(safe) = self.wilds_safe_zone(tile) {
             return safe;
         }
+        // A frontier world (Wave 12): hostile everywhere but its settlement and your bases.
+        if let Some(safe) = self.frontier_safe_zone(tile) {
+            return safe;
+        }
         let surface = self.terrain.surface_row(tile.x);
         if tile.y < surface + SAFE_SURFACE_ROWS {
             // The hostile sky of a V9 world (archipelago and up, T21) is safe only in sky

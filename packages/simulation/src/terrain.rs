@@ -1193,6 +1193,12 @@ impl Terrain {
         &self,
         position: TilePosition,
     ) -> &'static [(crate::enemy::EnemyKind, u32)] {
+        // A frontier world's creatures come from its own spawner (Wave 12 planets-b).
+        if let Some(planet) = &self.planet
+            && crate::frontier::style_of(planet.params().theme).is_some()
+        {
+            return &[];
+        }
         if self.settings.generator.has_descents() {
             self.stratum_at(position).def().creatures
         } else {
