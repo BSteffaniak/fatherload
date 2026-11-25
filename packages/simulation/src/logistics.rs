@@ -65,6 +65,10 @@ pub const TOWN_TRAVEL_CEILING_ROWS: i32 = 24;
 pub const OUTPOST_HALF_WIDTH: i32 = 4;
 /// Height in tiles of an outpost's room (above its floor row).
 pub const OUTPOST_HEIGHT: i32 = 4;
+/// Rows below a rig a supply stop may lie and still be the rig's own stop (Wave 11 carryover
+/// review: a rig in an outpost's hall stands above its floor row; see
+/// [`Logistics::supply_row_above`]).
+pub const SUPPLY_STOP_SLACK_ROWS: i32 = OUTPOST_HEIGHT * 4;
 /// Credits to claim an outpost (times the Descent's price percent).
 pub const OUTPOST_CLAIM_PRICE: u32 = 5_000;
 /// Credits per unit of fuel at an unclaimed / claimed outpost.
@@ -421,6 +425,10 @@ impl Logistics {
     /// The deepest supply stop at or above `row` (Wave 11 carryover, the supply line): an
     /// outpost, a restored lift's station or a depth beacon (anyone's: the crew shares the
     /// network), else the surface (row 0).
+    ///
+    /// A stop up to [`SUPPLY_STOP_SLACK_ROWS`] below `row` counts too: a rig standing in an
+    /// outpost's hall, or at a station's cab, is a row or more above the stop's floor row and
+    /// is at that stop, not far below the one before it.
     #[must_use]
     pub fn supply_row_above(&self, row: i32) -> i32 {
         let outposts = self.outposts.values().map(|outpost| outpost.floor_row);
@@ -433,7 +441,7 @@ impl Logistics {
         outposts
             .chain(beacons)
             .chain(stations)
-            .filter(|stop| *stop <= row)
+            .filter(|stop| *stop <= row.saturating_add(SUPPLY_STOP_SLACK_ROWS))
             .max()
             .unwrap_or(0)
             .max(0)
@@ -447,7 +455,8 @@ impl Logistics {
             return 0.0;
         }
         let descent = crate::depth_progression::descent_index_at_row(settings, row);
-        crate::depth_progression::supply_strain(row - self.supply_row_above(row), descent)
+        let below = (row - self.supply_row_above(row)).max(0);
+        crate::depth_progression::supply_strain(below, descent)
     }
 
     /// Percent of the ore price buyers pay `player_id` for the haul aboard (Wave 8, Descent

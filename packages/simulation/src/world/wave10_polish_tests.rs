@@ -1060,6 +1060,23 @@ fn far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it() {
     put_rig(&mut world, floor);
     assert!(world.logistics().supply_strain_at(&settings, floor.y) > 0.0);
     assert!(world.supply_strain_for(PLAYER).abs() < f32::EPSILON);
+    // Review fix: a rig standing in an outpost's hall (above its floor row) is at that stop,
+    // not far below the one before it (Heart's Edge showed FAR FROM SUPPLY in its own hall).
+    let halls: Vec<(String, i32)> = world
+        .logistics()
+        .outposts
+        .values()
+        .map(|outpost| (outpost.name.clone(), outpost.floor_row))
+        .collect();
+    assert!(halls.len() >= 7, "every Descent's outpost: {halls:?}");
+    for (name, floor) in halls {
+        for row in (floor - crate::logistics::OUTPOST_HEIGHT)..floor {
+            assert!(
+                world.logistics().supply_strain_at(&settings, row).abs() < f32::EPSILON,
+                "{name}: strained in its own hall at row {row} (floor {floor})"
+            );
+        }
+    }
     // Calm within reach of a stop, none in the Crust.
     assert!(supply_strain(SUPPLY_FREE_ROWS, 3).abs() < f32::EPSILON);
     assert!(supply_strain(5_000, 0).abs() < f32::EPSILON);
