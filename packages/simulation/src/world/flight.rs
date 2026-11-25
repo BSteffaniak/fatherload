@@ -200,11 +200,15 @@ impl WorldState {
                     {
                         if now.saturating_sub(since) >= WARP_SPOOL_MILLIS {
                             let bodies = space.bodies_near(flight.pos);
-                            match warp_check(&flight, attitude, &bodies, system.star, fuel) {
+                            // Test mode's infinite fuel spools as the command did.
+                            let aboard = if infinite_fuel { f32::MAX } else { fuel };
+                            match warp_check(&flight, attitude, &bodies, system.star, aboard) {
                                 Ok(cost) => {
                                     let arrival = warp_arrival(flight.pos, system.star);
                                     let distance = flight.pos.distance(arrival);
-                                    fuel = (fuel - cost).max(0.0);
+                                    if !infinite_fuel {
+                                        fuel = (fuel - cost).max(0.0);
+                                    }
                                     flight.drive = StarDrive::Warp(WarpRun {
                                         origin: flight.pos,
                                         arrival,
@@ -297,7 +301,9 @@ impl WorldState {
         if heat_before <= HEAT_WARNING && flight.heat > HEAT_WARNING {
             events.push((FlightEvent::HeatWarning, 0));
         }
-        fuel = (fuel - outcome.fuel_burned).max(0.0);
+        if !infinite_fuel {
+            fuel = (fuel - outcome.fuel_burned).max(0.0);
+        }
         if let Some(player) = self.players.get_mut(&player_id) {
             player.flight = flight;
             player.attitude = attitude;
