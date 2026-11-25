@@ -120,10 +120,13 @@ pub enum ArcKind {
     Crew,
     /// Tombs and crypts (WP-TOMBS, Wave 6): stories bound to sealed sites and their builders.
     Tomb,
+    /// The deep settlements' own stories (Wave 10): offered only by the people of one
+    /// settlement down the builders' cable, bound to its Descent's places and the Fathers.
+    Deep,
 }
 
 impl ArcKind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Frontier,
         Self::Village,
         Self::Sky,
@@ -133,6 +136,7 @@ impl ArcKind {
         Self::Pilot,
         Self::Crew,
         Self::Tomb,
+        Self::Deep,
     ];
 
     #[must_use]
@@ -147,6 +151,7 @@ impl ArcKind {
             Self::Pilot => "On foot",
             Self::Crew => "Crew",
             Self::Tomb => "Tombs",
+            Self::Deep => "The Deep",
         }
     }
 }
@@ -398,6 +403,9 @@ pub enum Trigger {
     History(HistoryKind),
     /// They work this trade.
     Role(Role),
+    /// They live in this deep settlement (Wave 10): their population answers to one of its
+    /// registered names ([`crate::expedition::memories::Settlement::of_place_name`]).
+    Settlement(crate::expedition::memories::Settlement),
 }
 
 impl Trigger {
@@ -405,6 +413,9 @@ impl Trigger {
     #[must_use]
     pub const fn weight(self) -> u32 {
         match self {
+            // A settlement's own stories come first there (and are offered nowhere else): more
+            // than any other trigger with a full role fit and the largest jitter.
+            Self::Settlement(_) => 60,
             Self::Want(_) => 30,
             Self::Absent(_) => 28,
             Self::Problem(_) => 24,
@@ -438,6 +449,8 @@ pub enum SeedSource {
     Role(Role),
     /// A follow-up the giver promised after an earlier arc.
     FollowUp(ArcId),
+    /// One of their deep settlement's own stories (Wave 10), by the settlement's name.
+    Settlement(String),
 }
 
 /// A slot an arc binds when seeded.
@@ -829,6 +842,13 @@ fn best_trigger(
                 .find(|fact| kind.matches(fact))
                 .map(|fact| SeedSource::History(format!("{fact:?}"))),
             Trigger::Role(role) if character.role == role => Some(SeedSource::Role(role)),
+            Trigger::Settlement(place)
+                if crate::expedition::memories::Settlement::of_place_name(
+                    &population.village_name,
+                ) == Some(place) =>
+            {
+                Some(SeedSource::Settlement(population.village_name.clone()))
+            }
             _ => None,
         };
         if let Some(source) = source {

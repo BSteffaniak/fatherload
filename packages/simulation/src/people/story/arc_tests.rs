@@ -343,6 +343,32 @@ fn check_arc(arc: &'static ArcTemplate) {
             "{name}: village arcs are about people"
         ),
         ArcKind::Frontier => {}
+        // Wave 10: a deep settlement's own story is offered only there and goes to its
+        // Descent's places.
+        ArcKind::Deep => {
+            assert!(
+                targets_place(&[
+                    StoryPlace::FathersSite,
+                    StoryPlace::DeepSeam,
+                    StoryPlace::Home
+                ]),
+                "{name}: deep arcs go to the Fathers' trail, a deep seam or their own settlement"
+            );
+            assert!(
+                arc.triggers
+                    .iter()
+                    .all(|trigger| matches!(trigger, super::Trigger::Settlement(_))),
+                "{name}: deep arcs are offered only by their own settlement"
+            );
+        }
+    }
+    if arc.kind != ArcKind::Deep {
+        assert!(
+            !arc.triggers
+                .iter()
+                .any(|trigger| matches!(trigger, super::Trigger::Settlement(_))),
+            "{name}: only deep arcs belong to a settlement"
+        );
     }
     // Sky places need the tank to get there.
     if targets_place(&[
@@ -405,7 +431,8 @@ fn arcs_are_well_formed_and_varied() {
         shapes.entry(shape).or_default().push(arc.title);
     }
     let count = ARC_TEMPLATES.len();
-    assert!((60..=100).contains(&count), "{count} arcs (want 60-100)");
+    // Wave 10 adds the deep settlements' own stories to the 92 everywhere-arcs.
+    assert!((60..=130).contains(&count), "{count} arcs (want 60-130)");
     for kind in ArcKind::ALL {
         let have = kinds.get(&kind).copied().unwrap_or(0);
         assert!(have >= 3, "only {have} {kind:?} arcs");
@@ -493,8 +520,10 @@ fn every_arc_is_offered_by_someone() {
         givers >= 240 * 9 * 3 / 4,
         "most people have a story ({givers})"
     );
+    // The deep settlements' own stories are offered only there (checked below, Wave 10).
     let missing: Vec<&str> = ARC_TEMPLATES
         .iter()
+        .filter(|arc| arc.kind != ArcKind::Deep)
         .filter(|arc| offered.get(&arc.id.0).copied().unwrap_or(0) == 0)
         .map(|arc| arc.title)
         .collect();

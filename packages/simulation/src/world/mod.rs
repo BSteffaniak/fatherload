@@ -54,6 +54,8 @@ mod crust_tests;
 mod crypt_tests;
 mod crypts;
 #[cfg(test)]
+mod deep_arc_tests;
+#[cfg(test)]
 mod deep_folk_tests;
 #[cfg(test)]
 mod deep_progression_tests;

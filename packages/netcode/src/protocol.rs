@@ -263,7 +263,7 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `Expedition` section, the story events 700-719 (`GameplayEventKind::Story` with
 ///   `expedition::progress::StoryEvent`), the appended finale `Milestone`s and their
 ///   `PaintColor` rewards, the appended deep-settlement story places
-///   (`StoryPlace::{FathersSite, DeepNeighbour}`), `ArcKind::Deep` and the deep settlements'
+///   (`StoryPlace::{FathersSite, DeepSeam}`), `ArcKind::Deep` and the deep settlements'
 ///   arcs in the arc log.
 pub const PROTOCOL_VERSION: u8 = 18;
 

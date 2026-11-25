@@ -32,6 +32,7 @@ const fn kind_color(kind: ArcKind) -> Color {
         ArcKind::Night => MIST,
         ArcKind::Pilot => LIME,
         ArcKind::Crew => PINK,
+        ArcKind::Deep => SAND,
         ArcKind::Tomb => AMBER,
     }
 }

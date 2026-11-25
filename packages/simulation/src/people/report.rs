@@ -358,6 +358,7 @@ fn source_text(source: &SeedSource, population: &Population) -> String {
             arc.template()
                 .map_or("an earlier story", |template| template.title)
         ),
+        SeedSource::Settlement(name) => format!("one of {name}'s own stories"),
     }
 }
 

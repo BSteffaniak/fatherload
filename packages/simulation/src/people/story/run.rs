@@ -575,6 +575,10 @@ pub fn offer_for(
         {
             continue;
         }
+        // A deep settlement's own story happens once (Wave 10): nobody there tells it again.
+        if template.kind == super::ArcKind::Deep && log.finished_any(template.id) {
+            continue;
+        }
         // The great sky lands are the heart of these stories: a world without a sky doesn't
         // offer them (their stand-in still binds, should one be promised as a follow-up).
         if !ctx.settings.generator.has_sky()
@@ -678,6 +682,26 @@ const fn direction(from: i32, to: i32) -> &'static str {
         "east"
     } else {
         "near"
+    }
+}
+
+/// `name` with "the" in front, unless it already begins with "The" ("the Glow Sea", "The Hive").
+fn the(name: &str) -> String {
+    // A city's own name takes no article ("Merrow City").
+    if name.starts_with("The ") || name.ends_with(" City") {
+        name.to_owned()
+    } else {
+        format!("the {name}")
+    }
+}
+
+/// "about 40 rows below", "level with", "about 120 rows above" (Wave 10: the deep places are
+/// told by how far up or down the cable they lie; the caller names what from).
+fn vertical_phrase(from: i32, to: i32) -> String {
+    match to - from {
+        -3..=3 => "level with".to_owned(),
+        rows if rows > 0 => format!("about {} rows below", rows.unsigned_abs()),
+        rows => format!("about {} rows above", rows.unsigned_abs()),
     }
 }
 
@@ -832,6 +856,38 @@ fn describe_place(
                 settlement: Some(id),
             }
         }
+        // The Fathers' expedition sites and the deep seams (Wave 10).
+        BoundTarget::Expedition(log) => {
+            let (kind, stratum) = crate::expedition::LOGS
+                .get(usize::from(log))
+                .map_or(("camp", "the deep"), |entry| {
+                    (entry.site.name(), entry.stratum.name())
+                });
+            ArcPlace {
+                noun: format!("Fathers' {kind}"),
+                dest: format!("the Fathers' {kind} in {}", the(stratum)),
+                phrase: format!(
+                    "beside the builders' cable, {} here ({away})",
+                    vertical_phrase(origin.y, target.center.y)
+                ),
+                band: the(stratum),
+                depth,
+                stand_in: false,
+                settlement: None,
+            }
+        }
+        BoundTarget::Seam(stratum) => ArcPlace {
+            noun: "seam".into(),
+            dest: format!("the seam in {}", the(stratum.name())),
+            phrase: format!(
+                "{} {home_name} ({away})",
+                vertical_phrase(origin.y, target.center.y)
+            ),
+            band: the(stratum.name()),
+            depth,
+            stand_in: false,
+            settlement: None,
+        },
         BoundTarget::Ridge => ArcPlace {
             noun: "high ridge".into(),
             dest: "the high ridge".into(),

@@ -1085,6 +1085,7 @@ pub const BATCH_FIRST: &[ArcTemplate] = &[
 ];
 
 mod crew;
+mod deep_settlements;
 mod far_places;
 mod frontier;
 mod home;
@@ -1111,4 +1112,6 @@ pub const BATCHES: &[&[ArcTemplate]] = &[
     tombs::BATCH,
     night_market::BATCH,
     far_places::BATCH,
+    // Wave 10: the deep settlements' own stories.
+    deep_settlements::BATCH,
 ];

@@ -203,6 +203,16 @@ pub const EXPEDITION_SCENES: &[Scene] = &[
         setup: |stage| ending_scene(stage, 7),
     },
     Scene {
+        name: "story_merrow_quest",
+        summary: "Wave 10: a quest in Merrow City: the journal on Sefa's Second Verse, bound to the Fathers' camp and the city's singers",
+        setup: |stage| merrow_quest_scene(stage, 1431, 1),
+    },
+    Scene {
+        name: "story_merrow_rain",
+        summary: "Wave 10: Merrow City's child asks for a jar of rain from the world above, the journal telling where it stands",
+        setup: |stage| merrow_quest_scene(stage, 1433, 0),
+    },
+    Scene {
         name: "story_ending_last",
         summary: "Wave 10: the ending's last page: the dock wakes and the sky past the Moon is open",
         setup: |stage| ending_scene(stage, 8),
@@ -262,6 +272,54 @@ fn progress_scene(stage: &mut SceneStage<'_>) {
     seat.modal = Some(ModalScreen::DescentProgress);
     // The Hollow World: its chapter's revelation pinned under the list.
     seat.selected_menu_item = 4;
+    seat.message.clear();
+    stage.settle(3);
+}
+
+/// A crew in Merrow City with deep arc `arc` running at beat `at`, the journal open on it.
+fn merrow_quest_scene(stage: &mut SceneStage<'_>, arc: u16, at: u8) {
+    use fatherload_simulation::{
+        people::ArcId,
+        village::{self, placement::underground_id},
+    };
+    stage.play(1, |world, seats| {
+        let player = seats[0].player;
+        deep_world(world, player);
+        world.set_expedition(read_up_to(
+            40,
+            u8::try_from(ECHOES.len()).unwrap_or(u8::MAX),
+        ));
+        let Some(city) = village::village(
+            &settings(),
+            underground_id(fatherload_simulation::drowned::MERROW_SITE),
+        ) else {
+            return;
+        };
+        let (column, floor) = (city.center_column(), city.ground_row);
+        place_rig(world, player, column, floor - 1);
+        reveal(
+            world,
+            player,
+            column - 40..column + 40,
+            floor - 20..floor + 10,
+        );
+        world.stream_terrain_near_players();
+        if let Some(mut run) = super::story_scenes::bind_story(world, &city, 1, ArcId(arc), player)
+        {
+            run.quest.stage = at;
+            for progress in run.quest.objectives.iter_mut().take(usize::from(at)) {
+                progress.done = true;
+            }
+            if let Some(rig) = world.player_mut(player) {
+                rig.quests.arcs.active = vec![run];
+            }
+        }
+    });
+    stage.settle(2);
+    let seat = stage.seat(0);
+    seat.modal = Some(ModalScreen::Journal);
+    seat.selected_menu_item = 0;
+    seat.journal.focus = 0;
     seat.message.clear();
     stage.settle(3);
 }

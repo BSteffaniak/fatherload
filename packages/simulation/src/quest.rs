@@ -504,10 +504,17 @@ pub enum StoryPlace {
     /// The nearest sky town (V9 archipelago), whose folk are story contacts; else a sky
     /// island; else the ridge.
     SkyTown,
+    // Wave 10 story (appended).
+    /// The nearest of the Fathers' expedition sites (camps, wrecks, cairns, a grave) to the
+    /// giver's settlement, preferring its own Descent (V11); else a deep chamber; else a cavern.
+    FathersSite,
+    /// A seam of rock in the giver's settlement's own stratum, a little below and beside it
+    /// (V11 Deep Descent worlds); else a cavern.
+    DeepSeam,
 }
 
 impl StoryPlace {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::Village,
         Self::Hall,
         Self::Camp,
@@ -522,6 +529,8 @@ impl StoryPlace {
         Self::NightMarket,
         Self::Homestead,
         Self::SkyTown,
+        Self::FathersSite,
+        Self::DeepSeam,
     ];
 
     /// What players call it before binding.
@@ -542,6 +551,8 @@ impl StoryPlace {
             Self::NightMarket => "night market",
             Self::Homestead => "homestead",
             Self::SkyTown => "sky town",
+            Self::FathersSite => "Fathers' camp",
+            Self::DeepSeam => "deep seam",
         }
     }
 

@@ -272,6 +272,10 @@ pub enum BoundTarget {
     Plot(crate::home::PlotSite),
     /// A sky town of the archipelago (V9).
     SkyTown(VillageId),
+    /// One of the Fathers' expedition sites (Wave 10): the log it holds (0-based).
+    Expedition(u8),
+    /// A seam of rock in a deep stratum (Wave 10).
+    Seam(crate::descent::Stratum),
 }
 
 /// Columns either side of the origin a story searches for villages, camps and halls.
@@ -376,11 +380,123 @@ fn camp_target(
 }
 
 /// The giver's own settlement.
+/// The nearest of the Fathers' expedition sites to `origin` (Wave 10): sites in the origin's
+/// own Descent first, then by distance (rows count four times columns: the trail runs down).
+fn fathers_site_target(
+    terrain: &Terrain,
+    origin: TilePosition,
+) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    if !settings.generator.has_descents() {
+        return None;
+    }
+    let here = crate::depth_progression::descent_index_at_row(settings, origin.y);
+    let site = crate::expedition::sites::sites(settings)
+        .into_iter()
+        .min_by_key(|site| {
+            let centre = site.interior().center();
+            let other = crate::depth_progression::descent_index_at_row(settings, centre.y);
+            (
+                other != here,
+                i64::from((centre.y - origin.y).abs()) * 4 + i64::from((centre.x - origin.x).abs()),
+                site.log,
+            )
+        })?;
+    let interior = site.interior();
+    Some((
+        QuestTarget {
+            feature: None,
+            center: site.canister(),
+            bounds: interior,
+        },
+        BoundTarget::Expedition(site.log),
+    ))
+}
+
+/// Rows below a settlement's ground the deep seam starts, at least.
+const SEAM_MIN_DROP: i32 = 14;
+/// Half the width of a deep seam, and its height.
+const SEAM_HALF_WIDTH: i32 = 3;
+const SEAM_HEIGHT: i32 = 5;
+
+/// A seam of rock in `origin`'s own stratum, a little below and beside it (Wave 10): a pure
+/// function of the settings and the origin, kept inside the stratum's rows and clear of the
+/// builders' cable.
+fn deep_seam_target(terrain: &Terrain, origin: TilePosition) -> Option<(QuestTarget, BoundTarget)> {
+    let settings = terrain.settings();
+    if !settings.generator.has_descents() {
+        return None;
+    }
+    let layout = crate::descent::fields::cached_layout(settings);
+    let stratum = crate::descent::Stratum::ALL
+        .into_iter()
+        .rev()
+        .find(|stratum| layout.rows(*stratum).0 <= origin.y)?;
+    let (_, last) = layout.rows(stratum);
+    let roll = crate::worldgen::noise::hash2(settings.seed, SALT_DEEP_SEAM, origin.x, origin.y);
+    let drop = SEAM_MIN_DROP + i32::try_from(roll % 12).unwrap_or(0);
+    let top = (origin.y + drop)
+        .min(last - SEAM_HEIGHT - 4)
+        .max(origin.y + 4);
+    let side = if roll & 0x100 == 0 { 1 } else { -1 };
+    let out = 26 + i32::try_from((roll >> 12) % 30).unwrap_or(0);
+    let mut x = origin.x + side * out;
+    let cable = crate::worldgen::descent::landmarks::lift_column(settings);
+    if (x - cable).abs() < 8 {
+        x = cable + side * 12;
+    }
+    let bounds = TileRect {
+        min: TilePosition {
+            x: x - SEAM_HALF_WIDTH,
+            y: top,
+        },
+        max: TilePosition {
+            x: x + SEAM_HALF_WIDTH,
+            y: top + SEAM_HEIGHT - 1,
+        },
+    };
+    Some((
+        QuestTarget {
+            feature: None,
+            center: bounds.center(),
+            bounds,
+        },
+        BoundTarget::Seam(stratum),
+    ))
+}
+
+const SALT_DEEP_SEAM: u64 = 0x5745_1001;
+
 fn home_target(terrain: &Terrain, home: Option<VillageId>) -> (QuestTarget, BoundTarget) {
     let settings = terrain.settings();
     let Some(id) = home else {
         return town_target(terrain);
     };
+    // Cathedral Station and the Amber Court (Wave 9 deep folk; Wave 10 fix): their halls.
+    if let Some(place) = crate::people::deep_folk::DeepSettlement::of_id(id)
+        && let Some((ground, first, last)) = crate::people::deep_folk::hall(settings, place)
+    {
+        return (
+            QuestTarget {
+                feature: None,
+                center: TilePosition {
+                    x: i32::midpoint(first, last),
+                    y: ground - 1,
+                },
+                bounds: TileRect {
+                    min: TilePosition {
+                        x: first - 2,
+                        y: ground - 8,
+                    },
+                    max: TilePosition {
+                        x: last + 2,
+                        y: ground,
+                    },
+                },
+            },
+            BoundTarget::Village(id),
+        );
+    }
     if crate::people::camps::is_camp(id) {
         if let Some(camp) = crate::people::camps::camp(settings, id) {
             let (first, last) = camp.span();
@@ -773,6 +889,12 @@ fn story_place(
                 .or_else(|| island_target(terrain, origin, skip))
                 .unwrap_or_else(|| ridge_target(terrain, origin)),
         ),
+        StoryPlace::FathersSite => fathers_site_target(terrain, origin)
+            .or_else(|| feature_fallback(FeatureKind::Chamber, (2, 9)))
+            .or_else(|| feature_fallback(FeatureKind::LargeCavern, (2, 4))),
+        StoryPlace::DeepSeam => deep_seam_target(terrain, origin)
+            .or_else(|| feature_fallback(FeatureKind::LargeCavern, (2, 4)))
+            .or_else(|| feature_fallback(FeatureKind::Chamber, (2, 9))),
     }
 }
 

@@ -7040,3 +7040,207 @@ Because other players' private state never reaches a client, replica checks comp
 hashed player by player, so host and a correct client authority agree exactly. Terrain
 dimensions, settings and the tiles that differ from generation travel only in keyframes
 (`redacted_for(viewer)`); the receiver regenerates the rest.
+
+## Wave 10 story: the finale, the deep settlements' stories and Descent progress (`src/expedition/{logs,memories,progress,ending,archivist}.rs`, `src/people/story/arcs/deep_settlements.rs`, `src/world/expedition.rs`)
+
+Expansion plan §13 (following the builders' cable: the builders' city and archive, then the
+Heart, a sleeping Star Drive; the ending opens space) and §18 decision 5 (the ending opens
+space but the game keeps going), on the Wave 8 and 9 story's tables and passes. Everything is
+V11-only, deterministic and read from state the world already saves and shares.
+
+### The trail's end (`expedition::logs`)
+
+- **Logs 61-80** follow the throughline table above row by row (strata, sites, authors and
+  beats), in two chapters. **VII "The Builders' City"**: the streets and the archivist ("you are
+  late"), the planet as the housing of an engine with the Moon its dock, Amos's leg broken in
+  the Engine Halls, the halls as the drive's governors (the town's hum is its idle), the star
+  charts (the first coordinates past the Moon), **Ines stays** in the Archive (log 67) to read
+  a copy of the world and teach the archivist to read aloud, Amos alone among the war machines
+  writing to his daughter **Wren**, the garrison waking, the Seal Gate's hollows for a key from
+  every Descent, his letter home, and the Gatekeeper letting him through for the cable mark Bran
+  painted on the sled. **VIII "The Star Drive"**: ore that weighs less than nothing, the hum as
+  the drive's idle, the Moon seen through the rock in a gravity well ("I looked up. You were
+  right."), the sled folding (he straps its name board to his back with Dov's recorder), the
+  mag rails over the metal sea, a last letter to the five who stayed, the Star Drive asleep ("a
+  star in a cage... I'll sit with it, and keep it") and log 80, **"Wake It"**: "You came down
+  after us. Of course you did. Wake it. Go up. Wren, if it's you or yours: look up."
+- **The Fathers' fate**: one by one they stayed with what was worth staying for (Teo, Sefa,
+  Bran, Dov's grave, Ines); Amos reached the Heart with no rig and no key, tied the sled's
+  name board to the cable root mark-up and kept the drive company until his lamp went out. His
+  last site is drawn as **his chair**: the board across two stones, his rail crutch as its back
+  with his hat on it, Dov's recorder on the seat, the tow rope to the gold-lit cable root.
+- **Echoes 27-34**: the city's own recordings (the archivist translates: the last tram, the
+  governors' song, the garrison's orders, the keys), **Ines reading aloud** in the Archive, and
+  in Descent VIII **Amos on Dov's recorder** (the last echo: "When you wake it, I'll hear. (The
+  tape runs out.)").
+- `CHAPTERS` has all eight; every stratum of every Descent holds at least one log; logs stay
+  under 340 characters with unique titles; days keep rising.
+
+### The ending (`expedition::ending`)
+
+`ENDING_TITLE` "The Cable Lights", `ENDING_LEAD` and `EPILOGUE`: eight beats bottom to top as
+the light runs up the cable past each of the Fathers (Amos's chair, Ines's voice in the
+Archive, Dov's headset singing one flat bar, Ruth-Little carrying the children out, Merrow City
+singing Sefa's verse, Teo's pumps keeping time, **Wren Varga on her porch** watching the cable
+light to the Moon, and the dock waking: "The Star Drive is your rig's engine now, and the sky
+past the Moon is open. The Descent is over. Look up."). `ending_text()` keeps it for the
+journal. The world goes on after it (§18 decision 5).
+
+### Descent progress (`expedition::progress`, `ExpeditionState::{descents, bosses, cable_lit}`)
+
+- `ExpeditionState` gains `descents` (bits by `progress::descent_bit`), `bosses` (bits by
+  `progress::boss_bit`) and `cable_lit`, with serde defaults (older journals load empty), in the
+  shared `Expedition` section, so partners and reloaded saves agree.
+- The tick (`WorldState::track_descent_progress`, inside `advance_expedition`): an actor below
+  the ground line marks its Descent reached (and every Descent above it as passed), raising one
+  `GameplayEventKind::Story { what: StoryEvent::DescentReached(descent) }`. Every gate boss is
+  checked each tick (`WorldState::descent_boss_beaten`): the Sinkhole by the Deep Claim, the Star
+  Core by its spent phase, the Mind, the Leviathan, the Sun Serpent and the Glitch by their
+  fights' `beaten`; a newly beaten boss raises `StoryEvent::BossBeaten(boss)`. Beating the
+  Heart lights the cable once (`StoryEvent::CableLit`, `cable_lit`).
+- **Seam for the Ancients and Heart tracks**: the Gatekeeper Colossus and the Heart have no
+  fight state on this branch. Their fights call **`WorldState::note_descent_boss_beaten(boss)`**
+  inside the tick when won (idempotent; a no-op on classic worlds); the next expedition pass
+  raises the event and, for the Heart, the ending. Noted wins live in the high byte of `bosses`.
+- `progress::descent_rows(state)` (per Descent: reached, its gate boss and whether it is won,
+  logs read of its chapter, the chapter title once read) and `totals(state)` drive the page;
+  `arrival_line(descent)` is each Descent's card ("Streets: lamps on poles, trams on rails, and
+  a voice that has waited an age to say hello.").
+- **Events 700-702** (the story's range): `StoryEvent::{DescentReached, BossBeaten, CableLit}`
+  as `700 + code`.
+
+### Milestones (achievements)
+
+21 appended `Milestone`s, each with its own appended `PaintColor` reward (ramps and accents in
+`rendering/rig_art/paint.rs`), all crew-wide from the shared journal (`MilestoneFacts` gains
+`descents`, `bosses`, `cable_lit`) so every partner earns them, each earned once
+(`Player::earn_milestone`):
+- **each Descent reached** (II-VIII): Past the Lid, Where It Grows, Under the Sea, A Sun
+  Inside, Thin Places, Swept Streets, Heartward;
+- **each boss**: Out of the Sinkhole, Core Breaker, Clear-Headed, Leviathan's Bane, Sun Chaser,
+  Bug Fixed, Colossus Toppled, and the Heart's is **Look Up** (the ending, platinum);
+- **each later chapter read** (IV-VIII): The People Below, The Hollow World, Where the World
+  Wears Thin, The Builders' City, The Star Drive;
+- **all logs**: The Whole Trail (platinum).
+
+The trophy shelf holds seven medals a row so all 47 stay on screen.
+
+### The archivist's voice (`expedition::archivist`, for the Ancients track's companion)
+
+30 `ArchivistLine`s with stable ids (`archivist.topic.name`) on every Descent, each of the
+Fathers, the expedition, the Heart, the stars and after the end, each opened by the trail
+(`after_log`), the Descents reached or the lit cable, so the companion never spoils. Learned
+from Ines, it speaks with her turns of phrase ("Go on."). **Registration API** (the integrator
+wires the companion to it): `remark(state, here, visit)` (what it says unprompted where the
+crew is: the place on even visits, the Fathers on odd ones, after the end what comes next),
+`answer(topic, state, visit)` and `topics(state)` (a talk menu of open topics), and the
+`*_from(tables, ...)` forms that take the companion track's own `ArchivistLine` tables beside
+`ARCHIVIST_LINES` in the same rotation and gating.
+
+### The Descent VII and VIII outposts remember (`expedition::memories`)
+
+`Settlement::{Megacity, HeartCamp}` (appended) with 11 lines (the outpost keeper, the tram
+driver with Calloway's ticket, the scholar, a salvager who found Bran's splint, a child; the
+Heart camp's keeper and a drifter who saw Amos's chair) and 5 more for the older settlements
+(Cathedral Station's surveyor on the city, the queen's voice on the waking, Merrow City on the
+charts, Ruth-Little's "everyone look up", the Prism Relay's needle). The Megacity's keeper tells
+of **Wren Varga**, who came as far as the gold wall years ago and left a note: "I looked up
+every night." Registration: `memories::ANCIENTS_OUTPOST_NAMES` and `HEART_CAMP_NAMES` (plan
+names: "Megacity Outpost", "Lamplight Station", "Heartfall Camp", ...); **the integrator adds
+the Ancients and Heart tracks' real settlement names there**, and their generated people speak
+by trade (`speaker_for_role`: keeper, tram driver, scholar, salvager, child, drifter).
+
+### The deep settlements' own stories (`people/story/arcs/deep_settlements.rs`, ids 1401-1463)
+
+18 arcs on the people/story engine, two or three for every deep settlement, each tied to the
+Fathers the settlement remembers and paid in the deep economy's coin (credits within the tier
+bounds plus ending credits, layer resources, furniture, settlement goodwill, unlocked offers):
+
+| Settlement | Arcs |
+|---|---|
+| Gravel Hollow (I) | Where the Rails Go (the rails are the builders'), It Worked (Teo's lucky stone), Brannigan's Stew (mostly onions) |
+| Cathedral Station (II) | Calloway's Benchmarks, Halloran's Splice (a spare tape of his hymn), One a Day, Dov (Bran's lead tent) |
+| The Amber Court (III) | The Wrench-One's Pumps (washers FOR THE NEXT WRENCH), The Humming Song (the walls hum Bran's song back) |
+| Merrow City (IV) | Sefa's Second Verse (a song about rain), Pearls for the Bubble, A Jar of Rain (go up to the surface for it) |
+| The Sunfolk Kraal (V) | Bran's Garden (FEVER, COUGH, SAD), The Other Half of the Board (AND THE SUNFOLK) |
+| Parallax Station (VI) | Two Clocks (time breathes), The Real Canister (read in order) |
+| The Megacity outpost (VII) | The Last Tram (Calloway's voice), I Looked Up Every Night (Wren's note and Amos's flower), Coordinates for the Archivist (the rig logged as a ship) |
+
+Engine additions (all appended): `ArcKind::Deep` ("The Deep"), `Trigger::Settlement(memories::Settlement)`
+(matched by the population's registered name, weight 60 so a settlement's own stories come
+first there and are offered nowhere else; `SeedSource::Settlement`), a deep story is told once
+(`offer_for` skips one finished with anyone), and two story places: `StoryPlace::FathersSite`
+(the nearest expedition site, preferring the giver's own Descent; `BoundTarget::Expedition`)
+and `StoryPlace::DeepSeam` (a seam in the settlement's own stratum below and beside it, clear of
+the cable; `BoundTarget::Seam`), each with fallbacks so every arc still binds on V5-V8. Fix:
+`StoryPlace::Home` for Cathedral Station's and the Amber Court's people bound the town; it binds
+their hall now. Arc lints: up to 130 arcs; deep arcs go to the trail, a seam or home and are
+offered only by their settlement; no other arc carries a settlement trigger.
+
+### Game side
+
+- A new Descent's card on every local seat (`StoryMomentKind::DescentReached`, "A NEW DESCENT",
+  a lamp sliding down a plumb line); a log or echo raised the same tick takes the card.
+- **The Descent progress page** (`ModalScreen::DescentProgress`, `shell/expedition.rs`,
+  `rendering/expedition_hud.rs`) after the codex in the page cycle (tomb codex, journal, codex,
+  **progress**, map): totals (Descents reached, gates won, logs found, the Heart asleep or
+  awake), a row per Descent (its name once reached, its gate and whether won, logs read of its
+  chapter), the selected Descent's chapter revelation or arrival line pinned under the list.
+  Rows by keys, pad, mouse and touch (`menu_pick`).
+- **The ending** (`ModalScreen::Ending`): when the Heart wakes every local seat gets the ending's
+  pages: the cable drawn from the Star Drive to the Moon with a station per beat, lit up to the
+  page, a soft glint climbing it (no flashing), the beat's place and words beside it. Confirm or
+  a tap anywhere turns the page (the whole screen is one pointer row, and `pick_row` keeps the
+  page); back closes it; the last page closes it and play goes on.
+- Camps dressed for Descent VII (a builder street: tram rails, a street lamp that came on for
+  them with its cold blue light, Amos's rail crutch from log 64) and VIII (Amos alone: the name
+  board leaning on the tent, the sled gone, his crutch, gold motes rising), and Amos's chair at
+  the last site with the cable root's warm light.
+- Audio appended at the end of `patches!`: `story_descent_call` (a bell call over the cable's
+  hum) and `story_cable_lit` (chords climbing from the Heart to the Moon under rising bells).
+
+### Formats
+
+- `PROTOCOL_VERSION` 18 (the journal's new fields, the story events, the finale milestones and
+  paints, the story places and `ArcKind::Deep`; the integrator collapses Wave 10's bumps). No
+  save format change (every new field is a serde default; appended enum variants).
+- **`GOLDEN_V11_DIGEST` updated** to `0x6697_981c_edd7_02b3` (the story pass now places logs
+  61-80; the last pinned log site is log 80's at the Heart). V1-V10 digests unchanged.
+
+### Tests and scenes
+
+- `expedition::tests`: logs and echoes in depth order through all eight Descents (80 logs,
+  every stratum, chapters ending in their Descent's last stratum, Ines staying at 67 and Amos
+  alone after, the last echo Amos's), placement deterministic, seeded and off the landmarks for
+  all 80, the archivist's lines gated and rotated (extra tables join), the ending passing every
+  Father, the progress rows against the registry's gates, the VII and VIII outposts' memories.
+- `world::story_finale_tests`: Descents reached once with the ones above, milestones firing
+  once and reaching partners; gate bosses tracked (own state and noted) and the Heart lighting
+  the cable once with Look Up; logs 61-80 read in order with the sealed 80 opening after 79 and
+  the chapter and trail milestones; the new fields saved, loaded, hashed, migrated from older
+  journals and replicated; classic worlds untouched.
+- `world::deep_arc_tests`: on a V11 world every deep settlement's residents offer its own arcs
+  first and only its own, and a bot takes each on, plays it at its real places through the
+  tick, turns it in and is paid; the Megacity's arcs bind (from a stand-in giver until the
+  outpost registers) and play through; deep places bind deterministically inside the
+  settlement's Descent. `people::story::arc_tests` lint the new arcs with the rest.
+- Game: `expedition_tests` (a new Descent's card on both seats, the progress page by tabs and
+  touch, the ending on every seat paged by taps and played once).
+- Scenes: `story_megacity_camp`, `story_letter_home`, `story_heart_camp`, `story_last_log`,
+  `story_last_site`, `story_descent_card`, `story_descent_progress`, `story_ending`,
+  `story_ending_last`, `story_merrow_quest`, `story_merrow_rain`. Every expedition scene's
+  journal now counts all Descents reached, so no new Descent's card covers it.
+
+### Seams and still open
+
+- **Integrator**: call `note_descent_boss_beaten(DescentBoss::GatekeeperColossus)` from the
+  Ancients' gate fight and `note_descent_boss_beaten(DescentBoss::TheHeart)` from the Heart's
+  (or read their states in `descent_boss_beaten`); add the VII and VIII outposts' real names to
+  `ANCIENTS_OUTPOST_NAMES` / `HEART_CAMP_NAMES` (their people then tell the memories and offer
+  the Megacity's arcs); wire the companion to `archivist::remark` / `answer` / `topics`; add the
+  Ancients' and Heart's set pieces to `sites::DEEPER_SET_PIECES` so logs 61-80 keep off them
+  (and update `GOLDEN_V11_DIGEST` if a site moves).
+- The ending card opens on the `CableLit` event; the Heart track's own set piece (the cable
+  lighting in the world, the Star Drive fitted) plays alongside it.
+- Deep arcs have no prerequisites (they are only offered in their settlements, which only a rig
+  that got there can visit).
