@@ -121,6 +121,22 @@ const GLYPHS: &[(char, &str)] = &[
     ('\u{00d7}', "..... ..... #...# .#.#. ..#.. .#.#. #...#"),
 ];
 
+/// Bold glyphs drawn by hand where smearing fails (Wave 11 carryover): smeared, the diagonals of
+/// M, N and W thicken on one side only (the gap rule keeps "#.#" open), so a bold W read as an
+/// N ("THE HEART NAKES") and an M as a lopsided N ("Negacity"). These keep both strokes heavy and
+/// the middle vee clear; M and W take a seventh column so the vee has room.
+const BOLD_GLYPHS: &[(char, &str)] = &[
+    (
+        'M',
+        "##...## ###.### ####### ##.#.## ##...## ##...## ##...##",
+    ),
+    ('N', "##..## ###.## ###.## ##.### ##.### ##..## ##..##"),
+    (
+        'W',
+        "##...## ##...## ##...## ##.#.## ####### ###.### ##...##",
+    ),
+];
+
 /// One glyph's pixels as rows of booleans.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GlyphBitmap {
@@ -144,7 +160,20 @@ pub fn glyph_bitmaps(bold: bool) -> Vec<GlyphBitmap> {
                 usize::try_from(GLYPH_HEIGHT).unwrap_or(9),
                 vec![false; base_width],
             );
-            if bold && *codepoint != ' ' {
+            let drawn = bold
+                .then(|| BOLD_GLYPHS.iter().find(|(glyph, _)| glyph == codepoint))
+                .flatten();
+            if let Some((_, bold_source)) = drawn {
+                rows = bold_source
+                    .split(' ')
+                    .map(|row| row.chars().map(|c| c == '#').collect())
+                    .collect();
+                let width = rows.first().map_or(0, Vec::len);
+                rows.resize(
+                    usize::try_from(GLYPH_HEIGHT).unwrap_or(9),
+                    vec![false; width],
+                );
+            } else if bold && *codepoint != ' ' {
                 for row in &mut rows {
                     let mut smeared = vec![false; base_width + 1];
                     for (index, set) in row.iter().enumerate() {
@@ -269,6 +298,33 @@ mod tests {
         }
     }
 
+    /// Wave 11 carryover: the bold M, N and W read as themselves: hand-drawn, well formed,
+    /// symmetric where the letter is (M and W), with the vee open in the middle column.
+    #[test]
+    fn bold_m_n_and_w_are_drawn_by_hand_and_read_apart() {
+        let bold = glyph_bitmaps(true);
+        let glyph = |c: char| bold.iter().find(|g| g.codepoint == c).expect("glyph");
+        for (codepoint, source) in BOLD_GLYPHS {
+            let rows: Vec<&str> = source.split(' ').collect();
+            assert_eq!(rows.len(), CAP_HEIGHT as usize, "{codepoint:?}");
+            assert!(rows.iter().all(|row| row.len() == rows[0].len()));
+        }
+        for c in ['M', 'W'] {
+            let g = glyph(c);
+            for row in &g.rows {
+                let mirrored: Vec<bool> = row.iter().rev().copied().collect();
+                assert_eq!(row, &mirrored, "{c} is symmetric");
+            }
+        }
+        // M's vee points down from the top; W's points up from the bottom.
+        let middle = |c: char, row: usize| glyph(c).rows[row][3];
+        assert!(!middle('M', 1) && middle('M', 3) && !middle('M', 4));
+        assert!(!middle('W', 5) && middle('W', 3) && !middle('W', 2));
+        // And neither is drawn like N.
+        assert_ne!(glyph('M').rows, glyph('N').rows);
+        assert_ne!(glyph('W').rows, glyph('N').rows);
+    }
+
     #[test]
     fn bold_glyphs_are_one_pixel_wider() {
         let regular = glyph_bitmaps(false);
@@ -276,6 +332,16 @@ mod tests {
         for (regular, bold) in regular.iter().zip(&bold) {
             if regular.codepoint == ' ' {
                 assert_eq!(regular.width, bold.width);
+            } else if BOLD_GLYPHS
+                .iter()
+                .any(|(glyph, _)| *glyph == regular.codepoint)
+            {
+                // Drawn by hand: wider, never narrower, and at most seven columns.
+                assert!(
+                    (regular.width + 1..=7).contains(&bold.width),
+                    "{:?}",
+                    regular.codepoint
+                );
             } else {
                 assert_eq!(regular.width + 1, bold.width, "{:?}", regular.codepoint);
             }
