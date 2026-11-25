@@ -628,3 +628,40 @@ fn the_home_towns_counters_are_not_on_other_bodies() {
         );
     }
 }
+
+/// Review fix: a rig parked on a body stays where it was parked, in absolute terms, while the
+/// home world's frame follows the rigs at home and while another rig's arrival moves the
+/// body's frame.
+#[test]
+fn a_rig_parked_on_a_body_stays_put_through_frame_moves() {
+    let mut world = deep_world(3);
+    world
+        .move_to_place(TWO, place_of(BODY_A), over_surface(10))
+        .expect("lands");
+    run(&mut world, 30, |_| ControlState::default());
+    let (place, parked_at) = world.rig_world_pos(TWO).expect("placed");
+    assert_eq!(place, place_of(BODY_A));
+    assert!(world.park_player(TWO));
+    // The home frame moves with the rig at home, a long way down.
+    let home = world.actor_world_pos(ONE).expect("rig");
+    let home_frame = world.frame();
+    world.teleport_rig_to(ONE, home.offset(0.0, 4_000.0 * TILE_SIZE));
+    run(&mut world, 5, |_| ControlState::default());
+    assert_ne!(world.frame(), home_frame, "the home frame moved");
+    // Another rig lands far across the body: its arrival moves the body's frame.
+    world
+        .move_to_place(
+            THREE,
+            place_of(BODY_A),
+            over_surface(i64::from(FlatTestGenerator::HALF_WIDTH) - 20),
+        )
+        .expect("lands");
+    run(&mut world, 5, |_| ControlState::default());
+    assert!(world.unpark_player(TWO));
+    let (place, back_at) = world.rig_world_pos(TWO).expect("placed");
+    assert_eq!(place, place_of(BODY_A));
+    assert!(
+        back_at.distance(parked_at) < 0.01,
+        "parked at {parked_at:?}, back at {back_at:?}"
+    );
+}

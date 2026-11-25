@@ -583,6 +583,22 @@ impl WorldState {
                 rig.reframe(shift);
             }
         }
+        self.reframe_parked_in(store, shift);
+    }
+
+    /// Shifts the rigs (and pilots) of the players parked in `store` with its frame, so a
+    /// player who comes back finds its rig where it left it.
+    fn reframe_parked_in(&mut self, store: StoreKey, shift: FrameShift) {
+        let places = &self.places;
+        for (id, parked) in &mut self.crew.parked {
+            if places
+                .players
+                .get(id)
+                .is_some_and(|place| place.store() == store)
+            {
+                super::frame::reframe_parked_body(parked, shift);
+            }
+        }
     }
 
     /// A ground pass's frame move: only the store's own things move (its entities and the
@@ -597,6 +613,7 @@ impl WorldState {
         for rig in self.players.values_mut() {
             rig.reframe(shift);
         }
+        self.reframe_parked_in(self.place_pass.store, shift);
     }
 
     /// Removes `player`'s entity of `kind` (its pilot) from `store`.

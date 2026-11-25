@@ -7568,9 +7568,10 @@ from `WorldOp::StoreTile`; client: digest-checked store edits). Scenes: `place_b
 * One frame per store, anchored on its first occupant: two players far apart in the same store
   (free flight is one store) keep `f32` precision relative to that anchor, as F7 documented
   for the home world. Splitting free flight into proximity clusters is a follow-up.
-* A parked player's rig position stays in its store's frame as parked; if the store's frame
-  moves while it is parked, its position is off by that move (rare: an empty store does not
-  move its frame).
+* A parked player keeps its place (parking is not leaving); its rig and pilot move with its
+  own store's frame (`reframe_parked_in`) and never with the home frame, so it comes back
+  exactly where it was parked (review fix: parking used to drop the place, so the rig came
+  back on the home world at the body's coordinates).
 * Infrastructure, scanner markers and collapse warnings are world lists (home only; building
   away from home is refused).
 * `PROTOCOL_VERSION` 19, save format 15 (one bump each).

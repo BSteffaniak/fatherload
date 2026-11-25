@@ -207,15 +207,24 @@ impl WorldState {
         }
         lost_cargo_sites.reframe(shift);
         entities.reframe_all(shift);
-        for parked in crew.parked.values_mut() {
-            parked.player.reframe(shift);
+        for (id, parked) in &mut crew.parked {
+            // Lost cargo is a home-world site; a rig parked away from the home store (F11)
+            // is in its own store's frame and stays put.
             parked.lost_cargo.reframe(shift);
-            if let Some(pilot) = &mut parked.pilot {
-                pilot.body.reframe(shift);
-                if let Some(rope) = &mut pilot.state.tether {
-                    shift.apply(&mut rope.anchor_x, &mut rope.anchor_y);
-                }
+            if places.is_home(*id) {
+                reframe_parked_body(parked, shift);
             }
+        }
+    }
+}
+
+/// Moves a parked player's rig and pilot by `shift` (a frame move of the store it is in).
+pub(super) fn reframe_parked_body(parked: &mut crate::crew::ParkedPlayer, shift: FrameShift) {
+    parked.player.reframe(shift);
+    if let Some(pilot) = &mut parked.pilot {
+        pilot.body.reframe(shift);
+        if let Some(rope) = &mut pilot.state.tether {
+            shift.apply(&mut rope.anchor_x, &mut rope.anchor_y);
         }
     }
 }

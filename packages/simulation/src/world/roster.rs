@@ -145,8 +145,11 @@ impl WorldState {
             places,
             place_pass: _,
         } = self;
-        // A removed player's place goes with it; a parked one keeps it (F11).
-        places.forget(player_id);
+        // A removed player's place goes with it; a parked one keeps it (F11: parking is the
+        // only removal that keeps charges armed, and the rig comes back where it was parked).
+        if disarm_charges {
+            places.forget(player_id);
+        }
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
         heart.forget(player_id);
