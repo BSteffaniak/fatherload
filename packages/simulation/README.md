@@ -8443,7 +8443,9 @@ or the surface) pays, for every second of thrust, a **share of its tank** on top
 growing over `SUPPLY_RAMP_ROWS` (1000) to `SUPPLY_STRAIN_MAX` (0.16 % a second). A share, not
 units, so a deep tank does not dwarf it: the long climb home from a new Descent's bottom costs,
 whatever the tier, while everyday trips from a beacon stay calm. `WorldState::supply_strain_for`
-(movement step; not in test mode); the HUD shows **FAR FROM SUPPLY**. Classic worlds and the
+(movement step; not in test mode). The gate fights' arenas are destinations, not the open
+deep: no strain in the Heart's chamber, the Gatekeeper's hall or the Glitch's and the
+Leviathan's arenas. The HUD shows **FAR FROM SUPPLY** (`ViewSnapshot::supply_strain`). Classic worlds and the
 Crust never feel it. Test: `far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it`.
 
 The descent probe models it on every trip (`supply_strain_share` over the climb back to the
