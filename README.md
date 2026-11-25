@@ -488,10 +488,16 @@ classic ladder exactly. Beacons, built lifts and dive charges work in every worl
   Hull, Gravity Anchor, Phase Drill and Heart Key. Each Descent from III on is crushing without
   its gate system; the Bio-Filter halves gas damage, the Sonar Suite reaches further, Lamp II
   lights wider.
+- **The supply line** (Wave 11). More than 450 rows below your nearest outpost, restored lift
+  station or depth beacon, every second of thrust also costs a share of the tank (up to
+  0.16 % a second far out; the HUD shows FAR FROM SUPPLY). Everyday trips from a beacon stay
+  calm; the first expedition into a new Descent, and the climb home, are the stressful part.
+  Plant beacons as you go.
 - **The descent probe.** `fatherload --balance-report --only descent` has a bot play all 41
-  strata on these curves; with Descents VII-VIII authored (Wave 10) it estimates 83.8 hours to
-  the Heart (target 60-90, every Descent inside its window on three seeds), with something new
-  at least every 20 minutes (details and the full table in
+  strata on these curves; with Descents VII-VIII authored (Wave 10) and the supply line and
+  the Heart's final fight counted (Wave 11) it estimates 84.2 hours to the Heart's
+  fall (target 60-90, every Descent inside its window on three seeds), with something new at
+  least every 20-40 minutes (details and the full table in
   [packages/simulation/README.md](packages/simulation/README.md)).
 
 ### The Descent economy (wave 8)
@@ -1115,13 +1121,20 @@ world dug to the floor, the browser memory fixture) show it.
   and the **Archive of Stars**, whose sealed vaults (plates, crawlway levers, coloured glass)
   hold **star charts** of real stars past the Moon. **Index, the archivist**, wakes in the
   Lantern Library and rides with each rig as a little drone: it scans for ore, warns of the
-  machinery and talks of the city and the Fathers. The **Archive Post** is Descent VII's
-  outpost, and its people remember the Fathers. Scenes: `city_*`.
+  machinery and talks of the city and the Fathers. **Ask it** (Wave 11) from the inventory's
+  "Ask Index" row or after the star charts in the map's pages: about ore nearby (it marks the
+  best), the crew's finds, or what it knows of the Descents, the Fathers, the Heart and the
+  stars (keys, pad, mouse or a tap; each seat asks its own). The **Archive Post** is Descent
+  VII's outpost, and its people remember the Fathers and talk about their city. Scenes:
+  `city_*`.
 - **The Heart** (Descent VIII, Wave 10): dark matter that makes a laden rig fall up in the
   **Dark Matter Veins**, gravity wells that bend light and pull everything in the
   **Singularity Fields** (slingshot round the rims; the horizon crushes), magnetic rails over
   the liquid-metal sea of the **Core Ocean**, and at the end of the builders' cable the
-  **Heart**: a three-phase fight with the sleeping Star Drive behind the Heart Key's seal.
+  **Heart**: a five-beat finale with the sleeping Star Drive behind the Heart Key's seal (the
+  coils, ignition, the reforge's inner coils struck while the drive pulls, the rekindled
+  ignition, the collapse and the eclipse's sweeping beam; about a quarter of an hour). **Heart's
+  Edge**, the last outpost, has five residents who kept Amos's trail, with stories of their own.
   Waking it lights the cable to the Moon, plays the ending on every seat (the awakening, the
   climb, the credits and the epilogue, then the Fathers' last pages, "The Cable Lights") and
   opens space: every rig gets the **Star Drive**, and the game goes on. Scenes: `heart_*`.

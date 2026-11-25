@@ -8358,6 +8358,179 @@ at stations and lands on worlds. Life support and the nav HUD come with it.
 - Scenes (`scene_capture/flight_scenes.rs`): `space_leaving_home`, `space_full_turn`,
   `space_cruise`, `space_warp`, `space_nav_hud`, `space_nav_chart`, `space_docking`,
   `space_station`, `space_reentry`, `space_landed`, `space_split_screen`, and `touch_space`.
+## Wave 11 carryover: the Wave 10 leftovers
+
+The open items of the Wave 10 reports, closed (`ancient_city::questions`, `world/ancient_city.rs`,
+`people::deep_folk`, `expedition::memories`, `people/story/arcs/deep_settlements.rs`,
+`heart.rs`, `world/enemies/heart.rs`, `depth_progression::supply_strain`, `balance::descent`,
+`world/supplies.rs`, `crust::pilot_heat_danger_levels`; game: `shell/archivist.rs`,
+`rendering/ancient_city_hud.rs`, `rendering/pixel_art/font.rs`, `audio/director.rs`,
+`rendering/heart_hud.rs`, `rendering/world/heart.rs`).
+
+### 1. Asking the archivist (`ancient_city::questions`)
+
+- `LogisticsCommand::AskArchivist(ArchivistQuestion)` (appended) puts a question to the
+  player's **own** archivist. It is checked before the rig's tile, so it works in the rig, on
+  a ride and on foot; with no archivist it is refused (`LogisticsRefusal::NoArchivist`,
+  appended). It answers at once (no line gap: it was asked).
+- **Questions** (`questions(state)`): **nearby ore** (it scans `ASK_SCAN_REACH_TILES` 16,
+  wider than its own sweep, marks the best three like a scan and says what and which way),
+  **our finds** (the logs read, the last one's title and author, the stars charted), then
+  every open **lore** topic of the story's `expedition::archivist::topics` (the Descents
+  reached, the Fathers and each of them, the Heart, the stars, after the end). Lore answers are
+  the story's own lines, taking turns by `Archivist::asked` (serde default).
+- **Answers are line ids** like every other line, so the `ArchivistSpoke` event, the
+  archivist's `line` and the speech box carry them unchanged. The ore and finds answers are
+  ids whose words are a pure function of the id (`answer_words`): `NO_ORE_ANSWER` 1999,
+  `ORE_ANSWER_BASE` 2000 + find * 9 + direction, `FINDS_ANSWER_BASE` 3000 + logs * 513 +
+  charts. `archivist::line_words` reads any line (its own, the story's past 1000, an answer).
+  Nothing new is replicated beyond the command and the counter.
+- **Game**: the **Ask Index** page (`ModalScreen::Archivist`, appended): the questions as
+  rows (keys, pad, mouse and touch: a tap selects and asks), the fresh answer under the list
+  and in the seat's speech box. It opens from the inventory's last row ("Ask Index", while an
+  archivist rides with the seat's player) and sits after the star charts in the map's page
+  cycle (the star charts' "Turn the page" goes to it, else to the map). Every seat asks for
+  its own player; online the question is an ordinary command. Scene `city_ask_index`.
+- Tests: `a_player_asks_its_archivist_about_ore_finds_and_lore` (refused without one, ore
+  straight below named and marked, nothing near, finds, lore in turn, on foot, a partner
+  refused, the answer in the section and the save), `questions::tests`, the game's
+  `each_seat_asks_its_own_archivist_from_the_inventory` (two seats, inventory row, tap,
+  keys, the page cycle) and `shell::archivist::tests`.
+
+### 2. Heart's Edge has residents (`people::deep_folk::HeartsEdge`)
+
+- `DeepSettlement::HeartsEdge` (appended; `HEARTS_EDGE` village id `0x3FFF_FB00`): Descent
+  VIII's outpost hall over the Dark Matter Veins (`landmarks::outpost(.., Descent::Heart)`),
+  its people in the half away from the lift's door like the Archive Post's. Five residents
+  who followed the trail down long after the Fathers and stayed: **Bryn Ashcombe** (keeper),
+  **Coll Fenn** (drifter), **Nan Orrin** (the listener, who counts the Heart's hum),
+  **Ivo Strand** (rail hand) and **Elm Maddox** (medic). They remember the Fathers by what
+  they found: Amos's plate on the lift door, the tally on the wall, the wiped magnet strips,
+  the crutch's marks in the rock.
+- Registered by name ("Heart's Edge", already first in `HEART_CAMP_NAMES`), so the story's
+  `Settlement::HeartCamp` memories come up: seven new lines (`heart_camp.keeper.plate`,
+  `listener.count`/`moon`, `railhand.strips`/`face`, `medic.peg`/`splint`; `MEMORIES` 73),
+  and `speaker_for_role` gives the camp's storyteller and healer their keys.
+- **Two arcs of its own** (ids 1464-1465, `Trigger::Settlement(HeartCamp)`): **Gone Down**
+  (carry Amos's door plate on foot to his last camp; BACK SOON. HA.) and **Ninety Beats** (read
+  the hum in the veins with the scanner: the ninety-first beat is the rig's own engine).
+- Tests: `hearts_edge_has_residents_who_remember_the_fathers_and_offer_its_stories`, the deep
+  folk cast test (four halls, 20 residents with lines), and the deep arc bot
+  (`every_deep_settlement_tells_its_own_stories_and_a_bot_sees_them_through`, now eight
+  settlements). Scenes `residents_hearts_edge`, `residents_hearts_edge_hall`.
+
+### 3. The title font's M and W
+
+The bold face smears each glyph one pixel right but never closes a one-pixel gap, so the
+diagonals of M, N and W thickened on one side only: bold W read as N ("THE HEART NAKES") and M
+as a lopsided N. `BOLD_GLYPHS` draws the three by hand (M and W seven columns, symmetric, the
+vee open in the middle). Test: `bold_m_n_and_w_are_drawn_by_hand_and_read_apart`. Checked on
+`heart_awakening` and `city_megacity_avenue`.
+
+### 4. One sting at a time
+
+The Heart's `CableLit` sting (`HeartCableLight`) and the story's `StoryCableLit` fire on the same
+moment. The audio director now sequences the finale stings (`sequenced_sting`): one plays,
+the other waits `STING_SECONDS` (3.6 s, as the first's tail lets go) and plays once; other
+sounds are not held. Test: `the_hearts_sting_and_the_storys_sting_play_one_after_the_other`.
+
+### 5. Deep expeditions are stressful: the supply line (`depth_progression::supply_strain`)
+
+The deep tanks dwarfed a Descent's climb (expeditions 2-10 % of the tank). On a Deep Descent
+world below the Crust, a rig more than `SUPPLY_FREE_ROWS` (450) rows below its nearest **supply
+stop** (`Logistics::supply_row_above`: an outpost, a restored lift's station, any depth beacon,
+or the surface) pays, for every second of thrust, a **share of its tank** on top of its burn,
+growing over `SUPPLY_RAMP_ROWS` (1000) to `SUPPLY_STRAIN_MAX` (0.16 % a second). A share, not
+units, so a deep tank does not dwarf it: the long climb home from a new Descent's bottom costs,
+whatever the tier, while everyday trips from a beacon stay calm. `WorldState::supply_strain_for`
+(movement step; not in test mode); the HUD shows **FAR FROM SUPPLY**. Classic worlds and the
+Crust never feel it. Test: `far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it`.
+
+The descent probe models it on every trip (`supply_strain_share` over the climb back to the
+trip's stop) and on every expedition (the Descent's span, plus two minutes at the bottom), and
+now **fights the Heart** at the end of Descent VIII from its bot fight (the gate loop never did:
+the Heart rewards no rig system). `descent_balance_pass` prints each Descent's fuel.
+
+| Descent | ends (h), default | seed 7 | seed 0xC0FFEE | target | everyday fuel | expedition fuel (was) |
+|---|---|---|---|---|---|---|
+| I | 6.4 | 7.3 | 6.6 | 5-8 | 49 % | 28 % (28) |
+| II | 15.9 | 16.8 | 16.0 | 13-18 | 15 % | 33 % (10) |
+| III | 24.1 | 25.0 | 24.3 | 22-29 | 17 % | 24 % (4) |
+| IV | 34.4 | 35.3 | 34.6 | 31-40 | 14 % | 30 % (4) |
+| V | 45.3 | 46.3 | 45.5 | 42-53 | 14 % | 29 % (4) |
+| VI | 60.3 | 61.1 | 60.4 | 53-66 | 13 % | 30 % (2) |
+| VII | 73.3 | 74.1 | 73.4 | 66-82 | 13 % | 29 % (2) |
+| VIII | 84.2 | 85.0 | 84.3 | 75-90 | 12 % | 25 % (2) |
+
+Whole run 84.2 / 85.0 / 84.3 h, 8 deaths (the Heart's learning try is now counted), longest
+wait for something new 38 min (the Heart's stratum with its fight; inside 20-40). No warnings
+and no misses on any seed (`descent_balance_pass`, `descent_balance_seeds`).
+
+### 6. The Heart is a proper finale (five beats)
+
+`HeartPhase::{Reforge, Eclipse}` (appended), `HeartEvent::{Reforged, Eclipse}` (appended,
+netcode 695-696), `HeartFight::{inner, rekindled}` (serde defaults):
+
+1. **The coils** (as before).
+2. **Ignition** (as before) until `REFORGE_AT_PERMILLE` (78 %).
+3. **Reforge**: the core reseals and calls `INNER_COIL_COUNT` (3) coils that orbit close
+   (`INNER_ORBIT_TILES` 6.5) the other way round (`inner_coil_angle`) and fire every
+   `INNER_FIRE_MILLIS`; the gravity pulses return, and the inner coils are **shielded except
+   while the drive pulls** (they glow gold then; a copper cage while calm): strike them in the
+   pull, which drags the rig toward the core. Breaking them **rekindles** the core.
+4. **Ignition, rekindled**: its two beams turn back the other way, faster
+   (`rekindled_beam_angle`), until `COLLAPSE_AT_PERMILLE` (52 %).
+5. **Collapse** (as before) until `ECLIPSE_AT_PERMILLE` (26 %), then the **Eclipse**: the
+   breathing goes on and one beam sweeps the chamber while the core holds its breath; it goes
+   dark as the core exhales (`eclipse_beam`), the window to strike.
+
+Every timing stays a pure function of the phase's world time (`fight_beams` gives the tick and
+the renderer the same beams). Fairness: in the breathing phases sparks come every
+`BREATHING_SPARK_MILLIS` (10 s), at most `BREATHING_MAX_SPARKS` (3), and each **exhale blows
+them out**, so the long phases never swarm and the strike window is clear. The core holds
+1560 hull (760). HUD lines, news, sounds and scenes `heart_phase_reforge`,
+`heart_phase_eclipse`.
+
+**Bot fight re-measured** (`a_bot_with_full_kit_wakes_the_heart_through_all_five_phases`; the bot
+now also shoots sparks while the core is armoured, as a player would): **163 s with 55 % hull**
+(was 69 s, 63 %), phases coils 17 s, ignition 13 s, reforge 29 s, rekindled 15 s, collapse 44
+s, eclipse 44 s. The probe's player fight is 6 + 163 s x 4 = **about 17 minutes** (was 11),
+plus one learning try.
+
+### 7. Smaller fixes
+
+- **Beast Bait lets go**: a baited predator's old home is kept (`SupplyEffects::baited_homes`,
+  serde default) and given back when its bait is spent or out of reach. Test:
+  `a_baited_predator_goes_back_to_its_old_home_when_the_bait_is_spent`.
+- **The HEAT badge on foot** reads the pilot's suit where the pilot stands
+  (`crust::pilot_heat_danger_levels`, which the pilot's burn reads too), not the parked rig's
+  radiator. Test: `on_foot_the_heat_warning_reads_the_pilots_suit_not_the_rigs_cooling`.
+- **Old tinted lamps wear off**: a lamp an older save tinted with no glass fitted gets one set's
+  life on the next tick (`glaze_unglazed_lamps`), then wears like any other. Test:
+  `an_older_saves_tinted_lamp_without_glass_wears_off`.
+
+### 8. The deep posts talk about their own place
+
+`Cast::chatter` (three lines each): the Archive Post's and Heart's Edge's residents say their
+own everyday talk (`deep_folk::chatter`, by day and visit) in place of the people system's
+generic chatter, between their greeting and their memory; the builders' machines show
+"builder machine" for an age in the talk header. Cathedral Station keeps the generic chatter,
+the Hive folk keep to their own words. Test:
+`the_archive_post_and_hearts_edge_talk_about_their_own_place`.
+
+### Formats and seams
+
+- **`PROTOCOL_VERSION` 19** (this track's one bump; the integrator collapses Wave 11's):
+  `LogisticsCommand::AskArchivist`, `Archivist::asked`, `SupplyEffects::baited_homes`, the
+  Heart's appended phases, events and fight fields, Heart's Edge's residents in NPC entities.
+- **No save format bump**: every new field has a serde default; enum variants are appended.
+- **Generation unchanged**: the V1-V11 golden digests are untouched (residents, memories and
+  arcs are not terrain).
+- Event codes: only the Heart's own range (695-696); no new carryover codes were needed.
+- Seams for the Wave 11 tracks: `ArchivistQuestion` is the place to add space questions
+  (append variants; answers can be new id ranges past 44,600); the supply line reads
+  `Logistics::supply_row_above`, so a future stop kind (a docked ship, a space station) only
+  has to be counted there.
 
 ## Replication
 
