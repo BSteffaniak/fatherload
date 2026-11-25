@@ -1856,7 +1856,7 @@ pub fn descent_section(run: &DescentRun) -> ReportSection {
 /// The Descents the balance pass holds to the plan (Wave 10 polish: I-VI on this branch; the
 /// integrator raises it to all eight once Descents VII-VIII are authored and re-runs
 /// `descent_balance_pass`).
-pub const BALANCE_PASS_DESCENTS: u8 = 6;
+pub const BALANCE_PASS_DESCENTS: u8 = 8;
 
 /// The descent probe (`--only descent`).
 pub struct DescentProbe;
@@ -2208,6 +2208,56 @@ mod tests {
             println!("warning: {warning}");
         }
         assert!(misses.is_empty(), "balance pass misses: {misses:#?}");
+    }
+
+    /// `cargo test --release -p fatherload_simulation descent_balance_seeds -- --ignored
+    /// --nocapture`: the balance pass on three seeds (Wave 10 integration), every stratum's
+    /// minutes, end and longest wait printed per seed.
+    #[test]
+    #[ignore = "plays the whole descent probe on three seeds (release build)"]
+    fn descent_balance_seeds() {
+        let mut all_misses = Vec::new();
+        for seed in [crate::worldgen::DEFAULT_WORLD_SEED, 7, 0x00C0_FFEE] {
+            let world = RegistryStrata {
+                settings: crate::worldgen::WorldSettings {
+                    generator: crate::worldgen::GeneratorVersion::DEEP_DESCENT,
+                    ..crate::worldgen::WorldSettings::new(seed)
+                },
+            };
+            let run = run_descent(&world, &DescentConfig::default());
+            println!("== seed {seed:#x}");
+            for stratum in &run.strata {
+                println!(
+                    "  {:<22} {:>5.0} min  ends {:>5.1} h  longest wait {:>4.0} min  deaths {}",
+                    stratum.stratum.name,
+                    stratum.minutes,
+                    stratum.end_hours,
+                    stratum.longest_gap_minutes,
+                    stratum.deaths
+                );
+            }
+            for (index, hours) in run.descent_hours.iter().enumerate() {
+                println!("  Descent {}: ends at {hours:.1} h", index + 1);
+            }
+            println!(
+                "  Whole run: {:.1} h, {} deaths, longest wait {:.0} min",
+                run.total_hours(),
+                run.deaths,
+                run.longest_gap()
+            );
+            for (system, hours) in &run.systems {
+                println!("  {system:?} at {hours:.1} h");
+            }
+            all_misses.extend(
+                run.balance_misses(BALANCE_PASS_DESCENTS)
+                    .into_iter()
+                    .map(|miss| format!("seed {seed:#x}: {miss}")),
+            );
+        }
+        assert!(
+            all_misses.is_empty(),
+            "balance pass misses: {all_misses:#?}"
+        );
     }
 
     /// `cargo test --release -p fatherload_simulation descent_report -- --ignored --nocapture`

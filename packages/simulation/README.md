@@ -7017,30 +7017,6 @@ between new things (the over-40-minute gaps the probe still reports are Descent 
 ancients tracks' placeholders on this branch). The Heart's fight scenes and the ending's scenes
 start with the stratum banner and tips already read, so the captures show the fight.
 
-## Replication
-
-Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
-destructuring in `section`, `remove_player`, `redact_player` and `split_player`):
-
-| Kind | Contents | Who receives it |
-|---|---|---|
-| Per tick | rig pose, velocity, fuel, hull, weapon state (capacitor, cooldown, aim, trigger), drill/scanner timers, deep-run pressure; the charge serial, entity id/revision counters and the local pixel frame (`LiveEntities`, applied first, see "Wave 7 positions") | clients the rig is relevant to |
-| Per tick, delta | entities (gas clouds, boulders, drops, charges, projectiles, targets, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
-| Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
-| Op log | per-player discovery | the owner only |
-| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount), the rig's cosmetics and its mounted weapon | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
-| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
-| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
-| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks, story marks), the Fathers' expedition (`SectionKey::Expedition`: logs read, sealed canisters, echoes, anomaly rooms; Wave 8) | everyone |
-
-Because other players' private state never reaches a client, replica checks compare
-`visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is
-hashed player by player, so host and a correct client authority agree exactly. Terrain
-dimensions, settings and the tiles that differ from generation travel only in keyframes
-(`redacted_for(viewer)`); the receiver regenerates the rest.
-
 ## Wave 10 story: the finale, the deep settlements' stories and Descent progress (`src/expedition/{logs,memories,progress,ending,archivist}.rs`, `src/people/story/arcs/deep_settlements.rs`, `src/world/expedition.rs`)
 
 Expansion plan §13 (following the builders' cable: the builders' city and archive, then the
@@ -7246,3 +7222,27 @@ offered only by their settlement; no other arc carries a settlement trigger.
   lighting in the world, the Star Drive fitted) plays alongside it.
 - Deep arcs have no prerequisites (they are only offered in their settlements, which only a rig
   that got there can visit).
+
+## Replication
+
+Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
+destructuring in `section`, `remove_player`, `redact_player` and `split_player`):
+
+| Kind | Contents | Who receives it |
+|---|---|---|
+| Per tick | rig pose, velocity, fuel, hull, weapon state (capacitor, cooldown, aim, trigger), drill/scanner timers, deep-run pressure; the charge serial, entity id/revision counters and the local pixel frame (`LiveEntities`, applied first, see "Wave 7 positions") | clients the rig is relevant to |
+| Per tick, delta | entities (gas clouds, boulders, drops, charges, projectiles, targets, ...): records of entities new to the client or changed since its last frame (by revision), and despawns (gone or out of relevance) | clients the entity is relevant to |
+| Op log | terrain tile writes | everyone, filtered by 16x16 terrain chunk relevance (stale chunks are refreshed with `terrain_chunk`: the chunk's diffs from generation) |
+| Op log | per-player discovery | the owner only |
+| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount), the rig's cosmetics and its mounted weapon | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, weapon rack, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, the enemy director (difficulty, rig i-frames, spawn cooldowns, cleared lairs) | everyone |
+| On change | `RigBuild(player)`: upgrade levels drawn on the rig (drill, engine, cargo bay, hull, radiator, scanner, bulkheads, drill mount) and the rig's cosmetics | everyone |
+| On change | `Loadout(player)`: cargo bay and block hopper, credits, upgrades, kits, rig parts, POI journal, quest log (solo quests, story arcs, reputation, blueprint fragments), salvage, rescue count, deep reward milestone, service transactions, cosmetic unlocks | the owner only |
+| On change | economy, contracts, progression (incl. `won_game`), town, world events, infrastructure, markers, RNG, timers (incl. twin-relay vault deadlines), session constants (tick timing, player template, world settings), crew quests, bases (claims, modules, fixtures, homes), the world clock (`SectionKey::Clock`: day length, skipped nights, sleep rule, sleepers), people (character memories, conversations, perks, story marks), the Fathers' expedition (`SectionKey::Expedition`: logs read, sealed canisters, echoes, anomaly rooms; Wave 8) | everyone |
+
+Because other players' private state never reaches a client, replica checks compare
+`visible_state_hash(viewer)`: private state is hashed only for the viewer and per-player data is
+hashed player by player, so host and a correct client authority agree exactly. Terrain
+dimensions, settings and the tiles that differ from generation travel only in keyframes
+(`redacted_for(viewer)`); the receiver regenerates the rest.

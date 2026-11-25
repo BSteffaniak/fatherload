@@ -911,6 +911,7 @@ fn a_bot_with_descent_vii_kit_beats_the_colossus_across_its_collapsing_hall_and_
     let mut ignored_mid_collapse = false;
     let mut slams = 0;
     let mut defeated = false;
+    let mut fight_ticks = 0_u64;
     for count in 0..u64::from(hz) * 1_200 {
         if world.garrison().colossus.entity.is_none() {
             break;
@@ -952,6 +953,7 @@ fn a_bot_with_descent_vii_kit_beats_the_colossus_across_its_collapsing_hall_and_
         }
         if ours.contains(&GarrisonEvent::ColossusDefeated) {
             defeated = true;
+            fight_ticks = count;
             break;
         }
         assert!(
@@ -986,6 +988,13 @@ fn a_bot_with_descent_vii_kit_beats_the_colossus_across_its_collapsing_hall_and_
         left > 0.15,
         "with a margin: {:.0} % of the hull left",
         left * 100.0
+    );
+    // The probe models the fight from this measured win (Wave 10 integration).
+    #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+    crate::balance::descent::mechanics::record_bot_fight(
+        crate::descent::DescentBoss::GatekeeperColossus,
+        fight_ticks as f64 / f64::from(hz),
+        f64::from(left),
     );
     assert!(world.garrison().colossus.beaten);
     assert!(

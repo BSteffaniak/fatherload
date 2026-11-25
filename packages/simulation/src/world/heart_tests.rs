@@ -564,6 +564,13 @@ fn a_bot_with_full_kit_wakes_the_heart_through_all_three_phases() {
         "with a margin: {:.0} % of the hull left",
         left * 100.0
     );
+    // The probe models the fight from this measured win (Wave 10 integration).
+    #[allow(clippy::cast_precision_loss, reason = "a few thousand ticks")]
+    crate::balance::descent::mechanics::record_bot_fight(
+        crate::descent::DescentBoss::TheHeart,
+        count as f64 / f64::from(hz),
+        f64::from(left),
+    );
     // The cable lit, space is open, the Star Drive is the rig's.
     assert!(world.space_unlocked());
     assert!(world.has_star_drive(PLAYER));

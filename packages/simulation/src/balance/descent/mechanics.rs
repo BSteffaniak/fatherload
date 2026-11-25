@@ -269,8 +269,7 @@ pub struct BotFight {
 /// The measured bot fights.
 ///
 /// The rigs are fitted as the probe's rig arrives: Descent kit, the hull tier the probe reaches
-/// each gate with. `None`: no bot fight yet (the Sinkhole is an escape, not a fight; Descents
-/// VII-VIII's bosses are measured when their tracks land).
+/// each gate with. `None`: the Sinkhole (an escape, not a fight).
 #[must_use]
 pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
     match boss {
@@ -297,7 +296,17 @@ pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
             seconds: 96.0,
             hull_left: 0.43,
         }),
-        DescentBoss::TheSinkhole | DescentBoss::GatekeeperColossus | DescentBoss::TheHeart => None,
+        // Measured at the integration (30 Hz bot fights, Wave 10).
+        DescentBoss::GatekeeperColossus => Some(BotFight {
+            seconds: 133.0,
+            hull_left: 0.71,
+        }),
+        // The bot fights the Heart with the top railgun, as the probe's rig arrives.
+        DescentBoss::TheHeart => Some(BotFight {
+            seconds: 69.0,
+            hull_left: 0.63,
+        }),
+        DescentBoss::TheSinkhole => None,
     }
 }
 
