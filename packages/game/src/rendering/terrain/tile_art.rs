@@ -1560,6 +1560,10 @@ const fn grows_grass(material: TileKind) -> bool {
 /// What tops ground that meets the sky: biome-tinted grass on soil and rock, a bright crust on
 /// snow and sand, moss on mud, a lit rim on bare mountain and mesa rock.
 fn paint_surface_top(canvas: &mut TileCanvas, terrain: &Terrain, material: TileKind) {
+    // Nothing grows on lava, nor on a frontier world's rock (an ore's host there, Wave 12).
+    if matches!(material, TileKind::Lava | TileKind::Frontier(_)) {
+        return;
+    }
     let TileKind::Surface(surface) = material else {
         paint_grass_top(canvas, grass_colors(terrain, canvas.origin_x / TILE_ART));
         return;

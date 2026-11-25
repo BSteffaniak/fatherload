@@ -155,6 +155,9 @@ pub fn draw_frontier_hud(
     for (index, (text, colour)) in lines.iter().enumerate() {
         let width = ui_kit::text_width(text, TextStyle::Body);
         let x = rect.x as i32 + (rect.width as i32 - width) / 2;
+        let y = top + index as i32 * line_height;
+        // A dark backing so the line reads over bright sand, grey basalt or glowing magma.
+        draw.draw_rectangle(x - 4, y - 1, width + 8, line_height, fade(INK, 0.55));
         ui_kit::text(
             draw,
             text,
