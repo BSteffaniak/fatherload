@@ -301,14 +301,16 @@ fn paint_water(
             } else if above.is_none() && py == top + 1 {
                 ramp[3]
             } else {
-                // Deeper is darker; a shimmer of light lines in the body.
+                // Deeper is darker (never night-black: water must not read as the starry
+                // sky); light moves through it in short horizontal ripples, not star dots.
                 let depth = (position.y.max(0) * TILE_ART + py) as f32;
                 let shade = noise(gx / 3, gy, 7, 2_041) * 0.12
                     + f32::from(bayer4(gx, gy)) / 120.0
-                    + (depth / 480.0).min(0.85);
-                if hash(gx, gy, 2_042).is_multiple_of(71) {
+                    + (depth / 1_600.0).min(0.6);
+                let ripple = gy.rem_euclid(3) == 0 && hash(gx / 5, gy, 2_042).is_multiple_of(9);
+                if ripple && depth < 640.0 {
                     ramp[3]
-                } else if shade < 0.35 {
+                } else if ripple || shade < 0.35 {
                     ramp[2]
                 } else if shade < 1.0 {
                     ramp[1]
