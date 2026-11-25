@@ -850,7 +850,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             return canvas;
         }
         if cell_at(terrain, x, y) == Cell::Sky {
-            paint_grass_blades(&mut canvas, terrain, position, down);
+            // No grass grows on a frontier world (Wave 12).
+            if frontier.is_none() {
+                paint_grass_blades(&mut canvas, terrain, position, down);
+            }
         } else if let Some((style, zone)) = frontier {
             // A frontier world's tunnels, caves, ruins and tubes (Wave 12 planets-b).
             frontier_art::paint_back(&mut canvas, style, zone, (up, left, right));
@@ -1522,6 +1525,7 @@ const fn grows_grass(material: TileKind) -> bool {
         material,
         TileKind::Surface(_)
             | TileKind::Frontier(_)
+            | TileKind::Lava
             | TileKind::Lunar(_)
             | TileKind::Deep(_)
             | TileKind::Hollow(_)

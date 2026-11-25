@@ -53,9 +53,9 @@ const PALM: Ramp = ramp([SOIL_DARK, SOIL, LOAM, CLAY]);
 const FROND: Ramp = ramp([PINE, MOSS, LEAF, LIME]);
 const SUN: Ramp = ramp([RUST, AMBER, GOLD, CREAM]);
 // The volcanic world.
-const ASH: Ramp = ramp([SLATE_DARK, SLATE, SLATE_LIGHT, FOG]);
+const ASH: Ramp = ramp([STONE_DARK, STONE, STONE_LIGHT, FOG]);
 const PUMICE: Ramp = ramp([STONE_DARK, STONE, STONE_LIGHT, MIST]);
-const BASALT: Ramp = ramp([INK, NIGHT, STONE_DARK, STONE]);
+const BASALT: Ramp = ramp([NIGHT, STONE_DARK, STONE, STONE_LIGHT]);
 const SCORIA: Ramp = ramp([SOIL_DARK, MAROON, RUST, COPPER]);
 const OBSIDIAN: Ramp = ramp([INK, NIGHT, PLUM, LAVENDER]);
 const TUBE: Ramp = ramp([INK, NIGHT, MAROON, RUST]);
@@ -417,7 +417,10 @@ fn body(tile: FrontierTile, x: i32, y: i32, px: i32, py: i32) -> Option<PaletteI
             if hash(x, y, 2101).is_multiple_of(113) {
                 index_of(ORANGE)
             } else {
-                let n = noise(x, y, 5, 2102) + dither(x, y);
+                // Soft drifts laid down by the wind: fine grain in gentle bands.
+                let n = noise(x, y, 3, 2102) * 0.6
+                    + noise(x, y + x / 3, 9, 2103) * 0.4
+                    + dither(x, y) * 0.6;
                 if n > 0.95 {
                     ASH[3]
                 } else if n > 0.7 {
@@ -573,6 +576,7 @@ fn body(tile: FrontierTile, x: i32, y: i32, px: i32, py: i32) -> Option<PaletteI
         FrontierTile::ShardStone => {
             // Violet-grey stone with splinters of crystal set in it.
             let shard = (x * 2 - y).rem_euclid(17) < 2
+                && y.rem_euclid(6) < 3
                 && hash(x.div_euclid(6), y.div_euclid(6), 2211).is_multiple_of(3);
             if shard {
                 if (x + y).rem_euclid(2) == 0 {
@@ -648,7 +652,7 @@ fn body(tile: FrontierTile, x: i32, y: i32, px: i32, py: i32) -> Option<PaletteI
             // Dark stone banded in every colour, the bands slanting.
             let slant = (y + x / 3 + (noise(x, y, 20, 2241) * 5.0) as i32).div_euclid(2);
             let colour = RAINBOW[slant.rem_euclid(6) as usize];
-            if hash(slant, x.div_euclid(16), 2242).is_multiple_of(3) {
+            if hash(slant, x.div_euclid(16), 2242).is_multiple_of(5) {
                 index_of(colour)
             } else if slant.rem_euclid(2) == 0 {
                 SHARD[1]

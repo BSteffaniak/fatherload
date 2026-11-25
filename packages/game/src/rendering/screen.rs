@@ -123,6 +123,8 @@ pub(super) fn draw_view_hud(
     let rect = view_rect(view);
     let (left, top) = (rect.x as i32 + 4, rect.y as i32 + 4);
     let split = snapshot.views.len() > 1;
+    // A frontier world's storm (under the panels), place, rule and hazards (Wave 12).
+    super::frontier_hud::draw_frontier_hud(draw, snapshot, view, rect);
     // The ending (Wave 10): the seat's own sequence over its view; the cutaway, the credits
     // and the epilogue cover it (and its HUD), the awakening plays over the world.
     if view.ending.is_some_and(|ending| ending.phase.playing()) {
@@ -211,8 +213,6 @@ pub(super) fn draw_view_hud(
     });
     // Altitude air, cold and wind while flying a V8 sky (F6).
     super::sky_hud::draw_sky_gauge(draw, snapshot, view, rect, top + 74);
-    // A frontier world's storm, place, rule and hazards (Wave 12 planets-b).
-    super::frontier_hud::draw_frontier_hud(draw, snapshot, view, rect);
     // The Moon checklist, the vacuum warning and the landing's sunrise (WP-MOON).
     super::moon_hud::draw_moon_hud(draw, shell, snapshot, view, rect, top + 124);
     // Descent II, the Old Deep (Wave 8): dose, storms, tides, the valves and the Star Core.
