@@ -8237,6 +8237,9 @@ at stations and lands on worlds. Life support and the nav HUD come with it.
 
 ### Stations (the stub Wave 12 fills)
 
+Wave 12 filled it: see "Wave 12 stations" below (the hub, priced by the station; a derelict
+refuses the counter).
+
 - To dock (`FlightCommand::Use`), the rig must be within `DOCK_RANGE` (3 tiles) of the port,
   slower than `DOCK_SPEED` (70 px/s), within `DOCK_ALIGN` (15°) of the port's axis (its up
   axis pointing into the port), and off the drive.
