@@ -619,7 +619,7 @@ pub fn draw_rock_shaped(
     for (index, slot) in outline.iter_mut().enumerate() {
         let angle = turn + index as f32 / SIDES as f32 * TAU;
         let lump = if ore.is_some() {
-            0.94 + 0.08 * unit(hash64(&[h as i64, index as i64]), 0)
+            1.02 + 0.06 * unit(hash64(&[h as i64, index as i64]), 0)
         } else {
             0.72 + 0.28 * unit(hash64(&[h as i64, index as i64]), 0)
         };

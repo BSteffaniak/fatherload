@@ -62,6 +62,26 @@ use crate::{
     },
 };
 
+/// `player`'s rig as drawn: the home store's rigs, or the seat's own store's (free flight's
+/// store holds the flyers, Wave 12 systems).
+fn presentation_of<'a>(
+    snapshot: &'a RenderSnapshot<'_>,
+    view: &'a ViewSnapshot<'_>,
+    player: PlayerId,
+) -> Option<&'a PlayerPresentation> {
+    snapshot
+        .players
+        .iter()
+        .find(|found| found.player_id == player)
+        .or_else(|| {
+            view.place_scene
+                .as_ref()?
+                .rigs
+                .iter()
+                .find(|found| found.player_id == player)
+        })
+}
+
 /// Deep space's backdrop.
 const SPACE: Color = Color::new(8, 7, 20, 255);
 /// Where the drawn rig sits in the sky (high, in open air, so it draws flying).
@@ -153,6 +173,13 @@ pub(super) fn space_frame(
     let (gap, _) = nearest_surface(bodies, flight.pos);
     // A black hole's disc frames the view as a body's surface would (Wave 11 integration).
     let gap = black_hole_gap(seed, flight.pos).map_or(gap, |hole| gap.min(hole));
+    // A belt rock close by frames the view like a surface too (Wave 12 systems: mining reads
+    // up close).
+    let gap = fatherload_simulation::space::Space::shared(seed)
+        .asteroids_near(flight.pos, 400)
+        .iter()
+        .map(|rock| flight.pos.span(rock.centre.pos()) - f32::from(rock.radius) * TILE_SIZE)
+        .fold(gap, f32::min);
     let visible = view.viewport.height as f32 / view.world_scale.max(0.01);
     let zoom = zoom_for(gap, visible);
     SpaceFrame {
@@ -217,10 +244,11 @@ pub(super) fn draw_space_world(
     if let StarDrive::Warp(run) = flight.drive {
         draw_warp_tunnel(draw, &frame, &flight, snapshot, run.target, ticks, strength);
     }
-    draw_own_rig(draw, terrain, facings, &frame, snapshot, view, ticks);
-    // Wave 12 systems: glare, fog, the hole's ring, the tunnel, the beam and the sparks.
+    // Wave 12 systems: glare, fog, the hole's ring, the tunnel, the beam and the sparks (under
+    // the rig, so it always reads).
     let reading = super::space_systems_view::read(snapshot, view);
     super::space_systems_view::draw_world(draw, &frame, snapshot, view, &reading, ticks);
+    draw_own_rig(draw, terrain, facings, &frame, snapshot, view, ticks);
     frame
 }
 
@@ -814,11 +842,7 @@ fn draw_flyer(
     if !frame.visible(at, 40.0) {
         return;
     }
-    let Some(presentation) = snapshot
-        .players
-        .iter()
-        .find(|player| player.player_id == flyer.player_id)
-    else {
+    let Some(presentation) = presentation_of(snapshot, view, flyer.player_id) else {
         return;
     };
     let density = frame.rect.height / view.viewport.height.max(1) as f32;
@@ -892,11 +916,7 @@ fn draw_own_rig(
         }
         StarDrive::Off | StarDrive::Warp(_) | StarDrive::Transit(_) => {}
     }
-    if let Some(presentation) = snapshot
-        .players
-        .iter()
-        .find(|player| player.player_id == view.player_id)
-    {
+    if let Some(presentation) = presentation_of(snapshot, view, view.player_id) {
         draw_rig_at(
             draw,
             terrain,

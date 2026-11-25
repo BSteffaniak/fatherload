@@ -406,12 +406,13 @@ pub(super) fn draw_hud(
     top: f32,
 ) -> f32 {
     let flight = view.player.flight;
-    let narrow = rect.width < 420.0;
+    // Long lines only where they clear the meters and the nav panel.
+    let narrow = rect.width < 820.0;
     let mut top = top;
     let banner = |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, text: &str, colour: Color| {
         let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
         let plate = Rectangle::new(
-            rect.x + (rect.width - width as f32) * 0.5,
+            (rect.x + (rect.width - width as f32) * 0.5).max(rect.x + 158.0),
             *top,
             width as f32,
             15.0,
@@ -514,7 +515,12 @@ pub(super) fn draw_hud(
     let gauge =
         |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, label: &str, ratio: f32, colour: Color| {
             let width = 170.0_f32.min(rect.width - 12.0);
-            let plate = Rectangle::new(rect.x + (rect.width - width) * 0.5, *top, width, 22.0);
+            let plate = Rectangle::new(
+                (rect.x + (rect.width - width) * 0.5).max(rect.x + 158.0),
+                *top,
+                width,
+                22.0,
+            );
             ui_kit::panel(draw, plate, PanelStyle::Standard);
             ui_kit::text(
                 draw,
@@ -578,7 +584,7 @@ pub(super) fn draw_hud(
         gauge(draw, &mut top, &label, flight.gathering, ICE);
     }
     if flight.marks & MARK_HOLDING != 0 {
-        banner(draw, &mut top, "PARKING HOLD: thrust to fly on", SKY_LIGHT);
+        banner(draw, &mut top, "PARKING HOLD", SKY_LIGHT);
     }
     top
 }

@@ -111,7 +111,7 @@ fn blue_glare(stage: &mut SceneStage<'_>) {
             BodyExtra::Star(StarFacts { heat_radius, .. }) => heat_radius,
             _ => star.radius * 3.0,
         };
-        let at = star.centre.offset(-heat * 2.6, heat * 0.8);
+        let at = star.centre.offset(-heat * 1.5, heat * 0.5);
         launch(
             world,
             player(seats),
@@ -347,10 +347,9 @@ fn moon(stage: &mut SceneStage<'_>, arrived: bool) {
         space_world(world);
         let moon = space::moon_centre();
         let radius = tiles(640.0);
-        let at = moon.offset(
-            tiles(180.0),
-            -(radius + tiles(if arrived { 62.0 } else { 140.0 })),
-        );
+        let reach = radius + tiles(if arrived { 63.0 } else { 140.0 });
+        let across = tiles(160.0);
+        let at = moon.offset(across, -(reach * reach - across * across).sqrt());
         launch(
             world,
             player(seats),

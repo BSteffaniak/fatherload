@@ -337,7 +337,14 @@ impl LocalGame {
                         .with_rotation(frame.controls.rotation())
                         .with_assists(frame.controls.assists());
                     }
-                    if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
+                    // Wave 12 systems: in space the Mining Beam is the trigger (armed or not).
+                    let beam = !on_foot
+                        && player.is_some_and(|player| {
+                            player.flight.away() && player.hazard_gear.flight.mining_beam > 0
+                        });
+                    if beam && sampled.fire {
+                        frame.controls.weapon.fire = true;
+                    } else if !on_foot && crate::weapon_aim::trigger_thrusts(sampled, player) {
                         frame.controls.thrust = true;
                     }
                     // Space flight (Wave 11): the seat's flight switches, and the rig's

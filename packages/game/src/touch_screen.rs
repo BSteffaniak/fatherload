@@ -328,7 +328,9 @@ pub fn touch_context(
     ];
     TouchContext {
         mode,
-        armed: player.mounted_weapon.is_some(),
+        // In space the Mining Beam is the trigger too (Wave 12 systems).
+        armed: player.mounted_weapon.is_some()
+            || (player.flight.away() && player.hazard_gear.flight.mining_beam > 0),
         charges_out: waiting_charges > 0,
         prompt: view.failure.is_some()
             || view.surface_zone.is_some()
