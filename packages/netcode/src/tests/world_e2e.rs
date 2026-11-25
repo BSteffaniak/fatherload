@@ -1722,3 +1722,81 @@ fn world_floods_replicate_to_every_client() {
         assert_eq!(water(seen), flooded, "every client sees the host's flood");
     }
 }
+
+/// Space flight online (Wave 11): every rig is put into deep space, where the bots' thrust and
+/// rotation pulses fly it on the flight model (rotation without drag, craft-relative thrust)
+/// and one rig warps toward another star. Flight state is per tick (predicted with the pose)
+/// and every flyer stays relevant to the others, so every client converges on the host with
+/// no hash mismatch and sees the others' flight exactly.
+#[test]
+fn world_rigs_fly_in_space_predict_and_converge() {
+    use fatherload_simulation::flight::{
+        FlightPlace, RigFlight, StarDrive, WarpRun,
+        space::{SpaceQuery, at_tile},
+    };
+
+    let mut harness = harness(60, 2, LinkConditions::new(60, 10, 2.0));
+    harness.run_for(Duration::from_secs(2));
+    assert!(harness.all_in_game());
+    let mut world = harness.world().clone();
+    let ids: Vec<_> = world.player_ids().collect();
+    let starts: Vec<_> = (0..ids.len())
+        .map(|index| at_tile(20_000 + 40 * i64::try_from(index).unwrap_or(0), 20_000))
+        .collect();
+    let target = {
+        let space = world.space();
+        (2..12)
+            .find_map(|gx| space.system_at((gx, 0)))
+            .expect("a star to the east")
+    };
+    let millis = world.millis_at(world.simulation_tick());
+    for (index, id) in ids.iter().enumerate() {
+        let rig = world.player_mut(*id).expect("rig");
+        rig.flight = RigFlight {
+            place: FlightPlace::Space,
+            pos: starts[index],
+            air: 600.0,
+            ..RigFlight::default()
+        };
+        if index == 0 {
+            // The first rig is mid-warp: the others watch it streak.
+            rig.attitude.orientation = fatherload_simulation::attitude::quantize_angle(
+                fatherload_simulation::flight::nav::bearing(starts[0], target.star),
+            );
+            rig.flight.drive = StarDrive::Warp(WarpRun {
+                origin: starts[0],
+                arrival: target.star,
+                target: target.system,
+                start: millis + 4_000,
+                duration_millis: 20_000,
+            });
+        }
+    }
+    harness.host.new_epoch(world);
+    let mut streaked = false;
+    for _ in 0..12 {
+        harness.run_for(Duration::from_secs(1));
+        let world = harness.world();
+        streaked |= world
+            .players()
+            .values()
+            .any(|player| player.flight.speed() > 100_000.0);
+    }
+    harness.settle(Duration::from_secs(1));
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+    }
+    let world = harness.world();
+    let moved = ids.iter().enumerate().any(|(index, id)| {
+        world
+            .rig_flight(*id)
+            .is_some_and(|flight| flight.pos.distance(starts[index]) > 32.0)
+    });
+    assert!(moved, "the rigs flew");
+    assert!(streaked, "a rig streaked through warp");
+    for id in &ids {
+        assert!(world.in_space(*id), "still in space");
+    }
+}
