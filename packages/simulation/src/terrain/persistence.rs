@@ -250,6 +250,10 @@ pub struct TerrainSnapshot {
     /// (and missing in older saves).
     #[serde(default)]
     pub packed: PackedChunks,
+    /// The round body this terrain is the ground of (Wave 11, [`crate::planet`]); `None` for
+    /// every other world (and missing in older saves).
+    #[serde(default)]
+    pub planet: Option<crate::planet::PlanetParams>,
 }
 
 /// Why a [`TerrainSnapshot`] could not be restored.
@@ -405,6 +409,34 @@ const STREAMED_PROBE_CHUNKS: [ChunkPosition; 5] = [
 /// generated tiles, so its digest folds this in: restoring it under a generator build that
 /// produces different terrain for the same settings fails instead of silently loading
 /// different terrain.
+/// The probe of a planet strip (Wave 11): a few chunks of its own generator, the surface, the
+/// middle and the core chamber.
+fn planet_generator_probe(planet: &crate::planet::PlanetGround) -> u64 {
+    let mut hash: u64 = 0x84_22_23_25_CB_F2_9C_E4;
+    let rows = [0, planet.bottom_row() / 2, planet.core_chamber_top()];
+    for (index, row) in (0_i32..).zip(rows) {
+        let chunk = ChunkPosition::of(crate::terrain::TilePosition {
+            x: index * 7 * CHUNK_SIZE_TILES,
+            y: row,
+        });
+        for tile in planet.generated_chunk(chunk).tiles() {
+            for byte in tile.code().to_le_bytes() {
+                hash ^= u64::from(byte);
+                hash = hash.wrapping_mul(0x0100_0000_01B3);
+            }
+        }
+    }
+    hash
+}
+
+/// The generator probe of a streamed terrain: its planet's, else its settings'.
+fn terrain_probe(settings: &WorldSettings, planet: Option<&crate::planet::PlanetGround>) -> u64 {
+    planet.map_or_else(
+        || streamed_generator_probe(settings),
+        planet_generator_probe,
+    )
+}
+
 fn streamed_generator_probe(settings: &WorldSettings) -> u64 {
     let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
     for chunk in STREAMED_PROBE_CHUNKS {
@@ -490,6 +522,7 @@ impl Terrain {
                     frame: self.frame,
                     column_limit: self.column_limit_override,
                     packed: PackedChunks::default(),
+                    planet: None,
                 }
             }
             Storage::Streamed(streamed) => TerrainSnapshot {
@@ -498,7 +531,7 @@ impl Terrain {
                 height: self.height,
                 digest: self
                     .digest
-                    .wrapping_add(streamed_generator_probe(&self.settings)),
+                    .wrapping_add(terrain_probe(&self.settings, self.planet.as_ref())),
                 diffs: TileDiffs::default(),
                 chunks: Vec::new(),
                 packed: PackedChunks(
@@ -520,6 +553,7 @@ impl Terrain {
                 ),
                 frame: self.frame,
                 column_limit: self.column_limit_override,
+                planet: self.planet.map(|planet| *planet.params()),
             },
         }
     }
@@ -542,11 +576,18 @@ impl Terrain {
             packed,
             frame,
             column_limit,
+            planet,
         } = snapshot;
         if settings.generator.is_streamed() {
             chunks.extend(packed.0);
-            let mut terrain =
-                Self::from_streamed_snapshot(settings, height, digest, chunks, column_limit)?;
+            let mut terrain = Self::from_streamed_snapshot(
+                settings,
+                height,
+                digest,
+                chunks,
+                column_limit,
+                planet,
+            )?;
             terrain.frame = frame;
             return Ok(terrain);
         }
@@ -581,23 +622,25 @@ impl Terrain {
         digest: u64,
         chunks: Vec<(ChunkPosition, TileDiffs)>,
         column_limit: Option<i32>,
+        planet: Option<crate::planet::PlanetParams>,
     ) -> Result<Self, TerrainRestoreError> {
-        if height != settings.height_tiles() {
+        let mut terrain = planet.map_or_else(|| Self::streamed(settings), Self::planet);
+        if height != terrain.height || (planet.is_some() && settings != terrain.settings) {
             return Err(TerrainRestoreError::InvalidSize { width: 0, height });
         }
-        let mut terrain = Self::streamed(settings);
         if let Some(limit) = column_limit {
             terrain.set_column_limit_for_tests(limit);
         }
         let limit = terrain.column_limit();
+        let terrain_top = terrain.min_y();
+        let ground = terrain.planet;
         let Storage::Streamed(streamed) = &mut terrain.storage else {
             return Err(TerrainRestoreError::InvalidSize { width: 0, height });
         };
         let mut sum = 0_u64;
         for (chunk, diffs) in chunks {
             let origin = chunk.origin();
-            let top = worldgen::streamed::top_row(&settings).div_euclid(CHUNK_SIZE_TILES)
-                * CHUNK_SIZE_TILES;
+            let top = terrain_top.div_euclid(CHUNK_SIZE_TILES) * CHUNK_SIZE_TILES;
             if origin.x < -limit || origin.x >= limit || origin.y < top || origin.y >= height {
                 return Err(TerrainRestoreError::DiffOutOfBounds {
                     index: u64::from(chunk.x.unsigned_abs()),
@@ -630,7 +673,7 @@ impl Terrain {
             }
         }
         terrain.digest = sum;
-        let actual = sum.wrapping_add(streamed_generator_probe(&settings));
+        let actual = sum.wrapping_add(terrain_probe(&settings, ground.as_ref()));
         if actual != digest {
             return Err(TerrainRestoreError::DigestMismatch {
                 generator: settings.generator,
@@ -706,8 +749,13 @@ impl Terrain {
             Slot::Streamed(chunk, local) => match &self.storage {
                 Storage::Streamed(streamed) => streamed.loaded.get(&chunk).map_or_else(
                     || {
-                        super::generated_chunk_of(&self.settings, self.body.as_deref(), chunk)
-                            .tile(local)
+                        super::base_chunk(
+                            &self.settings,
+                            self.body.as_deref(),
+                            self.planet.as_ref(),
+                            chunk,
+                        )
+                        .tile(local)
                     },
                     |loaded| loaded.base.tile(local),
                 ),

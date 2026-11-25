@@ -97,15 +97,19 @@ impl WorldState {
         let Some((x, y)) = self.frame_anchor() else {
             return;
         };
-        if let Some(next) = frame.recentred_on(x, y) {
+        // A planet strip wraps (Wave 11): its frame stays labelled within one lap.
+        let next = self.wrapped_frame(frame.recentred_on(x, y).unwrap_or(frame));
+        if next != frame {
             self.move_frame(next);
         }
     }
 
     /// Moves the local pixel space to `next`, shifting every stored local position so nothing
-    /// moves in absolute terms (replicas call it when the authority's frame arrives).
+    /// moves in absolute terms (replicas call it when the authority's frame arrives). On a
+    /// planet strip whole laps are the same place: positions shift only by the nearest copy
+    /// of `next` round the strip, so a frame relabelled back into its lap moves nothing.
     pub(crate) fn move_frame(&mut self, next: Frame) {
-        let shift = self.frame().shift_to(next);
+        let shift = self.frame().shift_to(self.nearest_lap_frame(next));
         self.terrain.set_frame(next);
         if !shift.is_zero() {
             self.reframe_positions(shift);

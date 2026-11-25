@@ -157,15 +157,31 @@ impl WorldState {
 
     /// Moves `player_id`'s rig one tick with `controls`: the craft rotation step (F9), then
     /// the drive, thrust, gravity and collision. Where the fields are neutral and the rig is
-    /// level and still this is the classic movement, bit for bit.
-    #[allow(
-        clippy::too_many_lines,
-        reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
-    )]
+    /// level and still this is the classic movement, bit for bit (tests: the events it would
+    /// report are dropped).
+    #[cfg(test)]
     pub(crate) fn step_rig_movement(
         &mut self,
         player_id: PlayerId,
         controls: RigControls,
+    ) -> Option<AuthoritativeMovementStep> {
+        let mut output = crate::TickOutput::default();
+        self.step_rig_movement_into(player_id, controls, &mut output)
+    }
+
+    /// Moves `player_id`'s rig one tick with `controls`: the craft rotation step (F9), then
+    /// the drive, thrust, gravity and collision, reporting its gameplay events (a touchdown on
+    /// a round body, Wave 11) into `output`. Where the fields are neutral and the rig is level
+    /// and still this is the classic movement, bit for bit.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "movement parity keeps modifier, integration, collision, and damage ordering explicit"
+    )]
+    pub(crate) fn step_rig_movement_into(
+        &mut self,
+        player_id: PlayerId,
+        controls: RigControls,
+        output: &mut crate::TickOutput,
     ) -> Option<AuthoritativeMovementStep> {
         let RigControls {
             horizontal,
@@ -277,19 +293,53 @@ impl WorldState {
         let seconds = delta_seconds * field.time_scale;
         // Craft rotation (F9): the player's rotation thrusters, limits, settling, assists.
         let attitude_gear = player.hazard_gear.attitude;
-        let proposed = step_attitude(
-            attitude_before,
-            &AttitudeContext {
-                level: level.unwrap_or(attitude_before.orientation),
-                limit: (!field.rotation_unlimited())
-                    .then(|| crate::attitude::tilt_limit(attitude_gear.tilt_rating)),
-                resting: grounded || drilling,
+        // A round body (Wave 11, `planet::landing`): rotation is the player's alone in flight;
+        // on the ground the tracks rest on the slope (or the craft lies tipped over until the
+        // player rights it with the thrusters).
+        let on_planet = self.terrain.planet_ground().is_some();
+        let legs = attitude_gear.landing_legs;
+        let resting = grounded || drilling;
+        let slope = if on_planet && resting {
+            ground_slope(&self.terrain, player.x, player.y)
+        } else {
+            0.0
+        };
+        let context = if on_planet {
+            let righting = resting
+                && crate::planet::landing::righting(
+                    attitude_before.orientation,
+                    slope,
+                    legs,
+                    rotate,
+                );
+            let settle = resting && !righting;
+            AttitudeContext {
+                level: if settle {
+                    crate::planet::landing::rest_target(attitude_before.orientation, slope, legs)
+                } else {
+                    level.unwrap_or(attitude_before.orientation)
+                },
+                // A settling craft settles whatever its lean; a flying one turns freely.
+                limit: settle.then_some(std::f32::consts::PI),
+                resting: settle,
                 input: rotate,
                 gyro: assists.gyro && attitude_gear.gyro_stabiliser > 0,
                 horizon: assists.horizon && attitude_gear.horizon_hold > 0,
                 seconds,
-            },
-        );
+            }
+        } else {
+            AttitudeContext {
+                level: level.unwrap_or(attitude_before.orientation),
+                limit: (!field.rotation_unlimited())
+                    .then(|| crate::attitude::tilt_limit(attitude_gear.tilt_rating)),
+                resting,
+                input: rotate,
+                gyro: assists.gyro && attitude_gear.gyro_stabiliser > 0,
+                horizon: assists.horizon && attitude_gear.horizon_hold > 0,
+                seconds,
+            }
+        };
+        let proposed = step_attitude(attitude_before, &context);
         if proposed.orientation.to_bits() != attitude_before.orientation.to_bits()
             && rig_collides(&self.terrain, player.x, player.y, proposed.orientation)
             && !rig_collides(
@@ -299,12 +349,49 @@ impl WorldState {
                 attitude_before.orientation,
             )
         {
-            // Turning would push a corner into rock: the rotation stops.
-            player.attitude.angular_velocity = 0.0;
+            // Turning would push a corner into rock. On a round body's ground the craft rolls
+            // up over its corner (contact lifts it a few pixels); anywhere else the rotation
+            // stops.
+            let lift = if on_planet && resting {
+                (1..=PLANET_ROLL_LIFT_PX).find(|lift| {
+                    let y = player.y - f32::from(*lift);
+                    !rig_collides(&self.terrain, player.x, y, proposed.orientation)
+                })
+            } else {
+                None
+            };
+            if let Some(lift) = lift {
+                player.y = quantize_simulation_scalar(player.y - f32::from(lift));
+                player.attitude = proposed;
+            } else {
+                player.attitude.angular_velocity = 0.0;
+            }
         } else {
             player.attitude = proposed;
         }
+        if on_planet
+            && resting
+            && crate::planet::landing::is_tipped(attitude_before.orientation, slope, legs)
+            && !crate::planet::landing::is_tipped(player.attitude.orientation, slope, legs)
+        {
+            let tile = self.terrain.frame().tile_at(player.x, player.y);
+            output.push_event(crate::GameplayEventKind::Planet {
+                what: crate::planet::landing::PlanetEvent::Righted,
+                player_id: Some(player_id),
+                x: tile.x,
+                y: tile.y,
+            });
+        }
         let orientation = player.attitude.orientation;
+        // A craft lying tipped over on a round body cannot drive on its tracks (Wave 11).
+        let horizontal = if on_planet
+            && resting
+            && crate::planet::landing::is_tipped(orientation, slope, legs)
+        {
+            0.0
+        } else {
+            horizontal
+        };
         let classic =
             field.is_neutral_physics() && attitude_before.is_level() && player.attitude.is_level();
         // Altitude physics (F6): thin air, wind, updrafts and gravity fields. Standard (and
@@ -594,6 +681,8 @@ impl WorldState {
             )
         };
         let (mut blocked_x, mut blocked_y) = (false, false);
+        // The fall speed a touchdown on a round body is judged at (Wave 11).
+        let fall_speed = player.velocity_y;
         for _ in 0..steps {
             if !blocked_x {
                 let (next_x, next_remainder) = integrate_x(player.x, player.x_remainder, step_x);
@@ -659,6 +748,33 @@ impl WorldState {
             }
         }
 
+        // Landing is a skill on a round body (Wave 11): a craft coming down onto the ground is
+        // judged by its lean from the ground under it.
+        if on_planet && !grounded && blocked_y && delta_y > 0.0 && player.velocity_y == 0.0 {
+            let slope = ground_slope(&self.terrain, player.x, player.y);
+            let lean = crate::field::trig::wrap_angle(player.attitude.orientation - slope);
+            let effect = crate::planet::landing::touchdown(lean, fall_speed, legs);
+            if !immune && effect.hull_damage > 0.0 {
+                player.hull = quantize_simulation_scalar(
+                    (player.hull - mitigated(effect.hull_damage)).max(0.0),
+                );
+            }
+            if effect.slide != 0.0 {
+                player.velocity_x =
+                    quantize_simulation_scalar((player.velocity_x + effect.slide).clamp(
+                        -AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                        AUTHORITATIVE_ABSOLUTE_MAX_SPEED,
+                    ));
+            }
+            let tile = self.terrain.frame().tile_at(player.x, player.y);
+            output.push_event(crate::GameplayEventKind::Planet {
+                what: crate::planet::landing::PlanetEvent::of(effect.outcome),
+                player_id: Some(player_id),
+                x: tile.x,
+                y: tile.y,
+            });
+        }
+
         Some(AuthoritativeMovementStep {
             player_id,
             x: player.x,
@@ -666,6 +782,37 @@ impl WorldState {
             velocity_x: player.velocity_x,
             velocity_y: player.velocity_y,
         })
+    }
+}
+
+/// Most pixels contact lifts a craft rolling over a corner on a round body's ground (Wave 11:
+/// righting a tipped craft, settling onto a slope).
+pub const PLANET_ROLL_LIFT_PX: u8 = 6;
+
+/// The slope of the ground under a craft at local pixel `(x, y)` (Wave 11, round bodies): the
+/// top of the solid ground under each side, [`crate::planet::landing::SLOPE_SPAN_PX`] apart,
+/// searched a few rows down from the craft's middle.
+fn ground_slope(terrain: &Terrain, x: f32, y: f32) -> f32 {
+    let frame = terrain.frame();
+    let half = crate::planet::landing::SLOPE_SPAN_PX * 0.5;
+    let first_row = frame.row(y);
+    // The ground's top under a side, or `None` where that side is a wall at the craft's own
+    // height (a wall is no slope) or there is no ground close under it.
+    let top = |sample_x: f32| -> Option<f32> {
+        let column = frame.col(sample_x);
+        if terrain.is_solid_at(TilePosition {
+            x: column,
+            y: first_row,
+        }) {
+            return None;
+        }
+        (first_row + 1..first_row + 3)
+            .find(|row| terrain.is_solid_at(TilePosition { x: column, y: *row }))
+            .map(|row| frame.row_px(row))
+    };
+    match (top(x - half), top(x + half)) {
+        (Some(left), Some(right)) => crate::planet::landing::slope_angle(left, right),
+        _ => 0.0,
     }
 }
 

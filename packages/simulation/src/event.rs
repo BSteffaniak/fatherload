@@ -1331,6 +1331,15 @@ pub enum GameplayEventKind {
         from: crate::place::Place,
         to: crate::place::Place,
     },
+    // Round bodies (Wave 11 polar track; netcode codes 780-799).
+    /// Something of a round body's ground happened at tile `(x, y)` (a touchdown and how it
+    /// went, a tipped craft righted); `player_id` is whose craft.
+    Planet {
+        what: crate::planet::landing::PlanetEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -1715,6 +1715,25 @@ impl LocalGame {
                         }
                     }
                 }
+                // Round bodies (Wave 11): a bad touchdown tells the pilot what happened.
+                GameplayEventKind::Planet {
+                    what, player_id, ..
+                } => {
+                    use fatherload_simulation::planet::landing::PlanetEvent as P;
+                    let text = match what {
+                        P::Landed | P::Slid => continue,
+                        P::HullScraped => "Hard, tilted touchdown: the hull scraped. Land level.",
+                        P::Tipped => {
+                            "TIPPED OVER! Hold the rotation thrusters toward upright to right it."
+                        }
+                        P::Righted => "Back on the tracks.",
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
                 _ => {}
             }
         }

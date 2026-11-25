@@ -434,6 +434,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Story { what, player_id } => (700 + what.code() as u32, player_id),
         // Places (wave 11 regions): 740-759.
         GameplayEventKind::PlaceChanged { player_id, .. } => (740, Some(player_id)),
+        // Round bodies (wave 11 polar): 780-799.
+        GameplayEventKind::Planet {
+            what, player_id, ..
+        } => (780 + what.code() as u32, player_id),
     }
 }
 

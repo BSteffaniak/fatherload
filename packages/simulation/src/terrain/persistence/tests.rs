@@ -43,6 +43,8 @@ struct WireSnapshot {
     column_limit: Option<i32>,
     /// [`super::PackedChunks`] bytes (save format 13).
     packed: Vec<u8>,
+    /// A planet strip's params (Wave 11): seed, radius, gravity, theme.
+    planet: Option<(u64, u32, u16, u16)>,
 }
 
 /// One streamed chunk's diffs on the wire.
@@ -462,6 +464,7 @@ fn corrupted_or_foreign_snapshots_are_rejected_cleanly() {
         frame: (0, 0, false),
         column_limit: None,
         packed: Vec::new(),
+        planet: None,
     };
     let bytes = postcard::to_allocvec(&known).expect("encode");
     assert!(

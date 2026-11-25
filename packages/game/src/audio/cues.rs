@@ -641,6 +641,21 @@ pub const fn heart_cue(what: fatherload_simulation::heart::HeartEvent) -> SoundC
     }
 }
 
+/// The sound of a round body's ground event (Wave 11; a clean touchdown is the landing's own
+/// thud). Exhaustive: a new event needs an answer.
+#[must_use]
+pub const fn planet_cue(
+    what: fatherload_simulation::planet::landing::PlanetEvent,
+) -> Option<SoundCue> {
+    use fatherload_simulation::planet::landing::PlanetEvent as E;
+    match what {
+        E::Landed => None,
+        E::Slid => Some(SoundCue::CartClunk),
+        E::HullScraped | E::Tipped => Some(SoundCue::Damage),
+        E::Righted => Some(SoundCue::LeverClunk),
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -1167,6 +1182,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // Descent VIII, the Heart (Wave 10).
         GameplayEventKind::Heart { what, .. } => Some(heart_cue(*what)),
         GameplayEventKind::HeartLandmarkFound { .. } => Some(SoundCue::AnomalyHum),
+        // Round bodies (Wave 11): a bad touchdown scrapes or knocks the hull; righting clunks.
+        GameplayEventKind::Planet { what, .. } => planet_cue(*what),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1516,7 +1533,8 @@ mod tests {
             | GameplayEventKind::Heart { .. }
             | GameplayEventKind::HeartLandmarkFound { .. }
             | GameplayEventKind::Story { .. }
-            | GameplayEventKind::PlaceChanged { .. } => {}
+            | GameplayEventKind::PlaceChanged { .. }
+            | GameplayEventKind::Planet { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1954,6 +1972,20 @@ mod tests {
                 to: fatherload_simulation::place::Place::Space,
             },
         ]);
+        for what in [
+            fatherload_simulation::planet::landing::PlanetEvent::Landed,
+            fatherload_simulation::planet::landing::PlanetEvent::Slid,
+            fatherload_simulation::planet::landing::PlanetEvent::HullScraped,
+            fatherload_simulation::planet::landing::PlanetEvent::Tipped,
+            fatherload_simulation::planet::landing::PlanetEvent::Righted,
+        ] {
+            events.push(GameplayEventKind::Planet {
+                what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+            });
+        }
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {
             events.push(GameplayEventKind::AnomalyEntered {
                 player_id,

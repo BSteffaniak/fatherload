@@ -147,8 +147,9 @@ impl WorldState {
     /// The surface building zone `player_id`'s rig stands at, if any.
     #[must_use]
     pub fn player_surface_zone(&self, player_id: PlayerId) -> Option<SurfaceZone> {
-        // The town is on the home world (F11).
-        if !self.store_of(player_id).is_home() {
+        // The town is on the home world (F11), and a planet's ground has no home town (Wave 11:
+        // bodies get their own settlements in Waves 12-13).
+        if !self.store_of(player_id).is_home() || self.planet().is_some() {
             return None;
         }
         // On foot the pilot is the one at the counter (Part II F5).

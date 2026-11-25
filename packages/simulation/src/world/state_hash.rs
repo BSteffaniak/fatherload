@@ -134,6 +134,10 @@ impl WorldState {
         if self.terrain.frame() != crate::position::Frame::FIXED {
             hash.write_serialized(&self.terrain.frame());
         }
+        // Wave 11: a planet's ground params (absent for every other world).
+        if let Some(planet) = self.terrain.planet_ground() {
+            hash.write_serialized(planet.params());
+        }
         if sees_home {
             hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
             hash.write_u64(self.terrain.digest());

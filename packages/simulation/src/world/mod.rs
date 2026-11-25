@@ -161,6 +161,9 @@ mod pilot_weather;
 pub(crate) mod places;
 #[cfg(test)]
 mod places_tests;
+pub mod planet;
+#[cfg(test)]
+mod planet_tests;
 mod player_sections;
 #[cfg(test)]
 mod poi_tests;

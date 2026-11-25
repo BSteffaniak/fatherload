@@ -96,6 +96,11 @@ pub struct AttitudeGear {
     /// Horizon hold fitted (0 or 1).
     #[serde(default)]
     pub horizon_hold: u8,
+    /// Landing legs tier (Wave 11, [`crate::planet::landing`]): each tier widens the safe
+    /// touchdown angle and the tip angle on a round body. Upgrade hook: nothing sells them
+    /// yet (space content, Waves 12-13); test mode fits them.
+    #[serde(default)]
+    pub landing_legs: u8,
 }
 
 impl AttitudeGear {
@@ -104,6 +109,7 @@ impl AttitudeGear {
         tilt_rating: TILT_RATING_MAX_LEVEL,
         gyro_stabiliser: 1,
         horizon_hold: 1,
+        landing_legs: crate::planet::landing::LANDING_LEGS_MAX_LEVEL,
     };
 }
 

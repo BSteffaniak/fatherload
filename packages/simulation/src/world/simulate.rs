@@ -64,6 +64,8 @@ impl WorldState {
         self.terrain.start_journal();
         // Collapsed ground whose hold has run out may move again.
         self.progression.settled_ground.prune(self.simulation_tick);
+        // Wave 11: a planet keeps its gravity (a test-mode "clear zones" must not switch it off).
+        self.tick_planet();
         let mut quest_notes = QuestNotes::default();
         // Wave 9: whose thrusters fire this tick (blind hunters hear them).
         if !self.far_schedule.thrusting.is_empty() {
@@ -140,7 +142,7 @@ impl WorldState {
                         f32::from(i8::from(controls.drill_down) - i8::from(controls.thrust));
                     self.step_no_clip_flight(player_id, controls.horizontal(), vertical)
                 } else {
-                    self.step_rig_movement(
+                    self.step_rig_movement_into(
                         player_id,
                         super::movement::RigControls {
                             horizontal: controls.horizontal(),
@@ -148,6 +150,7 @@ impl WorldState {
                             rotate: controls.rotation(),
                             assists: controls.assists(),
                         },
+                        &mut output,
                     )
                 };
                 if carted {
