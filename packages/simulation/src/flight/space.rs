@@ -486,10 +486,12 @@ impl SpaceQuery for PlaceholderSpace<'_> {
                 class: system.class,
             });
         }
-        // One station, near the first world (near home: a short hop from the launch point).
+        // One station, near the first world (near home: a short hop from the launch point,
+        // up and to the side, so the straight line there stays clear of the home world's
+        // approach sphere and does not hand the rig back to the home sky).
         let roll = hash64(self.seed ^ system.system.id, SALT_BODY, 0, 1);
         let station = if system.system.is_home() {
-            home_centre().offset(tiles(10_500.0), -tiles(4_000.0))
+            home_centre().offset(tiles(7_000.0), -tiles(10_500.0))
         } else {
             let angle = share(roll) * std::f32::consts::TAU;
             let (sin, cos) = crate::field::trig::sin_cos(angle);

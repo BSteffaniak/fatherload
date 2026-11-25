@@ -578,3 +578,117 @@ fn flight_state_saves_and_replicates() {
     assert_eq!(replica.rig_flight(PLAYER), world.rig_flight(PLAYER));
     assert_eq!(replica.flight_shared(), world.flight_shared());
 }
+
+/// A pilot bot that flies only with the player's controls (rotation thrusters, the main,
+/// retro and side thrusters, cruise and the use button): from the launch point over the home
+/// world to the home system's station, then docks. It proves the trip is flyable by hand
+/// with no assists, and how long it takes.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one bot: steer, cruise, brake, line up, dock"
+)]
+fn a_bot_flies_from_home_to_the_station_and_docks_by_hand() {
+    use crate::flight::physics::{axes, cruise_limit};
+    let hz = 60_u32;
+    let mut world = world_at(hz);
+    grant_star_drive(&mut world);
+    // No assists fitted: the bot has only the thrusters.
+    world.player_mut(PLAYER).expect("rig").hazard_gear = crate::protection::HazardGear {
+        attitude: crate::attitude::AttitudeGear::default(),
+        flight: crate::flight::FlightGear::default(),
+        ..crate::protection::HazardGear::MAXED
+    };
+    launch_to(&mut world, space::home_launch(), 0.0);
+    let station = world
+        .space()
+        .bodies_of(&world.space().system_at((0, 0)).expect("home"))
+        .into_iter()
+        .find(|body| body.kind == BodyKind::Station)
+        .expect("station");
+    let port = station.port().expect("port");
+    let dock_heading = station.dock_orientation();
+    // The approach starts on the port's axis, outside it.
+    let (up, _) = axes(dock_heading);
+    let lineup = port.offset(-up.0 * space::tiles(25.0), -up.1 * space::tiles(25.0));
+    let fuel_before = world.player(PLAYER).expect("rig").fuel;
+    let mut cruised = false;
+    let mut docked_at = None;
+    for tick in 0..(hz * 600) {
+        let flight = flight(&world);
+        if matches!(flight.place, FlightPlace::Docked(_)) {
+            docked_at = Some(tick);
+            break;
+        }
+        let attitude = world.player(PLAYER).expect("rig").attitude;
+        let to_lineup = flight.pos.distance(lineup);
+        let to_port = flight.pos.distance(port);
+        let final_leg = to_lineup < space::tiles(4.0) || to_port < space::tiles(25.0);
+        let target = if final_leg { port } else { lineup };
+        let distance = flight.pos.distance(target);
+        let (dx, dy) = flight.pos.delta(target);
+        let (dir_x, dir_y) = (dx / distance.max(1.0), dy / distance.max(1.0));
+        // Heading: at the target far out, the port's axis close in.
+        let heading = if to_port < space::tiles(60.0) {
+            dock_heading
+        } else {
+            nav::bearing(flight.pos, target)
+        };
+        let error = wrap_angle(heading - attitude.orientation);
+        let rotate = 2.5f32.mul_add(error, -0.9 * attitude.angular_velocity);
+        // Cruise far out, aligned; it drops by itself in the station's approach sphere.
+        let cruising = matches!(flight.drive, StarDrive::Cruise { .. });
+        if !cruising
+            && distance > space::tiles(2_000.0)
+            && error.abs() < 0.05
+            && attitude.angular_velocity.abs() < 0.05
+        {
+            let _ = act(
+                &mut world,
+                PlayerCommand::Flight(FlightCommand::ToggleCruise),
+            );
+            cruised = true;
+            continue;
+        }
+        if final_leg && to_port < space::tiles(2.5) && flight.speed() < 60.0 && error.abs() < 0.2 {
+            let _ = act(&mut world, PlayerCommand::Flight(FlightCommand::Use));
+            continue;
+        }
+        let controls = if cruising {
+            // The throttle open while the cruise's ramp allows it.
+            let speed = flight.speed();
+            let limit = cruise_limit(distance);
+            ControlState::new(0.0, speed < limit * 0.9, speed > limit * 1.1).with_rotation(rotate)
+        } else {
+            // Impulse: a velocity toward the target that brakes in time, in the craft's axes.
+            let speed_wanted = if final_leg {
+                (distance * 0.6).min(55.0)
+            } else {
+                (distance * 0.8).min(1_200.0)
+            };
+            let (ex, ey) = (
+                dir_x.mul_add(speed_wanted, -flight.velocity_x),
+                dir_y.mul_add(speed_wanted, -flight.velocity_y),
+            );
+            let (up, right) = axes(attitude.orientation);
+            let forward = ex.mul_add(up.0, ey * up.1);
+            let strafe = ex.mul_add(right.0, ey * right.1);
+            ControlState::new(
+                (strafe / 40.0).clamp(-1.0, 1.0),
+                forward > 8.0,
+                forward < -8.0,
+            )
+            .with_rotation(rotate)
+        };
+        let _ = tick_with(&mut world, controls);
+    }
+    let seconds = docked_at.map(|tick| tick / hz);
+    let fuel_used = fuel_before - world.player(PLAYER).expect("rig").fuel;
+    assert!(cruised, "the bot cruised");
+    assert!(
+        seconds.is_some_and(|seconds| (20..=240).contains(&seconds)),
+        "docked by hand in a sensible time: {seconds:?} s, {:?}",
+        flight(&world)
+    );
+    assert!(fuel_used > 0.0, "the trip burned fuel");
+}
