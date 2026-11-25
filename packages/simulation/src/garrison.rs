@@ -822,7 +822,7 @@ impl GarrisonLandmark {
             Self::GrandBastion => {
                 "Racks of war machines asleep on their feet, rows on rows, each with a lamp that \
                  never went out. On the pylon, scratched in Amos's hand: 'They wake when you \
-                 stand still. I did not stand still. If you are reading this, Mara, keep moving \
+                 stand still. I did not stand still. Whoever comes down after us: keep moving, \
                  and look up.' Under it someone, later, has drawn a turret and a wall."
             }
             Self::SealCourt => {
