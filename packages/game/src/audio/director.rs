@@ -463,6 +463,19 @@ struct SeatState {
     step_timer: f32,
 }
 
+/// How long a finale sting sounds before the next one in its sequence may start (seconds):
+/// the Heart's cable light and the story's ending swell are both 3.9 s long; the next starts
+/// as the first's tail lets go.
+pub const STING_SECONDS: f32 = 3.6;
+
+/// Whether `cue` is one of the finale stings that play in sequence, never on top of each other
+/// (Wave 11 carryover): the Heart's cable lighting and the story's ending swell fire on the same
+/// moment, so the second waits for the first.
+#[must_use]
+pub const fn sequenced_sting(cue: SoundCue) -> bool {
+    matches!(cue, SoundCue::HeartCableLight | SoundCue::StoryCableLit)
+}
+
 /// See the module docs.
 #[derive(Debug)]
 pub struct Director {
@@ -485,6 +498,10 @@ pub struct Director {
     pending_theme: Option<(f32, Patch)>,
     /// Seconds left in which another piece of music owns the moment and clock themes stay quiet.
     music_hold: f32,
+    /// Seconds the finale sting now sounding still holds the moment ([`sequenced_sting`]).
+    sting_hold: f32,
+    /// Finale stings waiting their turn, in order.
+    sting_queue: std::collections::VecDeque<PlacedCue>,
 }
 
 impl Director {
@@ -502,6 +519,8 @@ impl Director {
             clock_phase: None,
             pending_theme: None,
             music_hold: 0.0,
+            sting_hold: 0.0,
+            sting_queue: std::collections::VecDeque::new(),
         }
     }
 
@@ -510,11 +529,30 @@ impl Director {
         self.commands.clear();
         let listeners = listeners(frame.snapshot);
         let mut cue_played = false;
+        self.sting_hold = (self.sting_hold - frame.delta_seconds).max(0.0);
         for cue in frame.cues {
+            // A finale sting waits for the one sounding (or queued) before it.
+            if sequenced_sting(cue.cue) && (self.sting_hold > 0.0 || !self.sting_queue.is_empty()) {
+                if !self.sting_queue.iter().any(|queued| queued.cue == cue.cue) {
+                    self.sting_queue.push_back(*cue);
+                }
+                continue;
+            }
             if let Some(request) = Self::place_cue(*cue, frame.snapshot, &listeners) {
                 self.commands.push(MixerCommand::Play(request));
                 cue_played = true;
+                if sequenced_sting(cue.cue) {
+                    self.sting_hold = STING_SECONDS;
+                }
             }
+        }
+        if self.sting_hold <= 0.0
+            && let Some(cue) = self.sting_queue.pop_front()
+            && let Some(request) = Self::place_cue(cue, frame.snapshot, &listeners)
+        {
+            self.commands.push(MixerCommand::Play(request));
+            cue_played = true;
+            self.sting_hold = STING_SECONDS;
         }
         self.toasts(frame, &listeners, cue_played);
         if frame.world_running {
@@ -2578,6 +2616,64 @@ mod tests {
             message_tick: 0,
             delta_seconds: 1.0 / 60.0,
         }
+    }
+
+    /// Wave 11 carryover: the Heart's cable sting and the story's ending swell fire on the same
+    /// moment; they play one after the other, never together.
+    #[test]
+    fn the_hearts_sting_and_the_storys_sting_play_one_after_the_other() {
+        let one = PlayerId::new(1);
+        let world = WorldState::new_game(one);
+        let seats = [seat(0, one)];
+        let snapshot = RenderSnapshot::build(&world, &seats, (1280, 720), (&[], &[]), &[]);
+        let mut director = Director::new(1);
+        let audio = [SeatAudio::default(); 1];
+        let both = [
+            PlacedCue::interface(SoundCue::HeartCableLight),
+            PlacedCue::interface(SoundCue::StoryCableLit),
+            PlacedCue::interface(SoundCue::Ui),
+        ];
+        let first = plays(director.update(&frame(&snapshot, &both, &audio)));
+        let patches: Vec<Patch> = first.iter().map(|request| request.patch).collect();
+        assert!(patches.contains(&Patch::HeartCableLight), "{patches:?}");
+        assert!(
+            !patches.contains(&Patch::StoryCableLit),
+            "the story's waits: {patches:?}"
+        );
+        assert!(
+            patches.contains(&cue_patch(SoundCue::Ui)),
+            "other sounds are not held"
+        );
+        // The same moment raised again (a late event) does not queue a second copy.
+        let again = [PlacedCue::interface(SoundCue::StoryCableLit)];
+        let _ = director.update(&frame(&snapshot, &again, &audio));
+        let mut story_at = None;
+        let mut story_plays = 0;
+        for index in 0..400 {
+            let played = plays(director.update(&frame(&snapshot, &[], &audio)));
+            let story = played
+                .iter()
+                .filter(|request| request.patch == Patch::StoryCableLit)
+                .count();
+            if story > 0 && story_at.is_none() {
+                story_at = Some(index);
+            }
+            story_plays += story;
+            assert!(
+                played
+                    .iter()
+                    .all(|request| request.patch != Patch::HeartCableLight),
+                "the Heart's plays once"
+            );
+        }
+        let at = story_at.expect("the story's sting plays after the Heart's");
+        #[allow(clippy::cast_precision_loss, reason = "a few hundred frames")]
+        let seconds = (at + 2) as f32 / 60.0;
+        assert!(
+            seconds >= STING_SECONDS - 0.05,
+            "it waits for the Heart's: {seconds} s"
+        );
+        assert_eq!(story_plays, 1, "once");
     }
 
     #[test]
