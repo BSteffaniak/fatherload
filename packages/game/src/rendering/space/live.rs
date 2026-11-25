@@ -461,33 +461,37 @@ pub fn ground_things(
         if let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state {
             let feet = crate::rendering::world::enemy_feet_offset(state.kind);
             let (column, row) = strip(entity.body.x, entity.body.y + feet);
-            things.push(GroundThing {
-                column,
-                row,
-                kind: GroundThingKind::Enemy {
-                    kind: state.kind,
-                    frame: u8::try_from(crate::rendering::world::ground_enemy_frame(
-                        entity, state, seconds,
-                    ))
-                    .unwrap_or(0),
-                    left: state.facing < 0,
-                },
-            });
+            // A burrower inside the rock is hidden there (the flat renderer shows only its
+            // cracks): the wyrm's ripple below is its tell.
+            let buried = state.kind.stats().locomotion
+                == fatherload_simulation::enemy::Locomotion::Burrowing
+                && scene
+                    .terrain
+                    .is_solid_at(scene.frame.tile_at(entity.body.x, entity.body.y));
+            if !buried {
+                things.push(GroundThing {
+                    column,
+                    row,
+                    kind: GroundThingKind::Enemy {
+                        kind: state.kind,
+                        frame: u8::try_from(crate::rendering::world::ground_enemy_frame(
+                            entity, state, seconds,
+                        ))
+                        .unwrap_or(0),
+                        left: state.facing < 0,
+                    },
+                });
+            }
             if state.kind == fatherload_simulation::enemy::EnemyKind::DuneWyrm
                 && state.mode == fatherload_simulation::enemy::EnemyMode::Windup
             {
-                // The ripple on the sand over it.
-                if let Some(ground) = scene.terrain.planet_ground() {
-                    let surface = fatherload_simulation::planet::BodyGround::surface_row(
-                        ground,
-                        column.floor() as i32,
-                    );
-                    things.push(GroundThing {
-                        column,
-                        row: surface as f32,
-                        kind: GroundThingKind::Frontier(super::view::FrontierMark::Ripple),
-                    });
-                }
+                // The ripple in the sand where it gathers itself (at the surface or deep in
+                // the galleries alike).
+                things.push(GroundThing {
+                    column,
+                    row,
+                    kind: GroundThingKind::Frontier(super::view::FrontierMark::Ripple),
+                });
             }
             continue;
         }
