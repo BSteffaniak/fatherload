@@ -92,6 +92,10 @@ pub struct HazardGear {
     /// ([`crate::depth_progression::headlamp_light_scale`]).
     #[serde(default)]
     pub headlamp: u8,
+    /// Flight gear (Wave 11): the nav suite, re-entry shielding and auto-land (see
+    /// [`crate::flight::FlightGear`]).
+    #[serde(default)]
+    pub flight: crate::flight::FlightGear,
 }
 
 impl HazardGear {
@@ -111,6 +115,7 @@ impl HazardGear {
         rig_systems: u8::MAX,
         pressure_rating: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
         headlamp: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
+        flight: crate::flight::FlightGear::MAXED,
     };
 
     /// Whether the Deep Descent rig system `system` is fitted.

@@ -326,6 +326,9 @@ impl WorldState {
                 gyro: assists.gyro && attitude_gear.gyro_stabiliser > 0,
                 horizon: assists.horizon && attitude_gear.horizon_hold > 0,
                 seconds,
+                drag_scale: 1.0,
+                inertia: 1.0,
+                max_spin: f32::INFINITY,
             }
         } else {
             AttitudeContext {
@@ -337,6 +340,9 @@ impl WorldState {
                 gyro: assists.gyro && attitude_gear.gyro_stabiliser > 0,
                 horizon: assists.horizon && attitude_gear.horizon_hold > 0,
                 seconds,
+                drag_scale: 1.0,
+                inertia: 1.0,
+                max_spin: f32::INFINITY,
             }
         };
         let proposed = step_attitude(attitude_before, &context);

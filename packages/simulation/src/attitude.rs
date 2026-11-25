@@ -180,6 +180,15 @@ pub struct AttitudeContext {
     pub horizon: bool,
     /// Seconds to advance (the tick, scaled by the field's time scale).
     pub seconds: f32,
+    /// How much of the angular drag applies: 1 in air ([`ANGULAR_DRAG`]), 0 in the vacuum of
+    /// space (Wave 11 flight: spin is conserved until the player counter-thrusts). The gyro's
+    /// braking is not scaled.
+    pub drag_scale: f32,
+    /// Rotational inertia relative to an empty rig (1 on the home world; in space a laden
+    /// bay spins up and down slower, see [`crate::flight::rotation_inertia`]).
+    pub inertia: f32,
+    /// Fastest spin the rotation thrusters push to (rad/s; infinite where the drag caps it).
+    pub max_spin: f32,
 }
 
 /// Advances `attitude` by one tick of `context` (before collision: the caller refuses a
@@ -217,19 +226,25 @@ pub fn step_attitude(attitude: RigAttitude, context: &AttitudeContext) -> RigAtt
             continue;
         }
         let idle = input == 0.0;
-        let mut acceleration = input * ROTATION_THRUST;
+        let mut acceleration = input * ROTATION_THRUST / context.inertia.max(1.0);
         let mut drag = if idle && context.gyro {
             GYRO_DRAG
         } else {
-            ANGULAR_DRAG
+            ANGULAR_DRAG * context.drag_scale.clamp(0.0, 1.0)
         };
         if idle && context.horizon && !context.resting {
             acceleration = HORIZON_STIFFNESS.mul_add(-lean, acceleration);
             drag = drag.max(HORIZON_DAMPING);
         }
         // Semi-implicit Euler with the drag applied implicitly (stable at any step).
+        let before = spin;
         spin = acceleration.mul_add(dt, spin) / drag.mul_add(dt, 1.0);
-        if idle && spin.abs() < SPIN_REST {
+        // The thrusters push only up to the top spin (they never slow a faster one).
+        if spin.abs() > context.max_spin && spin.abs() > before.abs() {
+            spin = context.max_spin.max(before.abs()).copysign(spin);
+        }
+        // An idle rig's slow spin stops where drag acts (in vacuum spin is conserved).
+        if idle && drag > 0.0 && spin.abs() < SPIN_REST {
             spin = 0.0;
         }
         lean = wrap_angle(spin.mul_add(dt, lean));
@@ -276,6 +291,9 @@ mod tests {
             gyro: false,
             horizon: false,
             seconds,
+            drag_scale: 1.0,
+            inertia: 1.0,
+            max_spin: f32::INFINITY,
         }
     }
 
