@@ -43,7 +43,7 @@ fn ride_line(snapshot: &RenderSnapshot<'_>, view: &ViewSnapshot<'_>) -> Option<L
     let mover = sites::mover_at(settings, &layout, ride.mover)?;
     let millis = snapshot_millis(snapshot);
     #[allow(clippy::cast_precision_loss, reason = "a few seconds")]
-    let seconds = |ms: u64| ms as f32 / 1_000.0;
+    let seconds = |ms: u64| (ms as f32 / 1_000.0).ceil();
     Some(match (&mover, mover.track_at(millis)) {
         (CityMover::Tram { .. }, Some(state)) => Line {
             text: if state.dwelling.is_some() {
@@ -135,8 +135,8 @@ pub(super) fn draw_city_hud(
             metronome = Some(beat);
             lines.push(Line {
                 text: format!(
-                    "The engine's beat: {} a minute",
-                    fatherload_simulation::ancient_city::engine_bpm(beat)
+                    "The engine's beat: a stroke every {:.1} s",
+                    beat as f32 / 1_000.0
                 ),
                 color: ORANGE,
             });
@@ -221,14 +221,14 @@ pub(super) fn draw_archivist_line(
     let Some(text) = archivist::line_text(id) else {
         return;
     };
-    let width = (rect.width as i32 - 40).min(520);
+    let width = (rect.width as i32 - 40).min(400);
     if width < 200 {
         return;
     }
     let lines = ui_kit::wrap(text, width - 70, TextStyle::Body);
     let height = 22 + lines.len() as i32 * 11;
-    let x = rect.x as i32 + (rect.width as i32 - width) / 2;
-    let y = (rect.y + rect.height) as i32 - height - 70;
+    let x = rect.x as i32 + 16;
+    let y = (rect.y + rect.height * 0.74) as i32 - height / 2;
     ui_kit::panel(
         draw,
         Rectangle::new(x as f32, y as f32, width as f32, height as f32),
@@ -338,15 +338,15 @@ pub(super) fn draw_star_charts(
     );
     // The picture of the sky beside the dialog, where there is room.
     let view = super::screen::view_rect(ui.view);
-    let room = (view.width - 300.0) * 0.5 - 24.0;
-    if room < 150.0 {
+    let room = (view.width - 300.0) * 0.5 - 16.0;
+    if room < 100.0 {
         return;
     }
-    let size = room.min(view.height - 120.0).min(300.0);
-    if size < 150.0 {
+    let size = room.min(view.height - 60.0).min(300.0);
+    if size < 100.0 {
         return;
     }
-    let x = view.x + 12.0;
+    let x = view.x + 8.0;
     let y = view.y + (view.height - size) * 0.5;
     let picked = match rows.get(selected) {
         Some(StarChartRow::Chart(index)) => Some(*index),
@@ -389,13 +389,21 @@ fn draw_sky(
         draw.draw_rectangle(sx as i32, sy as i32, 1, 1, colour);
     }
     let (cx, cy) = (inner.x + inner.width * 0.5, inner.y + inner.height * 0.5);
-    let scale = (inner.width.min(inner.height) * 0.5 - 10.0) / CHART_RING.1 as f32;
-    // Rings every dozen sectors.
-    for ring in [12, 24, 36, 48] {
+    // Scaled to the farthest chart, so a few near stars spread over the picture.
+    let farthest = charts
+        .iter()
+        .map(fatherload_simulation::star_chart::StarChart::distance)
+        .max()
+        .unwrap_or(12)
+        .clamp(12, u32::try_from(CHART_RING.1).unwrap_or(48));
+    let scale = (inner.width.min(inner.height) * 0.5 - 14.0) / farthest as f32;
+    // Rings at quarters of that reach.
+    for quarter in 1..=4_u32 {
+        let ring = (farthest * quarter) as f32 / 4.0;
         draw.draw_circle_lines(
             cx as i32,
             cy as i32,
-            ring as f32 * scale,
+            ring * scale,
             with_alpha(SLATE_DARK, 200),
         );
     }
