@@ -1192,6 +1192,138 @@ Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped 
   tails, rings, black-hole lensing radii, `Atmosphere::visible` for the rim glow.
 - Space is not yet wired into `WorldState` (no accessor), so no world state, save or protocol
   changed.
+## Wave 11 space-render: space and round bodies on screen (`game/src/rendering/space.rs`, `game/src/rendering/space/*`)
+
+The game-side drawing of space and of round bodies (expansion plan F12). Nothing in the
+simulation changed: no format, protocol, digest or event code (820-839 stay free). The renderer
+draws a plain-data **`SpaceRenderView`** per seat and reads a body's ground through a
+**`PolarStrip`** trait, both this track's local interface (`rendering/space/view.rs`), so it
+could be built beside the space-gen, polar, flight and regions tracks; the integrator fills them
+from the real state (see the seams below).
+
+### What is drawn (`SpaceRenderer::draw`, in this order)
+
+- **Deep sky** (`starfield.rs`): three parallax layers of stars hashed per cell from the sky
+  seed (the world seed: every peer sees the same sky), sliding with the craft's exact travel
+  (`WorldPos::px_f64` times a tiny factor per layer) and never scaling with the zoom; slow faint
+  twinkles; the galaxy's band (denser stars and cloud haze on repeating spines) and a few far
+  galaxies. Under the Star Drive the stars stretch into streaks along the heading.
+- **Nebulae** (overlapping point-filtered cloud quads in their two colours, young stars inside;
+  inside one the view takes on its colour), **wormholes** (dark mouth with the far side's stars,
+  four swirling arms, a bright rim), **stars** by `star_chart::StarClass` (glow, spikes square to
+  the screen, banded disc, drifting spots, slow prominences; binaries circle each other; nebula
+  stars sit in their own cloud), **black-hole discs**, **asteroid belts** (polar cells round the
+  star, a few hundred on screen at any zoom: lumpy lit rocks with craters and ore glints near the
+  camera, dust specks far off, so a belt reads as a ring from a system away), **round bodies**,
+  loose **asteroids**, **comets** (nucleus, coma, a curved dust tail and a straight ion tail
+  streaming away from the star) and **derelicts and stations** (placeholder pixel art in a 64-art-
+  pixel grid, turned with the structure; Wave 12 replaces it).
+- **Black holes**: everything above is drawn into a view-sized target when a hole is on screen,
+  then put on screen through the lens shader (a point lens: the sky bends round it into a
+  photon ring, the far side of the disc shows above and below, the horizon's shadow is black);
+  the disc's near half is drawn again over the shadow. The lens strength follows the screen
+  effects setting (`EffectsIntensity::scale(Lensing)`); with it off (or without the shader)
+  the shadow and the disc are drawn plainly. Nothing flashes.
+- **Round bodies from space** (`bodies.rs`, the planet shader): a lit sphere in pixel-art light
+  steps with an ordered dither, theme-tinted land (three-octave value noise on the turned
+  sphere) or a gas giant's weather stripes, the terminator facing the nearest star, a cold trace
+  of colour on the night side and an atmosphere rim and glow brighter on the day side. The quad
+  turns with the view, so a body's own pattern stays its own when the player rolls. `BodyTheme`
+  (Barren, Ice, Desert, Jungle, Ocean, Volcanic, Crystal, Fungal, Machine, GasGiant, Dead) is a
+  placeholder for the space generator's themes. CPU fallback: a dark disc with its lit half.
+- **The ground** (`polar.rs`, below).
+- **Cruise lines and warp** (`motion.rs`): thin lines streaming past the craft in cruise; long
+  streaks, the stars' own streaks and a blue tunnel at the view's edges in warp. Their length
+  and count follow the setting (the motion effects, never fully off: they are how speed reads).
+- **The craft**, upright at the view's centre, two points per art pixel at every zoom.
+
+**The camera is locked to the craft**: the world is drawn turned by `-roll` round it
+(`Projection`), the craft and anything drawn after (the HUD) stay upright. Every position is a
+`WorldPos` projected through an exact `f64` delta from the camera, clamped far out (a star a
+light year away never makes a NaN); the fixtures put their systems a billion sectors from home.
+
+### Polar ground rendering (`polar.rs`, `shaders::POLAR_BODY`)
+
+- A body's tiles are painted **flat, in strip coordinates, with the home world's own tile art**
+  (`tile_art::paint_tile` on the strip's `Terrain`): a **fine window** of art pixels round the
+  craft (96 x 64 tiles, growing to 240 x 240 to cover a zoomed-out view; repainted only when the
+  window moves a 16-tile step or the strip's revision changes) and, when the view reaches past
+  it (zoomed out, or close to the centre where the deep rings span a wide angle), a **coarse
+  map** of one texel per tile (`material_color`; the whole ring of a small world, a 2,048 x 1,024
+  window of a big one).
+- The **polar shader** bends both into the ring per pixel: screen point -> the craft's local
+  frame (undoing the roll) -> radius and angle round the body's centre, worked out relative to
+  the camera (`r - r_c` without cancelling, the camera's column as `f64` on the CPU, per-band
+  offsets into each window), so a 31,416-column world is as exact as a small moon. Columns halve
+  below each `PolarGeometry::halvings` row (eight at most: two `vec4`s), strata are concentric
+  rings, the **core chamber** glows at the centre and lights the rings round it. Day and night
+  follow the body's star (`sun_angle`), deep ground keeps a dim ambient (the strata stay
+  readable) and the craft's lamp lights round it; the sky's atmosphere thins with altitude
+  (none on an airless moon: the stars show). `highp` where the browser has it.
+- **Horizon curvature** is exact: R = 400 drops 16 px over 20 tiles at 32 px per tile, R =
+  5,000 about 1.3 px (unit tests `a_small_world_shows_its_curve_at_the_horizon`).
+- Fallback without the shader: the fine window as **curved quads** (4-tile segments per row,
+  lit per quad), the plan's other route; the `space_polar_quads` scene draws it on purpose.
+- **Things on the ground** (`GroundThing`: pilot, creature, drop, parked rig) are drawn in the
+  local up frame of where they stand (`RingCamera::place` gives the point and the turn), lit like
+  the ground there (day side, night side, lamp).
+- From space, `bodies::ground_blend` fades the ground in over the disc between 0.9 and 3.5
+  points per tile, so the zoom from a round world to the ground under the craft is seamless.
+- `SpaceCamera::zoom_for_altitude(altitude, radius, view_height)`: the ground zoom for the
+  first rows, then a harmonic blend toward a zoom that keeps the body below the craft (the whole
+  body far out); never below the system zoom. A suggestion for the flight track.
+
+### Seams (TODO-SEAM, for the integrator)
+
+- `SpaceRenderView` (`view.rs`): fill per seat from the space generator (`simulation::space`:
+  stars with `StarClass`, bodies with `BodyId` -> `BodyView::id`, theme, radius, atmosphere,
+  spin; belts, loose asteroids, nebulae, comets, structures, black holes, wormholes) and the
+  flight state (`simulation::flight`: craft position and orientation -> `SpaceCamera`, cruise and
+  warp -> `FlightMotion`, thrusters -> `CraftView`). `BodyTheme` maps from the generator's
+  themes. `sky_seed` is the world seed.
+- `PolarStrip` + `PolarGeometry`: the polar track's ring geometry (`radius_tiles`,
+  `surface_row`, `surface_columns`, `halvings`, `core_radius_tiles`; `PolarGeometry::standard`
+  is the plan's rule as this track read it) and the body's strip `Terrain`, with `tile_at` saying
+  where band `k`'s column `c` is stored (default: terrain column `c`) and `revision` changing
+  with every tile edit. `GroundView` carries the camera's surface column (`f64`), row and roll
+  against the local up, the night light and the things standing there. The star's direction
+  comes from `SpaceRenderView::light_toward`.
+- `GameRenderer::sync_space` / `render_space` draw one view over the whole screen today (the
+  scenes and the browser page). In play: call `sync_space` from `sync` and draw each seat's view
+  in its viewport from `render_seat` (the space target and the polar windows are per renderer;
+  split-screen seats in different places want one `SpaceRenderer` per seat), then the seat's HUD
+  over it as usual (it stays upright). Field screen effects still go through the post-process
+  stack; the space renderer's own roll replaces the post-process roll pass while in space.
+- Fixture terrains (`fixtures.rs`) stand in for real planets: a barren R = 400 moon (lunar tiles
+  in concentric strata, caves, a lava ring and the core, hills on the generator's line, an
+  optional shaft) and a 2,048-column window of a jungle R = 5,000 world (the legacy generator).
+  The home tile art's edges look at terrain neighbours, so across a halving row they meet a
+  differently-spaced row (barely visible; the polar track may want edge hints).
+
+### Scenes, tests and timing
+
+- Screenshot scenes (`scene_capture/space_scenes.rs`, staged views drawn instead of the game):
+  `space_deep_starfield`, `space_star_system`, `space_planet_gallery`, `space_approach_moon`
+  (R = 400 from 600 tiles), `space_approach_planet` (R = 5,000 from 2,000 tiles),
+  `space_moon_hover`, `space_moon_surface` (the curved horizon, things upright),
+  `space_moon_night`, `space_moon_rolled` (the craft turned 120 degrees by the player),
+  `space_planet_surface`, `space_core_shaft`, `space_polar_quads`, `space_nebula`,
+  `space_black_hole`, `space_asteroid_belt`, `space_comet`, `space_station_derelict`,
+  `space_wormhole`, `space_warp`, `space_cruise`. `--frame-timing N` times them too.
+- The same views run in the app: `fatherload --space-view <name>` on the desktop,
+  `?space=<name>` in the browser; `node scripts/perf-web-space.cjs [names]` times the WASM build
+  in each (the same flags as `perf-web.cjs`).
+- Tests: shader sources well formed for GLSL 330 and ES 100 (no reserved `noise1..4` names:
+  Apple's GL compiler refuses a function called `noise3`), projection and roll, ring layout
+  (tiles 0.7x-1.4x square, the core), the zoom curve, horizon drops, glow and cloud textures,
+  fixtures (the camera stands at its row's radius; the shaft reaches the core), every fixture
+  has a scene.
+- Browser timing (WASM release, 1280 x 720, Chrome, machine under a load average of 30-50 from
+  the parallel tracks): **GPU: every space scene at 60.0 fps**, 1.3-1.7 ms of frame work (2.7 ms
+  in the belt and the quads fallback). Software (SwiftShader, CPU fill): planet gallery 44 fps,
+  warp 42, moon surface 30, deep starfield 19, core shaft 14, black hole 13 (the lens pass),
+  asteroid belt 10, nebula 7 (big overlapping cloud quads). Desktop release CPU frame work
+  (`--frame-timing 120`, loaded machine): medians 1.8-8 ms.
 
 ## Replication of entities
 

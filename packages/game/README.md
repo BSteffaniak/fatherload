@@ -367,3 +367,19 @@ belong to seats at home). `view_frame::scoped(frame)` draws and listens in anoth
 frame. Body tile changes arrive as `FrameReport::changed_store_tiles`. Save format 15 holds
 every visited body's ground (see the simulation README, "Wave 11 regions"). Scenes:
 `place_body_landed`, `place_free_flight`, `split_two_places`, `split_four_places`.
+## Wave 11 space-render (space and round bodies)
+
+`rendering/space.rs` and `rendering/space/` draw space and round bodies from a plain-data
+`SpaceRenderView` per seat: the parallax starfield, stars by class, nebulae, belts and rocks,
+comets, stations and derelicts, black holes (with a lens pass) and wormholes, planets from space
+(the planet shader), the polar ground (tile art bent into the ring by the polar shader, or curved
+quads without it), and cruise and warp effects. Shaders: GLSL 330 and GLSL ES 100 from one body
+(`rendering/space/shaders.rs`). The camera is locked to the craft; the HUD is drawn after and
+stays upright. The full write-up, the seams the integrator wires and the timing are in
+`packages/simulation/README.md` ("Wave 11 space-render").
+
+- Look: `--screenshot-scenes <dir> --only space_star_system,space_moon_surface,...` (every
+  `space_*` scene), or interactively `fatherload --space-view space_black_hole`.
+- Time the browser build: `node scripts/perf-web-space.cjs [names]` (serves `target/web`,
+  opens `?space=<name>`; `FATHERLOAD_WEB_GPU=1` for the GPU).
+
