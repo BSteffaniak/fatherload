@@ -268,6 +268,14 @@ fn pirates_hail_and_leave_once_paid() {
     }
     assert!(over, "paid pirates leave");
     assert!(world.hostiles().ships.is_empty());
+    // A rig that never fired nor was hit keeps a charged deflector and a full rack after it.
+    let combat = world.rig_combat(PLAYER);
+    let gear = world.player(PLAYER).expect("rig").hazard_gear.arms;
+    assert_eq!(
+        combat.missiles,
+        crate::hostiles::missile_capacity(gear, false)
+    );
+    assert!((combat.shield - crate::hostiles::shield_capacity(gear)).abs() < 0.01);
 }
 
 #[test]

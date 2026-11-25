@@ -1722,8 +1722,11 @@ impl WorldState {
             posted.met = false;
         }
         self.hostiles.ships.retain(|ship| ship.encounter != id);
-        let combat = self.hostiles.rigs.entry(encounter.target).or_default();
+        // A rig with no combat state yet starts from a charged deflector and a full rack (a
+        // default entry would leave both empty after its first encounter ended).
+        let mut combat = self.rig_combat(encounter.target);
         combat.next_roll = combat.next_roll.max(step + REST_STEPS);
+        self.hostiles.rigs.insert(encounter.target, combat);
         output.push_event(hostile_event(
             HostileEvent::EncounterOver,
             Some(encounter.target),
