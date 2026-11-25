@@ -287,8 +287,9 @@ impl WorldState {
                 }
                 None
             }
-            EnemyKind::Mossprowler if state.mode == EnemyMode::Idle => {
-                // It lies flat where it is.
+            EnemyKind::Vinestalker | EnemyKind::Mossprowler if state.mode == EnemyMode::Idle => {
+                // The stalker hangs still where it is, the prowler lies flat: ambushers never
+                // wander about in plain sight.
                 state.mode = EnemyMode::Dormant;
                 Some(Intent::default())
             }

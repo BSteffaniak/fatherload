@@ -68,6 +68,18 @@ impl FluidSchedule {
         self.awake.is_empty()
     }
 
+    /// How many cells are waiting to move (reports).
+    #[cfg(test)]
+    pub(crate) fn woken_len(&self) -> usize {
+        self.awake.len()
+    }
+
+    /// The woken cells (reports).
+    #[cfg(test)]
+    pub(crate) fn woken(&self) -> impl Iterator<Item = TilePosition> + '_ {
+        self.awake.iter().copied()
+    }
+
     /// How many cells are waiting.
     #[must_use]
     pub fn awake_count(&self) -> usize {

@@ -75,6 +75,10 @@ const ICICLE_LIFE_MILLIS: u64 = 4_000;
 pub const WILD_SITE_MARGIN: i32 = 6;
 /// A hazard event repeats at most this often while it lasts.
 const HAZARD_EVENT_MILLIS: u64 = 3_000;
+/// The cold is everywhere on a glacier: its reminder (a message and a cue) comes this rarely.
+const COLD_EVENT_MILLIS: u64 = 20_000;
+/// Rows over and under the surface a rig hears a storm rise from.
+const STORM_HEARING_ROWS: i32 = 30;
 
 impl WorldState {
     /// The wild world this pass's ground is, with its life (`None` anywhere else).
@@ -207,7 +211,7 @@ impl WorldState {
             self.apply_wild_hazards(*player_id, next_tick, output);
             self.apply_wild_rules(&planet, *player_id, next_tick, output);
         }
-        self.wild_weather_turns(next_tick, output);
+        self.wild_weather_turns(&players, next_tick, output);
         self.freeze_sweep(&planet, &players, next_tick, output);
         self.advance_wild_creatures(&planet, wild, &players, next_tick);
     }
@@ -230,6 +234,7 @@ impl WorldState {
         }
         let dt = self.timing.delta_seconds;
         let due = self.wild_event_due(player_id, next_tick, HAZARD_EVENT_MILLIS);
+        let cold_due = self.wild_event_due(player_id, next_tick, COLD_EVENT_MILLIS);
         let Some((x, y)) = self.players.get(&player_id).map(|rig| (rig.x, rig.y)) else {
             return;
         };
@@ -275,6 +280,11 @@ impl WorldState {
                 // The gravity is the body's own (its field zone); gear that lightens it is the
                 // stations track's.
                 PlanetHazard::HighGravity => continue,
+            };
+            let due = if event == WildsEvent::ColdBite {
+                cold_due
+            } else {
+                due
             };
             if due {
                 output.push_event(wild_event(event, Some(player_id), tile));
@@ -344,7 +354,7 @@ impl WorldState {
         if life::signature_at(planet, tile.x, tile.y) == Some(SignatureRule::Icicles)
             && self.wild_event_due(player_id, next_tick, 250)
         {
-            self.drop_icicle_over(tile, output);
+            self.drop_icicle_over(player_id, tile, output);
         }
     }
 
@@ -360,7 +370,12 @@ impl WorldState {
 
     /// The first icicle over `tile` within [`ICICLE_REACH`] rows (open air between), cracked
     /// loose: it falls as a boulder after a short warning.
-    fn drop_icicle_over(&mut self, tile: TilePosition, output: &mut TickOutput) {
+    fn drop_icicle_over(
+        &mut self,
+        player_id: PlayerId,
+        tile: TilePosition,
+        output: &mut TickOutput,
+    ) {
         for dx in [0, -1, 1] {
             for up in 1..=ICICLE_REACH {
                 let at = TilePosition {
@@ -391,7 +406,7 @@ impl WorldState {
                         SimulationTick::new(now.saturating_add(warning)),
                         SimulationTick::new(now.saturating_add(life)),
                     );
-                    output.push_event(wild_event(WildsEvent::IcicleCrack, None, at));
+                    output.push_event(wild_event(WildsEvent::IcicleCrack, Some(player_id), at));
                     output.push_event(GameplayEventKind::BouldersChanged);
                     return;
                 }
@@ -400,25 +415,38 @@ impl WorldState {
         }
     }
 
-    /// A storm's first moment is announced.
-    fn wild_weather_turns(&self, next_tick: SimulationTick, output: &mut TickOutput) {
+    /// A storm's first moment is announced to each rig on or near the open surface (one deep
+    /// underground, or in another place, does not hear it).
+    fn wild_weather_turns(
+        &self,
+        players: &[PlayerId],
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+    ) {
         let Some((planet, _)) = self.wild_world() else {
             return;
         };
         let before = life::weather_at(planet.params(), self.millis_at(self.simulation_tick));
         let after = life::weather_at(planet.params(), self.millis_at(next_tick));
-        if let (Some(before), Some(after)) = (before, after)
-            && before.intensity == 0
-            && after.intensity > 0
-        {
-            let spot = self
+        let rising = matches!(
+            (before, after),
+            (Some(before), Some(after)) if before.intensity == 0 && after.intensity > 0
+        );
+        if !rising {
+            return;
+        }
+        let frame = self.frame();
+        for player_id in players {
+            let Some(tile) = self
                 .players
-                .values()
-                .next()
-                .map_or(TilePosition { x: 0, y: 0 }, |rig| {
-                    self.frame().tile_at(rig.x, rig.y)
-                });
-            output.push_event(wild_event(WildsEvent::StormRising, None, spot));
+                .get(player_id)
+                .map(|rig| frame.tile_at(rig.x, rig.y))
+            else {
+                continue;
+            };
+            if tile.y < planet.surface_row(tile.x) + STORM_HEARING_ROWS {
+                output.push_event(wild_event(WildsEvent::StormRising, Some(*player_id), tile));
+            }
         }
     }
 

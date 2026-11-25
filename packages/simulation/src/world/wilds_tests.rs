@@ -340,6 +340,17 @@ fn a_vinestalker_sees_only_what_passes_below_it() {
     }
     assert!(enemy_state(&world, level).target.is_none());
     assert_eq!(enemy_state(&world, above).target, Some(PLAYER));
+    // Unprovoked, an ambusher hangs still where it is: it never wanders about in plain sight.
+    let start = world.entities().get(level).expect("stalker").body;
+    for _ in 0..30 * 3 {
+        step(&mut world, idle());
+    }
+    let end = world.entities().get(level).expect("stalker").body;
+    assert_eq!(enemy_state(&world, level).mode, EnemyMode::Dormant);
+    assert!(
+        (end.x - start.x).abs() < 1.0 && (end.y - start.y).abs() < 1.0,
+        "the stalker drifted from {start:?} to {end:?}"
+    );
 }
 
 #[test]
@@ -747,4 +758,213 @@ fn storms_rise_and_push_craft_over_the_open_surface() {
     }
     let moved = (world.player(PLAYER).expect("rig").x - x).abs();
     assert!(moved > 4.0, "the blizzard pushed the rig {moved} px");
+}
+
+#[test]
+fn a_storm_is_heard_on_the_surface_only_and_the_cold_is_not_nagging() {
+    let params = PlanetParams::new(0x5EED_0012, 2_000, PlanetThemeId::GLACIER);
+    let start = (1..400_u64)
+        .map(|cycle| cycle * life::WEATHER_CYCLE_SECONDS * 1_000)
+        .find(|millis| {
+            life::weather_at(&params, *millis + 1_000).is_some_and(|weather| weather.intensity > 0)
+        })
+        .expect("a storm");
+    let storm_heard = |row_below_surface: i32| {
+        let mut world = world(PlanetThemeId::GLACIER, 2_000, 30);
+        let (column, floor) = site(&world);
+        place_rig(&mut world, column, floor + row_below_surface);
+        let _ = world.terrain_mut().set_kind(
+            TilePosition {
+                x: column,
+                y: floor + row_below_surface,
+            },
+            TileKind::Air,
+        );
+        world.set_simulation_tick(crate::SimulationTick::new((start - 2_000) * 30 / 1_000));
+        let mut events = Vec::new();
+        for _ in 0..30 * 4 {
+            events.extend(wild_events(&step(&mut world, idle())));
+        }
+        events.contains(&WildsEvent::StormRising)
+    };
+    assert!(storm_heard(-1), "a rig on the surface hears the storm rise");
+    assert!(!storm_heard(120), "a rig deep in the glacier does not");
+    // The glacier's cold is everywhere: its reminder comes rarely, not every few seconds.
+    let mut world = world(PlanetThemeId::GLACIER, 2_000, 30);
+    let (column, floor) = site(&world);
+    place_rig(&mut world, column, floor - 1);
+    let mut bites = 0;
+    for _ in 0..30 * 60 {
+        bites += wild_events(&step(&mut world, idle()))
+            .iter()
+            .filter(|what| **what == WildsEvent::ColdBite)
+            .count();
+    }
+    assert!(
+        (1..=3).contains(&bites),
+        "{bites} cold reminders in a minute"
+    );
+}
+
+/// A ten-minute tour of each wild world by a simple bot (drive the surface, then dig and
+/// wander underground), printing what it met and the tick cost: run with
+/// `cargo test --release -p fatherload_simulation wild_world_tour -- --ignored --nocapture`.
+#[test]
+#[ignore = "a report for reviewing the wild worlds' pacing and tick cost"]
+#[allow(clippy::too_many_lines, reason = "one report, read top to bottom")]
+fn wild_world_tour() {
+    use std::collections::{BTreeMap, BTreeSet};
+    for theme in THEMES {
+        // Fresh chunk generation cost (a seed nothing else uses).
+        for radius in [640, 5_000] {
+            let planet =
+                crate::planet::PlanetGround::new(PlanetParams::new(0x70_0E, radius, theme));
+            let started = std::time::Instant::now();
+            let mut count = 0_u32;
+            for cy in -2..60 {
+                for cx in 0..8 {
+                    let _ = planet.chunk_tiles(crate::terrain::ChunkPosition { x: cx, y: cy });
+                    count += 1;
+                }
+            }
+            eprintln!(
+                "{theme:?} r{radius}: {} us per fresh chunk",
+                started.elapsed().as_micros() / u128::from(count)
+            );
+        }
+        let hz = 30;
+        let mut world = world(theme, 3_000, hz);
+        // A late-game rig (the stars open after the Heart), mortal and on real fuel.
+        world.enable_test_mode();
+        for action in [
+            crate::TestModeAction::SetInvulnerable(false),
+            crate::TestModeAction::SetInfiniteFuel(false),
+        ] {
+            let _ = world.apply_test_mode_action(PLAYER, action);
+        }
+        let (column, floor) = wild_spot(&world);
+        place_rig(&mut world, column, floor - 1);
+        let mut events: BTreeMap<String, u32> = BTreeMap::new();
+        let mut kinds: BTreeMap<String, u32> = BTreeMap::new();
+        let mut seen = BTreeSet::new();
+        let mut layers: Vec<&'static str> = Vec::new();
+        let (mut damaged, mut refills, mut worst, mut total) = (0_u32, 0_u32, 0_u128, 0_u128);
+        let mut slow = 0_u32;
+        let mut minute = 0_u128;
+        let (mut last_row, mut still, mut nudge) = (0, 0, 0);
+        let ticks = hz * 60 * 10;
+        let planet = *world.planet().expect("planet");
+        for tick in 0..ticks {
+            let second = tick / hz;
+            let tile = rig_tile(&world);
+            if tile.y == last_row {
+                still += 1;
+            } else {
+                still = 0;
+                last_row = tile.y;
+            }
+            if still > hz * 2 && nudge == 0 {
+                still = 0;
+                nudge = hz / 6;
+            }
+            let controls = if second < 120 {
+                // Drive along the surface.
+                ControlState::new(
+                    if (second / 40) % 2 == 0 { 1.0 } else { -1.0 },
+                    false,
+                    false,
+                )
+            } else if nudge > 0 {
+                nudge -= 1;
+                let rig = world.player(PLAYER).expect("rig");
+                let fraction = (rig.x / TILE_SIZE).rem_euclid(1.0);
+                ControlState::new(if fraction < 0.5 { 0.4 } else { -0.4 }, false, false)
+            } else {
+                ControlState::new(0.0, false, true)
+            };
+            let started = std::time::Instant::now();
+            let out = step(&mut world, controls);
+            let spent = started.elapsed().as_micros();
+            worst = worst.max(spent);
+            total += spent;
+            minute += spent;
+            if spent > 8_000 {
+                slow += 1;
+            }
+            if spent > 40_000 {
+                eprintln!(
+                    "    slow tick {tick}: {spent} us at {:?}, {} woken, {} enemies",
+                    rig_tile(&world),
+                    world.fluids.woken_len(),
+                    world.enemies().count()
+                );
+            }
+            if tick % (hz * 60) == 0 {
+                let tile = rig_tile(&world);
+                eprintln!(
+                    "  t{second}s at {tile:?} ({}), last minute {} us/tick, {} woken fluid cells",
+                    planet.layer_name(tile.x, tile.y),
+                    minute / u128::from(hz * 60),
+                    world.fluids.woken_len()
+                );
+                minute = 0;
+            }
+            for event in &out {
+                match event {
+                    GameplayEventKind::Wilds { what, .. } => {
+                        *events.entry(format!("{what:?}")).or_default() += 1;
+                    }
+                    GameplayEventKind::PlayerDamaged { .. } => damaged += 1,
+                    _ => {}
+                }
+            }
+            for (entity, state) in world.enemies() {
+                if seen.insert(entity.id) {
+                    *kinds.entry(format!("{:?}", state.kind)).or_default() += 1;
+                }
+            }
+            let rig = world.player_mut(PLAYER).expect("rig");
+            if rig.hull < rig.max_hull() * 0.3 || rig.fuel < rig.fuel_capacity * 0.2 {
+                refills += 1;
+                rig.hull = rig.max_hull();
+                rig.fuel = rig.fuel_capacity;
+            }
+            let tile = rig_tile(&world);
+            let name = planet.layer_name(tile.x, tile.y);
+            if layers.last() != Some(&name) {
+                layers.push(name);
+            }
+        }
+        for minute in 1..=3 {
+            let started = std::time::Instant::now();
+            for _ in 0..hz * 60 {
+                step(&mut world, idle());
+            }
+            eprintln!(
+                "  idle minute {minute}: {} us/tick, {} woken fluid cells",
+                started.elapsed().as_micros() / u128::from(hz * 60),
+                world.fluids.woken_len()
+            );
+            let mut rows: BTreeMap<i32, (i32, i32, u32)> = BTreeMap::new();
+            for at in world.fluids.woken() {
+                let entry = rows
+                    .entry(at.y.div_euclid(50) * 50)
+                    .or_insert((i32::MAX, i32::MIN, 0));
+                entry.0 = entry.0.min(at.x);
+                entry.1 = entry.1.max(at.x);
+                entry.2 += 1;
+            }
+            eprintln!("    woken by 50 rows (min x, max x, count): {rows:?}");
+        }
+        let tile = rig_tile(&world);
+        eprintln!(
+            "{theme:?}: end {tile:?} (surface {}), mean tick {} us, worst {} us, {slow} ticks over 8 ms",
+            planet.surface_row(tile.x),
+            total / u128::from(ticks),
+            worst
+        );
+        eprintln!("  layers {layers:?}");
+        eprintln!("  creatures {kinds:?}");
+        eprintln!("  events {events:?}; damaged {damaged}; refills {refills}");
+    }
 }
