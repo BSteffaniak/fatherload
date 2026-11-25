@@ -322,21 +322,51 @@ pub enum CartStep {
     },
 }
 
-/// One fixed step of `ride` (1 / [`CART_STEPS_PER_SECOND`] s).
+/// A rail's ride tuning: the Crust's mine carts ([`MINE_CART`]) or the Heart's magnetic rails
+/// (`crate::heart::MAG_RAIL`). Thousandths of a tile per second (and per second squared).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CartTuning {
+    pub top_speed: i32,
+    pub push: i32,
+    pub brake: i32,
+    pub friction: i32,
+    pub slope: i32,
+}
+
+/// The Crust's mine carts.
+pub const MINE_CART: CartTuning = CartTuning {
+    top_speed: CART_TOP_SPEED,
+    push: CART_PUSH,
+    brake: CART_BRAKE,
+    friction: CART_FRICTION,
+    slope: CART_SLOPE,
+};
+
+/// One fixed step of `ride` (1 / [`CART_STEPS_PER_SECOND`] s) on a mine cart.
 pub fn step_cart(
     ride: &mut CartRide,
     stick: CartStick,
     is_rail: impl Fn(TilePosition) -> bool,
 ) -> CartStep {
+    step_cart_tuned(ride, stick, is_rail, &MINE_CART)
+}
+
+/// One fixed step of `ride` with `tuning` (mine carts or magnetic rails).
+pub fn step_cart_tuned(
+    ride: &mut CartRide,
+    stick: CartStick,
+    is_rail: impl Fn(TilePosition) -> bool,
+    tuning: &CartTuning,
+) -> CartStep {
     let steps = i32::try_from(CART_STEPS_PER_SECOND).unwrap_or(240);
     let along = i32::from(stick.horizontal) * i32::from(ride.dir);
     let mut accel = match along {
-        1 => CART_PUSH,
-        -1 => -CART_BRAKE,
-        _ => -CART_FRICTION,
+        1 => tuning.push,
+        -1 => -tuning.brake,
+        _ => -tuning.friction,
     };
-    accel += CART_SLOPE * ride.slope();
-    ride.speed = (ride.speed + accel / steps).min(CART_TOP_SPEED);
+    accel += tuning.slope * ride.slope();
+    ride.speed = (ride.speed + accel / steps).min(tuning.top_speed);
     if ride.speed < 0 {
         // Braked (or rolled back) past a stop: the cart turns round on the spot.
         ride.speed = -ride.speed;
