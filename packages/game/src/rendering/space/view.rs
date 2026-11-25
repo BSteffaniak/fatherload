@@ -371,7 +371,26 @@ impl PolarGeometry {
     /// Columns in the ring at `row`.
     #[must_use]
     pub fn columns_at(&self, row: i32) -> u32 {
-        (self.surface_columns >> self.band(row)).max(1)
+        self.columns_in_band(self.band(row))
+    }
+
+    /// Columns in a ring of band `band` (`surface_columns >> band`: an odd ring rounds down,
+    /// so a band's columns are not always exactly half the band above's).
+    #[must_use]
+    pub fn columns_in_band(&self, band: u32) -> u32 {
+        (self.surface_columns >> band.min(31)).max(1)
+    }
+
+    /// Band `band`'s continuous column at the angle of surface column `column`.
+    #[must_use]
+    pub fn band_column(&self, band: u32, column: f64) -> f64 {
+        column * f64::from(self.columns_in_band(band)) / f64::from(self.surface_columns.max(1))
+    }
+
+    /// The surface column at the angle of band `band`'s continuous column `band_column`.
+    #[must_use]
+    pub fn surface_column(&self, band: u32, band_column: f64) -> f64 {
+        band_column * f64::from(self.surface_columns.max(1)) / f64::from(self.columns_in_band(band))
     }
 
     /// Radius (tiles) of the top edge of `row`.
@@ -525,6 +544,22 @@ mod tests {
                     <= geometry.core_radius_tiles + 0.5
             );
         }
+    }
+
+    #[test]
+    fn big_worlds_reach_the_eighth_band_and_odd_rings_keep_their_angles() {
+        // R = 5,000 halves eight times before its core: the polar shader must draw band 8
+        // (its offsets and ring come in `uBand8`, beside the two vec4s of bands 0..7).
+        let big = PolarGeometry::standard(5_000.0, 0);
+        assert_eq!(big.halvings.len(), MAX_HALVINGS);
+        assert_eq!(big.band(big.last_row()), 8);
+        // The moon's ring is odd (2,513): band 5 has 78 columns, not 2,513 / 32 = 78.53, so
+        // the same angle is a band column in proportion to the band's own ring.
+        let moon = PolarGeometry::standard(400.0, 0);
+        assert_eq!(moon.columns_in_band(5), 78);
+        let half_way = f64::from(moon.surface_columns) * 0.5;
+        assert!((moon.band_column(5, half_way) - 39.0).abs() < 1e-9);
+        assert!((moon.surface_column(5, 39.0) - half_way).abs() < 1e-9);
     }
 
     #[test]

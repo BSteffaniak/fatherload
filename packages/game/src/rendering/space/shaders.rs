@@ -140,19 +140,24 @@ uniform sampler2D texture0;
 uniform sampler2D uCoarse;
 // view size (points), pivot (points)
 uniform vec4 uView;
-// camera radius (tiles), points per tile, roll (radians), surface columns per radian
+// camera radius (tiles), points per tile, roll (radians), unused
 uniform vec4 uCam;
 // fine window: width, height (tiles), camera row - window's first row, unused
 uniform vec4 uFine;
 uniform vec4 uFineOffA;
 uniform vec4 uFineOffB;
-// coarse window: width, height (texels = tiles), camera row - first row, ring columns or 0
+// coarse window: width, height (texels = tiles), camera row - first row, whole rings (1) or 0
 uniform vec4 uCoarseInfo;
 uniform vec4 uCoarseOffA;
 uniform vec4 uCoarseOffB;
 // halving rows relative to the camera row (never: 1e6)
 uniform vec4 uHalveA;
 uniform vec4 uHalveB;
+// each band's ring columns (bands 0..7)
+uniform vec4 uColsA;
+uniform vec4 uColsB;
+// band 8 (the eighth halving): fine offset, coarse offset, ring columns, unused
+uniform vec4 uBand8;
 // camera row - surface row, core radius (tiles), atmosphere height (tiles; 0 airless), lamp
 uniform vec4 uGeo;
 // sun angle from the camera's up (radians, clockwise), night light, atmosphere strength, time
@@ -165,6 +170,11 @@ float pick(vec4 a, vec4 b, float k) {
     vec4 ma = vec4(1.0) - min(abs(ka - vec4(k)), vec4(1.0));
     vec4 mb = vec4(1.0) - min(abs(kb - vec4(k)), vec4(1.0));
     return dot(a, ma) + dot(b, mb);
+}
+
+// Bands 0..7 from two vec4s, band 8 from `extra`.
+float pick9(vec4 a, vec4 b, float extra, float k) {
+    return pick(a, b, k) + extra * step(7.5, k);
 }
 
 void main() {
@@ -184,20 +194,20 @@ void main() {
     vec4 ha = step(uHalveA, vec4(rowRel));
     vec4 hb = step(uHalveB, vec4(rowRel));
     float band = dot(ha, vec4(1.0)) + dot(hb, vec4(1.0));
-    float scale = exp2(band);
-    float across = phi * uCam.w / scale;
+    // Each band's own ring (an odd ring rounds down when it halves): the angle in its columns.
+    float cols = pick9(uColsA, uColsB, uBand8.z, band);
+    float across = phi * cols * 0.15915494;
     float depth = rowRel + uGeo.x;
 
     vec4 texel = vec4(0.0);
-    float fx = (pick(uFineOffA, uFineOffB, band) + across) / uFine.x;
+    float fx = (pick9(uFineOffA, uFineOffB, uBand8.x, band) + across) / uFine.x;
     float fy = (uFine.z + rowRel) / uFine.y;
     if (fx >= 0.0 && fx <= 1.0 && fy >= 0.0 && fy <= 1.0) {
         texel = TEX(texture0, vec2(fx, fy));
     } else {
-        float cx = pick(uCoarseOffA, uCoarseOffB, band) + across;
-        if (uCoarseInfo.w > 0.0) {
-            float ring = uCoarseInfo.w / scale;
-            cx = mod(cx, ring);
+        float cx = pick9(uCoarseOffA, uCoarseOffB, uBand8.y, band) + across;
+        if (uCoarseInfo.w > 0.5) {
+            cx = mod(cx, cols);
         }
         float cy = (uCoarseInfo.z + rowRel) / uCoarseInfo.y;
         cx = cx / uCoarseInfo.x;
@@ -353,6 +363,9 @@ mod tests {
                 "uCoarseOffB",
                 "uHalveA",
                 "uHalveB",
+                "uColsA",
+                "uColsB",
+                "uBand8",
                 "uGeo",
                 "uSun",
                 "uAtmos",

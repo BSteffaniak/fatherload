@@ -209,7 +209,7 @@ fn build_moon(shaft: bool) -> FixtureStrip {
     if shaft {
         for y in 0..height {
             let band = geometry.band(y);
-            let centre = (MOON_COLUMN as i64 >> band) as i32;
+            let centre = geometry.band_column(band, MOON_COLUMN).floor() as i32;
             let half = i32::from(band == 0);
             for x in centre - half..=centre + half {
                 terrain.set_kind(TilePosition { x, y }, TileKind::Air);
@@ -847,7 +847,9 @@ mod tests {
         let terrain = strip.terrain();
         // The shaft is open from the surface to the core.
         for row in terrain.surface_row(MOON_COLUMN as i32)..=geometry.last_row() {
-            let column = (MOON_COLUMN as i64 >> geometry.band(row)) as i32;
+            let column = geometry
+                .band_column(geometry.band(row), MOON_COLUMN)
+                .floor() as i32;
             let tile = terrain.tile(TilePosition { x: column, y: row });
             assert!(tile.is_some_and(|tile| tile.kind.is_open()), "row {row}");
         }

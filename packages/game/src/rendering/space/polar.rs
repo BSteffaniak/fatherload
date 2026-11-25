@@ -23,11 +23,11 @@
     reason = "texture sizes, tile windows and texels are small whole numbers drawn as floats"
 )]
 
-use std::f64::consts::TAU;
+use std::{collections::BTreeMap, f64::consts::TAU};
 
 use raylib::{ffi, prelude::*};
 
-use fatherload_simulation::terrain::TilePosition;
+use fatherload_simulation::terrain::{Terrain, TilePosition};
 
 use super::{
     shaders,
@@ -84,6 +84,9 @@ struct Locations {
     coarse_b: i32,
     halve_a: i32,
     halve_b: i32,
+    cols_a: i32,
+    cols_b: i32,
+    band8: i32,
     geo: i32,
     sun: i32,
     atmos: i32,
@@ -162,6 +165,9 @@ impl PolarGround {
                 coarse_b: at("uCoarseOffB"),
                 halve_a: at("uHalveA"),
                 halve_b: at("uHalveB"),
+                cols_a: at("uColsA"),
+                cols_b: at("uColsB"),
+                band8: at("uBand8"),
                 geo: at("uGeo"),
                 sun: at("uSun"),
                 atmos: at("uAtmos"),
@@ -271,11 +277,12 @@ impl PolarGround {
             .filter(|_| coarse_used)
             .cloned()
             .unwrap_or_default();
-        let offsets = |window: &Window| -> [f32; 8] {
-            let mut out = [0.0; 8];
+        // Per band (0..=8): the camera's offset into each window, and the ring's columns.
+        let offsets = |window: &Window| -> [f32; MAX_HALVINGS + 1] {
+            let mut out = [0.0; MAX_HALVINGS + 1];
             for (band, slot) in out.iter_mut().enumerate() {
-                let band_column = camera.column / f64::from(1_u32 << band);
-                *slot = (band_column - window.origins[band.min(MAX_HALVINGS)] as f64) as f32;
+                let band_column = geometry.band_column(band as u32, camera.column);
+                *slot = (band_column - window.origins[band] as f64) as f32;
             }
             out
         };
@@ -284,15 +291,19 @@ impl PolarGround {
             offsets(&coarse_window)
         } else {
             // Nothing painted: every coarse lookup lands outside.
-            [-1.0e6; 8]
+            [-1.0e6; MAX_HALVINGS + 1]
         };
+        let mut ring_columns = [0.0_f32; MAX_HALVINGS + 1];
+        for (band, slot) in ring_columns.iter_mut().enumerate() {
+            *slot = geometry.columns_in_band(band as u32) as f32;
+        }
         let mut halve = [1.0e6_f32; 8];
         for (slot, row) in halve.iter_mut().zip(&geometry.halvings) {
             *slot = *row as f32 - camera.row;
         }
         let (body_atmosphere, atmos) = atmosphere(ground);
         let lamp = lamp_radius(camera.px_per_tile);
-        let uniforms: [(i32, [f32; 4]); 12] = [
+        let uniforms: [(i32, [f32; 4]); 15] = [
             (
                 self.locations.view,
                 [
@@ -304,12 +315,7 @@ impl PolarGround {
             ),
             (
                 self.locations.cam,
-                [
-                    camera.radius,
-                    camera.px_per_tile,
-                    camera.roll,
-                    (camera.columns / TAU) as f32,
-                ],
+                [camera.radius, camera.px_per_tile, camera.roll, 0.0],
             ),
             (
                 self.locations.fine,
@@ -328,17 +334,24 @@ impl PolarGround {
                     coarse_window.size.0.max(1) as f32,
                     coarse_window.size.1.max(1) as f32,
                     camera.row - coarse_window.row0 as f32,
-                    if coarse_window.ring {
-                        camera.columns as f32
-                    } else {
-                        0.0
-                    },
+                    if coarse_window.ring { 1.0 } else { 0.0 },
                 ],
             ),
             (self.locations.coarse_a, quad(&coarse_off, 0)),
             (self.locations.coarse_b, quad(&coarse_off, 4)),
             (self.locations.halve_a, quad(&halve, 0)),
             (self.locations.halve_b, quad(&halve, 4)),
+            (self.locations.cols_a, quad(&ring_columns, 0)),
+            (self.locations.cols_b, quad(&ring_columns, 4)),
+            (
+                self.locations.band8,
+                [
+                    fine_off[MAX_HALVINGS],
+                    coarse_off[MAX_HALVINGS],
+                    ring_columns[MAX_HALVINGS],
+                    0.0,
+                ],
+            ),
             (
                 self.locations.geo,
                 [
@@ -410,13 +423,12 @@ impl PolarGround {
             for y in 0..window.size.1 {
                 let row = window.row0 + y;
                 let band = geometry.band(row);
-                let scale = f64::from(1_u32 << band);
                 let origin = window.origins[band as usize] as f64;
                 let depth = (row - geometry.surface_row) as f32;
                 for x in (0..window.size.0).step_by(STEP as usize) {
                     let (c0, c1) = (
-                        (origin + f64::from(x)) * scale,
-                        (origin + f64::from(x + STEP)) * scale,
+                        geometry.surface_column(band, origin + f64::from(x)),
+                        geometry.surface_column(band, origin + f64::from(x + STEP)),
                     );
                     let (r0, r1) = (row as f32, (row + 1) as f32);
                     let corners = [
@@ -519,7 +531,7 @@ fn shade(colour: Color, light: f32) -> Color {
     Color::new(scale(colour.r), scale(colour.g), scale(colour.b), colour.a)
 }
 
-const fn quad(values: &[f32; 8], start: usize) -> [f32; 4] {
+const fn quad(values: &[f32], start: usize) -> [f32; 4] {
     [
         values[start],
         values[start + 1],
@@ -572,7 +584,7 @@ fn fine_window(
     let row0 = snap_down(ground.row.floor() as i64 - i64::from(height / 2), step) as i32;
     let mut origins = [0_i64; MAX_HALVINGS + 1];
     for (band, origin) in origins.iter_mut().enumerate() {
-        let band_column = (ground.column / f64::from(1_u32 << band)).floor() as i64;
+        let band_column = geometry.band_column(band as u32, ground.column).floor() as i64;
         *origin = snap_down(band_column - i64::from(width / 2), step);
     }
     Window {
@@ -605,7 +617,7 @@ fn coarse_window(ground: &GroundView<'_>, geometry: &PolarGeometry, revision: u6
     let mut origins = [0_i64; MAX_HALVINGS + 1];
     if !ring {
         for (band, origin) in origins.iter_mut().enumerate() {
-            let band_column = (ground.column / f64::from(1_u32 << band)).floor() as i64;
+            let band_column = geometry.band_column(band as u32, ground.column).floor() as i64;
             *origin = snap_down(band_column - i64::from(width / 2), 256);
         }
     }
@@ -671,6 +683,7 @@ fn paint_coarse(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
     let terrain = strip.terrain();
     let (width, height) = window.size;
     let mut pixels = vec![0_u8; (width * height * 4) as usize];
+    let mut means = BTreeMap::new();
     for y in 0..height {
         let row = window.row0 + y;
         if row > geometry.last_row() {
@@ -690,20 +703,44 @@ fn paint_coarse(strip: &dyn PolarStrip, window: &Window) -> Vec<u8> {
             let Some(found) = terrain.tile(tile) else {
                 continue;
             };
-            let colour = if found.kind.is_open() {
-                if tile.y < terrain.surface_row(tile.x) {
-                    continue;
-                }
-                let back = tile_art::material_color(found.kind, terrain.band_at(tile));
-                Color::new(back.r / 2, back.g / 2, back.b / 2, 255)
-            } else {
-                tile_art::material_color(found.kind, terrain.band_at(tile))
-            };
+            if found.kind.is_open() && tile.y < terrain.surface_row(tile.x) {
+                continue;
+            }
+            // The mean of the tile art itself (one painted sample per material), so the coarse
+            // map meets the fine window's art without a change of colour.
+            let material = tile_art::material_color(found.kind, terrain.band_at(tile));
+            let colour = *means
+                .entry((found.kind, [material.r, material.g, material.b]))
+                .or_insert_with(|| art_mean(terrain, tile, material));
             let at = ((y * width + x) * 4) as usize;
             pixels[at..at + 4].copy_from_slice(&[colour.r, colour.g, colour.b, 255]);
         }
     }
     pixels
+}
+
+/// The mean colour of `tile`'s art (`fallback` when it paints nothing opaque).
+fn art_mean(terrain: &Terrain, tile: TilePosition, fallback: Color) -> Color {
+    let side = TILE_ART as usize;
+    let mut art = vec![TRANSPARENT; side * side];
+    tile_art::paint_tile(terrain, tile, &mut art, side, (0, 0));
+    let (mut sum, mut count) = ([0_u32; 3], 0_u32);
+    for value in art.iter().filter(|value| **value != TRANSPARENT) {
+        let colour = color_at(*value);
+        sum[0] += u32::from(colour.r);
+        sum[1] += u32::from(colour.g);
+        sum[2] += u32::from(colour.b);
+        count += 1;
+    }
+    if count == 0 {
+        return fallback;
+    }
+    Color::new(
+        (sum[0] / count) as u8,
+        (sum[1] / count) as u8,
+        (sum[2] / count) as u8,
+        255,
+    )
 }
 
 /// Makes `target` a texture of `size` holding `pixels` (point filtered).
