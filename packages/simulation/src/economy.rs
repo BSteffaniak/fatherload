@@ -823,6 +823,8 @@ pub fn max_out_upgrades(player: &mut Player) {
     player.hazard_gear.attitude = crate::attitude::AttitudeGear::MAXED;
     // Wave 11 flight gear (stations sell it; the assists stay off until switched on).
     player.hazard_gear.flight = crate::flight::FlightGear::MAXED;
+    // Wave 12 ship weapons and the deflector (stations' shipyards sell them).
+    player.hazard_gear.arms = crate::hostiles::ShipGear::MAXED;
     player.fuel = player.fuel_capacity;
     player.hull = player.max_hull();
 }
