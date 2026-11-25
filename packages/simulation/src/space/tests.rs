@@ -561,3 +561,58 @@ fn sectors_generate_quickly() {
     let average = start.elapsed().as_secs_f64() * 1_000.0 / sectors.len() as f64;
     assert!(average < 3.0, "{average:.3} ms a sector");
 }
+
+/// Fog really hides things: from inside a thick nebula the scanner misses bodies it would see
+/// from clear space, and every contact it keeps lies within the fog-shortened range.
+#[test]
+fn fog_shortens_what_the_scanner_sees() {
+    let seed = DEFAULT_WORLD_SEED;
+    let space = Space::new(seed);
+    let range = 400_000_i64;
+    let mut checked = 0;
+    let mut nebulae: Vec<Nebula> = Vec::new();
+    for coords in sectors_around_home(12) {
+        for system in &space.sector(coords).systems {
+            nebulae.extend(system.nebula.filter(|nebula| nebula.fog >= 400));
+        }
+    }
+    for nebula in nebulae {
+        let at = nebula.centre;
+        let fog = i64::from(space.fog_at(at));
+        assert!(fog >= i64::from(nebula.fog));
+        let reach = range * (1_000 - fog * 7 / 10) / 1_000;
+        let contacts = space.scan(at, range);
+        for contact in &contacts {
+            let boost = match contact.kind {
+                query::ContactKind::Star { .. } => 4,
+                query::ContactKind::BlackHole(_) => 2,
+                _ => 1,
+            };
+            assert!(
+                contact.distance <= (reach * boost) as f64,
+                "{contact:?} beyond the fogged range {reach}"
+            );
+            assert!(contact.signal <= 1_000);
+        }
+        // Bodies between the fogged and the clear range are hidden.
+        let all = space
+            .bodies_near(at, range)
+            .into_iter()
+            .filter(|hit| hit.distance < range as f64)
+            .count();
+        let hidden = space
+            .bodies_near(at, range)
+            .into_iter()
+            .filter(|hit| hit.distance > reach as f64 && hit.distance < range as f64)
+            .count();
+        if hidden > 0 {
+            let body_contacts = contacts
+                .iter()
+                .filter(|contact| matches!(contact.kind, query::ContactKind::Body(_)))
+                .count();
+            assert!(body_contacts + hidden <= all, "fog hid nothing at {at:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no nebula star with bodies past the fogged range");
+}

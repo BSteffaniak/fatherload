@@ -187,12 +187,13 @@ impl SpaceSector {
         if dx > dy { dx } else { dy }
     }
 
-    /// Euclidean distance to `other`, sectors.
+    /// Euclidean distance to `other`, sectors (the same bits on every platform: see
+    /// [`SpaceTile::distance`]).
     #[must_use]
     pub fn distance(self, other: Self) -> f64 {
-        let dx = (other.x as i64 - self.x as i64) as f64;
-        let dy = (other.y as i64 - self.y as i64) as f64;
-        dx.hypot(dy)
+        let dx = i128::from(other.x) - i128::from(self.x);
+        let dy = i128::from(other.y) - i128::from(self.y);
+        ((dx * dx + dy * dy) as f64).sqrt()
     }
 
     /// Squared distance from `tile` to this sector's square, tiles² (0 inside).
@@ -267,10 +268,22 @@ impl SpaceTile {
     }
 
     /// Distance to `other`, tiles.
+    ///
+    /// The same bits on every platform: the exact squared distance rounded once to `f64`,
+    /// then an IEEE square root (correctly rounded everywhere). `f64::hypot` comes from the
+    /// platform's libm (macOS, glibc and the browser build's musl may differ in the last
+    /// bit), so space never uses it.
     #[must_use]
     pub fn distance(self, other: Self) -> f64 {
-        let (dx, dy) = self.delta(other);
-        (dx as f64).hypot(dy as f64)
+        (self.distance2(other) as f64).sqrt()
+    }
+
+    /// Distance to `other`, tiles, rounded up (exact integers).
+    #[must_use]
+    pub const fn distance_ceil(self, other: Self) -> i64 {
+        let d2 = self.distance2(other).unsigned_abs();
+        let root = d2.isqrt();
+        (if root * root == d2 { root } else { root + 1 }) as i64
     }
 
     /// Whether `other` lies within `radius` tiles (exact).

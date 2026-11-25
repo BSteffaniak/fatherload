@@ -524,7 +524,10 @@ impl BlackHole {
             return low as f32;
         }
         let depth = (lens - distance) / (lens - horizon);
-        ((1.0 - low) * depth).mul_add(-depth, 1.0) as f32
+        // Plain IEEE arithmetic (no `mul_add`): the same bits on every peer.
+        #[allow(clippy::suboptimal_flops, reason = "bit-identical on every platform")]
+        let scale = 1.0 - (1.0 - low) * depth * depth;
+        scale as f32
     }
 }
 

@@ -92,7 +92,7 @@ pub(super) fn segments_near(
 ) -> Vec<u32> {
     let reach = radius + i64::from(ASTEROID_MAX_RADIUS) + 1_000;
     let (dx, dy) = system.centre.delta(at);
-    let distance = (dx as f64).hypot(dy as f64);
+    let distance = system.centre.distance(at);
     if distance + (reach as f64) < f64::from(belt.inner)
         || distance - (reach as f64) > f64::from(belt.outer)
     {

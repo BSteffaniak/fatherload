@@ -479,7 +479,9 @@ pub(super) fn generate_system(
 
 /// Distance of `tile` from the (still relative) system centre.
 fn radius_of(tile: SpaceTile) -> i64 {
-    SpaceTile::default().distance(tile).ceil() as i64
+    // Exact integers: a float distance's last bit could round a placement differently on
+    // another platform, and the extent decides where the whole system sits.
+    SpaceTile::default().distance_ceil(tile)
 }
 
 fn translate(system: &mut StarSystem, by: SpaceTile) {

@@ -138,7 +138,14 @@ impl GravitySource {
         let (dx, dy) = at.delta_f64(self.centre.pos());
         let tile = f64::from(TILE_SIZE);
         let (dx, dy) = (dx / tile, dy / tile);
-        let distance = dx.hypot(dy);
+        // Not `hypot` (platform libm) nor `mul_add` (a software fma on some browsers): plain
+        // IEEE arithmetic, the same bits on every peer. The flight track steps with this.
+        #[allow(
+            clippy::suboptimal_flops,
+            clippy::imprecise_flops,
+            reason = "bit-identical on every platform"
+        )]
+        let distance = (dx * dx + dy * dy).sqrt();
         if distance < 1e-6 || distance > self.influence() {
             return (0.0, 0.0);
         }
