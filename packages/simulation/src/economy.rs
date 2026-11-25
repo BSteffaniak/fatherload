@@ -821,6 +821,8 @@ pub fn max_out_upgrades(player: &mut Player) {
     player.hazard_gear.pressurized_hull = crate::skycraft::PRESSURIZED_HULL_MAX_LEVEL;
     // F9 rotation hardware (no shop line yet; the assists stay off until switched on).
     player.hazard_gear.attitude = crate::attitude::AttitudeGear::MAXED;
+    // Wave 11 flight gear (stations sell it; the assists stay off until switched on).
+    player.hazard_gear.flight = crate::flight::FlightGear::MAXED;
     player.fuel = player.fuel_capacity;
     player.hull = player.max_hull();
 }
