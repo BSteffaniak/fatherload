@@ -57,11 +57,13 @@ pub enum Hint {
     Mirrored,
     TimeZone,
     Supplies,
+    // Wave 11 carryover: the supply line.
+    SupplyLine,
 }
 
 impl Hint {
     /// Every hint, in the order they are checked (the most urgent first).
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::GateCrush,
         Self::Pressure,
         Self::SystemOnSale,
@@ -81,6 +83,8 @@ impl Hint {
         Self::LowGravity,
         Self::Slippery,
         Self::Dark,
+        // Wave 11 carryover: the supply line names the beacon as its cure, so it goes first.
+        Self::SupplyLine,
         Self::Beacon,
     ];
 }
@@ -222,6 +226,12 @@ pub fn due_hint(
             .then(|| {
                 "Tip: plant a depth beacon (inventory, Depth logistics) to jump back down here \
                  later."
+                    .to_owned()
+            }),
+            // Wave 11 carryover: the badge alone does not say what the strain is or its cure.
+            Hint::SupplyLine => (world.supply_strain_for(player) > 0.0).then(|| {
+                "Tip: far from supply. Out here every second of thrust burns extra fuel. Plant a \
+                 depth beacon to extend your supply line."
                     .to_owned()
             }),
             // Wave 9: answered by `deep_hint` above.
@@ -517,5 +527,67 @@ mod tests {
             due_hint(&world, player, &BTreeSet::new()).map(|(hint, _)| hint),
             Some(Hint::Pressure)
         );
+    }
+}
+
+#[cfg(test)]
+mod supply_line_tests {
+    use super::*;
+    use fatherload_simulation::{
+        terrain::{TILE_SIZE, TileKind, TilePosition},
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+
+    /// Wave 11 carryover review: far below every supply stop the seat learns what the FAR FROM
+    /// SUPPLY badge means and its cure (a depth beacon); in an outpost's hall it does not.
+    #[test]
+    fn far_from_supply_explains_the_strain_once() {
+        let player = PlayerId::new(0);
+        let settings = WorldSettings {
+            generator: GeneratorVersion::V11,
+            ..WorldSettings::new(7)
+        };
+        let mut world = WorldState::new_game_with_settings(
+            player,
+            &settings,
+            fatherload_simulation::SimulationParams::new(60),
+        );
+        let row = (1_500..6_000)
+            .step_by(10)
+            .find(|row| {
+                world
+                    .logistics()
+                    .supply_strain_at(world.terrain().settings(), *row)
+                    > 0.0
+            })
+            .expect("somewhere far below the stops");
+        world.terrain_mut().ensure_depth(row + 4);
+        for (column, line) in [(39, row), (40, row), (41, row)]
+            .into_iter()
+            .flat_map(|(x, y)| [(x, y - 1), (x, y), (x, y + 1)])
+        {
+            let kind = if line == row + 1 {
+                TileKind::Stone
+            } else {
+                TileKind::Air
+            };
+            let _ = world
+                .terrain_mut()
+                .set_kind(TilePosition { x: column, y: line }, kind);
+        }
+        let frame = world.frame();
+        let rig = world.player_mut(player).expect("rig");
+        rig.x = TILE_SIZE.mul_add(0.5, frame.col_px(40));
+        rig.y = TILE_SIZE.mul_add(0.5, frame.row_px(row));
+        assert!(world.supply_strain_for(player) > 0.0);
+        let seen: BTreeSet<Hint> = Hint::ALL
+            .into_iter()
+            .filter(|hint| *hint != Hint::SupplyLine)
+            .collect();
+        let (hint, text) = due_hint(&world, player, &seen).expect("a hint");
+        assert_eq!(hint, Hint::SupplyLine, "{text}");
+        assert!(text.contains("depth beacon"), "{text}");
+        let all: BTreeSet<Hint> = Hint::ALL.into_iter().collect();
+        assert_eq!(due_hint(&world, player, &all), None, "once");
     }
 }
