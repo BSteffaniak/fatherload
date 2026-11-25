@@ -129,18 +129,28 @@ fn strata_ores_caves_and_the_core_chamber() {
     assert!(ores > 100, "ores {ores}");
     assert!(open_underground > 20, "caves {open_underground}");
     assert_eq!(strata_seen.len(), theme.strata.len());
-    // The core chamber is open all the way round, over an indestructible core floor.
+    // The core chamber is open all the way round (but for a few pillars holding its roof), over
+    // an indestructible core floor.
+    let mut pillars = 0;
+    let mut sampled = 0;
     for column in (0..width).step_by(11) {
+        sampled += 1;
         let top = ground.core_chamber_top();
         let floor = ground.core_floor_row();
         let open = (top..floor)
             .filter(|row| ground.generated_tile(column, *row).kind.is_open())
             .count();
-        assert!(open >= 6, "column {column}: {open} open chamber rows");
+        if open < 6 {
+            pillars += 1;
+        }
         for row in floor..=ground.bottom_row() {
             assert!(is_indestructible(ground.generated_tile(column, row).kind));
         }
     }
+    assert!(
+        pillars * 10 < sampled,
+        "{pillars} of {sampled} columns closed"
+    );
     assert_eq!(
         ground.layer_name(0, ground.core_chamber_top()),
         "Core Chamber"

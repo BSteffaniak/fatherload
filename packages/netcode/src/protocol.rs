@@ -265,6 +265,9 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `PlayerTickState::place`, `LiveEntities::store_frames`, the `places` world field in
 ///   keyframes (every store's ground) and the place event 740
 ///   (`GameplayEventKind::PlaceChanged`).
+/// * Polar (round bodies): `TerrainSnapshot::planet` (a round body's `PlanetParams`) in
+///   keyframes, `AttitudeGear::landing_legs` in the rig's loadout, and the round-body events
+///   780-799 (`GameplayEventKind::Planet` with `planet::landing::PlanetEvent`).
 pub const PROTOCOL_VERSION: u8 = 19;
 
 /// One client input frame: the controls and actions for exactly one tick.

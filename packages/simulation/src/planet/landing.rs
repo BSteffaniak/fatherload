@@ -50,6 +50,9 @@ pub const SCRAPE_DAMAGE: f32 = 0.06;
 pub const SCRAPE_THRESHOLD: f32 = 0.5;
 /// Hull a tip-over takes, plus [`SCRAPE_DAMAGE`] on the excess past the safe angle.
 pub const TIP_DAMAGE: f32 = 6.0;
+/// Slowest fall (px/s) that counts as a touchdown: a craft resting on the ground meets it a
+/// tick's worth of gravity at a time, and one set down slower than this simply rests.
+pub const TOUCHDOWN_MIN_FALL_SPEED: f32 = 25.0;
 /// Least fall speed (px/s) a touchdown counts at (a rig set down from a hover still lands).
 pub const MIN_TOUCHDOWN_SPEED: f32 = 40.0;
 

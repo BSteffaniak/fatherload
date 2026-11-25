@@ -750,7 +750,12 @@ impl WorldState {
 
         // Landing is a skill on a round body (Wave 11): a craft coming down onto the ground is
         // judged by its lean from the ground under it.
-        if on_planet && !grounded && blocked_y && delta_y > 0.0 && player.velocity_y == 0.0 {
+        if on_planet
+            && blocked_y
+            && delta_y > 0.0
+            && player.velocity_y == 0.0
+            && fall_speed >= crate::planet::landing::TOUCHDOWN_MIN_FALL_SPEED
+        {
             let slope = ground_slope(&self.terrain, player.x, player.y);
             let lean = crate::field::trig::wrap_angle(player.attitude.orientation - slope);
             let effect = crate::planet::landing::touchdown(lean, fall_speed, legs);

@@ -7727,6 +7727,185 @@ from `WorldOp::StoreTile`; client: digest-checked store edits). Scenes: `place_b
 * Infrastructure, scanner markers and collapse warnings are world lists (home only; building
   away from home is refused).
 * `PROTOCOL_VERSION` 19, save format 15 (one bump each).
+## Wave 11 polar: round bodies, curved tiles, radial gravity and planet ground (`src/polar.rs`, `src/polar/trig.rs`, `src/planet.rs`, `src/planet/{theme,landing}.rs`, `src/world/planet.rs`, expansion plan F12)
+
+The polar track of Wave 11 (space foundations). It owns `simulation::polar` (geometry) and
+`simulation::planet` (planet ground): a round body is a ring-tiled world whose gameplay runs
+on its unrolled, wrapping strip with the existing terrain, dig, cave, fluid, drop, rig and
+pilot code.
+
+### Polar geometry (`crate::polar`)
+
+- **`PolarGrid::new(radius)`**: rings of tiles, row = depth below the datum radius `R` (the
+  top edge of row 0), column = angle clockwise from the body's top. The surface ring has
+  `W0 = round(2 pi R / 512) * 512` columns (a whole number of sectors, so a lap of the strip is
+  a whole number of `SECTOR_TILES`: R = 400 has 2,560 columns, 5 sectors, tiles 0.98 square).
+- **Columns halve toward the core** at fixed rows (`halving_rows`) wherever a ring's tiles
+  would get narrower than `1/sqrt 2` of a square, so every ring keeps its tiles between 0.707
+  and 1.414 square down to the **core** (`core_radius = clamp(R / 12, 24, 640)`). R = 400 halves
+  4 times (2,560 → 160 columns at the core, rows 0-366). A tile of ring `k` spans `2^k` strip
+  columns (`span_at`); `tile_of`, `first_strip_column`, `neighbours` (left/right wrap, up/down
+  cross a halving boundary: one inner tile under two outer ones).
+- **Conversions**: strip point `(u, v)` (fractional surface columns, rows) ↔ body-centred
+  Cartesian tiles (`+y` down, column 0 straight up) via `to_cartesian` / `from_cartesian`;
+  `tile_point` / `point_tile` for a ring tile plus sub-tile offset; `to_world` / `from_world`
+  for `WorldPos` in space around a body centre (`offset_world` splits whole sectors off in
+  `f64`, so it is exact to the sub-pixel 10^12 tiles out); `local_frame(u)` gives local up,
+  down, the tangent and the angle of up (what a craft's orientation reads as level there).
+- **Deterministic trigonometry** (`polar::trig`): `sin_cos`, `atan`, `atan2` in `f64` from basic
+  IEEE arithmetic (Cody-Waite reduction, Taylor series), identical on every platform including
+  WASM, within 4e-15 of the platform maths.
+- **The F12 table** is a test (`the_f12_table_bow_and_width_difference`): tile bow
+  `32 / (8 R)` px (0.01 / 0.003 / 0.001 px at R = 400 / 1,500 / 5,000), width difference
+  `1 / R` (0.25 / 0.07 / 0.02 %), horizon drop 20 tiles away 16 / 4.3 / 1.3 px.
+- `MIN_LANDABLE_RADIUS` = 400 (moons and craters 400-1,000, planets 1,500-10,000; smaller rocks
+  are asteroids mined from flight).
+
+### Planet ground (`crate::planet`)
+
+- **`PlanetParams { seed, radius, gravity_milli, theme }`** (serde, saved and replicated):
+  `PlanetParams::new(seed, radius, theme)` clamps the radius to 400 and gives a placeholder
+  gravity (0.33 g at R = 400, rising to 1.2 g); `gravity()` clamps to 0.25..2.5 g (above the
+  field model's weightless line, so the smallest moon still has a "down").
+- **`PlanetGround`** generates the strip as a pure function of the params: periodic value-noise
+  hills (lattices of 32 and 128 columns, which divide every lap, so the seam is seamless), the
+  theme's crust, two or three concentric strata with ragged boundaries, accent rock, ores per
+  stratum, `caves_per_256_columns` elliptic caves (kept in shape across the rings), and a
+  ring-shaped **core chamber** (`CORE_CHAMBER_ROWS` = 8 open rows with a few pillars, its floor
+  lined with the theme's core ore) over two rows of indestructible bedrock (`CORE_FLOOR_ROWS`).
+  Generation is per **ring tile**: every strip cell of a tile reads alike.
+- **Theme registry** (`planet::theme`, append-only, the id is the index): `BARREN` (grey
+  regolith moon), `ROCKY` (sand, dirt, stone, hard rock), `ICE` (snow, moon ice, granite). Each
+  theme has a `PlanetPalette` (sky, atmosphere glow, surface, rock, deep, core colours) for the
+  renderer, a crust, strata (`share_permille` sums to 1,000; rock, accent, ores per 10,000),
+  a core ore, a cave density and a hill height. Waves 12-13 append real themes here; only
+  existing `TileKind`s are used (no new tile codes).
+- **`BodyGround`** is this track's minimal body-generator trait (TODO-SEAM, the regions track
+  owns `BodyId`/`Place` and the real interface): `generated_tile`, `surface_row`,
+  `strip_columns`, `top_row`, `height`, `gravity`. `PlanetGround` implements it.
+
+### The strip is a streamed `Terrain` (`Terrain::planet`)
+
+`Terrain::planet(params)` is an ordinary streamed terrain with a `planet` field:
+
+- chunks come from the planet generator (`terrain::base_chunk`, memoized per process by
+  params and wrapped chunk); `stream_around` wraps chunk columns and measures distance round
+  the ring;
+- **columns wrap**: `slot()` folds every column into `0..W0`, so a tile dug on one lap is dug on
+  all of them, and edits are stored (and digested) at the wrapped position;
+- **ring tiles stay whole**: a write that makes or breaks solid ground below a halving row
+  writes every strip cell of its ring tile (open-to-open writes such as fluids flowing stay per
+  cell, so fluid mass is conserved); drilling one cell of an inner ring opens the whole tile;
+- `surface_row`, `min_y` (the strip top: hills plus 24 sky rows) and `height` (to the core) are
+  the planet's; `layer_name` reads the theme's strata ("Core Chamber" at the bottom); the home
+  world's caves, POIs, features and villages are switched off (`cave_at`, `caves_touching`,
+  `pois_touching`, `features_in`, `feature`, `nearest_feature`);
+- settings: `Terrain::planet_settings(seed)` (generator V5: no sky, Moon, villages, cave
+  ecosystems or Descents; bands and rosters stand in for the classic rules); column limit
+  `PLANET_COLUMN_LIMIT` (2^28) because positions never go far;
+- the snapshot carries `TerrainSnapshot::planet` (serde default `None`, so every existing save
+  loads unchanged) and a planet generator probe in its digest; the world hash adds the params
+  only for planets (no existing hash or golden digest changed).
+
+### The world on a planet (`world/planet.rs`)
+
+- **`WorldState::new_planet_world(player, params, sim)`**: a single-rig world whose terrain is
+  the strip, the rig three rows above column 64, and the body's **gravity zone**
+  (`planet_gravity_zone`: a field zone over every tile, gravity `(0, g)`, free rotation).
+  Gravity points at the body's centre, which in strip coordinates is straight down, so rigs,
+  pilots, creatures, drops, charges and fluids all move in their local up/down frame through
+  the existing F9 field readers with no other change. `tick_planet` (first thing in
+  `simulate_tick`) puts the zone back if a test-mode "clear zones" removed it.
+- **The frame wraps by whole laps**: `recentre_frame` labels a planet's floating frame within
+  one lap (`wrapped_frame`: `sector_x` in `0..lap_sectors`), and `move_frame` shifts positions
+  only by the nearest copy of the target round the strip (`nearest_lap_frame`). Relabelling a
+  frame by a lap moves no position at all, so a rig drives round forever with bit-exact local
+  positions; replicas that receive a relabelled frame shift by the same nearest copy.
+- `WorldState::planet()`; the home town's doors are closed on a planet
+  (`player_surface_zone` is `None`).
+
+### Landing is a skill (`planet::landing`, in the movement step)
+
+On a round body nothing turns the craft but the player (gravity never rotates it) and contact:
+
+- **Flight**: rotation is free (no lean limit), thrusters spin it and spin keeps going; horizon
+  hold and the gyro still work when fitted and switched on (off by default).
+- **Touchdown** (`touchdown(lean, fall_speed, legs)`, lean measured from the ground's slope under
+  the tracks): within `safe_angle` (12°, +12° per **landing legs** tier) it is clean; past it
+  the craft **slides** the way it leans and, harder or more tilted, **scrapes** its hull
+  (`SCRAPE_DAMAGE` per px/s per radian of excess); past `tip_angle` (50°, +10° per tier) it
+  **tips over** (`TIP_DAMAGE` + scrape). Hull damage goes through the rig's mitigation and
+  invulnerability.
+- **Resting** (`rest_target`): on its tracks the craft settles onto the slope under it
+  (`slope_angle` from the ground's top just outside each track, capped at 25°, walls ignored)
+  at the attitude model's settle rate: a roll of a few tenths of a second, never a snap.
+  Tipped, it settles onto its side (or its roof past 135°), cannot drive, and the player
+  **rights** it by holding the rotation thrusters toward upright (`righting`): the craft rolls
+  over its corner (contact lifts it up to `PLANET_ROLL_LIFT_PX` = 6 px) and settles back on its
+  tracks.
+- **Landing legs**: `AttitudeGear::landing_legs` (0-2; serde default 0). Upgrade hook: nothing
+  sells them yet (space content); test mode fits them.
+- **Events** (netcode 780-799): `GameplayEventKind::Planet { what: PlanetEvent, player_id, x,
+  y }` with `Landed`, `Slid`, `HullScraped`, `Tipped`, `Righted`. The game: `Slid` clunks,
+  `HullScraped` / `Tipped` play the hull hit, `Righted` the lever clunk (no new patches);
+  messages for scraped, tipped ("Hold the rotation thrusters toward upright") and righted.
+- `WorldState::step_rig_movement_into` is the movement step with its events (the old
+  `step_rig_movement` is a test wrapper).
+
+### Formats
+
+- `PROTOCOL_VERSION` 19 (`TerrainSnapshot::planet`, `AttitudeGear::landing_legs`, events
+  780-799). Saves: no format bump (both fields have serde defaults; old saves load as before).
+- No `TileKind` codes, sound patches or world sections added. V1-V11 golden digests unchanged.
+
+### Tests
+
+- `polar::tests` (11): whole-sector surface rings, every ring 0.70-1.42 square for R 400-10,000,
+  the R = 400 rings, the F12 table, strip/Cartesian round trips (2,000 random points per radius),
+  ring tile + offset round trips through the strip and Cartesian frame, wrap, halving
+  neighbours both ways (every column of every boundary), local frames, `WorldPos` round trips at
+  10^9 and 3 x 10^12 sectors, purity; `polar::trig` against the platform maths.
+- `planet::tests` (8): purity and cache, seamless wrap, hills and crust, ring tiles generate
+  alike, strata/ores/caves/core chamber, every theme, params, a planet `Terrain` reads its
+  ground and wraps. `planet::landing::tests` (5).
+- `world::planet_tests`: **the moon bot** (R = 400, test-mode rig) lands, drives a full lap
+  clockwise (the frame stays within its 5 sectors), digs to the core chamber (every halving
+  ring's tile in the shaft is open whole) and flies back out above the hills; the bot twice at
+  30 Hz gives the same state hash and events, and plays through at 120 Hz; gravity is the body's
+  (fall distance matches 0.33 g) and survives a cleared zone list; gravity never turns the
+  craft and the thrusters turn it freely; clean, sliding/scraping, legged and tipping
+  touchdowns, the roll back onto the tracks (never more than 0.2 rad a tick), righting a tipped
+  craft; one tile per place round the laps; JSON save and postcard keyframe round trips with
+  mirrored edits; a replica follows the frame across the seam.
+
+### Seams for the integrator and the other Wave 11 tracks
+
+- **Regions** (`simulation::place`): implement the body generator for a planet `BodyId` with
+  `PlanetGround` (or adapt `BodyGround`), build the body region's terrain with
+  `Terrain::planet(params)` and add `planet_gravity_zone(&params)` to its fields; replace
+  `new_planet_world` (a world that *is* one planet) with a body region.
+- **Space gen** (`simulation::space`): give each landable body `PlanetParams` (seed from the
+  world seed and its coordinates, radius ≥ `MIN_LANDABLE_RADIUS`, gravity, a theme id from the
+  registry).
+- **Flight** (`simulation::flight`): crossing into a body, place the craft with
+  `PolarGrid::from_world(centre, pos)` (strip `u, v`) and turn its orientation into the local
+  frame by subtracting `local_frame(u).angle` (leaving, add it back); never set the orientation
+  for the player. Re-entry, docking and auto-land (the optional assist) build on
+  `planet::landing`.
+- **Space render**: draw the strip into a texture and bend it with the polar mapping
+  (`to_cartesian`), or use `local_frame` per sprite; palettes from `PlanetTheme::palette`. A
+  tile of ring `k` spans `2^k` strip cells: draw it as one curved tile.
+
+### Known limits
+
+- In strip coordinates a strip cell at depth is physically narrower (`r / R`): actors keep
+  their strip size, so near the core a rig crosses a ring tile in several cells and moves
+  physically slower sideways. The renderer may draw actors at a constant physical size.
+- Gravity is constant with depth (a real body's pull falls toward the centre).
+- No milestones or story for a lap or the core yet (content waves); no settlements, creatures
+  or features of the planet's own (the classic band rosters stand in).
+- A remote rig's netcode pose jumps by a lap when the host relabels its frame (interpolation
+  sees a lap-long move once per lap); poses could compare modulo the lap.
 
 ## Replication
 
