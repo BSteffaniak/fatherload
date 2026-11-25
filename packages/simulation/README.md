@@ -1246,16 +1246,29 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
 
 - A body's tiles are painted **flat, in strip coordinates, with the home world's own tile art**
   (`tile_art::paint_tile` on the strip's `Terrain`): a **fine window** of art pixels round the
-  craft (96 x 64 tiles, growing to 240 x 240 to cover a zoomed-out view; repainted only when the
-  window moves a 16-tile step or the strip's revision changes) and, when the view reaches past
-  it (zoomed out, or close to the centre where the deep rings span a wide angle), a **coarse
-  map** of one texel per tile (`material_color`; the whole ring of a small world, a 2,048 x 1,024
-  window of a big one).
+  craft (96 x 64 tiles, growing to 240 x 240 to cover a zoomed-out view; it moves in 16-tile
+  steps) and, when the view reaches past it (zoomed out, or close to the centre where the deep
+  rings span a wide angle) or some of its cells are not painted yet, a **coarse map** of one
+  texel per tile (the mean colour of each material's tile art; the whole ring of a small world,
+  a 2,048 x 1,024 window of a big one).
+- **The fine art is repainted a little at a time** (`polar/fine.rs`): tile art costs about
+  10 us a tile, so a whole 96 x 80 window is ~60 ms and a zoomed-out 240 x 240 one ~0.5 s. A
+  moved or resized window copies every cell it already held (each band row by its own origin
+  shift); a changed tile (`PolarGround::mark_tile_dirty`) repaints just its rows (and the
+  neighbours' rows, whose edges depend on it) and uploads just those rows; new cells hold a
+  marker texel (alpha 1/255) that the shader reads as "use the coarse map here" and are painted
+  nearest the craft first, 384 a frame. A strip whose `revision` changes with no tile marked
+  repaints every cell that way (the old art stays until then). The coarse map patches marked
+  rows too. Scene capture waits until the art is complete.
 - The **polar shader** bends both into the ring per pixel: screen point -> the craft's local
   frame (undoing the roll) -> radius and angle round the body's centre, worked out relative to
   the camera (`r - r_c` without cancelling, the camera's column as `f64` on the CPU, per-band
   offsets into each window), so a 31,416-column world is as exact as a small moon. Columns halve
-  below each `PolarGeometry::halvings` row (eight at most: two `vec4`s), strata are concentric
+  below each `PolarGeometry::halvings` row (eight at most: bands 0..7 in two `vec4`s, band 8 in
+  `uBand8`; R = 5,000 uses all eight before its core). Each band has its own ring
+  (`columns_in_band` = `surface_columns >> band`, so an odd ring like the moon's 2,513 rounds
+  down) and angles map to band columns in proportion to it (`band_column` /
+  `surface_column`), so the wrap seam stays exact in every band. Strata are concentric
   rings, the **core chamber** glows at the centre and lights the rings round it. Day and night
   follow the body's star (`sun_angle`), deep ground keeps a dim ambient (the strata stay
   readable) and the craft's lamp lights round it; the sky's atmosphere thins with altitude
@@ -1287,7 +1300,18 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
   where band `k`'s column `c` is stored (default: terrain column `c`) and `revision` changing
   with every tile edit. `GroundView` carries the camera's surface column (`f64`), row and roll
   against the local up, the night light and the things standing there. The star's direction
-  comes from `SpaceRenderView::light_toward`.
+  comes from `SpaceRenderView::light_toward`. The two cameras must agree (the fixtures'
+  `follow_ground` shows how): with `angle = column / surface_columns * TAU + body.spin`, the
+  space camera's centre is the body's centre plus `(sin angle, -cos angle) * radius_of_row(row)`
+  tiles, and `SpaceCamera::roll = angle + GroundView::roll` (the craft's own orientation; the
+  local up only enters through `angle`, so gravity never turns the view).
+- Tell the renderer of every tile change on the seat's body: `PolarGround::mark_tile_dirty`
+  (reached as `SpaceRenderer::polar`) with the strip's terrain position, from the same frame
+  reports that drive the home terrain's `mark_tile_dirty`. Without it a dig still shows, but by
+  repainting the whole window over a few frames. It assumes `PolarStrip::tile_at` keeps rows.
+- `CraftView::look`: the seat's `RigLook::from_player` (paint job, tiers) so split-screen seats
+  tell their craft apart; the pilot and parked rigs on the ground still use default looks
+  (`GroundThingKind` could carry a `RigLook` / `PilotLook` the same way).
 - `GameRenderer::sync_space` / `render_space` draw one view over the whole screen today (the
   scenes and the browser page). In play: call `sync_space` from `sync` and draw each seat's view
   in its viewport from `render_seat` (the space target and the polar windows are per renderer;
@@ -1309,7 +1333,9 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
   `space_moon_night`, `space_moon_rolled` (the craft turned 120 degrees by the player),
   `space_planet_surface`, `space_core_shaft`, `space_polar_quads`, `space_nebula`,
   `space_black_hole`, `space_asteroid_belt`, `space_comet`, `space_station_derelict`,
-  `space_wormhole`, `space_warp`, `space_cruise`. `--frame-timing N` times them too.
+  `space_wormhole`, `space_warp`, `space_cruise`, `space_moon_flyover` (the ground panning 40
+  columns a second under the craft: the incremental repaint under `--frame-timing`).
+  `--frame-timing N` times them too.
 - The same views run in the app: `fatherload --space-view <name>` on the desktop,
   `?space=<name>` in the browser; `node scripts/perf-web-space.cjs [names]` times the WASM build
   in each (the same flags as `perf-web.cjs`).
@@ -1317,7 +1343,9 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
   Apple's GL compiler refuses a function called `noise3`), projection and roll, ring layout
   (tiles 0.7x-1.4x square, the core), the zoom curve, horizon drops, glow and cloud textures,
   fixtures (the camera stands at its row's radius; the shaft reaches the core), every fixture
-  has a scene.
+  has a scene, band 8 and odd rings (`big_worlds_reach_the_eighth_band_...`), and the fine
+  art's incremental repaint (a moved window's art equals a fresh paint texel for texel; a marked
+  tile repaints only its rows; an unexplained revision repaints everything over frames).
 - Browser timing (WASM release, 1280 x 720, Chrome, machine under a load average of 30-50 from
   the parallel tracks): **GPU: every space scene at 60.0 fps**, 1.3-1.7 ms of frame work (2.7 ms
   in the belt and the quads fallback). Software (SwiftShader, CPU fill): planet gallery 44 fps,

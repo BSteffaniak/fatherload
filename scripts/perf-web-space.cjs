@@ -25,7 +25,8 @@ const all = [
   'space_approach_planet', 'space_moon_hover', 'space_moon_surface', 'space_moon_night',
   'space_moon_rolled', 'space_planet_surface', 'space_core_shaft', 'space_polar_quads',
   'space_nebula', 'space_black_hole', 'space_asteroid_belt', 'space_comet',
-  'space_station_derelict', 'space_wormhole', 'space_warp',
+  'space_station_derelict', 'space_wormhole', 'space_warp', 'space_cruise',
+  'space_moon_flyover',
 ];
 const names = process.argv[2] ? process.argv[2].split(',') : all;
 const server = http.createServer(async (req, res) => {
