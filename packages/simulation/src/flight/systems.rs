@@ -647,7 +647,7 @@ pub struct SystemsShared {
     pub wormholes: Vec<KnownWormhole>,
 }
 
-/// Most mined asteroids the record keeps (the oldest beyond it regrow).
+/// Most mined asteroids the record keeps (beyond it the lowest-keyed rock regrows).
 pub const MAX_MINED_RECORDS: usize = 16_384;
 
 impl SystemsShared {

@@ -361,12 +361,13 @@ impl WorldState {
             if depleted {
                 events.push((SystemsEvent::AsteroidDepleted, 0));
             }
-            // The record keeps the newest rocks (the oldest regrow past its bound).
+            // Past its bound the record drops its lowest-keyed rock (it regrows): a
+            // deterministic choice, not the oldest (the record keeps no ages).
             if self.space_systems.mined.len() > MAX_MINED_RECORDS
-                && let Some(oldest) = self.space_systems.mined.keys().next().copied()
-                && oldest != rock.id
+                && let Some(lowest) = self.space_systems.mined.keys().next().copied()
+                && lowest != rock.id
             {
-                self.space_systems.mined.remove(&oldest);
+                self.space_systems.mined.remove(&lowest);
             }
         }
         if let Some((key, taken)) = dust
