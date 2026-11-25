@@ -5,6 +5,7 @@ mod persistence_e2e;
 mod relevance;
 mod support;
 mod units;
+mod world_aliens;
 mod world_e2e;
 mod world_far;
 mod world_keyframes;

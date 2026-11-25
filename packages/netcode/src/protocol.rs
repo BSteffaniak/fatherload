@@ -307,6 +307,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   920-939 (`GameplayEventKind::Frontier` with `frontier::FrontierEvent`). No world field or
 ///   section: the frontier rules keep no state of their own (the weather and the eruptions are
 ///   pure schedules of the planet's seed and world time).
+/// * Aliens (friendly species): `PlanetParams::folk` (a settled body's species) in keyframes,
+///   `TileKind::Alien` tiles (codes `0x2800`: the towns' paving and lexicon stones) in terrain
+///   ops and chunks, `PlayerCommand::Alien`, the `aliens` world field and the appended
+///   `SectionKey::Aliens` section (understanding, contacts, chapters, homes, monuments, trail
+///   leads), the alien residents in NPC entities of the bodies' stores, and the alien events
+///   940-959 (`GameplayEventKind::Alien`).
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -1263,6 +1263,41 @@ as a round world.
   `bodylife_locked_day`, `bodylife_locked_night`, `bodylife_locked_terminator`,
   `bodylife_storm`, `bodylife_snow`, `bodylife_aurora`.
 
+### Friendly aliens (wave 12)
+
+Out among the stars you are not alone. Three friendly species live on worlds near home, each
+with towns of their own, a tongue you learn over time, things they trade, a story to tell and
+homes for sale.
+
+- **The Vessi** of the ice worlds: tall as two rigs on four stilt legs, bells of frost-fur with
+  a lantern at the throat that glows when they sing. They live in spiral snow-vaults lit warm
+  from inside round a song spire, never hurry, and prize warm things: ruby, copper, uranium.
+- **The Tokkari** of the rocky worlds: low, six-limbed burrowing smiths under gem-studded
+  shells, eyes on stalks. Terraced mound-halls of fused stone, round doors, forge chimneys.
+  Every debt is a knot in a cord; they pay well for honest iron, platinum, mythril and silver.
+- **The Siphra** of the airless moons: drifting bells of living glass trailing light, keepers of
+  memory, who hang their homes as lantern-pods from crystal pylons. Their eldest remember the
+  builders' ships. They prize clear crystal: diamond, emerald, skystone.
+- **First contact** comes the first time you roll into one of their towns. Each species has a
+  town within a short flight of home: in the home system or a neighbouring one.
+- **Their tongue**: at first everything they say is in their own glyphs (rings, notched runes,
+  constellations). Talk to their people each day, trade with them, take a lesson at the
+  lexicon house, dig up the **lexicon stones** buried under their towns, buy a primer: the
+  little words show through first, then more, until you read them like a native. Each player
+  learns for themselves, and understanding buys better prices.
+- **Trade**: their trader buys the ores they prize and sells their goods (primers, furniture
+  for your home, a day of frost-down padding or glow pearls, hull plates, an air bloom, a star
+  memory that charts a system).
+- **Their story**: each species' elder asks for five things in turn as you understand more of
+  their tongue: a gift of ore, a journey (deep under the town, or the far side of the world), a
+  traveller carried to the next town, a monument raised (it stands for everyone after), and at
+  last what they remember of **the builders**, a lead charted on your nav chart.
+- **Homes**: buy a plot from the town's builder and they raise a home in their own style. Rest
+  there to refill your air; on that world the emergency beacon tows you home to it.
+- Scenes: `alien_vessi_town`, `alien_tokkari_town`, `alien_siphra_town`, `alien_vessi_homes`,
+  `alien_first_contact`, `alien_talk_glyphs`, `alien_talk_fragments`, `alien_talk_fluent`,
+  `alien_trade`, `alien_home_and_monument`.
+
 ### The Fathers' expedition (wave 8 story)
 
 A generation ago six people from the town went down the builders' cable to find out what hums.

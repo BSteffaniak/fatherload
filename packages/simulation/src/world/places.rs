@@ -81,6 +81,11 @@ impl BodyWorld {
         let mut fields = crate::field::FieldZones::default();
         let terrain = if let Some(params) = planet {
             let _id = fields.insert(super::planet::planet_gravity_zone(&params));
+            // A settled body's towns resolve by id from the moment its ground exists (Wave 12:
+            // a store built fresh, restored from a save or received in a keyframe).
+            if params.folk != 0 {
+                crate::alien::town::register(&params);
+            }
             Terrain::planet_with(params, frame, edits)
         } else {
             Terrain::for_body(BodySource::for_store(store, seed)?, frame, edits)
@@ -856,7 +861,8 @@ impl WorldState {
     }
 
     /// The test-mode warp to `place` (F11): the place's arrival point (a body's generator's,
-    /// the Moon's top, the spawn point at home, the origin of free flight).
+    /// a settled body's first alien town (Wave 12), the Moon's top, the spawn point at home,
+    /// the origin of free flight), with full air.
     pub(super) fn warp_to_place(
         &mut self,
         player_id: PlayerId,
@@ -885,6 +891,16 @@ impl WorldState {
                 };
                 WorldPos::tile_center(i64::from(moon.center_x), i64::from(moon.top_row) - 4)
             }
+            // A settled body (Wave 12): over its first alien town's square.
+            Place::OnBody(crate::place::BodyId::Space(key))
+                if let Some(params) = crate::place::planet_params_for(self.home_seed(), key)
+                    && let Some(first) = crate::alien::town::towns_of(&params).first() =>
+            {
+                crate::world::strip_position(
+                    f64::from(first.site.centre) + 0.5,
+                    f64::from(first.ground_row() - 3),
+                )
+            }
             Place::OnBody(crate::place::BodyId::Space(_)) | Place::Space => {
                 let Some(source) = BodySource::for_store(place.store(), self.home_seed()) else {
                     return PlayerScopedCommandOutcome::IgnoredUnavailable;
@@ -893,6 +909,11 @@ impl WorldState {
                 WorldPos::tile_center(i64::from(tile.x), i64::from(tile.y))
             }
         };
+        // The warp arrives with full air (a round body's life support counts from there).
+        let air = self.air_capacity_of(player_id);
+        if let Some(player) = self.players.get_mut(&player_id) {
+            player.flight.air = player.flight.air.max(air);
+        }
         match self.move_to_place(player_id, place, arrival) {
             Ok(()) => PlayerScopedCommandOutcome::Applied,
             Err(PlaceError::UnknownPlayer) => PlayerScopedCommandOutcome::UnknownPlayer,
