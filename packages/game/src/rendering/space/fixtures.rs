@@ -531,12 +531,26 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
     let mut fixture = SpaceFixture::empty(camera(-140_000.0, 160_000.0, 0.0, 1.0));
     match name {
         "space_deep_starfield" => {
+            // Between the stars, at the system zoom: two far suns and a faint cloud.
             fixture.stars.push(StarView {
                 centre: at(-200_000.0, 120_000.0),
                 radius_tiles: 1_600.0,
                 class: StarClass::Blue,
                 seed: 1,
             });
+            fixture.stars.push(StarView {
+                centre: at(-20_000.0, 230_000.0),
+                radius_tiles: 900.0,
+                class: StarClass::Red,
+                seed: 2,
+            });
+            fixture.nebulae.push(NebulaView {
+                centre: at(-60_000.0, 90_000.0),
+                radius_tiles: 50_000.0,
+                colours: [palette::PLUM, palette::DEEP_BLUE],
+                seed: 12,
+            });
+            fixture.camera.px_per_tile = 0.004;
         }
         "space_star_system" => {
             system(&mut fixture);
