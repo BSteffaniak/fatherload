@@ -1138,6 +1138,18 @@ world dug to the floor, the browser memory fixture) show it.
   Waking it lights the cable to the Moon, plays the ending on every seat (the awakening, the
   climb, the credits and the epilogue, then the Fathers' last pages, "The Cable Lights") and
   opens space: every rig gets the **Star Drive**, and the game goes on. Scenes: `heart_*`.
+- **Stations** (Wave 12): dock at a station's port and step into its hub. Who runs it decides
+  what it offers: human stations (Halcyon Dock at home, trade posts, shipyards, outposts,
+  relays), alien-run ones (alien tech: the phase lattice, graviton spool, xeno lens and
+  symbiont weave), and derelicts to strip once. The **shipyard** fits the ship lines (hull,
+  engine, Star Drive range, cargo hold, life support; five tiers, a yard fits up to its own)
+  and planet gear for a world's hazards (heat shielding, cold insulation, toxic-air filters,
+  high-gravity struts). The **market** trades goods for the hold (cheap where they're made,
+  dear where they're wanted; your trades move the price) and buys your ore. The **bounty
+  board** offers deliveries, body scans and ore quotas, paid at any board, never on a clock;
+  Halcyon Dock's first board is a starter set. The **bar** has patrons with rumours: buy a
+  round and the world they talk about goes on your nav chart. A first trip out affords the
+  first ship-line tier in about 40 minutes. Scenes: `station_*`, `touch_station`.
 - **The Fathers' trail ends** (Wave 10 story): logs 61-80 through Descents VII-VIII, Amos's
   chair at the cable root, a Descent progress page in the codex (the ending can be read again
   from it), new Descent cards, finale milestones, and every deep settlement's own story arcs.

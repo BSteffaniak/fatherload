@@ -9769,6 +9769,224 @@ each gated by understanding (`CHAPTER_NEEDS` 0 / 150 / 300 / 450 / 600):
 - Scenes: `alien_home_and_monument` now centres on the home (the monument stands too far
   away for one view); new `alien_monument_raised` and `alien_chapter_tracker`.
 
+## Wave 12 stations: hubs, ship lines and progression in space (`src/station.rs`, `src/station/{profile,shipyard,market,bounty,bar,hazard,ledger,balance}.rs`, `src/world/stations.rs`)
+
+Expansion plan §16 WP-SPACE ("space stations as hubs: shipyards, markets, bounty boards";
+"progression in space: alien tech upgrades, a ship hull and engine line, planet-specific gear").
+Docking (Wave 11 flight) now opens a real station: a hub with a shipyard, a market, a bounty
+board, a bar, refuel, repair and save, drawn as the station's interior.
+
+### Who runs a station (`station::profile`)
+
+A station's profile is a pure function of the world seed and the space generator's station
+(its `StationId`, `StationKind` and system); space generation is untouched
+(`GOLDEN_SPACE_DIGEST` unchanged). `profile_of(seed, &StarSystem, &Station)`, and by flight's
+ids `profile_at(&GeneratedSpace, BodyRef)` / `profile_of_id` / `station_ref` /
+`world::station_profile_at(world, body)`.
+
+| Owner | Shipyard (ship lines) | Planet gear | Alien tech | Market | Bounty board | Bar | Ore rate | Fuel / hull |
+|---|---|---|---|---|---|---|---|---|
+| Halcyon Dock (home, always human) | to tier 2 | tier 1 | - | yes | starter board | yes | 100 % | 2 / 4 |
+| human trade post | tier 1 | tier 1 | - | more goods | yes | yes | 125 % | 2 / 4 |
+| human shipyard | every tier (5) | tier 2 | - | yes | yes | yes | 105 % | 2 / 4 |
+| human outpost | tier 3 | tier 2 | - | yes | yes (+20 % pay) | yes | 115 % | 2 / 4 |
+| human relay | - | tier 1 | - | yes | yes | yes (every patron has a rumour) | 110 % | 2 / 4 |
+| alien-run (`StationOwner::Alien(AlienKin)`) | - (a shipyard: tier 3) | tier 2 | yes | alien goods | outposts only | its kin | 135 % | 3 / 5 |
+| derelict | - | - | - | - | - | - | salvage once | - |
+
+Relays are derelict 45 % of the time, other stations 12 %; 30 % of the rest are alien-run. Names
+are seeded: human (`Tycho Slipway`, `Meridian Exchange`), alien (`Vey'vor Spire`), derelict
+(`Wreck of Wayfarer Market`). Every system keeps the generator's 0-2 stations (the home system
+Halcyon Dock plus any of its own); the nav HUD and chart now call a station by its name.
+
+### The shipyard (`station::shipyard`)
+
+Everything fitted lives in the rig's loadout, `HazardGear::ship: ShipGear` (serde default).
+`ShipUpgrade::{Line, Gear, Alien}`; `level`, `max_level`, `price(level)`, `sold_to(station)`
+(a yard fits up to its tier), `effect(level)`.
+
+| Line | Tier names | Per tier | First tier | Tier 5 |
+|---|---|---|---|---|
+| Ship Hull | Riveted Hull .. Starforged Hull | space and hazard damage -10 % (to -50 %) | 7,400 | 96,200 |
+| Ship Engine | Twin Ion .. Sunfire Engine | thrust and impulse speed in space +12 % | 8,000 | 104,000 |
+| Star Drive Range | Tuned .. Horizon Coils | warp range +25 % (a warp costs its fuel / the scale) | 6,800 | 88,400 |
+| Cargo Hold | Cargo Pod .. Leviathan Hold | trade-goods hold 8 + 12 a tier | 5,200 | 67,600 |
+| Life Support | Scrubber Pack .. Gardens Deck | +240 s of air | 6,000 | 78,000 |
+
+Each tier costs about 1.9 times the last (x1.0, 1.9, 3.6, 6.8, 13). **Planet gear** (two tiers;
+2,000-2,600, tier 2 three times that): Heat Shielding, Cold Insulation, Toxic-Air Filters,
+High-Gravity Struts. **Alien tech** (alien-run stations only, 6,500-11,000): the Phase Lattice
+(re-entry heat as if two more shield tiers), the Graviton Spool (the warp spools in half the
+time), the Xeno Lens (scanner pings and body scans reach twice as far), the Symbiont Weave (the
+hull knits 0.6 a second in space, up to 70 %).
+
+The effects are wired into flight (`world/flight.rs`): the engine scales `FlightRig::
+engine_power`, the hull scales flight's hull damage, the range divides warp fuel (both the
+command's check and the spool's charge), life support adds to `air_capacity_of`, the lattice
+adds to `FlightRig::shield`, the spool halves `WARP_SPOOL_MILLIS`, the lens doubles
+`ping_range`, the weave runs in `ship_upkeep` (space, not landed). The stock ship is unchanged,
+so every Wave 11 timing, bot and test holds. `HazardGear::MAXED` keeps the ship lines stock
+(flight's tuned bots use it); the god-mode toolkit (Wave 14) stocks them.
+
+### The market (`station::market`)
+
+Trade goods (`Good`, nine: water ice, hydroponic greens, machine parts, med kits, reactor
+cells, alien spice, xeno silk, salvaged alloy, builders' relics) ride in the ship's **hold**
+(`StationLedger::holds`, capacity from the hold line), never the cargo bay. Each crewed station
+deals in its own goods: it **makes** some (sells about 30 % under base), **needs** some (buys
+about 35 % over), trades the rest; one plain good per station takes a side of its own.
+`economy_percent(seed, station, good, role)` is the per-station economy hook (the role plus a
+seeded wobble of +-8 %). The player buys 8 % over the mid price and sells 8 % under. Trading moves
+the price 1 % a unit (at most 40 %), fading 1 % every 20 s of world time (`MarketShift`, pure
+in the world's milliseconds). Ore and relics from the cargo bay sell at the station's ore rate.
+
+### The bounty board (`station::bounty`)
+
+Three slots a board; a slot's mission is a pure function of (seed, station, slot, serial) and
+taking it rolls the slot's next (`StationLedger::boards`), so every peer shows the same board.
+`MissionKind` (append-only): **Deliver** `units` of a good to another crewed station (loaded at
+the giver into the hold, they take hold room and cannot be sold; handed over at turn-in
+there), **Scan** a body (a scanner ping in space within 8,000 tiles of its surface, 16,000 with
+the lens, or the scanner used on its ground), **Mine** a quota of ore on a body's ground
+(`ItemsCollected` minerals in that body store's ground pass). Targets come from the station's
+system and systems within 6 million tiles (`board_context`, memoised per seed and station).
+Rewards: a base plus distance pay (a credit per 600 tiles, at most 1,200, plus 900 for another
+system), the quota (45 a unit) and the body's gravity; outposts pay a fifth more. At most three
+missions under way (`MAX_ACTIVE`); no deadlines (never an unwinnable countdown); abandoning
+costs nothing but the consignment. Finished work is paid at any crewed station's board
+(`TurnIn`). **Halcyon Dock's first board is a starter set**: slot 0 a scan of the nearest
+world, slot 1 a 12-unit quota on the lightest world near, slot 2 a 4-unit delivery to the
+nearest crewed station. `describe(space, kind)` titles a mission ("Deliver 4 Med Kits to Tycho
+Exchange").
+
+### The bar (`station::bar`)
+
+Three patrons per crewed bar: people-engine characters (`generate_character` in a bar's own
+village namespace, `bar_village`), at an alien-run station two of its kin
+(placeholder names until the aliens track's registry). Each has a line about their trade; two
+in three (every one at a relay) carry a **rumour** about a world near the station: its name and
+system, its theme in a phrase, and what to bring (its worst hazard tag). Buying the round (30
+credits, 45 at an alien bar) charts that world's system on the nav chart and sets the player's
+waypoint on it.
+
+### Planet hazards and gear (`station::hazard`)
+
+`hazards_of(&SpaceBody)` tags a world: **heat** (>= 120 °C, severe >= 300 °C or scalding air),
+**cold** (<= -90 °C, severe <= -170 °C), **toxic air** (spores mild, toxic severe), **high
+gravity** (>= 1.4 g, severe >= 1.9 g); the home world and the Moon have none. On a body's ground
+(`advance_body_flight` -> `body_hazards`, in the body store's ground pass) a rig without the
+counter pays every second: heat 1.2 hull a severity (scaled by the hull line), cold 0.6 fuel,
+toxic 1.0 extra air, high gravity 1.0 fuel a second of thrust. Gear below the tag's severity
+halves it; at or over, none. `HazardBiting` fires once a landing per tag. Test mode's infinite
+fuel covers the fuel drains.
+
+### State, formats and events
+
+* `WorldState::stations: StationLedger` (shared `SectionKey::Stations`, appended to `SHARED`;
+  serde default; hashed only once non-empty, so older worlds keep their hashes): holds, missions,
+  board serials, market shifts (pair lists for struct and tuple keys), derelicts salvaged,
+  rumours heard, bodies scanned, missions completed, hazard warnings. A leaving player's hold
+  and missions go with them (`remove_player_with`).
+* `HazardGear::ship` (appended) in the private loadout.
+* Commands: `StationService::Hub(StationAction)` (appended) for every hub action: `Fit`,
+  `BuyGood`, `SellGood`, `SellOre`, `Accept`, `Abandon`, `TurnIn`, `BuyRound`, `Salvage`.
+  Refuel, repair and flight gear stay Wave 11's services, now priced by the station and refused
+  at a derelict. A refusal is an event (`StationEvent::Refused` with a `StationRefusal` code).
+* Events 960-979: `GameplayEventKind::Station { what: StationEvent, player_id, detail }` (16
+  kinds: fits, trades, missions, rumours, salvage, refusals, scans, hazards).
+* **`PROTOCOL_VERSION` 20** (this track's one bump: the loadout field, the command, the section,
+  the events). **Save format**: no bump (every field has a serde default). No golden digest
+  moved (V1-V11, `GOLDEN_SPACE_DIGEST`).
+
+### The first hour in space (`station::balance`)
+
+A rig reaches space after the Heart, so the model starts from nothing: take Halcyon Dock's
+starter board, fly it, sell the ore dug past the quota (as much again, at 20 credits a unit:
+the planet themes' shallow iron and silver), carry what Halcyon makes to the delivery's station,
+then take the board's next three. Minutes come from the Wave 11 journey (a warp about a minute,
+approach and landing two and a half, docking three): a scan 4 min, a quota 10, a delivery 6,
+another system +4, 1.5 at the counters each time. `first_trip(seed)`; the test holds the first
+Ship Engine tier (8,000, the dearest first tier) affordable between 30 and 60 minutes on five
+seeds (`first_trip_report` prints the steps).
+
+| Seed | First Ship Engine tier | Credits in the model | Model minutes |
+|---|---|---|---|
+| 1 | 42 min | 13,683 | 53.5 |
+| 7 | 40.5 min | 18,398 | 68 |
+| 42 | 40.5 min | 18,181 | 61.5 |
+| 0xC0FFEE | 36.5 min | 11,725 | 48 |
+| 0x5EED0011 | 40.5 min | 14,042 | 58 |
+
+The curve after it: missions pay 1,000-3,500 (more from outposts and from far systems), about
+12,000-18,000 an hour once the boards and holds open up; each tier of a line costs about 1.9
+times the last, so the second tier of a line lands in the second hour, the third (about
+29,000) in the third, and a full line (tier 5, ~100,000) is a long goal paid for by the far
+systems' bigger boards. Alien tech (6,500-11,000) and planet gear (2,000-7,800) are side buys
+the worlds' hazard tags ask for.
+
+### Game side
+
+* `shell/station.rs`: the hub (`ModalScreen::Station`, now pages: `StationPage::{Hub, Shipyard,
+  Market, Board, Bar}`, `SeatUi::station`). Rows by keys, pad, mouse and touch (tap a row);
+  Back returns to the concourse; abandoning a mission takes a second confirm on its row.
+  Every action is an ordinary `PlayerCommand::Flight` for the seat's player (split screen:
+  each seat at its own station and page; online: a normal command).
+* `rendering/station_hub.rs`: the hub's counter panel beside the station's interior (the town
+  counters' side placement; a narrow split-screen view docks the panel along the bottom). The
+  interior is drawn by owner (human riveted bulkheads and warm strip lights; alien grown columns
+  and pointed arches with breathing pods; derelict scorched plating, torn panels, hanging
+  cables, one dimming lamp, deck debris) and by page (a directory arch and spacers walking by;
+  a hull on its gantry with a welder's steady glow; crates, a price board and a trader's stall;
+  a corkboard with a notice per offer and a WANTED poster; shelves of bottles, a neon sign, the
+  patrons and a keeper behind the counter), with a window onto the world the station keeps
+  station with. People are the people engine's figures; alien kin are drawn as themselves.
+  Nothing flashes (lights hold or breathe slowly).
+* `rendering/space_view.rs`: stations outside by owner: the human hub (Wave 11's), an alien bulb
+  with curving fins and a crown of pods, a derelict with a torn wing, a holed ring, dead windows,
+  one dim lamp and drifting debris.
+* Toasts for every station event (`LocalGame::announce_stations`), sounds (`station_cue`).
+* `shell/flight::named`: the nav chart and the flight HUD call stations by name.
+* Scenes (`scene_capture/station_scenes.rs`): `station_exterior_human`, `station_exterior_alien`,
+  `station_exterior_derelict`, `station_docking`, `station_concourse`, `station_shipyard`,
+  `station_shipyard_alien`, `station_market`, `station_bounty_board`, `station_bar`,
+  `station_bar_alien`, `station_derelict_salvage`, `station_split`; touch: `touch_station`.
+
+### Tests
+
+* `station::tests`: Halcyon's profile; owners and services across 81 sectors (every owner
+  present, derelicts only salvage, seeded); the shipyard's prices climb and every upgrade does
+  what it says; markets (spread, unsold goods, a trade moving the price and fading back);
+  Halcyon's starter board on four seeds; bars (people-engine patrons, rumours about near worlds,
+  an alien bar's kin); hazard tags and gear (tier 1 halves the severe heat, tier 2 stops it,
+  gravity only while thrusting); the first hour within 30-60 min on five seeds; codes in range.
+* `world::station_tests`: docking opens the hub and every service works (credits refused,
+  two engine tiers, the yard's limit, gear, no alien tech at a human yard, buying to the hold's
+  limit, selling under the price, unsold goods, ore at the station's rate, accept and roll the
+  slot, abandon, nothing to turn in, a round's rumour setting the waypoint and charting the
+  system, station-priced refuel and repair, closed when undocked); ship lines apply in flight
+  (more speed from a second of thrust, less burn at a star's surface, more air, a bigger hold,
+  half the warp fuel at drive range 4); alien tech at an alien station (the lens doubles the
+  ping) and a derelict refuses service and is stripped once; planet gear counters heat, cold
+  and toxic air on real worlds near home (the warning fires); **a bot completes Halcyon's
+  starter board with the player's controls** (undocks, flies to the scan target and pings,
+  lands on the quota's world, digs a seam, takes off, docks at the delivery's station and is
+  paid every reward there); station state saves (JSON and postcard), replicates (the shared
+  section and the private loadout) and replays identically.
+
+### Seams (for the Wave 12 integrator)
+
+* TODO-SEAM(w12-aliens): `profile::AlienKin` (an index; `PLACEHOLDERS` names) stands in for the
+  aliens track's species; alien bar patrons' names and lines are placeholders too.
+* TODO-SEAM(w12-hostiles): faction missions append to `bounty::MissionKind` and come from
+  `bounty::faction_offers` (empty); the board's WANTED poster is waiting for them.
+* TODO-SEAM(w12-planets-a / planets-b): `hazard::hazards_of` reads physical parameters; the
+  theme tracks' hazard tags replace it (`PlanetHazard` is the vocabulary). Rumours use
+  `space::Theme` phrases.
+* TODO-SEAM(w12-systems): asteroid mining from flight calls `WorldState::credit_asteroid_ore`
+  (a quota in that system); a per-body/system economy folds into `market::economy_percent`.
+* Station music and a station ambience patch are not added (the audio director plays the
+  place's sound; stations reuse existing cues).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
