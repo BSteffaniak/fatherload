@@ -456,6 +456,13 @@ impl WorldState {
         if mission.kind.hold_units() > room {
             return Err(StationRefusal::HoldFull);
         }
+        // A bounty is posted for the hunter (the ships come when the rig flies near).
+        let bounty = crate::station::bounty::bounty_target_of(self.world_seed(), mission.kind);
+        if let Some(target) = bounty.clone()
+            && !self.post_bounty(player_id, target)
+        {
+            return Err(StationRefusal::Nothing);
+        }
         let serials = self.stations.boards.entry(profile.id).or_default();
         serials[usize::from(slot)] = serials[usize::from(slot)].saturating_add(1);
         self.stations
@@ -467,16 +474,20 @@ impl WorldState {
         // player can fly it straight from the board.
         let galaxy = self.space();
         let target = match mission.kind {
-            MissionKind::Scan { body } | MissionKind::Mine { body, .. } => galaxy.body_ref(body),
-            MissionKind::Deliver { to, .. } => crate::station::profile::station_ref(&galaxy, to),
+            MissionKind::Scan { body } | MissionKind::Mine { body, .. } => {
+                galaxy.body_ref(body).map(NavTarget::Body)
+            }
+            MissionKind::Deliver { to, .. } => {
+                crate::station::profile::station_ref(&galaxy, to).map(NavTarget::Body)
+            }
+            // A bounty's waypoint is the system its target lurks in.
+            MissionKind::Bounty { .. } => bounty.map(|target| NavTarget::System(target.system)),
         };
         if let Some(target) = target {
-            if !target.system.is_home() {
-                self.flight.found(target.system);
+            if !target.system().is_home() {
+                self.flight.found(target.system());
             }
-            self.flight
-                .waypoints
-                .insert(player_id, NavTarget::Body(target));
+            self.flight.waypoints.insert(player_id, target);
         }
         output.push_event(station_event(
             StationEvent::MissionAccepted,
@@ -500,9 +511,15 @@ impl WorldState {
         if usize::from(index) >= missions.len() {
             return Err(StationRefusal::Nothing);
         }
-        missions.remove(usize::from(index));
+        let gone = missions.remove(usize::from(index));
         if missions.is_empty() {
             self.stations.missions.remove(&player_id);
+        }
+        // An abandoned bounty is taken down (its ships stop hunting for this player).
+        if let MissionKind::Bounty { target, .. } = gone.kind {
+            self.hostiles
+                .bounties
+                .retain(|posted| !(posted.target.id == target && posted.hunter == player_id));
         }
         output.push_event(station_event(
             StationEvent::MissionAbandoned,
@@ -588,7 +605,18 @@ impl WorldState {
         player.credits -= price;
         self.stations.heard.insert((profile.id, patron));
         let galaxy = self.space();
-        if let Some(body) = galaxy.body_ref(rumour.body) {
+        if let Some(lair) = rumour
+            .lair
+            .and_then(|faction| crate::hostiles::boss_lair(self.world_seed(), faction))
+        {
+            // A boss's lair: its system charted and the waypoint on it (Wave 12 hostiles).
+            if !lair.system.is_home() {
+                self.flight.found(lair.system);
+            }
+            self.flight
+                .waypoints
+                .insert(player_id, NavTarget::System(lair.system));
+        } else if let Some(body) = galaxy.body_ref(rumour.body) {
             if !body.system.is_home() {
                 self.flight.found(body.system);
             }
@@ -756,11 +784,9 @@ impl WorldState {
         }
     }
 
-    /// Asteroid ore mined from flight counts toward quotas on bodies of its system.
-    ///
-    /// TODO-SEAM(w12-systems): the systems track's asteroid mining calls this with the
-    /// asteroid's system; quotas name a body, so ore from a belt counts toward any quota in
-    /// that system.
+    /// Asteroid ore mined from flight counts toward quotas on bodies of its system: the
+    /// systems track's belt mining calls this with the rock's system (quotas name a body, so
+    /// ore from a belt counts toward any quota in that system).
     pub fn credit_asteroid_ore(
         &mut self,
         player_id: PlayerId,
@@ -777,6 +803,34 @@ impl WorldState {
             },
             output,
         );
+    }
+
+    /// A bounty `target` was claimed by `hunter` (the kill paid its reward, Wave 12 hostiles):
+    /// the board's mission for it is done and closes.
+    pub(super) fn bounty_mission_claimed(
+        &mut self,
+        hunter: PlayerId,
+        target: u64,
+        output: &mut TickOutput,
+    ) {
+        let Some(missions) = self.stations.missions.get_mut(&hunter) else {
+            return;
+        };
+        let Some(index) = missions.iter().position(|mission| {
+            matches!(mission.kind, MissionKind::Bounty { target: id, .. } if id == target)
+        }) else {
+            return;
+        };
+        let mission = missions.remove(index);
+        if missions.is_empty() {
+            self.stations.missions.remove(&hunter);
+        }
+        *self.stations.completed.entry(hunter).or_insert(0) += 1;
+        output.push_event(station_event(
+            StationEvent::MissionPaid,
+            hunter,
+            mission.reward,
+        ));
     }
 
     // --- The ship at work ---------------------------------------------------------------------

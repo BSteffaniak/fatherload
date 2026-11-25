@@ -1,7 +1,8 @@
 //! Ground raids: a faction's dropship sets troopers down on a body.
 //!
-//! They land near where people are (a rig on the ground today; alien towns and player bases
-//! through the [`RaidSite`] hook, TODO-SEAM w12-aliens / w12-bodylife).
+//! They land near where people are ([`RaidSite`]): by an alien town a rig is in or near (Wave
+//! 12 integration: the raiders come for the town, and its folk's safe ground does not hold
+//! them back), else near a rig on the ground. A player's base or home still keeps them out.
 //!
 //! The troopers are ordinary creatures of the body's store (raid corsairs, swarm skitters and
 //! machine troopers: [`crate::enemy::EnemyKind::RaidCorsair`] and its siblings): they keep the body rules every creature keeps (`step_body`,
@@ -26,9 +27,10 @@ pub const MAX_TROOPERS: u32 = 6;
 pub const LANDING_OFFSET: i32 = 15;
 /// Troopers drop from this many rows above the ground.
 pub const DROP_ROWS: i32 = 10;
+/// Columns past an alien town's edge within which a rig draws a raid onto the town.
+pub const TOWN_RAID_REACH: i32 = 90;
 
-/// A place raiders come for (TODO-SEAM w12-aliens: alien towns; w12-bodylife / bases: a
-/// player's base on a body). Today a rig on the ground is the only site.
+/// A place raiders come for: an alien town (its middle and ground) or a rig on the ground.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RaidSite {
     /// Strip column and the row of its ground.

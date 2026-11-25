@@ -41,6 +41,9 @@ const SALT_PATRON: u64 = 0x57A7_0301;
 pub struct Rumour {
     pub body: SpaceBodyId,
     pub text: String,
+    /// A rumour of a faction boss's lair instead (Wave 12 integration with the hostiles
+    /// track): the round charts the lair's system and points the waypoint at it.
+    pub lair: Option<crate::hostiles::Faction>,
 }
 
 /// One patron.
@@ -190,9 +193,17 @@ fn patron(
             LINES[pick(LINES.len(), 15)].to_owned(),
         )
     };
-    // Two in three have a rumour; a relay's bar hears everything.
+    // Two in three have a rumour; a relay's bar hears everything. The last patron of a bar
+    // out past the home system knows where a faction's boss holds court (the lairs are
+    // otherwise only met by flying through them).
     let rumoured = station.kind == crate::space::StationKind::Relay || pick(3, 27) != 0;
-    let rumour = if rumoured && !worlds.is_empty() {
+    let far = station.id.sector != crate::space::HOME_SECTOR || station.id.system != 0;
+    let lair = (far && index + 1 == PATRONS)
+        .then(|| crate::hostiles::Faction::ALL[pick(crate::hostiles::Faction::ALL.len(), 39)])
+        .and_then(|faction| lair_rumour(space, faction, worlds));
+    let rumour = if lair.is_some() {
+        lair
+    } else if rumoured && !worlds.is_empty() {
         let body = worlds[(usize::from(index) + pick(worlds.len(), 33)) % worlds.len()];
         rumour_about(space, body)
     } else {
@@ -240,5 +251,26 @@ pub fn rumour_about(space: &Space, body: SpaceBodyId) -> Option<Rumour> {
             system.name,
             theme_hint(found.theme),
         ),
+        lair: None,
+    })
+}
+
+/// A rumour of `faction`'s boss lair (`None` if the galaxy has none for it).
+fn lair_rumour(
+    space: &Space,
+    faction: crate::hostiles::Faction,
+    worlds: &[SpaceBodyId],
+) -> Option<Rumour> {
+    let lair = crate::hostiles::boss_lair(space.seed(), faction)?;
+    let body = *worlds.first()?;
+    let boss = faction.boss().name();
+    Some(Rumour {
+        body,
+        text: format!(
+            "Stay clear of the {} if you value your hull: {boss} holds court out there, on \
+             the way in from home. Go armed, or go round.",
+            faction.name()
+        ),
+        lair: (!lair.system.is_home()).then_some(faction),
     })
 }

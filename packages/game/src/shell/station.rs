@@ -74,6 +74,8 @@ pub enum StationRow {
     /// Back to the hub.
     Back,
     Close,
+    /// Space weapons and the deflector (Wave 12 hostiles, sold at the shipyard).
+    Arm(fatherload_simulation::hostiles::ShipGearKind),
 }
 
 /// The seat's hub state.
@@ -145,6 +147,15 @@ pub fn station_rows(
             );
             if station.dock_services {
                 rows.extend(FlightGearKind::ALL.into_iter().map(StationRow::Buy));
+            }
+            // The hostile factions' answer: cannon, turret, missiles and deflector at any yard
+            // that fits ship lines (Wave 12 integration).
+            if station.yard_tier > 0 {
+                rows.extend(
+                    fatherload_simulation::hostiles::ShipGearKind::ALL
+                        .into_iter()
+                        .map(StationRow::Arm),
+                );
             }
             rows.push(StationRow::Back);
         }
@@ -262,6 +273,16 @@ impl SeatUi {
             Some(StationRow::Offer(slot)) => hub(StationAction::Accept(slot)),
             Some(StationRow::Patron(index)) => hub(StationAction::BuyRound(index)),
             Some(StationRow::Salvage) => hub(StationAction::Salvage),
+            Some(StationRow::Arm(kind)) => {
+                cues.push(SoundCue::Ui);
+                requests.push(ShellRequest::Action {
+                    seat: ctx.seat,
+                    command: PlayerCommand::Combat(
+                        fatherload_simulation::hostiles::CombatCommand::BuyGear(kind),
+                    ),
+                });
+                return;
+            }
             Some(StationRow::Mission(index)) => {
                 if self.station.abandon_armed == Some(index) {
                     self.station.abandon_armed = None;

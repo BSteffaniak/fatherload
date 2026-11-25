@@ -35,6 +35,8 @@ pub const SCAN_MINUTES: f32 = 4.0;
 pub const MINE_MINUTES: f32 = 10.0;
 /// Minutes to carry a delivery to another station in the system and dock.
 pub const DELIVER_MINUTES: f32 = 6.0;
+/// A bounty hunt: the flight out to its system and the fight.
+pub const BOUNTY_MINUTES: f32 = 9.0;
 /// Extra minutes when the target is in another system (a warp each way, the cruise in).
 pub const ELSEWHERE_MINUTES: f32 = 4.0;
 /// Minutes at a station's counters per visit.
@@ -85,11 +87,13 @@ fn minutes_for(kind: MissionKind, context: &BoardContext) -> f32 {
             .stations
             .iter()
             .any(|found| found.0 == to && found.2),
+        MissionKind::Bounty { .. } => true,
     };
     let work = match kind {
         MissionKind::Scan { .. } => SCAN_MINUTES,
         MissionKind::Mine { .. } => MINE_MINUTES,
         MissionKind::Deliver { .. } => DELIVER_MINUTES,
+        MissionKind::Bounty { .. } => BOUNTY_MINUTES,
     };
     work + if elsewhere { ELSEWHERE_MINUTES } else { 0.0 } + DOCKED_MINUTES
 }
@@ -168,7 +172,7 @@ pub fn first_trip(seed: u64) -> TripModel {
                         });
                     }
                 }
-                MissionKind::Scan { .. } => {}
+                MissionKind::Scan { .. } | MissionKind::Bounty { .. } => {}
             }
         }
     }

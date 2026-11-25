@@ -100,6 +100,11 @@ impl WorldState {
     pub fn hostile_safe_zone(&self, attacker: Option<EnemyKind>, tile: TilePosition) -> bool {
         match attacker {
             Some(kind) if night::is_nocturnal(kind) => self.night_safe_zone(tile),
+            // Raid troopers came for the place (an alien town's safe ground does not hold
+            // them, Wave 12 integration); a player's base or home still keeps them out.
+            Some(kind) if crate::hostiles::raid::is_trooper(kind) => {
+                self.bases.is_safe_zone(tile) || self.homes.is_safe_zone(tile)
+            }
             _ => self.enemy_safe_zone(tile),
         }
     }

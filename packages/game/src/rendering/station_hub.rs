@@ -227,6 +227,7 @@ const fn group_of(row: StationRow) -> (&'static str, Color) {
         StationRow::Fit(ShipUpgrade::Gear(_)) => ("Planet gear", ORANGE),
         StationRow::Fit(ShipUpgrade::Alien(_)) => ("Alien tech", LAVENDER),
         StationRow::Buy(_) => ("Flight gear", SKY_LIGHT),
+        StationRow::Arm(_) => ("Weapons", RED),
         StationRow::SellOre => ("Ore", COPPER),
         StationRow::BuyGood(_) => ("Buy", MINT),
         StationRow::SellGood(_) => ("Sell", GOLD),
@@ -332,6 +333,22 @@ fn entry_for(
                 ),
                 "Whatever the crew left behind: credits in the safe, alloy in the frames, \
                  maybe a builders' relic."
+                    .to_owned(),
+            )
+        }
+        StationRow::Arm(kind) => {
+            let level = kind.level(player.hazard_gear.arms);
+            let maxed = level >= kind.max_level();
+            (
+                entry(
+                    &menu_icons::GEAR,
+                    kind.name(),
+                    format!("tier {level}/{}", kind.max_level()),
+                    (!maxed).then(|| kind.price(level)),
+                    picked,
+                    maxed || credits < kind.price(level),
+                ),
+                "For the pirates, the swarm and the machine fleet out past the home sector."
                     .to_owned(),
             )
         }
@@ -539,6 +556,9 @@ fn entry_for(
                         }
                         fatherload_simulation::station::MissionKind::Mine { .. } => {
                             "dig the ore on its ground"
+                        }
+                        fatherload_simulation::station::MissionKind::Bounty { .. } => {
+                            "fly to its system and bring it down"
                         }
                     },
                     Some(mission.reward),
@@ -1550,12 +1570,17 @@ fn draw_board(
                 fatherload_simulation::station::MissionKind::Scan { .. } => SKY,
                 fatherload_simulation::station::MissionKind::Mine { .. } => COPPER,
                 fatherload_simulation::station::MissionKind::Deliver { .. } => LEAF,
+                fatherload_simulation::station::MissionKind::Bounty { .. } => RED,
             };
             block(draw, x + 17.0, y + 29.0, 8.0, 6.0, stamp);
             block(draw, x + 18.0, y + 30.0, 6.0, 1.0, CREAM.alpha(0.6));
         }
     }
-    // The wanted poster (TODO-SEAM(w12-hostiles): the factions' bounties fill it).
+    // The wanted poster: the board's bounty, if it has one (a hostile faction's named ship,
+    // Wave 12 integration), its faction's colour on the face and its name under it.
+    let wanted = offers.iter().flatten().find_map(|offer| {
+        fatherload_simulation::station::bounty::bounty_target_of(world.world_seed(), offer.kind)
+    });
     let poster_x = board.x + board.width - 40.0;
     if poster_x > board.x + 104.0 {
         block(draw, poster_x, board.y + 10.0, 34.0, 46.0, BONE);
@@ -1574,6 +1599,24 @@ fn draw_board(
         block(draw, poster_x + 13.0, board.y + 39.0, 8.0, 1.0, CREAM);
         block(draw, poster_x + 6.0, board.y + 48.0, 22.0, 2.0, MAROON);
         block(draw, poster_x + 16.0, board.y + 8.0, 3.0, 3.0, RED);
+        if let Some(target) = wanted {
+            let mark = match target.faction {
+                fatherload_simulation::hostiles::Faction::Pirates => COPPER,
+                fatherload_simulation::hostiles::Faction::Swarm => LEAF,
+                fatherload_simulation::hostiles::Faction::Machine => SKY,
+            };
+            block(draw, poster_x + 3.0, board.y + 52.0, 28.0, 3.0, mark);
+            let name: String = target.name.chars().take(12).collect();
+            ui_kit::text_shadowed(
+                draw,
+                &name,
+                (poster_x - 6.0) as i32,
+                (board.y + 58.0) as i32,
+                TextStyle::Body,
+                CREAM,
+                None,
+            );
+        }
     }
     // A clerk's terminal below, its screen scrolling the board.
     block(draw, left + 8.0, floor_y - 40.0, 54.0, 40.0, colours.trim);

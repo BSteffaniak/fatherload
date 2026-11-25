@@ -88,9 +88,9 @@ impl WorldState {
 
     /// Nebula cover at `pos`, per mille: how hidden a ship there is from sensors.
     ///
-    /// TODO-SEAM(w12-hostiles): pirates lurking in a nebula read this to hide (and to ambush
-    /// from); the nav HUD already fades their markers with [`crate::flight::systems::
-    /// marker_visibility`].
+    /// Pirates lurk in it (the hostiles track weights them toward fog) and spring their
+    /// ambushes from closer in it (`start_encounter`); the nav HUD fades their markers with
+    /// [`crate::flight::systems::marker_visibility`].
     #[must_use]
     pub fn nebula_cover(&self, pos: WorldPos) -> u16 {
         if !self.space_enabled() {
@@ -345,6 +345,7 @@ impl WorldState {
             player.fuel = (player.fuel - fuel_burned).max(0.0);
         }
         let mut cargo_changed = false;
+        let mut quota = None;
         if let Some(rock) = mined_unit
             && player.add_cargo(asteroid_mineral(rock.ore))
         {
@@ -358,6 +359,10 @@ impl WorldState {
                 .position(|ore| *ore == rock.ore)
                 .unwrap_or(0) as u32;
             events.push((SystemsEvent::OreMined, ore));
+            quota = Some(crate::space::SystemRef {
+                sector: rock.id.sector,
+                system: rock.id.system,
+            });
             if depleted {
                 events.push((SystemsEvent::AsteroidDepleted, 0));
             }
@@ -380,6 +385,11 @@ impl WorldState {
         }
         for (what, detail) in events {
             output.push_event(systems_event(what, player_id, detail));
+        }
+        // Belt ore counts toward the stations' mining quotas in its system (Wave 12
+        // integration).
+        if let Some(system) = quota {
+            self.credit_asteroid_ore(player_id, system, 1, output);
         }
         if cargo_changed {
             output.push_event(GameplayEventKind::CargoChanged { player_id });

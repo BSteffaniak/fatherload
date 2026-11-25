@@ -20,8 +20,11 @@
 //! quota and a delivery inside or next to the home system) so a first trip out has clear,
 //! near goals.
 //!
-//! TODO-SEAM(w12-hostiles): faction missions (pirate bounties, swarm culls, the machine
-//! fleet) append to [`MissionKind`] and come from [`faction_offers`].
+//! * **Bounty** (Wave 12 integration with the hostiles track): a named elite ship of a hostile
+//!   faction ([`crate::hostiles::bounty_targets`]: a pirate captain, a swarm brood-mother, a
+//!   machine warden) with its escort, lurking in a system a little farther out. Taking it posts
+//!   the bounty for the player (the ships appear when the rig comes near) and points the nav
+//!   waypoint at its system; the kill pays the reward on the spot and closes the mission.
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -72,6 +75,14 @@ pub enum MissionKind {
     Scan { body: SpaceBodyId },
     /// Collect `units` of ore on `body`'s ground.
     Mine { body: SpaceBodyId, units: u16 },
+    /// Hunt down a hostile faction's named ship: target `index` of the board of system
+    /// `posted` on day `day` ([`bounty_target_of`]; `target` is its id). Wave 12 hostiles.
+    Bounty {
+        target: u64,
+        posted: crate::flight::SystemRef,
+        day: u32,
+        index: u8,
+    },
 }
 
 impl MissionKind {
@@ -80,7 +91,7 @@ impl MissionKind {
     pub const fn goal(self) -> u16 {
         match self {
             Self::Deliver { units, .. } | Self::Mine { units, .. } => units,
-            Self::Scan { .. } => 1,
+            Self::Scan { .. } | Self::Bounty { .. } => 1,
         }
     }
 
@@ -89,7 +100,7 @@ impl MissionKind {
     pub const fn body(self) -> Option<SpaceBodyId> {
         match self {
             Self::Scan { body } | Self::Mine { body, .. } => Some(body),
-            Self::Deliver { .. } => None,
+            Self::Deliver { .. } | Self::Bounty { .. } => None,
         }
     }
 
@@ -243,6 +254,9 @@ pub fn reward_for(kind: MissionKind, station: &StationProfile, context: &BoardCo
             500 + u32::from(units) * good.base_price() / 2
                 + near.map_or(0, |found| distance_pay(found.1, found.2))
         }
+        // The kill pays the bounty's own reward (the hostiles track pays it on the spot);
+        // the board shows that figure ([`offer`]).
+        MissionKind::Bounty { .. } => return 0,
     };
     if station.kind == StationKind::Outpost {
         base + base / 5
@@ -269,24 +283,81 @@ pub fn offer(seed: u64, context: &BoardContext, slot: u8, serial: u16) -> Option
         SALT_MISSION ^ (u64::from(slot) << 16) ^ (u64::from(serial) << 24),
     );
     let starter = station.halcyon && serial == 0;
-    let first_kind = if starter { u64::from(slot) } else { roll % 3 };
+    // A starter board keeps its fixed three; any other rolls a bounty one time in four
+    // (Wave 12 integration: the hostile factions' targets).
+    let kinds: u64 = if starter { 3 } else { 4 };
+    let first_kind = if starter {
+        u64::from(slot)
+    } else {
+        roll % kinds
+    };
     // Try the rolled kind, then the others.
-    for step in 0..3 {
-        let kind = match (first_kind + step) % 3 {
+    for step in 0..kinds {
+        let kind = match (first_kind + step) % kinds {
             0 => scan_offer(context, roll, starter),
             1 => mine_offer(context, roll, starter),
-            _ => deliver_offer(context, roll, starter),
+            2 => deliver_offer(context, roll, starter),
+            _ => bounty_offer(seed, station, serial, roll),
         };
         if let Some(kind) = kind {
+            let reward = match kind {
+                MissionKind::Bounty { .. } => {
+                    bounty_target_of(seed, kind).map_or(0, |target| target.reward)
+                }
+                _ => reward_for(kind, station, context),
+            };
             return Some(Mission {
                 id,
                 kind,
-                reward: reward_for(kind, station, context),
+                reward,
                 progress: 0,
             });
         }
     }
     None
+}
+
+/// A bounty on a board: one of the hostile factions' targets posted round the station's
+/// system (the targets change with the slot's serial, so a taken bounty is replaced).
+fn bounty_offer(
+    seed: u64,
+    station: &StationProfile,
+    serial: u16,
+    roll: u64,
+) -> Option<MissionKind> {
+    let space = Space::shared(seed);
+    let system = space.system(SystemRef {
+        sector: station.id.sector,
+        system: station.id.system,
+    })?;
+    let posted = crate::flight::space::GeneratedSpace::reference(station.id.sector, &system);
+    let day = u32::from(serial);
+    let targets = crate::hostiles::bounty_targets(seed, posted, day);
+    if targets.is_empty() {
+        return None;
+    }
+    let index = ((roll >> 13) % targets.len() as u64) as usize;
+    let target = &targets[index];
+    Some(MissionKind::Bounty {
+        target: target.id,
+        posted,
+        day,
+        index: u8::try_from(index).unwrap_or(0),
+    })
+}
+
+/// The hostile target a bounty mission names (`None` for other kinds).
+#[must_use]
+pub fn bounty_target_of(seed: u64, kind: MissionKind) -> Option<crate::hostiles::BountyTarget> {
+    let MissionKind::Bounty {
+        posted, day, index, ..
+    } = kind
+    else {
+        return None;
+    };
+    crate::hostiles::bounty_targets(seed, posted, day)
+        .into_iter()
+        .nth(usize::from(index))
 }
 
 /// Picks one of `n` candidates (the nearest for a starter).
@@ -360,13 +431,6 @@ fn deliver_offer(context: &BoardContext, roll: u64, starter: bool) -> Option<Mis
     Some(MissionKind::Deliver { good, units, to })
 }
 
-/// Faction missions for a board (TODO-SEAM(w12-hostiles): the hostiles track's factions post
-/// bounties here; none yet).
-#[must_use]
-pub const fn faction_offers(_seed: u64, _context: &BoardContext) -> Vec<Mission> {
-    Vec::new()
-}
-
 /// A body's name (`Kessa III`, `Kessa IIb`).
 #[must_use]
 pub fn body_name(space: &Space, body: SpaceBodyId) -> String {
@@ -409,6 +473,10 @@ pub fn describe(space: &Space, kind: MissionKind) -> String {
             "Deliver {units} {} to {}",
             good.name(),
             station_name(space, to)
+        ),
+        MissionKind::Bounty { .. } => bounty_target_of(space.seed(), kind).map_or_else(
+            || "Bounty".to_owned(),
+            |target| format!("Bounty: {} ({})", target.name, target.faction.name()),
         ),
     }
 }

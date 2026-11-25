@@ -539,6 +539,11 @@ fn world_with(world: &WorldState, hazard: PlanetHazard) -> Option<(SpaceBodyId, 
             let sector = space.sector(SpaceSector::new(x, y));
             for system in &sector.systems {
                 for body in &system.bodies {
+                    // A theme world applies its hazards through its own rules (Wave 12
+                    // integration): the flat drain is measured on the generic worlds.
+                    if crate::station::hazard::theme_rules_hazards(body) {
+                        continue;
+                    }
                     let id = SpaceBodyId {
                         sector: sector.coords,
                         system: system.index,

@@ -555,7 +555,17 @@ impl WorldState {
         } else {
             1.0
         };
-        let centre = pos.offset(fx * SPAWN_RANGE * boss_range, fy * SPAWN_RANGE * boss_range);
+        // Pirates hide in a nebula's fog and spring out of it close by (Wave 12 integration
+        // with the systems track): the thicker the cover, the nearer the ambush (at most 40 %
+        // nearer, still outside a fair reaction distance).
+        let ambush = if faction == Faction::Pirates && kind != EncounterKind::Boss {
+            let cover = f32::from(self.nebula_cover(pos).min(1_000)) / 1_000.0;
+            1.0 - 0.4 * cover
+        } else {
+            1.0
+        };
+        let reach = SPAWN_RANGE * boss_range * ambush;
+        let centre = pos.offset(fx * reach, fy * reach);
         let (vx, vy) = if cruising {
             (0.0, 0.0)
         } else {
@@ -1580,6 +1590,8 @@ impl WorldState {
                 if let Some(hunter) = self.players.get_mut(&posted.hunter) {
                     hunter.credits = hunter.credits.saturating_add(posted.target.reward);
                 }
+                // The station board's mission for it closes (Wave 12 integration).
+                self.bounty_mission_claimed(posted.hunter, bounty, output);
                 output.push_event(hostile_event(
                     HostileEvent::BountyClaimed,
                     Some(posted.hunter),
@@ -1872,9 +1884,9 @@ impl WorldState {
 
     // --- Ground raids -------------------------------------------------------------------------
 
-    /// Ground raids in a body's ground pass: rolls on an occupied body, troopers landing near a
-    /// rig (TODO-SEAM w12-aliens: alien towns; w12-bodylife: bases), and raids ending when
-    /// their troopers are gone.
+    /// Ground raids in a body's ground pass: rolls on an occupied body, troopers landing by an
+    /// alien town a rig is near, else near a rig, and raids ending when their troopers are
+    /// gone.
     pub(super) fn advance_raids(&mut self, next_tick: SimulationTick, output: &mut TickOutput) {
         let store = self.active_store();
         let crate::place::StoreKey::Body(key) = store else {
@@ -2030,21 +2042,38 @@ impl WorldState {
         ));
     }
 
-    /// Where raiders come for on this ground: every rig on it (TODO-SEAM w12-aliens: alien
-    /// towns; w12-bodylife / bases: player bases on bodies).
+    /// Where raiders come for on this ground: an alien town with a rig in or near it first
+    /// (the dropship sets down by the town; its folk shelter and the crew can defend it,
+    /// Wave 12 integration with the aliens track), then every rig on the ground.
     fn raid_sites(&self) -> Vec<raid::RaidSite> {
         let frame = self.frame();
-        self.players
+        let rigs: Vec<crate::terrain::TilePosition> = self
+            .players
             .values()
             .filter(|player| player.hull > 0.0)
-            .map(|player| {
-                let tile = frame.tile_at(player.x, player.y);
-                raid::RaidSite {
-                    column: tile.x,
-                    row: tile.y,
+            .map(|player| frame.tile_at(player.x, player.y))
+            .collect();
+        let mut sites = Vec::new();
+        if let Some(ground) = self.terrain.planet_ground() {
+            let width = ground.strip_width();
+            for town in ground.town_sites().iter().flatten() {
+                let near = rigs.iter().any(|rig| {
+                    crate::alien::town::wrapped_distance(i64::from(rig.x), town.centre, width)
+                        <= i64::from(town.half_width + raid::TOWN_RAID_REACH)
+                });
+                if near {
+                    sites.push(raid::RaidSite {
+                        column: town.centre,
+                        row: town.ground_row,
+                    });
                 }
-            })
-            .collect()
+            }
+        }
+        sites.extend(rigs.into_iter().map(|tile| raid::RaidSite {
+            column: tile.x,
+            row: tile.y,
+        }));
+        sites
     }
 }
 
