@@ -24,6 +24,7 @@ use crate::{
     save,
 };
 
+pub mod archivist;
 pub mod arms;
 mod build;
 mod colony;
@@ -190,6 +191,10 @@ pub enum ModalScreen {
     /// A docked station's counter (Wave 11 stub, `shell/flight.rs`): fuel, repairs, flight
     /// gear, a save, undocking. Opens on docking.
     Station,
+    /// The "Ask Index" page (Wave 11 carryover, `shell/archivist.rs`): questions for the seat's
+    /// archivist. From the inventory while one rides with the seat's player, and after the star
+    /// charts in the page cycle.
+    Archivist,
 }
 
 impl ModalScreen {
@@ -1762,7 +1767,7 @@ impl SeatUi {
             return true;
         }
         if modal == ModalScreen::StarCharts {
-            self.handle_star_charts(input, ctx.world, cues);
+            self.handle_star_charts(input, ctx.world, ctx.player, cues);
             return true;
         }
         if modal == ModalScreen::NavChart {
@@ -1775,6 +1780,10 @@ impl SeatUi {
         }
         if modal == ModalScreen::DescentProgress {
             self.handle_descent_progress(input, ctx.world, cues);
+            return true;
+        }
+        if modal == ModalScreen::Archivist {
+            self.handle_archivist(input, ctx, cues, requests);
             return true;
         }
         if modal == ModalScreen::Ending {
@@ -1806,9 +1815,12 @@ impl SeatUi {
             ModalScreen::Depot | ModalScreen::Salvage => 5,
             // Then a row surveys the spot for a home plot (WP-HOME), and the last opens depth
             // logistics (Part III F10).
-            ModalScreen::Inventory => ctx
-                .player()
-                .map_or(0, |player| hopper::hopper_rows(player).len() + 1),
+            // With an archivist along (Wave 11 carryover), one more asks it.
+            ModalScreen::Inventory => ctx.player().map_or(0, |player| {
+                hopper::hopper_rows(player).len()
+                    + 1
+                    + usize::from(archivist::can_ask(ctx.world, ctx.player))
+            }),
             ModalScreen::Fuel | ModalScreen::Bank => 2,
             ModalScreen::Repair => GARAGE_COUNTER_ROW,
             ModalScreen::Explosives => arms::ARMS_FIRST_ROW + arms::ARMS_ROWS.len() - 1,
@@ -2008,7 +2020,16 @@ impl SeatUi {
             | ModalScreen::DescentProgress
             | ModalScreen::Ending
             | ModalScreen::NavChart
-            | ModalScreen::Station => None,
+            | ModalScreen::Station
+            | ModalScreen::Archivist => None,
+            ModalScreen::Inventory
+                if ctx.player().is_some_and(|player| {
+                    self.selected_menu_item == hopper::hopper_rows(player).len() + 2
+                }) =>
+            {
+                self.open_archivist(&ctx, cues);
+                None
+            }
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 1

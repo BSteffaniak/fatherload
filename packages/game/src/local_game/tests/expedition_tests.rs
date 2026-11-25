@@ -10,7 +10,7 @@ use fatherload_simulation::{
     worldgen::{GeneratorVersion, WorldSettings},
 };
 
-use super::{LocalGame, PlayerId, PlayerInput, confirm_input, idle, playing, press};
+use super::{LocalGame, PlayerId, PlayerInput, confirm_input, idle, playing, press, press_seat};
 use crate::shell::{ModalScreen, StoryMomentKind, expedition::expedition_rows};
 
 const PLAYER: PlayerId = PlayerId::new(1);
@@ -355,4 +355,128 @@ fn waking_the_heart_opens_the_ending_on_every_seat_and_taps_turn_its_pages() {
     let _ = press(&mut game, confirm_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Ending));
     assert_eq!(game.shell.seat(0).selected_menu_item, 0);
+}
+
+/// Wave 11 carryover: each seat asks its own archivist from the inventory's "Ask Index" row
+/// (keys or a tap), the answer comes back as that seat's archivist's line, and a seat with no
+/// archivist sees no row and its star charts page turns straight to the map.
+#[test]
+#[allow(clippy::too_many_lines, reason = "two seats through every way of asking")]
+fn each_seat_asks_its_own_archivist_from_the_inventory() {
+    use crate::shell::archivist::{ArchivistRow, archivist_rows};
+    use fatherload_simulation::ancient_city::questions::{ArchivistQuestion, finds_answer};
+    let mut game = playing(deep_world(), 2, "ask-archivist");
+    idle(&mut game, 2);
+    let first = game.seats()[0].player;
+    let second = game.seats()[1].player;
+    game.edit_world(|world| {
+        world.set_expedition(ExpeditionState {
+            found: 12,
+            descents: 0xFF,
+            ..ExpeditionState::default()
+        });
+        world.wake_archivist_for(first);
+    });
+    idle(&mut game, 2);
+    assert!(game.world().archivist_of(first).is_some());
+    assert!(game.world().archivist_of(second).is_none());
+    // Seat 1: the inventory's last row opens the page.
+    let survey = game
+        .world()
+        .player(first)
+        .map(crate::shell::hopper::hopper_rows)
+        .expect("rig")
+        .len();
+    game.shell.seat_mut(0).modal = Some(ModalScreen::Inventory);
+    game.shell.seat_mut(0).selected_menu_item = survey + 2;
+    press_seat(&mut game, 0, confirm_input());
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Archivist));
+    // A tap on "Our finds" asks it.
+    let rows = archivist_rows(game.world().expedition());
+    let finds = rows
+        .iter()
+        .position(|row| *row == ArchivistRow::Ask(ArchivistQuestion::Finds))
+        .expect("finds row");
+    press_seat(
+        &mut game,
+        0,
+        PlayerInput {
+            menu_pick: Some(finds),
+            ..PlayerInput::default()
+        },
+    );
+    idle(&mut game, 3);
+    let charts = game.world().star_charts().len();
+    assert_eq!(
+        game.world()
+            .archivist_of(first)
+            .and_then(|archivist| archivist.line)
+            .map(|(id, _)| id),
+        Some(finds_answer(12, charts)),
+        "its answer is the archivist's line"
+    );
+    assert!(game.shell.seat(0).message.contains("You ask Index"));
+    // Keys: down to the first lore topic and confirm.
+    let lore = rows
+        .iter()
+        .position(|row| matches!(row, ArchivistRow::Ask(ArchivistQuestion::Lore(_))))
+        .expect("a lore row");
+    game.shell.seat_mut(0).selected_menu_item = lore;
+    press_seat(&mut game, 0, confirm_input());
+    idle(&mut game, 3);
+    let id = game
+        .world()
+        .archivist_of(first)
+        .and_then(|archivist| archivist.line)
+        .map(|(id, _)| id)
+        .expect("a line");
+    assert!(
+        id >= fatherload_simulation::ancient_city::archivist::STORY_LINE_BASE,
+        "the story's words: {id}"
+    );
+    // Seat 2 has no archivist: no row past the logistics one, and its star charts page turns
+    // to the map.
+    game.shell.seat_mut(1).modal = Some(ModalScreen::StarCharts);
+    press_seat(
+        &mut game,
+        1,
+        PlayerInput {
+            tab_next: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Map));
+    // Once it wakes one, seat 2 asks its own, and seat 1's is untouched.
+    game.edit_world(|world| world.wake_archivist_for(second));
+    idle(&mut game, 2);
+    let before = game.world().archivist_of(first).and_then(|a| a.line);
+    game.shell.seat_mut(1).modal = Some(ModalScreen::StarCharts);
+    press_seat(
+        &mut game,
+        1,
+        PlayerInput {
+            tab_next: true,
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Archivist));
+    press_seat(
+        &mut game,
+        1,
+        PlayerInput {
+            menu_pick: Some(finds),
+            ..PlayerInput::default()
+        },
+    );
+    idle(&mut game, 3);
+    assert!(
+        game.world()
+            .archivist_of(second)
+            .and_then(|archivist| archivist.line)
+            .is_some()
+    );
+    assert_eq!(
+        game.world().archivist_of(first).and_then(|a| a.line),
+        before
+    );
 }

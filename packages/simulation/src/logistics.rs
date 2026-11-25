@@ -355,6 +355,9 @@ pub enum LogisticsCommand {
         outpost: u32,
         supply: crate::workshop::DeepSupply,
     },
+    /// Ask the player's archivist a question (Wave 11 carryover,
+    /// [`crate::ancient_city::questions`]): it answers at once, in the rig or on foot.
+    AskArchivist(crate::ancient_city::questions::ArchivistQuestion),
 }
 
 /// A rig in a dive (from a dive charge): crash damage is off until it settles.

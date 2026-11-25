@@ -35,6 +35,7 @@ use crate::{
             CityMover, CityRide, LIFT_CAB_TILES, MILLI, MoverKind, PISTON_REBOARD_MILLIS,
             PISTON_TILES, RIDE_WALK_SPEED, StrokePhase, TRAM_CAR_TILES,
         },
+        questions::{self, ArchivistQuestion, OreFind},
         scan_worthy,
     },
     descent::{Descent, Stratum},
@@ -1033,26 +1034,7 @@ impl WorldState {
         let Some(centre) = self.actor_tile(player_id) else {
             return;
         };
-        let reach = SCAN_REACH_TILES;
-        let mut found: Vec<(u32, i32, TilePosition)> = Vec::new();
-        for dy in -reach..=reach {
-            for dx in -reach..=reach {
-                let at = TilePosition {
-                    x: centre.x + dx,
-                    y: centre.y + dy,
-                };
-                let worth = match self.terrain.tile(at).map(|tile| tile.kind) {
-                    Some(TileKind::Ore(mineral)) if scan_worthy(mineral) => mineral.value(),
-                    Some(TileKind::City(
-                        CityTile::AlloyOre | CityTile::EngineCoreOre | CityTile::StarGlass,
-                    )) => 400,
-                    Some(TileKind::Cave(cave)) if cave.is_cache() => 900,
-                    _ => continue,
-                };
-                found.push((worth, dx * dx + dy * dy, at));
-            }
-        }
-        found.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        let found = self.ore_near(centre, SCAN_REACH_TILES);
         let marks: Vec<TilePosition> = found
             .iter()
             .take(SCAN_MARKS)
@@ -1228,6 +1210,105 @@ impl WorldState {
             id,
         ));
         true
+    }
+
+    /// The best ore round `centre` within `reach` tiles, best first (worth, then nearest).
+    fn ore_near(&self, centre: TilePosition, reach: i32) -> Vec<(u32, i32, TilePosition)> {
+        let mut found: Vec<(u32, i32, TilePosition)> = Vec::new();
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                let at = TilePosition {
+                    x: centre.x + dx,
+                    y: centre.y + dy,
+                };
+                let worth = match self.terrain.tile(at).map(|tile| tile.kind) {
+                    Some(TileKind::Ore(mineral)) if scan_worthy(mineral) => mineral.value(),
+                    Some(TileKind::City(
+                        CityTile::AlloyOre | CityTile::EngineCoreOre | CityTile::StarGlass,
+                    )) => 400,
+                    Some(TileKind::Cave(cave)) if cave.is_cache() => 900,
+                    _ => continue,
+                };
+                found.push((worth, dx * dx + dy * dy, at));
+            }
+        }
+        found.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        found
+    }
+
+    /// `player_id` asks its archivist `question` (Wave 11 carryover,
+    /// [`crate::ancient_city::questions`]): it answers at once (no gap: it was asked), and an ore
+    /// question marks what it found.
+    pub(super) fn ask_archivist(
+        &mut self,
+        player_id: PlayerId,
+        question: ArchivistQuestion,
+        output: &mut TickOutput,
+    ) {
+        let now = self.simulation_tick.next();
+        let Some(asked) = self
+            .ancient_city
+            .archivists
+            .get(&player_id)
+            .map(|archivist| archivist.asked)
+        else {
+            return;
+        };
+        let Some(centre) = self.actor_tile(player_id) else {
+            return;
+        };
+        let mut marks = None;
+        let id = match question {
+            ArchivistQuestion::NearbyOre => {
+                let found = self.ore_near(centre, questions::ASK_SCAN_REACH_TILES);
+                let best = found.first().and_then(|(_, _, at)| {
+                    let find = match self.terrain.tile(*at)?.kind {
+                        TileKind::Ore(mineral) => OreFind::Ore(mineral),
+                        TileKind::City(CityTile::AlloyOre) => OreFind::AlloyOre,
+                        TileKind::City(CityTile::EngineCoreOre) => OreFind::EngineCore,
+                        TileKind::City(CityTile::StarGlass) => OreFind::StarGlass,
+                        _ => OreFind::Cache,
+                    };
+                    Some(questions::ore_answer(
+                        find,
+                        questions::direction(centre, *at),
+                    ))
+                });
+                marks = Some(
+                    found
+                        .iter()
+                        .take(SCAN_MARKS)
+                        .map(|(_, _, at)| *at)
+                        .collect::<Vec<_>>(),
+                );
+                best.unwrap_or(questions::NO_ORE_ANSWER)
+            }
+            ArchivistQuestion::Finds => {
+                questions::finds_answer(self.expedition.found, self.ancient_city.charts.len())
+            }
+            ArchivistQuestion::Lore(topic) => {
+                let Some(id) = crate::expedition::archivist::answer(topic, &self.expedition, asked)
+                    .and_then(archivist::story_line_id)
+                else {
+                    return;
+                };
+                id
+            }
+        };
+        if let Some(archivist) = self.ancient_city.archivists.get_mut(&player_id) {
+            archivist.asked = archivist.asked.wrapping_add(1);
+            archivist.line = Some((id, now));
+            if let Some(marks) = marks {
+                archivist.scan = marks;
+                archivist.scan_tick = now;
+            }
+        }
+        output.push_event(city_event(
+            CityEvent::ArchivistSpoke,
+            Some(player_id),
+            centre,
+            id,
+        ));
     }
 
     // --- Dev and scene seams ----------------------------------------------------------------

@@ -277,6 +277,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   pings), and the flight events 800-819 (`GameplayEventKind::Flight`). A rig away in
 ///   space poses at the shared park spot over the Moon (`SPACE_POSE_MODE`), so co-op flyers
 ///   stay relevant to each other and see each other fly and streak.
+/// * Carryover (Wave 10 leftovers): `LogisticsCommand::AskArchivist` (a question for the
+///   player's archivist, answered as an `ArchivistSpoke` line id; ids past 1999 are asked
+///   answers), `Archivist::asked`, `SupplyEffects::baited_homes` (Beast Bait's predators go
+///   home again), Heart's Edge's residents (a fourth deep settlement) in NPC entities, and the
+///   Heart's longer fight (more fields in the `Heart` section).
 pub const PROTOCOL_VERSION: u8 = 19;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -102,6 +102,8 @@ pub enum LogisticsRefusal {
     SupplyFull,
     /// This counter does not sell that supply: a deeper outpost does (Wave 9).
     SupplyNotSoldHere,
+    /// No archivist rides with this player to ask (Wave 11 carryover).
+    NoArchivist,
 }
 
 impl LogisticsRefusal {
@@ -158,6 +160,9 @@ impl LogisticsRefusal {
             Self::SupplyFull => "The supply kit has no room for more of those.".to_owned(),
             Self::SupplyNotSoldHere => {
                 "This counter does not stock that supply: a deeper outpost does.".to_owned()
+            }
+            Self::NoArchivist => {
+                "No archivist rides with you. Wake one in the Lantern Library.".to_owned()
             }
         }
     }
@@ -425,6 +430,18 @@ impl WorldState {
                 .map_err(LogisticsRefusal::Hollow)
                 .map(|()| LogisticsQuote::credits(0));
         }
+        // The archivist answers wherever its player is: in the rig, riding or on foot (Wave 11
+        // carryover).
+        if let LogisticsCommand::AskArchivist(_) = *command {
+            if !self.players.contains_key(&player_id) {
+                return Err(LogisticsRefusal::UnknownPlayer);
+            }
+            return if self.ancient_city.archivists.contains_key(&player_id) {
+                Ok(LogisticsQuote::credits(0))
+            } else {
+                Err(LogisticsRefusal::NoArchivist)
+            };
+        }
         let tile = self.logistics_rig_tile(player_id)?;
         let descent_here = self.descent_of_row(tile.y);
         match *command {
@@ -617,6 +634,8 @@ impl WorldState {
                 }
                 self.check_dive_purchase(player_id)
             }
+            // Answered above, before the rig's tile is asked for.
+            LogisticsCommand::AskArchivist(_) => Ok(LogisticsQuote::credits(0)),
             LogisticsCommand::Hollow(action) => self
                 .check_hollow(player_id, action)
                 .map_err(LogisticsRefusal::Hollow)
@@ -1161,6 +1180,9 @@ impl WorldState {
             }
             LogisticsCommand::Hollow(action) => {
                 self.apply_hollow(player_id, action, output);
+            }
+            LogisticsCommand::AskArchivist(question) => {
+                self.ask_archivist(player_id, question, output);
             }
             LogisticsCommand::FarStrange(action) => {
                 self.apply_far_strange(player_id, tile, action, output);

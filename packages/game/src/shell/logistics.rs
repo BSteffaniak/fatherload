@@ -688,6 +688,7 @@ fn sent_message(world: &WorldState, command: LogisticsCommand) -> String {
                 "Gravity Anchor.".to_owned()
             }
         },
+        LogisticsCommand::AskArchivist(question) => question.asked(),
         LogisticsCommand::FarStrange(action) => match action {
             FarStrangeAction::CycleFilter => "The lamp's filter turns.".to_owned(),
             FarStrangeAction::SetFilter(filter) => format!("Lamp filter: {}.", filter.name()),

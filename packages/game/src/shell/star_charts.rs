@@ -50,6 +50,7 @@ impl SeatUi {
         &mut self,
         input: PlayerInput,
         world: &WorldState,
+        player: Option<fatherload_simulation::PlayerId>,
         cues: &mut Vec<SoundCue>,
     ) {
         if input.backs_out() {
@@ -64,8 +65,15 @@ impl SeatUi {
             self.open_modal(ModalScreen::DescentProgress);
             return;
         }
+        // The "Ask Index" page comes next while an archivist rides with the seat's player
+        // (Wave 11 carryover), then the map.
+        let next = if super::archivist::can_ask(world, player) {
+            ModalScreen::Archivist
+        } else {
+            ModalScreen::Map
+        };
         if input.tab_next {
-            self.open_modal(ModalScreen::Map);
+            self.open_modal(next);
             return;
         }
         if !input.confirm {
@@ -73,7 +81,7 @@ impl SeatUi {
         }
         match rows.get(self.selected_menu_item) {
             Some(StarChartRow::Chart(_)) => cues.push(SoundCue::UiMove),
-            Some(StarChartRow::TurnPage) | None => self.open_modal(ModalScreen::Map),
+            Some(StarChartRow::TurnPage) | None => self.open_modal(next),
         }
     }
 }

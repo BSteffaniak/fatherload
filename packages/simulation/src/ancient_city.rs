@@ -19,6 +19,7 @@
 
 pub mod archivist;
 pub mod movers;
+pub mod questions;
 
 use std::collections::{BTreeMap, BTreeSet};
 

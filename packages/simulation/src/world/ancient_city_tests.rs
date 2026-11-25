@@ -1500,3 +1500,174 @@ fn older_worlds_keep_their_hashes_and_the_city_is_deterministic() {
     };
     assert_eq!(run(), run());
 }
+
+/// Asks `player`'s archivist `question`: the outcome and the city events of the tick.
+fn ask_archivist(
+    world: &mut WorldState,
+    player: PlayerId,
+    question: crate::ancient_city::questions::ArchivistQuestion,
+) -> (
+    crate::summary::PlayerScopedCommandOutcome,
+    Vec<(CityEvent, u16)>,
+) {
+    let output = world.simulate_tick(
+        world.simulation_tick(),
+        &TickInputs::default().act(
+            player,
+            PlayerCommand::Logistics(LogisticsCommand::AskArchivist(question)),
+        ),
+    );
+    let outcome = output
+        .action_outcomes
+        .first()
+        .map(|outcome| outcome.outcome)
+        .expect("an outcome");
+    let events: Vec<GameplayEventKind> = output.events.into_iter().map(|e| e.kind).collect();
+    (outcome, city_events(&events))
+}
+
+/// Wave 11 carryover: a player asks its own archivist about nearby ore (it scans, marks the best
+/// and says what and which way), the crew's finds and the story's lore (the story's lines in
+/// turn), in the rig or on foot; a partner without one is refused; the answer travels in the
+/// shared section like any line.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one walk through every kind of question"
+)]
+fn a_player_asks_its_archivist_about_ore_finds_and_lore() {
+    use crate::{
+        ancient_city::{
+            archivist::{STORY_LINE_BASE, line_words},
+            questions::{
+                ASK_SCAN_REACH_TILES, ArchivistQuestion, NO_ORE_ANSWER, OreFind, finds_answer,
+                ore_answer,
+            },
+        },
+        expedition::{ExpeditionState, archivist::ArchivistTopic},
+        summary::PlayerScopedCommandOutcome,
+    };
+    let mut world = world_at(30);
+    world.add_player(PARTNER);
+    fit(&mut world, PARTNER);
+    // No archivist yet: nothing to ask.
+    let (outcome, _) = ask_archivist(&mut world, PLAYER, ArchivistQuestion::Finds);
+    assert_eq!(outcome, PlayerScopedCommandOutcome::IgnoredUnavailable);
+    let core = sites::library_core(
+        &sites::lantern_library(&settings(), &layout(&settings())).expect("library"),
+    );
+    put(&mut world, PARTNER, TilePosition { x: 0, y: 80 });
+    put_rig(
+        &mut world,
+        TilePosition {
+            x: core.x + 2,
+            y: core.y,
+        },
+    );
+    let _ = ticks(&mut world, 5);
+    assert!(world.archivist_of(PLAYER).is_some());
+    // Nearby ore: clear every find within its reach, then lay mythril straight below.
+    let here = world.actor_tile(PLAYER).expect("rig");
+    let reach = ASK_SCAN_REACH_TILES;
+    for dy in -reach..=reach {
+        for dx in -reach..=reach {
+            let at = TilePosition {
+                x: here.x + dx,
+                y: here.y + dy,
+            };
+            let kind = world.terrain().tile(at).map(|tile| tile.kind);
+            let find = match kind {
+                Some(
+                    TileKind::Ore(_)
+                    | TileKind::City(
+                        CityTile::AlloyOre | CityTile::EngineCoreOre | CityTile::StarGlass,
+                    ),
+                ) => true,
+                Some(TileKind::Cave(cave)) => cave.is_cache(),
+                _ => false,
+            };
+            if find {
+                let _ = world.terrain_mut().set_kind(at, TileKind::Stone);
+            }
+        }
+    }
+    let (outcome, said) = ask_archivist(&mut world, PLAYER, ArchivistQuestion::NearbyOre);
+    assert_eq!(outcome, PlayerScopedCommandOutcome::Applied);
+    assert!(
+        said.contains(&(CityEvent::ArchivistSpoke, NO_ORE_ANSWER)),
+        "nothing near: {said:?}"
+    );
+    let ore = TilePosition {
+        x: here.x,
+        y: here.y + 6,
+    };
+    let _ = world
+        .terrain_mut()
+        .set_kind(ore, TileKind::Ore(MineralKind::Mythril));
+    let (_, said) = ask_archivist(&mut world, PLAYER, ArchivistQuestion::NearbyOre);
+    let id = ore_answer(OreFind::Ore(MineralKind::Mythril), 5);
+    assert!(said.contains(&(CityEvent::ArchivistSpoke, id)), "{said:?}");
+    let words = line_words(id).expect("words");
+    assert!(
+        words.contains("Mythril") && words.contains("below"),
+        "{words}"
+    );
+    let archivist = world.archivist_of(PLAYER).expect("archivist");
+    assert_eq!(archivist.scan.first(), Some(&ore), "it marks it");
+    assert_eq!(archivist.line.map(|(line, _)| line), Some(id));
+    // The crew's finds.
+    world.set_expedition(ExpeditionState {
+        found: 80,
+        descents: 0xFF,
+        ..ExpeditionState::default()
+    });
+    let (_, said) = ask_archivist(&mut world, PLAYER, ArchivistQuestion::Finds);
+    let finds = finds_answer(80, world.star_charts().len());
+    assert!(
+        said.contains(&(CityEvent::ArchivistSpoke, finds)),
+        "{said:?}"
+    );
+    assert!(line_words(finds).expect("words").contains("Wake It"));
+    // Lore: the story's own lines, taking turns.
+    let mut heard = Vec::new();
+    for _ in 0..3 {
+        let (outcome, said) = ask_archivist(
+            &mut world,
+            PLAYER,
+            ArchivistQuestion::Lore(ArchivistTopic::Fathers),
+        );
+        assert_eq!(outcome, PlayerScopedCommandOutcome::Applied);
+        let (_, id) = said
+            .iter()
+            .copied()
+            .find(|(what, _)| *what == CityEvent::ArchivistSpoke)
+            .expect("an answer");
+        assert!(id >= STORY_LINE_BASE && line_words(id).is_some());
+        heard.push(id);
+    }
+    heard.dedup();
+    assert!(heard.len() > 1, "its answers take turns: {heard:?}");
+    // On foot, it still answers.
+    let (x, y) = rig_xy(&world);
+    let _ = world.place_pilot(PLAYER, TILE_SIZE.mul_add(2.0, x), y);
+    let (outcome, _) = ask_archivist(&mut world, PLAYER, ArchivistQuestion::Finds);
+    assert_eq!(outcome, PlayerScopedCommandOutcome::Applied);
+    // The partner has none of its own to ask, and the player's is untouched by the refusal.
+    let line = world.archivist_of(PLAYER).expect("archivist").line;
+    let (outcome, _) = ask_archivist(&mut world, PARTNER, ArchivistQuestion::Finds);
+    assert_eq!(outcome, PlayerScopedCommandOutcome::IgnoredUnavailable);
+    assert_eq!(world.archivist_of(PLAYER).expect("archivist").line, line);
+    // The answer travels in the shared section and is saved.
+    let mut client =
+        WorldState::new_game_with_settings(PLAYER, &settings(), SimulationParams::new(30));
+    client.apply_section(
+        crate::world::SectionKey::AncientCity,
+        world
+            .section(crate::world::SectionKey::AncientCity)
+            .expect("section"),
+    );
+    assert_eq!(client.archivist_of(PLAYER), world.archivist_of(PLAYER));
+    let json = serde_json::to_string(&world).expect("save");
+    let loaded: WorldState = serde_json::from_str(&json).expect("load");
+    assert_eq!(loaded.archivist_of(PLAYER), world.archivist_of(PLAYER));
+}

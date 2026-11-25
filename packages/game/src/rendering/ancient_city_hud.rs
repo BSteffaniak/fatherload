@@ -218,14 +218,15 @@ pub(super) fn draw_archivist_line(
     if millis.saturating_sub(said) >= archivist::LINE_SHOW_MILLIS {
         return;
     }
-    let Some(text) = archivist::line_text(id) else {
+    // Its own lines, the story's, and answers to questions (Wave 11 carryover).
+    let Some(text) = archivist::line_words(id) else {
         return;
     };
     let width = (rect.width as i32 - 40).min(400);
     if width < 200 {
         return;
     }
-    let lines = ui_kit::wrap(text, width - 70, TextStyle::Body);
+    let lines = ui_kit::wrap(&text, width - 70, TextStyle::Body);
     let height = 22 + lines.len() as i32 * 11;
     let x = rect.x as i32 + 16;
     let y = (rect.y + rect.height * 0.74) as i32 - height / 2;
@@ -255,6 +256,106 @@ pub(super) fn draw_archivist_line(
         ui_kit::text(draw, &line, x + 62, line_y, TextStyle::Body, CREAM);
         line_y += 11;
     }
+}
+
+/// The "Ask Index" page (Wave 11 carryover): the questions the seat's player may put to its
+/// archivist as rows (keys, pad, mouse and touch select and ask them), and its last answer
+/// under the list while it is fresh.
+pub(super) fn draw_archivist_page(
+    draw: &mut RaylibDrawHandle<'_>,
+    ui: &super::screen::UiFrame<'_, '_>,
+) {
+    use super::layout::{ItemEntry, ModalContent, Section, SectionItem, UiLayout};
+    use crate::{
+        input::prompts::Prompt,
+        shell::archivist::{ArchivistRow, archivist_rows},
+    };
+    use fatherload_simulation::ancient_city::questions::ArchivistQuestion;
+    let rows = archivist_rows(ui.snapshot.expedition);
+    let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
+    let item = |row: ArchivistRow, label: String, detail: &str, value_color: Color| {
+        SectionItem::item(ItemEntry {
+            icon: Some(match row {
+                ArchivistRow::Ask(ArchivistQuestion::NearbyOre) => {
+                    &super::pixel_art::sprites::icons::SCANNER
+                }
+                ArchivistRow::Ask(ArchivistQuestion::Finds) => {
+                    &super::pixel_art::sprites::menu_icons::SIGNAL
+                }
+                ArchivistRow::Ask(ArchivistQuestion::Lore(_)) => &art::ARCHIVIST,
+                ArchivistRow::TurnPage => &super::pixel_art::sprites::menu_icons::BACK,
+            }),
+            label,
+            detail: detail.to_owned(),
+            value: String::new(),
+            value_color,
+            coin: false,
+            selected: rows.get(selected) == Some(&row),
+            disabled: false,
+        })
+    };
+    let mut asks = Vec::new();
+    let mut lore = Vec::new();
+    for row in &rows {
+        if let ArchivistRow::Ask(question) = *row {
+            let detail = match question {
+                ArchivistQuestion::NearbyOre => "It scans and marks the best within 16 tiles",
+                ArchivistQuestion::Finds => "The Fathers' logs and the stars charted",
+                ArchivistQuestion::Lore(_) => "",
+            };
+            let entry = item(*row, question.label().to_owned(), detail, MINT);
+            if matches!(question, ArchivistQuestion::Lore(_)) {
+                lore.push(entry);
+            } else {
+                asks.push(entry);
+            }
+        }
+    }
+    let mut sections = vec![Section::new("Ask", MINT, asks)];
+    if !lore.is_empty() {
+        sections.push(Section::new("What it knows", GOLD, lore));
+    }
+    sections.push(Section::new(
+        "",
+        FOG,
+        vec![item(
+            ArchivistRow::TurnPage,
+            "Turn the page: the map".to_owned(),
+            "",
+            GOLD,
+        )],
+    ));
+    // Its fresh answer, else what the selected row asks.
+    let millis = snapshot_millis(ui.snapshot);
+    let answer = ui
+        .snapshot
+        .ancient_city
+        .archivists
+        .get(&ui.view.player_id)
+        .and_then(|drone| drone.line)
+        .filter(|(_, tick)| {
+            let said =
+                tick.get().saturating_mul(1_000) / u64::from(ui.snapshot.tick_rate.hz().max(1));
+            millis.saturating_sub(said) < archivist::LINE_SHOW_MILLIS * 2
+        })
+        .and_then(|(id, _)| archivist::line_words(id))
+        .map(|words| format!("{}: \"{words}\"", archivist::ARCHIVIST_NAME));
+    let footer = answer.or_else(|| match rows.get(selected) {
+        Some(ArchivistRow::Ask(question)) => Some(question.asked()),
+        _ => None,
+    });
+    UiLayout::screen(draw).modal_with_render_plan(
+        "Ask Index",
+        "The archivist rides with you. It knows the builders' world, and it listens.",
+        &ModalContent::new(sections)
+            .footer(footer)
+            .compact()
+            .prompts(&[
+                super::prompts::hint(Prompt::Confirm, "ask"),
+                super::prompts::hint(Prompt::Tab, "pages"),
+                super::prompts::hint(Prompt::Back, "close"),
+            ]),
+    );
 }
 
 /// The star charts page (Wave 10): the charts read as rows (touch, keys, pad and mouse select
@@ -306,7 +407,16 @@ pub(super) fn draw_star_charts(
             FOG,
             vec![SectionItem::item(ItemEntry {
                 icon: Some(&super::pixel_art::sprites::menu_icons::BACK),
-                label: "Turn the page: the map".to_owned(),
+                label: if ui
+                    .snapshot
+                    .ancient_city
+                    .archivists
+                    .contains_key(&ui.view.player_id)
+                {
+                    "Turn the page: ask Index".to_owned()
+                } else {
+                    "Turn the page: the map".to_owned()
+                },
                 detail: String::new(),
                 value: String::new(),
                 value_color: GOLD,

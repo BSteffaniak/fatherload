@@ -84,6 +84,9 @@ pub struct Archivist {
     /// The next musing.
     #[serde(default)]
     pub musing: u8,
+    /// How many questions it has answered (Wave 11 carryover): lore answers take turns by it.
+    #[serde(default)]
+    pub asked: u32,
 }
 
 impl Archivist {
@@ -674,6 +677,9 @@ pub const STORY_LINE_BASE: u16 = 1_000;
 /// The line with id `id`, if any (its own, or the story's past [`STORY_LINE_BASE`]).
 #[must_use]
 pub fn line_text(id: u16) -> Option<&'static str> {
+    if super::questions::is_answer(id) {
+        return None;
+    }
     if let Some(index) = id.checked_sub(STORY_LINE_BASE) {
         return crate::expedition::archivist::ARCHIVIST_LINES
             .get(usize::from(index))
@@ -683,6 +689,16 @@ pub fn line_text(id: u16) -> Option<&'static str> {
         .iter()
         .find(|line| line.id == id)
         .map(|line| line.text)
+}
+
+/// The words of line `id`: its own, the story's, or an asked answer's
+/// ([`super::questions::answer_words`], Wave 11 carryover). The speech box reads this.
+#[must_use]
+pub fn line_words(id: u16) -> Option<std::borrow::Cow<'static, str>> {
+    if super::questions::is_answer(id) {
+        return super::questions::answer_words(id);
+    }
+    line_text(id).map(std::borrow::Cow::Borrowed)
 }
 
 /// The story's line the companion muses on next.

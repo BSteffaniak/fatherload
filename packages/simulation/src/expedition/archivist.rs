@@ -27,7 +27,9 @@ use super::{ExpeditionState, Member};
 use crate::descent::Descent;
 
 /// What a line is about.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(
+    Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub enum ArchivistTopic {
     /// A Descent: what the builders made there (opens once the crew reached it).
     Descent(Descent),

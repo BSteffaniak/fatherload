@@ -1447,6 +1447,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::ExpeditionCodex => super::expedition_hud::draw_expedition_codex(draw, ui),
         ModalScreen::StarCharts => super::ancient_city_hud::draw_star_charts(draw, ui),
         ModalScreen::DescentProgress => super::expedition_hud::draw_descent_progress(draw, ui),
+        ModalScreen::Archivist => super::ancient_city_hud::draw_archivist_page(draw, ui),
         ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
         ModalScreen::NavChart => super::space_view::draw_nav_chart(draw, ui),
         ModalScreen::Station => super::space_view::draw_station_counter(draw, ui),
@@ -1772,6 +1773,32 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
         4,
         super::logistics_hud::inventory_section(ui, survey_row + 1),
     );
+    // The archivist (Wave 11 carryover): while one rides with the seat's player, the next row
+    // opens the "Ask Index" page.
+    if ui
+        .snapshot
+        .ancient_city
+        .archivists
+        .contains_key(&ui.view.player_id)
+    {
+        sections.insert(
+            5,
+            Section::new(
+                "Index",
+                MINT,
+                vec![SectionItem::item(ItemEntry {
+                    icon: Some(&super::pixel_art::sprites::ancient_city::ARCHIVIST),
+                    label: "Ask Index".to_owned(),
+                    detail: "Ore nearby, the crew's finds, the Fathers and the builders".to_owned(),
+                    value: String::new(),
+                    value_color: MINT,
+                    coin: false,
+                    selected: ui.seat.selected_menu_item == survey_row + 2,
+                    disabled: false,
+                })],
+            ),
+        );
+    }
     UiLayout::screen(draw).modal_with_render_plan(
         "Inventory",
         "Cargo, blocks, the pilot's pack, artifacts, consumables and field kits.",
