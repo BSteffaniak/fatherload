@@ -6596,6 +6596,35 @@ wait 38, for part B). The Heart Key lands at 69.6 h. No retune was needed.
 
 - The archivist's lines are its own table (`archivist::LINES`), not yet routed through the
   story track's journal; the story track may key the Fathers' log remarks to its log ids.
+- The Archive Post's residents use the people system's generic chatter beside their own
+  memories, so a builder machine like Curator Thessaly also has an age ("Scholar, 66") and
+  everyday quips. The city's creatures are small next to the rig. The rock around the Megacity's
+  avenues uses the stratum's ordinary palette; only the city's own tiles are new.
+- The `city_great_engine` scene shows the floor and the flywheel, not the piston staircases.
+
+### Review (Wave 10 ancients-a review)
+
+- **Crushers and rams no longer push a rig into rock.** They used to shove a rig to the
+  nearer side whatever was there. In the crusher test world an artifact stood beside the
+  crusher, so the rig ended up inside it, and the old test passed only because the stuck rig
+  stayed clear of the crusher. Now the shove goes to the other side when rock fills the nearer
+  one (`free_shove_side`). The crusher test checks the rig right after the strike, since the
+  belt carries it back for the next slam. A new test puts rock on one side and checks the rig
+  goes out the other.
+- **The lever vault is tested end to end.** A pilot climbs out, stands in the crawlway, pulls
+  the lever, the gate opens, and the rig drives in and reads the chart. The old test only
+  teleported the rig past the gate.
+- **The city tile family moved to code base `0x1C00`.** The heart track's `CoreTile` also used
+  `0x1A00` on its branch. Only the codes changed, not the world, but the digest folds in tile
+  codes, so **`GOLDEN_V11_DIGEST` is now `0x7048_e2dc_ef30_15bf`**. V1-V10 digests are
+  unchanged.
+- The codex's "Turn the page" goes to the star charts only on Deep Descent worlds. Elsewhere it
+  goes straight to the map.
+- `city_vault_grand` now places the rig between the second gate and the glass, so the whole
+  vault is in view.
+- Re-ran the descent probe (release, default seed, 60 Hz). It matches the table above:
+  Megacity 163 min / 62.6 h, Engine Halls 148 / 65.1, Archive 148 / 67.6, Descent VII
+  71.4 h, whole run 79.8 h, 7 deaths, longest gap 39 min (the part-B placeholders).
 
 ## Replication
 
