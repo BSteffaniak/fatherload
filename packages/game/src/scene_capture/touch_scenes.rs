@@ -16,6 +16,11 @@ pub const TOUCH_SCENES: &[Scene] = &[
         setup: |stage| restage(stage, "space_nav_hud", TouchView::default()),
     },
     Scene {
+        name: "touch_station",
+        summary: "Touch at a station (Wave 12): the hub's bar page, rows to tap, over the station's interior",
+        setup: |stage| restage(stage, "station_bar", TouchView::default()),
+    },
+    Scene {
         name: "touch_hud",
         summary: "Touch controls while digging: the resting stick, bomb, scan and tools buttons, the top row",
         setup: |stage| restage(stage, "shallow_dig", TouchView::default()),

@@ -37,6 +37,7 @@ use fatherload_simulation::{
         space::{self, nearest_surface},
     },
     position::WorldPos,
+    station::StationOwner,
     terrain::TILE_SIZE,
 };
 use raylib::prelude::*;
@@ -232,7 +233,14 @@ pub(super) fn draw_space_world(
         .collect();
     order.sort_by(|a, b| b.approach.total_cmp(&a.approach));
     for body in order {
-        draw_body(draw, &frame, body, &bodies, ticks);
+        // Who runs a station decides its look (Wave 12).
+        let owner = if body.kind == BodyKind::Station {
+            fatherload_simulation::world::station_profile_at(snapshot.space.world, body.body)
+                .map_or(StationOwner::Human, |profile| profile.owner)
+        } else {
+            StationOwner::Human
+        };
+        draw_body(draw, &frame, body, &bodies, ticks, owner);
     }
     draw_ping(draw, &frame, snapshot, view.player_id);
     for flyer in &snapshot.space.flyers {
@@ -516,6 +524,7 @@ fn draw_body(
     body: &FlightBody,
     bodies: &[FlightBody],
     ticks: u64,
+    owner: StationOwner,
 ) {
     let at = frame.project(body.centre);
     let radius = body.radius * frame.scale;
@@ -624,9 +633,257 @@ fn draw_body(
                 );
             }
         }
-        BodyKind::Station => draw_station(draw, frame, body, at, radius, ticks),
+        BodyKind::Station => match owner {
+            StationOwner::Human => draw_station(draw, frame, body, at, radius, ticks),
+            StationOwner::Alien(_) => draw_alien_station(draw, frame, body, at, radius, ticks),
+            StationOwner::Derelict => draw_derelict_station(draw, frame, body, at, radius, ticks),
+        },
         // Wave 12 systems: the space renderer draws holes, mouths, rocks and comets.
         BodyKind::BlackHole | BodyKind::Wormhole | BodyKind::Asteroid | BodyKind::Comet => {}
+    }
+}
+
+/// An alien-run station (Wave 12): a grown bulb with three curving fins, a crown of pods
+/// that breathe slowly, a violet collar round its port.
+fn draw_alien_station(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    body: &FlightBody,
+    at: Vector2,
+    radius: f32,
+    ticks: u64,
+) {
+    if !frame.visible(at, radius * 4.0 + 8.0) {
+        return;
+    }
+    if radius < 3.0 {
+        draw.draw_rectangle(at.x as i32 - 1, at.y as i32 - 1, 3, 3, LAVENDER);
+        draw.draw_rectangle(at.x as i32, at.y as i32, 1, 1, MINT);
+        return;
+    }
+    let turn = body.port_angle - frame.roll;
+    let unit = radius / 5.0;
+    let breathe = ((ticks % 240) as f32 / 240.0 * std::f32::consts::TAU).sin();
+    // Three fins, each a chain of shrinking discs curving away from the bulb.
+    for fin in 0..3 {
+        let base = turn + std::f32::consts::FRAC_PI_2 + fin as f32 * std::f32::consts::TAU / 3.0;
+        for step in 0..9 {
+            let t = step as f32 / 8.0;
+            let angle = base + t * 0.7;
+            let reach = radius * (0.9 + t * 1.6);
+            let spot = Vector2::new(
+                angle.sin().mul_add(reach, at.x),
+                (-angle.cos()).mul_add(reach, at.y),
+            );
+            let size = unit * (1.8 - t * 1.3);
+            fill_disc(draw, frame, spot, size + unit * 0.25, INK);
+            fill_disc(
+                draw,
+                frame,
+                spot,
+                size,
+                if step % 2 == 0 { VIOLET } else { PLUM },
+            );
+            if step == 8 {
+                fill_disc(
+                    draw,
+                    frame,
+                    spot,
+                    unit * 0.5,
+                    with_alpha(MINT, (170.0 + 60.0 * breathe) as u8),
+                );
+            }
+        }
+    }
+    // The bulb: dark rim, teal body, a lighter crown and a glowing heart.
+    fill_disc(draw, frame, at, radius * 1.15, INK);
+    fill_disc(draw, frame, at, radius * 1.05, TEAL_DARK);
+    fill_disc(
+        draw,
+        frame,
+        Vector2::new(at.x - unit * 0.8, at.y - unit * 0.8),
+        radius * 0.8,
+        TEAL,
+    );
+    fill_disc(
+        draw,
+        frame,
+        at,
+        radius * 0.45,
+        with_alpha(MINT, (150.0 + 50.0 * breathe) as u8),
+    );
+    fill_disc(draw, frame, at, radius * 0.2, CREAM);
+    // A crown of pods round the bulb.
+    for pod in 0..8 {
+        let angle = turn + pod as f32 / 8.0 * std::f32::consts::TAU + 0.2;
+        let spot = Vector2::new(
+            angle.sin().mul_add(radius * 1.05, at.x),
+            (-angle.cos()).mul_add(radius * 1.05, at.y),
+        );
+        fill_disc(draw, frame, spot, unit * 0.55, LAVENDER);
+        fill_disc(draw, frame, spot, unit * 0.3, with_alpha(MINT, 200));
+    }
+    if let Some(port) = body.port() {
+        let port_at = frame.project(port);
+        draw.draw_line_ex(at, port_at, unit * 1.4, PLUM);
+        fill_disc(draw, frame, port_at, unit * 1.1, INK);
+        fill_disc(draw, frame, port_at, unit * 0.75, VIOLET);
+        fill_disc(
+            draw,
+            frame,
+            port_at,
+            unit * 0.4,
+            with_alpha(MINT, (180.0 + 60.0 * breathe) as u8),
+        );
+        draw_approach_guide(draw, at, port_at, unit, LAVENDER);
+    }
+}
+
+/// A derelict station (Wave 12): the human hub gone dark: one solar wing torn away, the other
+/// bent, the ring scorched and holed, the windows dead but one dim amber lamp, debris adrift
+/// and the port's light a dull, steady amber.
+#[allow(clippy::too_many_lines, reason = "one hulk's parts, outside in")]
+fn draw_derelict_station(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    body: &FlightBody,
+    at: Vector2,
+    radius: f32,
+    ticks: u64,
+) {
+    if !frame.visible(at, radius * 4.0 + 8.0) {
+        return;
+    }
+    if radius < 3.0 {
+        draw.draw_rectangle(at.x as i32 - 1, at.y as i32 - 1, 3, 3, STONE_DARK);
+        draw.draw_rectangle(at.x as i32, at.y as i32, 1, 1, AMBER);
+        return;
+    }
+    let turn = body.port_angle - frame.roll;
+    let rotation = turn.to_degrees();
+    let unit = radius / 5.0;
+    let (sin, cos) = turn.sin_cos();
+    // The one wing left, bent down; a stub where the other was.
+    let centre = Vector2::new(at.x + cos * unit * 7.5, at.y + sin * unit * 7.5);
+    let wing = Rectangle::new(centre.x, centre.y, unit * 5.0, unit * 2.6);
+    draw.draw_rectangle_pro(
+        wing,
+        Vector2::new(unit * 2.5, unit * 1.3),
+        rotation + 14.0,
+        INK,
+    );
+    let inner = Rectangle::new(centre.x, centre.y, unit * 4.6, unit * 2.2);
+    draw.draw_rectangle_pro(
+        inner,
+        Vector2::new(unit * 2.3, unit * 1.1),
+        rotation + 14.0,
+        SLATE_DARK,
+    );
+    let stub = Rectangle::new(
+        at.x - cos * unit * 4.5,
+        at.y - sin * unit * 4.5,
+        unit * 2.0,
+        unit * 0.8,
+    );
+    draw.draw_rectangle_pro(
+        stub,
+        Vector2::new(unit, unit * 0.4),
+        rotation - 20.0,
+        STONE_DARK,
+    );
+    let spar = Rectangle::new(at.x, at.y, unit * 9.0, unit * 0.8);
+    draw.draw_rectangle_pro(
+        spar,
+        Vector2::new(unit * 2.0, unit * 0.4),
+        rotation,
+        STONE_DARK,
+    );
+    // The ring, scorched, with a hole torn in it.
+    draw.draw_ring(at, radius * 0.85, radius * 1.2, 0.0, 360.0, 48, INK);
+    draw.draw_ring(at, radius * 0.9, radius * 1.15, 0.0, 360.0, 48, STONE);
+    let hole = turn.to_degrees() + 200.0;
+    draw.draw_ring(at, radius * 0.86, radius * 1.19, hole, hole + 40.0, 12, INK);
+    draw.draw_ring(
+        at,
+        radius * 0.9,
+        radius * 1.15,
+        hole + 60.0,
+        hole + 110.0,
+        12,
+        SOIL_DARK,
+    );
+    // Dead windows and one dim lamp (it never blinks; it only dims and comes back slowly).
+    let dim = 90 + ((ticks % 600) as i32 - 300).unsigned_abs() as u8 / 4;
+    for window in 0..12 {
+        let angle = window as f32 / 12.0 * std::f32::consts::TAU + turn;
+        let spot = Vector2::new(
+            angle.cos().mul_add(radius * 1.02, at.x),
+            angle.sin().mul_add(radius * 1.02, at.y),
+        );
+        let size = (unit * 0.35).max(1.0);
+        draw.draw_rectangle_v(
+            Vector2::new(spot.x - size * 0.5, spot.y - size * 0.5),
+            Vector2::new(size, size),
+            if window == 4 {
+                with_alpha(AMBER, dim)
+            } else {
+                SLATE_DARK
+            },
+        );
+    }
+    fill_disc(draw, frame, at, radius * 0.72, INK);
+    fill_disc(draw, frame, at, radius * 0.66, STONE_DARK);
+    fill_disc(draw, frame, at, radius * 0.42, NIGHT);
+    // Debris adrift round it (slowly).
+    for piece in 0..7 {
+        let angle = piece as f32 * 0.9 + (ticks as f32 / 3_000.0) * (1.0 + piece as f32 * 0.1);
+        let reach = radius * (1.6 + (piece % 3) as f32 * 0.5);
+        let spot = Vector2::new(
+            angle.cos().mul_add(reach, at.x),
+            angle.sin().mul_add(reach, at.y),
+        );
+        let size = (unit * (0.3 + (piece % 2) as f32 * 0.3)).max(1.0);
+        draw.draw_rectangle_v(spot, Vector2::new(size, size * 0.7), STONE);
+    }
+    if let Some(port) = body.port() {
+        let port_at = frame.project(port);
+        draw.draw_line_ex(at, port_at, unit * 1.2, STONE_DARK);
+        let size = (unit * 0.6).max(2.0);
+        draw.draw_rectangle_v(
+            Vector2::new(port_at.x - size, port_at.y - size),
+            Vector2::new(size * 2.0, size * 2.0),
+            INK,
+        );
+        draw.draw_rectangle_v(
+            Vector2::new(port_at.x - size * 0.6, port_at.y - size * 0.6),
+            Vector2::new(size * 1.2, size * 1.2),
+            with_alpha(AMBER, dim),
+        );
+        draw_approach_guide(draw, at, port_at, unit, AMBER);
+    }
+}
+
+/// The approach guide: a dashed line out of a port.
+fn draw_approach_guide(
+    draw: &mut RaylibDrawHandle<'_>,
+    at: Vector2,
+    port_at: Vector2,
+    unit: f32,
+    colour: Color,
+) {
+    let (dx, dy) = (port_at.x - at.x, port_at.y - at.y);
+    let length = dx.hypot(dy).max(1.0);
+    for dash in 1..8 {
+        let from = dash as f32 * unit * 2.0;
+        let start = Vector2::new(
+            port_at.x + dx / length * from,
+            port_at.y + dy / length * from,
+        );
+        let end = Vector2::new(
+            port_at.x + dx / length * (from + unit),
+            port_at.y + dy / length * (from + unit),
+        );
+        draw.draw_line_ex(start, end, (unit * 0.3).max(1.0), with_alpha(colour, 110));
     }
 }
 

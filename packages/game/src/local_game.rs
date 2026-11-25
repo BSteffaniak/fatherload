@@ -587,6 +587,7 @@ impl LocalGame {
         self.announce_flight(&players);
         self.announce_systems(&players);
         self.announce_aliens(&players);
+        self.announce_stations(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1919,6 +1920,66 @@ impl LocalGame {
                     .map_or("Not now.", AlienRefusal::message)
                     .to_owned(),
                 E::Learned => continue,
+            };
+            news.push((seat, message));
+        }
+        for (seat, message) in news {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
+    /// Stations for local seats (Wave 12): the seat whose player it was reads what happened at
+    /// the counter (a refusal says why) and how its missions move on.
+    fn announce_stations(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::station::{PlanetHazard, StationEvent as E, StationRefusal};
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut news: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Station {
+                what,
+                player_id,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let Some(seat) = seat_of(player_id) else {
+                continue;
+            };
+            let message = match what {
+                E::Refused => format!(
+                    "Not now: {}.",
+                    StationRefusal::from_code(detail).map_or("not here", StationRefusal::reason)
+                ),
+                E::ShipUpgraded => format!("Ship upgraded: tier {detail} fitted."),
+                E::GearFitted => format!("Planet gear fitted: tier {detail}."),
+                E::GoodsBought => format!("Goods loaded for {detail} credits."),
+                E::GoodsSold => format!("Goods sold for {detail} credits."),
+                E::OreSold => format!("Ore sold for {detail} credits."),
+                E::MissionAccepted => {
+                    format!("Mission accepted: {detail} credits on completion. No clock runs.")
+                }
+                E::MissionProgress => format!("Mission progress: {detail}."),
+                E::MissionPaid => format!("Bounty paid: {detail} credits."),
+                E::Salvaged => format!("Salvage: {detail} credits and scrap for the hold."),
+                E::RumourHeard => {
+                    "Rumour heard: the world is on your nav chart as a waypoint.".to_owned()
+                }
+                E::HazardBiting => {
+                    let hazard = PlanetHazard::ALL
+                        .into_iter()
+                        .find(|hazard| hazard.code() == detail)
+                        .unwrap_or(PlanetHazard::Heat);
+                    format!(
+                        "This world's {} bites: fit {} at a station's shipyard.",
+                        hazard.name(),
+                        hazard.counter().name()
+                    )
+                }
+                other => other.headline().to_owned(),
             };
             news.push((seat, message));
         }
