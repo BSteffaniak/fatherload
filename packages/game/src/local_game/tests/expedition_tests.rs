@@ -361,7 +361,10 @@ fn waking_the_heart_opens_the_ending_on_every_seat_and_taps_turn_its_pages() {
 /// (keys or a tap), the answer comes back as that seat's archivist's line, and a seat with no
 /// archivist sees no row and its star charts page turns straight to the map.
 #[test]
-#[allow(clippy::too_many_lines, reason = "two seats through every way of asking")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "two seats through every way of asking"
+)]
 fn each_seat_asks_its_own_archivist_from_the_inventory() {
     use crate::shell::archivist::{ArchivistRow, archivist_rows};
     use fatherload_simulation::ancient_city::questions::{ArchivistQuestion, finds_answer};
