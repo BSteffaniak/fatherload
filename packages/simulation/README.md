@@ -7223,6 +7223,155 @@ offered only by their settlement; no other arc carries a settlement trigger.
 - Deep arcs have no prerequisites (they are only offered in their settlements, which only a rig
   that got there can visit).
 
+## Wave 10 integration: Descents VII-VIII, the ending and the 60-90 h balance pass
+
+The five Wave 10 tracks are stacked in this order on one linear branch: polish, ancients-a,
+ancients-b, heart, story. Every commit compiles and passes clippy. Below are what the
+stacking decided and the seams wired on top (`world/wave10_integration_tests.rs`).
+
+### Shared files and formats
+
+- **Appended enums, in track order**:
+  - `EnemyKind`: the city's nine kinds, the garrison's nine, the Heart's fourteen; 150 in
+    `ALL`.
+  - `ShotKind`, `MusicCue` / `AmbienceCue`, and `LandmarkKind` / `LandmarkGenerator`
+    (`AncientCity`, `Garrison`, `Heart`; 16 in `ALL`).
+  - `SectionKey`: `AncientCity`, `Garrison` and `Heart`, all in `SectionKey::SHARED` (31).
+  - `GameplayEventKind`: `Supply`, `AncientCity`, `Garrison`, `Heart` /
+    `HeartLandmarkFound` and `Story`.
+  - `StoryMomentKind` and `ModalScreen`: `StarCharts`, `DescentProgress`, `Ending`.
+  - The game's `SoundCue` / `Patch` / `SeatLoop`. The audio patches are appended at the end
+    of `patches!` in track order, and no patch name repeats.
+- **Tile codes**:
+  - The buried city's `TileKind::City` family is at `0x1C00`, and the Heart's
+    `TileKind::Core` at `0x1A00` (the ancients-a review moved the city off the Heart's
+    base).
+  - The garrison's twelve `CaveTile`s take codes 160-171.
+  - No range overlaps another.
+- **Event codes**: polish 720-724, ancients-a 630-647, ancients-b 650-669, heart 670-694
+  and 699, story 700-702.
+- **Village sites**: only ancients-a adds one, the Archive Post (`deep_folk::ARCHIVE_POST`,
+  `0x3FFF_FC00`).
+- **`PROTOCOL_VERSION` 18**: one bump for the wave. The netcode doc lists every track's wire
+  changes under one entry.
+- **Save format**: stays 14. Every new field has a serde default, and the old-save
+  migration test still loads formats 1-14.
+- **Seat loops**: `SEAT_LOOP_SLOTS` is 128. The city's six beds, the garrison's five and
+  the Heart's ten fit with room to spare. (The ancients-b commit that says 96 kept the
+  integrated 128.)
+- **`GOLDEN_V11_DIGEST` is `0xab0f_567c_0490_b4c9`**. The V1-V10 digests are unchanged.
+
+### Conflicts the stacking resolved
+
+- **Two Heart Seals, one key**: ancients-b seals Descent VIII under `CaveTile::HeartSeal`,
+  and the heart track seals its chamber with `CoreTile::HeartSeal`.
+  `WorldState::heart_seal_refuses` (in `world/garrison.rs`) now guards both. Both yield
+  only to the Heart Key, which only the Colossus hands out.
+- **Descent VII's outpost**: the story track wrote memories and arcs for a placeholder
+  `Settlement::Megacity`. They are now the Archive Post's:
+  - `Settlement::ArchivePost`, the ancients-a residents.
+  - Speakers keyed `keeper` / `lamplighter` / `curator` / `tinker` / `sweeper`.
+  - `ANCIENTS_OUTPOST_NAMES` is the Archive Post's names.
+  - The deep arc tests play its arcs at the real Archive Post.
+  - `HEART_CAMP_NAMES` starts with "Heart's Edge", Descent VIII's logistics outpost.
+- **The codex's page cycle**: codex -> Descent progress -> star charts (Deep Descent worlds
+  only) -> map. Tab-back reverses it. Each page's "Turn the page" row names the page it
+  goes to.
+- **The probe**: each authored Descent's mechanics and set pieces are counted once
+  (`living_dark_content`, `ancient_city::authored_content`, `garrison::authored_content`,
+  `heart::authored_content`).
+
+### Seams wired
+
+1. **The archivist speaks the story's lines** (`ancient_city::archivist::STORY_LINE_BASE`).
+   - Every other musing of the companion is one of the story track's 30 `ARCHIVIST_LINES`.
+     The line is chosen by `expedition::archivist::remark` for the Descent the companion is
+     in.
+   - Each line is said once, under an id past 1000. The speech box reads it back with
+     `archivist::line_text`.
+   - Test: `the_archivist_muses_in_the_story_tracks_words`.
+2. **The gate fights drive the story**. `descent_boss_beaten` reads
+   `garrison.colossus.beaten` and `heart.fight.beaten`.
+   - Beating the Colossus raises the story's `BossBeaten`.
+   - The Heart waking (`heart_wakes`: `space_unlocked`, the Star Drive on every rig, the
+     cable's light) also sets the story's `cable_lit` and `CableLit`.
+   - Test: `the_gate_fights_drive_the_story_and_waking_the_heart_ends_it`.
+3. **One ending, in order**. The story's ending pages wait for each seat's own Heart
+   sequence to end or be skipped (`SeatUi::story_ending_pending`). The sequence is the
+   awakening, the cutaway, the credits and the epilogue. After it, the seat reads "The
+   Cable Lights". The pages can be read again from the Descent progress page.
+4. **Logs 61-80 lie in Descents VII-VIII, off every set piece**:
+   - the garrison's, through `crosses_set_pieces`;
+   - the city's and the Heart's, through `DEEPER_SET_PIECES`.
+   - Test (three seeds): `the_last_logs_lie_in_the_builders_world_off_its_set_pieces`.
+5. **The Archive Post remembers the Fathers, and tells its arcs**. See the Archive Post
+   entry under "Conflicts the stacking resolved". Tests:
+   `the_ancients_and_heart_outposts_remember_the_fathers` and
+   `every_deep_settlement_tells_its_own_stories_and_a_bot_sees_them_through` (seven
+   settlements).
+6. **The Seal Gate checks every key** (ancients-b's six sockets), and the Heart Key gates
+   Descent VIII. Test: `the_heart_key_opens_both_seals_and_only_it_does`.
+7. **Star charts for Wave 11**: `WorldState::star_charts()` / `star_chart_known()`. They
+   are saved and replicated in the `AncientCity` section.
+8. **The polish's rules on the new content**:
+   - The HEAT warning test now covers Descents VII and VIII.
+   - Hit areas come from every new kind's contact box. The game's art test holds all 150
+     kinds.
+   - The pilot on foot feels the Heart's wells, because they are a field.
+9. **Per-stratum music beds**: every VII-VIII stratum has its piece and bed, plus the
+   Colossus's theme, the Heart's fight and the ending.
+10. **Saves**: a V11 world carrying the star charts, the Colossus's win, the Heart's flags,
+    the ending's clock and the story's progress saves and loads to the same state hash.
+    Test: `wave_ten_state_is_shared_and_round_trips_a_save`.
+
+### The balance pass, all eight Descents
+
+`BALANCE_PASS_DESCENTS` is 8. The Colossus's and the Heart's bot fights record their wins
+(133 s with 71 % hull; 69 s with 63 % hull), so the probe models their fights from them.
+`descent_balance_seeds` (release, `--ignored`) plays three seeds.
+
+| Descent (h, cumulative) | target | default seed | seed 7 | seed 0xC0FFEE |
+|---|---|---|---|---|
+| I | 5-8 | 6.4 | 7.3 | 6.6 |
+| II | 13-18 | 15.9 | 16.8 | 16.0 |
+| III | 22-29 | 24.1 | 25.0 | 24.3 |
+| IV | 31-40 | 34.4 | 35.3 | 34.6 |
+| V | 42-53 | 45.3 | 46.3 | 45.5 |
+| VI | 53-66 | 60.3 | 61.1 | 60.4 |
+| VII | 66-82 | 73.3 | 74.1 | 73.4 |
+| VIII | 75-90 | 83.8 | 84.6 | 83.9 |
+| Whole run (60-90), deaths | | 83.8, 7 | 84.6, 7 | 83.9, 7 |
+| Longest wait for something new | 20-40 | 16 min | 18 min | 16 min |
+
+On the default seed, the Heart Key is won at 70.9 h. The Descent VII-VIII strata (default
+seed):
+
+| Stratum | minutes | ends (h) | longest wait (min) |
+|---|---|---|---|
+| Buried Megacity | 163 | 63.0 | 9 |
+| Engine Halls | 148 | 65.5 | 11 |
+| The Archive of Stars | 148 | 67.9 | 11 |
+| Sleeping Garrison | 150 | 70.4 | 12 |
+| The Seal Gate | 170 | 73.3 | 13 |
+| Dark Matter Veins | 161 | 76.0 | 10 |
+| Singularity Fields | 149 | 78.4 | 12 |
+| Core Ocean | 155 | 81.0 | 12 |
+| The Heart | 167 | 83.8 | 13 |
+
+### Still open
+
+- **Descent VIII has no resident settlement**. Heart's Edge is a logistics outpost with no
+  people, so the story's `HeartCamp` memories and arcs wait for a population with one of
+  `HEART_CAMP_NAMES`.
+- **The archivist does not take questions**: the story's `topics` / `answer` menu is
+  not wired. The companion only speaks unprompted, in its musings.
+- **Two stings for one moment**: the Heart's `CableLit` sting and the story's
+  `StoryCableLit` fire on the same moment. The Heart's ducks the mix.
+- **Fuel is not stressful**: expeditions past Descent II still burn only 2-10 % of the
+  tank. The balance pass reports this as a warning.
+- **The final boss is short**: the bot wins the Heart's fight faster than the Leviathan's.
+  It fights with the top railgun, about 11 minutes for a player.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

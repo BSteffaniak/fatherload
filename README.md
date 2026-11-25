@@ -489,8 +489,9 @@ classic ladder exactly. Beacons, built lifts and dive charges work in every worl
   its gate system; the Bio-Filter halves gas damage, the Sonar Suite reaches further, Lamp II
   lights wider.
 - **The descent probe.** `fatherload --balance-report --only descent` has a bot play all 41
-  strata on these curves; its first run estimates 80.1 hours to the Heart (target 60-90), with
-  something new at least every 30 minutes (details and the full table in
+  strata on these curves; with Descents VII-VIII authored (Wave 10) it estimates 83.8 hours to
+  the Heart (target 60-90, every Descent inside its window on three seeds), with something new
+  at least every 20 minutes (details and the full table in
   [packages/simulation/README.md](packages/simulation/README.md)).
 
 ### The Descent economy (wave 8)
@@ -1097,13 +1098,29 @@ world dug to the floor, the browser memory fixture) show it.
   Heater** burns hull frost off, a **Shade Canopy** cools a scorching rig); and the people of
   Merrow City, the Sunfolk Kraal and Parallax Station remember the Fathers when you talk to
   them.
-- Descents VII and VIII are still **placeholders**: their own rock colours, ores and hazards
-  from the stratum registry, creatures borrowed from the classic roster, and the rules of the
-  classic layer each stands in for. Strata meet in ragged transition zones, wider between
-  Descents.
+- **The builders' buried city** (Descent VII part A, Wave 10): the **Buried Megacity**'s
+  avenues, timetabled trams and tower lifts (cut the city's fabric and its alarm sends drones
+  and searchlit sentinels after you; ride instead), the **Engine Halls** where every piston,
+  crusher and belt keeps the Great Engine's beat (ride a rising piston, or be thrown off it),
+  and the **Archive of Stars**, whose sealed vaults (plates, crawlway levers, coloured glass)
+  hold **star charts** of real stars past the Moon. **Index, the archivist**, wakes in the
+  Lantern Library and rides with each rig as a little drone: it scans for ore, warns of the
+  machinery and talks of the city and the Fathers. The **Archive Post** is Descent VII's
+  outpost, and its people remember the Fathers. Scenes: `city_*`.
+- **The Heart** (Descent VIII, Wave 10): dark matter that makes a laden rig fall up in the
+  **Dark Matter Veins**, gravity wells that bend light and pull everything in the
+  **Singularity Fields** (slingshot round the rims; the horizon crushes), magnetic rails over
+  the liquid-metal sea of the **Core Ocean**, and at the end of the builders' cable the
+  **Heart**: a three-phase fight with the sleeping Star Drive behind the Heart Key's seal.
+  Waking it lights the cable to the Moon, plays the ending on every seat (the awakening, the
+  climb, the credits and the epilogue, then the Fathers' last pages, "The Cable Lights") and
+  opens space: every rig gets the **Star Drive**, and the game goes on. Scenes: `heart_*`.
+- **The Fathers' trail ends** (Wave 10 story): logs 61-80 through Descents VII-VIII, Amos's
+  chair at the cable root, a Descent progress page in the codex (the ending can be read again
+  from it), new Descent cards, finale milestones, and every deep settlement's own story arcs.
+  Strata meet in ragged transition zones, wider between Descents.
 - Each Descent has an **outpost** hall (a working deep outpost: fuel, repair, selling, a
-  claim and a respawn point) and a **gate chamber** at its end (the gates are open while they
-  are placeholders). The halls stand on one column a short way off the spawn, and the
+  claim and a respawn point) and a **gate chamber** at its end. The halls stand on one column a short way off the spawn, and the
   **builders' cable** of ancient lifts runs down beside them, outpost to outpost. Descent V
   breaks into the **Hollow World**: a cavern hundreds of rows tall with floating stones. The
   Strange Layers hold crystal-lined **anomaly rooms**.
