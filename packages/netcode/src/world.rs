@@ -390,6 +390,8 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
             what, player_id, ..
         } => (670 + what.code() as u32, player_id),
         GameplayEventKind::HeartLandmarkFound { player_id, .. } => (699, Some(player_id)),
+        // The story's finale (wave 10 story): 700-719.
+        GameplayEventKind::Story { what, player_id } => (700 + what.code() as u32, player_id),
     }
 }
 

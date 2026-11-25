@@ -189,6 +189,8 @@ mod sonar;
 mod sonar_tests;
 mod state_hash;
 #[cfg(test)]
+mod story_finale_tests;
+#[cfg(test)]
 mod streaming_tests;
 mod supplies;
 mod test_mode;

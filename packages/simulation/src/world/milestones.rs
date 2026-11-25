@@ -121,6 +121,9 @@ impl WorldState {
                 expedition_logs: self.expedition.found,
                 expedition_echoes: self.expedition.echoes,
                 anomaly_kinds: self.expedition.anomaly_kinds,
+                descents: self.expedition.descents,
+                bosses: self.expedition.bosses,
+                cable_lit: self.expedition.cable_lit,
             };
             let silent = !player.milestones.primed;
             player.milestones.primed = true;

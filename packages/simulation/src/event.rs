@@ -1315,6 +1315,14 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         landmark: crate::heart::HeartLandmark,
     },
+    // The story's finale (Wave 10 story; netcode codes 700-719).
+    /// The crew's progress through the Descent changed: a Descent reached, a gate boss beaten,
+    /// or the Heart woken and the cable lit (the ending). `player_id` is whose rig did it, if
+    /// known.
+    Story {
+        what: crate::expedition::progress::StoryEvent,
+        player_id: Option<PlayerId>,
+    },
 }
 
 /// What a weapon shot struck.

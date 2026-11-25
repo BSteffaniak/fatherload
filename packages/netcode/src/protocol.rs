@@ -257,6 +257,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   and `SectionKey::Heart` section (floating rigs, wells, landmarks found, the Heart's fight,
 ///   `space_unlocked`, the Star Drives, the ending's start), and the Heart events 670-699
 ///   (`GameplayEventKind::Heart`, `HeartLandmarkFound`).
+///
+/// Version 18 (Wave 10; each track bumps at most once and the integration collapses them):
+/// * The story (w10-story): `ExpeditionState::{descents, bosses, cable_lit}` in the shared
+///   `Expedition` section, the story events 700-719 (`GameplayEventKind::Story` with
+///   `expedition::progress::StoryEvent`), the appended finale `Milestone`s and their
+///   `PaintColor` rewards, the appended deep-settlement story places
+///   (`StoryPlace::{FathersSite, DeepNeighbour}`), `ArcKind::Deep` and the deep settlements'
+///   arcs in the arc log.
 pub const PROTOCOL_VERSION: u8 = 18;
 
 /// One client input frame: the controls and actions for exactly one tick.

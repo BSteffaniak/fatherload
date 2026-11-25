@@ -63,6 +63,28 @@ pub const fn paint_ramp(paint: PaintColor) -> Ramp {
         PaintColor::Phantom => ramp(BONE, MIST, FOG, SLATE),
         PaintColor::Anomaly => ramp(LAVENDER, VIOLET, PLUM, INK),
         PaintColor::Glitch => ramp(LIME, PINK, PLUM, NIGHT),
+        // The finale's milestone rewards (wave 10 story).
+        PaintColor::Quartz => ramp(ICE, LAVENDER, VIOLET, PLUM),
+        PaintColor::Spore => ramp(LIME, LEAF, MOSS, NIGHT),
+        PaintColor::Brine => ramp(ICE, SKY, OCEAN, DEEP_BLUE),
+        PaintColor::InnerSun => ramp(CREAM, GOLD, AMBER, RUST),
+        PaintColor::Prism => ramp(PINK, LAVENDER, SKY, OCEAN),
+        PaintColor::Alloy => ramp(STEEL_LIGHT, SAND, COPPER, SLATE_DARK),
+        PaintColor::Heartlight => ramp(BONE, CREAM, GOLD, AMBER),
+        PaintColor::Rubble => ramp(FOG, SLATE_LIGHT, SLATE, SLATE_DARK),
+        PaintColor::Corona => ramp(CREAM, ORANGE, RED, PLUM),
+        PaintColor::Mycelium => ramp(BONE, PINK, PLUM, NIGHT),
+        PaintColor::DeepScale => ramp(MINT, TEAL, OCEAN, NIGHT),
+        PaintColor::SerpentGold => ramp(GOLD, ORANGE, RUST, MAROON),
+        PaintColor::DeadPixel => ramp(SKY_LIGHT, LIME, PINK, INK),
+        PaintColor::GateGold => ramp(CREAM, GOLD, COPPER, SOIL_DARK),
+        PaintColor::Nacre => ramp(BONE, PINK, LAVENDER, SLATE),
+        PaintColor::Jungle => ramp(LEAF, MOSS, PINE, SOIL_DARK),
+        PaintColor::Mirrorglass => ramp(BONE, ICE, STEEL_LIGHT, SLATE),
+        PaintColor::Lamplight => ramp(CREAM, AMBER, COPPER, SOIL),
+        PaintColor::DriveWhite => ramp(BONE, MIST, ICE, SKY),
+        PaintColor::FathersLoad => ramp(CREAM, RED, MAROON, SOIL_DARK),
+        PaintColor::Starward => ramp(BONE, LAVENDER, DEEP_BLUE, INK),
     }
 }
 
@@ -71,25 +93,39 @@ pub const fn paint_ramp(paint: PaintColor) -> Ramp {
 #[must_use]
 pub const fn paint_accent(paint: PaintColor) -> Color {
     match paint {
-        PaintColor::Gold => GOLD,
-        PaintColor::Tangerine | PaintColor::Magma => ORANGE,
-        PaintColor::Ochre => AMBER,
-        PaintColor::Phantom => MIST,
-        PaintColor::Crimson => RED,
+        PaintColor::Gold
+        | PaintColor::InnerSun
+        | PaintColor::SerpentGold
+        | PaintColor::GateGold => GOLD,
+        PaintColor::Tangerine | PaintColor::Magma | PaintColor::Corona => ORANGE,
+        PaintColor::Ochre | PaintColor::Lamplight => AMBER,
+        PaintColor::Phantom | PaintColor::DriveWhite => MIST,
+        PaintColor::Crimson | PaintColor::FathersLoad => RED,
         PaintColor::Rose => ROSE,
-        PaintColor::Blossom => PINK,
-        PaintColor::Violet | PaintColor::Anomaly => LAVENDER,
+        PaintColor::Blossom | PaintColor::Prism | PaintColor::Mycelium | PaintColor::Nacre => PINK,
+        PaintColor::Violet | PaintColor::Anomaly | PaintColor::Quartz | PaintColor::Starward => {
+            LAVENDER
+        }
         PaintColor::Sky => SKY_LIGHT,
-        PaintColor::Cobalt | PaintColor::Abyss => SKY,
-        PaintColor::Teal | PaintColor::Mint | PaintColor::Jade | PaintColor::Lumen => MINT,
-        PaintColor::Lime | PaintColor::Glowcap | PaintColor::Glitch => LIME,
-        PaintColor::Forest => LEAF,
+        PaintColor::Cobalt | PaintColor::Abyss | PaintColor::Brine => SKY,
+        PaintColor::Teal
+        | PaintColor::Mint
+        | PaintColor::Jade
+        | PaintColor::Lumen
+        | PaintColor::DeepScale => MINT,
+        PaintColor::Lime
+        | PaintColor::Glowcap
+        | PaintColor::Glitch
+        | PaintColor::Spore
+        | PaintColor::DeadPixel => LIME,
+        PaintColor::Forest | PaintColor::Jungle => LEAF,
         PaintColor::Copper | PaintColor::Bronze => COPPER,
-        PaintColor::Sand | PaintColor::Khaki => SAND,
-        PaintColor::Pearl | PaintColor::Chrome => BONE,
+        PaintColor::Sand | PaintColor::Khaki | PaintColor::Alloy => SAND,
+        PaintColor::Pearl | PaintColor::Chrome | PaintColor::Mirrorglass => BONE,
         PaintColor::Steel => STEEL_LIGHT,
-        PaintColor::Graphite => FOG,
+        PaintColor::Graphite | PaintColor::Rubble => FOG,
         PaintColor::Stealth => SLATE_LIGHT,
+        PaintColor::Heartlight => CREAM,
     }
 }
 

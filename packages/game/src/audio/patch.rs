@@ -22,6 +22,7 @@ mod garrison;
 mod heart;
 mod hollow;
 mod old_deep;
+mod story_finale;
 
 use super::{
     analysis,
@@ -530,6 +531,9 @@ patches! {
     GravityLoop => "loop_gravity",
     MetalSeaLoop => "loop_metal_sea",
     StarDriveLoop => "loop_star_drive",
+    // The story finale (wave 10 story): a Descent reached, and the cable lit.
+    StoryDescentCall => "story_descent_call",
+    StoryCableLit => "story_cable_lit",
 }
 
 /// Playback metadata of a patch.
@@ -1004,6 +1008,19 @@ impl Patch {
                 .instances(2)
                 .send(0.45)
                 .jitter(0.03, 0.5)
+                .priority(8),
+            // The story finale (wave 10 story): set pieces that hush the mix.
+            Self::StoryDescentCall => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.0, 0.3)
+                .ducking(0.3)
+                .priority(6),
+            Self::StoryCableLit => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.55)
+                .jitter(0.0, 0.0)
+                .ducking(0.5)
                 .priority(8),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
@@ -1763,6 +1780,8 @@ impl Patch {
             Self::GravityLoop => heart::gravity_loop(rng),
             Self::MetalSeaLoop => heart::metal_sea_loop(rng),
             Self::StarDriveLoop => heart::star_drive_loop(rng),
+            Self::StoryDescentCall => story_finale::story_descent_call(rng),
+            Self::StoryCableLit => story_finale::story_cable_lit(rng),
         }
     }
 }

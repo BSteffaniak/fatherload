@@ -48,10 +48,12 @@ pub enum Settlement {
     /// The Archive Post, Descent VII's outpost in the Buried Megacity: the Lamplighters and the
     /// builders' patient machines.
     ArchivePost,
+    /// The Descent VIII outpost, Heart's Edge, the last camp above the Heart (Wave 10 story).
+    HeartCamp,
 }
 
 impl Settlement {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::GravelHollow,
         Self::OldDeepCamp,
         Self::TheHive,
@@ -59,6 +61,7 @@ impl Settlement {
         Self::JungleTribes,
         Self::PrismRelay,
         Self::ArchivePost,
+        Self::HeartCamp,
     ];
 
     #[must_use]
@@ -71,6 +74,7 @@ impl Settlement {
             Self::JungleTribes => "the jungle tribes",
             Self::PrismRelay => "the Prism Relay",
             Self::ArchivePost => "the Archive Post",
+            Self::HeartCamp => "the Heart camp",
         }
     }
 
@@ -85,6 +89,7 @@ impl Settlement {
             Self::JungleTribes => "jungle_tribes.",
             Self::PrismRelay => "prism_relay.",
             Self::ArchivePost => "archive_post.",
+            Self::HeartCamp => "heart_camp.",
         }
     }
 
@@ -111,11 +116,9 @@ impl Settlement {
                 "the Prism Relay",
             ],
             // The Descent VII outpost's Lamplighters (Wave 10 ancients-a).
-            Self::ArchivePost => &[
-                "The Archive Post",
-                "the Archive Post",
-                "Megacity Archive Post",
-            ],
+            Self::ArchivePost => ANCIENTS_OUTPOST_NAMES,
+            // The Descent VIII outpost (Wave 10 story): Heart's Edge, by its logistics name.
+            Self::HeartCamp => HEART_CAMP_NAMES,
         }
     }
 
@@ -157,9 +160,15 @@ impl Settlement {
             (Self::JungleTribes, Role::Healer) => Some("healer"),
             (Self::JungleTribes, Role::Farmer | Role::Prospector) => Some("hunter"),
             (Self::PrismRelay, Role::Quartermaster | Role::Mechanic)
-            | (Self::ArchivePost, Role::Quartermaster | Role::Trader) => Some("keeper"),
+            | (Self::ArchivePost, Role::Quartermaster | Role::Trader)
+            | (Self::HeartCamp, Role::Quartermaster | Role::Mechanic | Role::Trader) => {
+                Some("keeper")
+            }
             (Self::PrismRelay, Role::Tinkerer | Role::Smith) => Some("glass_cutter"),
-            (Self::PrismRelay, Role::Courier | Role::Prospector | Role::Hermit) => Some("drifter"),
+            (
+                Self::PrismRelay | Self::HeartCamp,
+                Role::Courier | Role::Prospector | Role::Hermit,
+            ) => Some("drifter"),
             (Self::ArchivePost, Role::Storyteller | Role::RetiredMiner) => Some("lamplighter"),
             (Self::ArchivePost, Role::Mechanic | Role::Tinkerer | Role::Smith) => Some("tinker"),
             (Self::ArchivePost, Role::Courier | Role::Apprentice) => Some("sweeper"),
@@ -168,6 +177,23 @@ impl Settlement {
         }
     }
 }
+
+/// The names the Descent VII outpost's population goes by (Wave 10: the ancients track's
+/// Archive Post in the Buried Megacity, and its logistics outpost's name).
+pub const ANCIENTS_OUTPOST_NAMES: &[&str] = &[
+    "The Archive Post",
+    "the Archive Post",
+    "Megacity Archive Post",
+];
+
+/// The names the Descent VIII outpost's population may go by (Wave 10 registration seam).
+pub const HEART_CAMP_NAMES: &[&str] = &[
+    "Heart's Edge",
+    "Heartfall Camp",
+    "the Heart Camp",
+    "The Heart Camp",
+    "Heart Outpost",
+];
 
 /// One remembered line.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -198,7 +224,7 @@ impl SettlementMemory {
 }
 
 /// Every remembered line.
-pub const MEMORIES: [SettlementMemory; 50] = [
+pub const MEMORIES: [SettlementMemory; 66] = [
     SettlementMemory {
         id: "gravel_hollow.smith.rails",
         settlement: Settlement::GravelHollow,
@@ -608,6 +634,138 @@ pub const MEMORIES: [SettlementMemory; 50] = [
         after_log: Some(60),
         line: "Varga asked me which way was home. I showed him up. He laughed and said: no, \
                the other home. I showed him up again, further.",
+    },
+    // --- Wave 10: the older settlements hear of the city, the Archive and the Heart. --------
+    SettlementMemory {
+        id: "old_deep_camp.surveyor.city",
+        settlement: Settlement::OldDeepCamp,
+        speaker: "the surveyor",
+        after_log: Some(61),
+        line: "A city. Calloway's numbers say a whole city lies under the thin places, plumb to \
+               the cable. I'd give my good knee to see her survey of it.",
+    },
+    SettlementMemory {
+        id: "hive.queen.waking",
+        settlement: Settlement::TheHive,
+        speaker: "the queen's voice",
+        after_log: Some(80),
+        line: "The light below turns in its sleep. Soon. Soft-shell, when you wake it, the comb \
+               will sing all the way up, and the Wrench-One's pumps with it.",
+    },
+    SettlementMemory {
+        id: "merrow_city.archivist.charts",
+        settlement: Settlement::MerrowCity,
+        speaker: "the archivist",
+        after_log: Some(66),
+        line: "Sefa always said the Tall Ones' song had a second verse, about roads between the \
+               stars. The dry-air woman in the builders' archive found the map of them, they say.",
+    },
+    SettlementMemory {
+        id: "jungle_tribes.chief.look_up",
+        settlement: Settlement::JungleTribes,
+        speaker: "the chief",
+        after_log: Some(80),
+        line: "My father said the big man walked down to the heart of the world to sit with it. \
+               When the cable lights, he said, everyone look up.",
+    },
+    SettlementMemory {
+        id: "prism_relay.keeper.needle",
+        settlement: Settlement::PrismRelay,
+        speaker: "the relay keeper",
+        after_log: Some(72),
+        line: "The relay's needle swung all the way round one night and settled pointing down, \
+               steady as a compass. Something down there let somebody through.",
+    },
+    // --- Wave 10 story: the Archive Post (Descent VII) remembers the Fathers too. -----------
+    SettlementMemory {
+        id: "archive_post.keeper.lamp",
+        settlement: Settlement::ArchivePost,
+        speaker: "the outpost keeper",
+        after_log: None,
+        line: "The lamp over the gate came on by itself the day I got here. The archivist says it \
+               does that for everyone it expects. I asked how long it had expected me. A while.",
+    },
+    SettlementMemory {
+        id: "archive_post.lamplighter.ticket",
+        settlement: Settlement::ArchivePost,
+        speaker: "a lamplighter",
+        after_log: Some(61),
+        line: "The trams still run, empty, on the old timetable. I ride the last one every night \
+               for company. Calloway rode it once: there's a ticket in the seat in her hand.",
+    },
+    SettlementMemory {
+        id: "archive_post.curator.parked",
+        settlement: Settlement::ArchivePost,
+        speaker: "the scholar",
+        after_log: Some(63),
+        line: "We argued for years whether the builders lived here or only worked here. Then the \
+               archivist lit the plan on the wall. They didn't live here. They parked here.",
+    },
+    SettlementMemory {
+        id: "archive_post.tinker.splint",
+        settlement: Settlement::ArchivePost,
+        speaker: "a salvager",
+        after_log: Some(64),
+        line: "Found a tram-rail splint in the Engine Halls, wound in a medic's bandage, R.B. on \
+               the clasp. Somebody broke a leg down there, and somebody had cared.",
+    },
+    SettlementMemory {
+        id: "archive_post.curator.ines",
+        settlement: Settlement::ArchivePost,
+        speaker: "the scholar",
+        after_log: Some(67),
+        line: "Ines Calloway read in the Archive until she couldn't see the pages, then had the \
+               archivist read them to her. It talks like her now. Hear it say: go on.",
+    },
+    SettlementMemory {
+        id: "archive_post.keeper.wren",
+        settlement: Settlement::ArchivePost,
+        speaker: "the outpost keeper",
+        after_log: Some(71),
+        line: "A woman came down years back asking after Amos Varga. Grey hair, porch-lamp face. \
+               Wren, she said. She got to the gold wall, went home to wait, and left a note: \
+               I looked up every night.",
+    },
+    SettlementMemory {
+        id: "archive_post.sweeper.mark",
+        settlement: Settlement::ArchivePost,
+        speaker: "the sweeper's boy",
+        after_log: Some(72),
+        line: "The big guard at the gold wall lets people with the mark through. Draw a ball on \
+               a string on your hand! It doesn't work. It's still fun.",
+    },
+    // --- Wave 10: the Heart camp (Descent VIII), the last camp above the drive. -------------
+    SettlementMemory {
+        id: "heart_camp.drifter.skip",
+        settlement: Settlement::HeartCamp,
+        speaker: "a drifter",
+        after_log: None,
+        line: "The hum's so loud here you stop hearing it. Then one day it skips a beat, and \
+               every one of us sits up in the dark like a dog.",
+    },
+    SettlementMemory {
+        id: "heart_camp.keeper.board",
+        settlement: Settlement::HeartCamp,
+        speaker: "the camp keeper",
+        after_log: Some(76),
+        line: "There's a sled folded flat in the first well past camp, painted letters on what's \
+               left: THE FATHERS'. Nobody moves it. It feels like a grave.",
+    },
+    SettlementMemory {
+        id: "heart_camp.keeper.letters",
+        settlement: Settlement::HeartCamp,
+        speaker: "the camp keeper",
+        after_log: Some(78),
+        line: "There are letters in the cairns down here, all in one big careful hand, all to \
+               the same five names. We read them out loud on rest days.",
+    },
+    SettlementMemory {
+        id: "heart_camp.drifter.chair",
+        settlement: Settlement::HeartCamp,
+        speaker: "a drifter",
+        after_log: Some(79),
+        line: "I went as far as the gold light once. There's a chair down there made of a sled \
+               board and a crutch, by the cable root, facing the drive. I didn't sit in it.",
     },
 ];
 

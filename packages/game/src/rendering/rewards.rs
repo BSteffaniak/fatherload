@@ -1051,7 +1051,8 @@ fn draw_trophy_shelf(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let canvas = ui_kit::canvas();
     let left = (panel.x + panel.width) as i32 + 8;
     let width = (canvas.width - 8 - left).min(260);
-    let per_row = 5;
+    // Seven medals a shelf keeps the whole collection (47 since the Wave 10 finale) on screen.
+    let per_row = 7;
     let rows = Milestone::ALL.len().div_ceil(per_row) as i32;
     let shelf_height = 26;
     let height = 22 + rows * shelf_height + 14 + 74;

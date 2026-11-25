@@ -1187,6 +1187,7 @@ impl LocalGame {
                 Settlement::JungleTribes => "The Jungle Tribes",
                 Settlement::PrismRelay => "The Prism Relay",
                 Settlement::ArchivePost => "The Archive Post",
+                Settlement::HeartCamp => "The Heart Camp",
             };
             cards.push((seat, settlement, place, memory.told()));
         }

@@ -342,6 +342,8 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::HeartRailZap => Patch::HeartRailZap,
         SoundCue::HeartWellGroan => Patch::HeartWellGroan,
         SoundCue::HeartMetalSplash => Patch::HeartMetalSplash,
+        SoundCue::StoryDescentCall => Patch::StoryDescentCall,
+        SoundCue::StoryCableLit => Patch::StoryCableLit,
     }
 }
 
@@ -1128,6 +1130,17 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // The Fathers' expedition (wave 8 story): the canister's tumblers, a sealed one's
         // refusal, Dov's voice (static on the line, or off the tape) and the anomaly's swell.
         GameplayEventKind::ExpeditionLogFound { .. } => Some(SoundCue::LogCanister),
+        // The story finale (wave 10 story): a new Descent's bell call and the ending's swell
+        // (the gate fights play their own fanfares).
+        GameplayEventKind::Story { what, .. } => match what {
+            fatherload_simulation::expedition::progress::StoryEvent::DescentReached(_) => {
+                Some(SoundCue::StoryDescentCall)
+            }
+            fatherload_simulation::expedition::progress::StoryEvent::BossBeaten(_) => None,
+            fatherload_simulation::expedition::progress::StoryEvent::CableLit => {
+                Some(SoundCue::StoryCableLit)
+            }
+        },
         GameplayEventKind::ExpeditionLogSealed { .. } => Some(SoundCue::LeverClunk),
         GameplayEventKind::ExpeditionEcho { echo, .. } => {
             let index = echo.saturating_sub(1) as usize;
@@ -1498,7 +1511,8 @@ mod tests {
             | GameplayEventKind::AncientCity { .. }
             | GameplayEventKind::Garrison { .. }
             | GameplayEventKind::Heart { .. }
-            | GameplayEventKind::HeartLandmarkFound { .. } => {}
+            | GameplayEventKind::HeartLandmarkFound { .. }
+            | GameplayEventKind::Story { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -1917,6 +1931,16 @@ mod tests {
                 y: 0,
             },
             GameplayEventKind::ExpeditionLogFound { player_id, log: 1 },
+            GameplayEventKind::Story {
+                what: fatherload_simulation::expedition::progress::StoryEvent::DescentReached(
+                    fatherload_simulation::descent::Descent::Ancients,
+                ),
+                player_id: Some(player_id),
+            },
+            GameplayEventKind::Story {
+                what: fatherload_simulation::expedition::progress::StoryEvent::CableLit,
+                player_id: None,
+            },
             GameplayEventKind::ExpeditionLogSealed { player_id, log: 3 },
             GameplayEventKind::ExpeditionEcho { player_id, echo: 1 },
             GameplayEventKind::ExpeditionEcho { player_id, echo: 7 },
@@ -2613,6 +2637,8 @@ mod tests {
             SoundCue::HeartRailZap,
             SoundCue::HeartWellGroan,
             SoundCue::HeartMetalSplash,
+            SoundCue::StoryDescentCall,
+            SoundCue::StoryCableLit,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

@@ -5,14 +5,21 @@
 
 use crate::{
     GameplayEventKind, PlayerId, SimulationTick, TickOutput,
+    descent::{Descent, DescentBoss},
     expedition::{
-        ECHO_GAP_MILLIS, ECHOES, Echo, ExpeditionState, LOGS, anomaly, log_bounty, sites,
+        ECHO_GAP_MILLIS, ECHOES, Echo, ExpeditionState, LOGS, anomaly, log_bounty,
+        progress::{StoryEvent, boss_bit, descent_bit},
+        sites,
     },
     terrain::TilePosition,
     worldgen::{WorldSettings, descent::DescentLayout},
 };
 
 use super::WorldState;
+
+/// Where [`WorldState::note_descent_boss_beaten`] keeps a noted win in
+/// [`ExpeditionState::bosses`]: the eight bosses' bits shifted up past the beaten bits.
+const BOSS_NOTED_SHIFT: u16 = 8;
 
 /// The terrain row echo `echo` plays at in a world with `layout`.
 #[must_use]
@@ -88,6 +95,82 @@ impl WorldState {
         self.read_canisters(&settings, &actors, output);
         self.play_echoes(&settings, &actors, next_tick, output);
         self.enter_anomalies(&settings, &actors, output);
+        self.track_descent_progress(&settings, &actors, output);
+    }
+
+    /// Records that `boss`, a Descent's gate boss, has been beaten (Wave 10 story seam).
+    ///
+    /// The bosses whose fights keep their own state are read every tick
+    /// ([`Self::descent_boss_beaten`]); a fight without such a flag (the Gatekeeper Colossus
+    /// and the Heart, built by the Ancients and Heart tracks) calls this when it is won, inside
+    /// the tick. The next expedition pass raises the [`StoryEvent::BossBeaten`] event, and
+    /// beating the Heart lights the cable (the ending). Idempotent.
+    pub const fn note_descent_boss_beaten(&mut self, boss: DescentBoss) {
+        if !self.terrain.settings().generator.has_descents() {
+            return;
+        }
+        self.expedition.bosses |= boss_bit(boss) << BOSS_NOTED_SHIFT;
+    }
+
+    /// Whether `boss`'s own fight state says it is beaten (or it was noted through
+    /// [`Self::note_descent_boss_beaten`]).
+    #[must_use]
+    pub fn descent_boss_beaten(&self, boss: DescentBoss) -> bool {
+        let own = match boss {
+            DescentBoss::TheSinkhole => self.crust.deep_claim,
+            DescentBoss::StarCore => self.old_deep.core.phase == crate::old_deep::CorePhase::Beaten,
+            DescentBoss::MycelialMind => self.living_dark.mind.beaten,
+            DescentBoss::Leviathan => self.drowned.leviathan.beaten,
+            DescentBoss::SunSerpent => self.hollow.serpent.beaten,
+            DescentBoss::TheGlitch => self.far_strange.glitch.beaten,
+            DescentBoss::GatekeeperColossus | DescentBoss::TheHeart => false,
+        };
+        own || self.expedition.bosses & (boss_bit(boss) << BOSS_NOTED_SHIFT) != 0
+    }
+
+    /// The crew's progress through the Descent (Wave 10): Descents reached by an actor (the
+    /// Descents above count as passed), gate bosses beaten, and the ending once the Heart is.
+    fn track_descent_progress(
+        &mut self,
+        settings: &WorldSettings,
+        actors: &[(PlayerId, TilePosition)],
+        output: &mut TickOutput,
+    ) {
+        let ground = crate::descent::fields::cached_layout(settings).tops[0];
+        for (player_id, tile) in actors {
+            if tile.y <= ground + 2 {
+                continue;
+            }
+            let index = crate::depth_progression::descent_index_at_row(settings, tile.y);
+            let descent = Descent::from_index(usize::from(index));
+            if self.expedition.reached(descent) {
+                continue;
+            }
+            for passed in Descent::ALL.into_iter().take(usize::from(index) + 1) {
+                self.expedition.descents |= descent_bit(passed);
+            }
+            output.push_event(GameplayEventKind::Story {
+                what: StoryEvent::DescentReached(descent),
+                player_id: Some(*player_id),
+            });
+        }
+        for boss in DescentBoss::ALL {
+            if self.expedition.beat(boss) || !self.descent_boss_beaten(boss) {
+                continue;
+            }
+            self.expedition.bosses |= boss_bit(boss);
+            output.push_event(GameplayEventKind::Story {
+                what: StoryEvent::BossBeaten(boss),
+                player_id: None,
+            });
+        }
+        if !self.expedition.cable_lit && self.expedition.beat(DescentBoss::TheHeart) {
+            self.expedition.cable_lit = true;
+            output.push_event(GameplayEventKind::Story {
+                what: StoryEvent::CableLit,
+                player_id: actors.first().map(|(player_id, _)| *player_id),
+            });
+        }
     }
 
     /// Opens the canister an actor stands at if its turn has come, or seals it until then.

@@ -103,6 +103,48 @@ pub enum Milestone {
     FirstAnomaly,
     /// Stepped into every kind of anomaly room.
     EveryAnomaly,
+    /// Reach Descent II, the Old Deep. (Wave 10 story).
+    ReachedOldDeep,
+    /// Reach Descent III, the Living Dark. (Wave 10 story).
+    ReachedLivingDark,
+    /// Reach Descent IV, the Drowned and Frozen. (Wave 10 story).
+    ReachedDrowned,
+    /// Reach Descent V, the Hollow World. (Wave 10 story).
+    ReachedHollow,
+    /// Reach Descent VI, the Strange Layers. (Wave 10 story).
+    ReachedStrange,
+    /// Reach Descent VII, the Ancients. (Wave 10 story).
+    ReachedAncients,
+    /// Reach Descent VIII, the Heart. (Wave 10 story).
+    ReachedHeart,
+    /// Climb out of the Sinkhole with its core: the Crust's gate. (Wave 10 story).
+    BeatSinkhole,
+    /// Beat the Star Core: the Old Deep's gate. (Wave 10 story).
+    BeatStarCore,
+    /// Beat the Mycelial Mind: the Living Dark's gate. (Wave 10 story).
+    BeatMind,
+    /// Beat the Leviathan: the Drowned and Frozen's gate. (Wave 10 story).
+    BeatLeviathan,
+    /// Beat the Sun Serpent: the Hollow World's gate. (Wave 10 story).
+    BeatSerpent,
+    /// Beat the Glitch: the Strange Layers' gate. (Wave 10 story).
+    BeatGlitch,
+    /// Beat the Gatekeeper Colossus: the Ancients' gate. (Wave 10 story).
+    BeatColossus,
+    /// Read every expedition log in the Drowned and Frozen. (Wave 10 story).
+    PeopleBelow,
+    /// Read every expedition log in the Hollow World. (Wave 10 story).
+    HollowWorldRead,
+    /// Read every expedition log in the Strange Layers. (Wave 10 story).
+    WearsThin,
+    /// Read every expedition log in the Ancients. (Wave 10 story).
+    BuildersCity,
+    /// Read every expedition log in the Heart. (Wave 10 story).
+    StarDriveChapter,
+    /// Read all eighty logs of the Fathers' expedition. (Wave 10 story).
+    WholeTrail,
+    /// Wake the Heart and light the cable to the Moon. (Wave 10 story).
+    LookUp,
 }
 
 /// A milestone's medal on the trophy shelf.
@@ -328,6 +370,13 @@ pub struct MilestoneFacts {
     /// Kinds of anomaly room the crew has entered (bits of
     /// [`crate::expedition::anomaly::AnomalyKind::bit`]).
     pub anomaly_kinds: u8,
+    /// Descents the crew has reached (Wave 10; bits of
+    /// [`crate::expedition::progress::descent_bit`]).
+    pub descents: u8,
+    /// Gate bosses the crew has beaten (bits of [`crate::expedition::progress::boss_bit`]).
+    pub bosses: u16,
+    /// The Heart woke and the cable lit (the ending).
+    pub cable_lit: bool,
 }
 
 /// Whether a crew with `facts` has read every expedition log of `descent`'s chapter.
@@ -351,7 +400,7 @@ pub const CORE_LINES: [UpgradeKind; 6] = [
 
 impl Milestone {
     /// Every milestone, in progression-screen order.
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 47] = [
         Self::FirstUpgrade,
         Self::DrillTier5,
         Self::EngineTier5,
@@ -378,6 +427,27 @@ impl Milestone {
         Self::GhostVoices,
         Self::FirstAnomaly,
         Self::EveryAnomaly,
+        Self::ReachedOldDeep,
+        Self::ReachedLivingDark,
+        Self::ReachedDrowned,
+        Self::ReachedHollow,
+        Self::ReachedStrange,
+        Self::ReachedAncients,
+        Self::ReachedHeart,
+        Self::BeatSinkhole,
+        Self::BeatStarCore,
+        Self::BeatMind,
+        Self::BeatLeviathan,
+        Self::BeatSerpent,
+        Self::BeatGlitch,
+        Self::BeatColossus,
+        Self::PeopleBelow,
+        Self::HollowWorldRead,
+        Self::WearsThin,
+        Self::BuildersCity,
+        Self::StarDriveChapter,
+        Self::WholeTrail,
+        Self::LookUp,
     ];
 
     /// Display name.
@@ -410,6 +480,27 @@ impl Milestone {
             Self::GhostVoices => "Voices on the Cable",
             Self::FirstAnomaly => "Something Is Wrong Here",
             Self::EveryAnomaly => "Cracks in Reality",
+            Self::ReachedOldDeep => "Past the Lid",
+            Self::ReachedLivingDark => "Where It Grows",
+            Self::ReachedDrowned => "Under the Sea",
+            Self::ReachedHollow => "A Sun Inside",
+            Self::ReachedStrange => "Thin Places",
+            Self::ReachedAncients => "Swept Streets",
+            Self::ReachedHeart => "Heartward",
+            Self::BeatSinkhole => "Out of the Sinkhole",
+            Self::BeatStarCore => "Core Breaker",
+            Self::BeatMind => "Clear-Headed",
+            Self::BeatLeviathan => "Leviathan's Bane",
+            Self::BeatSerpent => "Sun Chaser",
+            Self::BeatGlitch => "Bug Fixed",
+            Self::BeatColossus => "Colossus Toppled",
+            Self::PeopleBelow => "The People Below",
+            Self::HollowWorldRead => "The Hollow World",
+            Self::WearsThin => "Where the World Wears Thin",
+            Self::BuildersCity => "The Builders' City",
+            Self::StarDriveChapter => "The Star Drive",
+            Self::WholeTrail => "The Whole Trail",
+            Self::LookUp => "Look Up",
         }
     }
 
@@ -445,6 +536,27 @@ impl Milestone {
             Self::GhostVoices => "Hear one of Dov Halloran's ghost recordings.",
             Self::FirstAnomaly => "Step into an anomaly room.",
             Self::EveryAnomaly => "Step into all four kinds of anomaly room.",
+            Self::ReachedOldDeep => "Reach Descent II, the Old Deep.",
+            Self::ReachedLivingDark => "Reach Descent III, the Living Dark.",
+            Self::ReachedDrowned => "Reach Descent IV, the Drowned and Frozen.",
+            Self::ReachedHollow => "Reach Descent V, the Hollow World.",
+            Self::ReachedStrange => "Reach Descent VI, the Strange Layers.",
+            Self::ReachedAncients => "Reach Descent VII, the Ancients.",
+            Self::ReachedHeart => "Reach Descent VIII, the Heart.",
+            Self::BeatSinkhole => "Climb out of the Sinkhole with its core: the Crust's gate.",
+            Self::BeatStarCore => "Beat the Star Core: the Old Deep's gate.",
+            Self::BeatMind => "Beat the Mycelial Mind: the Living Dark's gate.",
+            Self::BeatLeviathan => "Beat the Leviathan: the Drowned and Frozen's gate.",
+            Self::BeatSerpent => "Beat the Sun Serpent: the Hollow World's gate.",
+            Self::BeatGlitch => "Beat the Glitch: the Strange Layers' gate.",
+            Self::BeatColossus => "Beat the Gatekeeper Colossus: the Ancients' gate.",
+            Self::PeopleBelow => "Read every expedition log in the Drowned and Frozen.",
+            Self::HollowWorldRead => "Read every expedition log in the Hollow World.",
+            Self::WearsThin => "Read every expedition log in the Strange Layers.",
+            Self::BuildersCity => "Read every expedition log in the Ancients.",
+            Self::StarDriveChapter => "Read every expedition log in the Heart.",
+            Self::WholeTrail => "Read all eighty logs of the Fathers' expedition.",
+            Self::LookUp => "Wake the Heart and light the cable to the Moon.",
         }
     }
 
@@ -461,7 +573,22 @@ impl Milestone {
             Self::ReachedStone
             | Self::FirstDeepLayer
             | Self::ReachedMachineLayer
-            | Self::ReachedMantle => MilestoneGroup::Depths,
+            | Self::ReachedMantle
+            | Self::ReachedOldDeep
+            | Self::ReachedLivingDark
+            | Self::ReachedDrowned
+            | Self::ReachedHollow
+            | Self::ReachedStrange
+            | Self::ReachedAncients
+            | Self::ReachedHeart
+            | Self::BeatSinkhole
+            | Self::BeatStarCore
+            | Self::BeatMind
+            | Self::BeatLeviathan
+            | Self::BeatSerpent
+            | Self::BeatGlitch
+            | Self::BeatColossus
+            | Self::LookUp => MilestoneGroup::Depths,
             Self::FirstArtifact
             | Self::FirstCave
             | Self::FirstVillage
@@ -473,7 +600,13 @@ impl Milestone {
             | Self::GrowsInTheDark
             | Self::GhostVoices
             | Self::FirstAnomaly
-            | Self::EveryAnomaly => MilestoneGroup::Discoveries,
+            | Self::EveryAnomaly
+            | Self::PeopleBelow
+            | Self::HollowWorldRead
+            | Self::WearsThin
+            | Self::BuildersCity
+            | Self::StarDriveChapter
+            | Self::WholeTrail => MilestoneGroup::Discoveries,
             Self::HighFlyer | Self::IslandCapableTank | Self::ActTwoUnlocked => MilestoneGroup::Sky,
         }
     }
@@ -496,7 +629,11 @@ impl Milestone {
             | Self::FirstDeepLayer
             | Self::IslandCapableTank
             | Self::ShapedWorld
-            | Self::GhostVoices => Medal::Silver,
+            | Self::GhostVoices
+            | Self::ReachedOldDeep
+            | Self::ReachedLivingDark
+            | Self::ReachedDrowned
+            | Self::BeatSinkhole => Medal::Silver,
             Self::DrillTier10
             | Self::EngineTier10
             | Self::MaxedLine
@@ -504,8 +641,26 @@ impl Milestone {
             | Self::ReachedMantle
             | Self::BuildersCellar
             | Self::GrowsInTheDark
-            | Self::EveryAnomaly => Medal::Gold,
-            Self::FullyLoaded | Self::ActTwoUnlocked => Medal::Platinum,
+            | Self::EveryAnomaly
+            | Self::ReachedHollow
+            | Self::ReachedStrange
+            | Self::ReachedAncients
+            | Self::ReachedHeart
+            | Self::BeatStarCore
+            | Self::BeatMind
+            | Self::BeatLeviathan
+            | Self::BeatSerpent
+            | Self::BeatGlitch
+            | Self::PeopleBelow
+            | Self::HollowWorldRead
+            | Self::WearsThin
+            | Self::BuildersCity
+            | Self::StarDriveChapter => Medal::Gold,
+            Self::FullyLoaded
+            | Self::ActTwoUnlocked
+            | Self::BeatColossus
+            | Self::WholeTrail
+            | Self::LookUp => Medal::Platinum,
         }
     }
 
@@ -539,6 +694,27 @@ impl Milestone {
             Self::GhostVoices => &[CosmeticItem::Paint(PaintColor::Phantom)],
             Self::FirstAnomaly => &[CosmeticItem::Paint(PaintColor::Anomaly)],
             Self::EveryAnomaly => &[CosmeticItem::Paint(PaintColor::Glitch)],
+            Self::ReachedOldDeep => &[CosmeticItem::Paint(PaintColor::Quartz)],
+            Self::ReachedLivingDark => &[CosmeticItem::Paint(PaintColor::Spore)],
+            Self::ReachedDrowned => &[CosmeticItem::Paint(PaintColor::Brine)],
+            Self::ReachedHollow => &[CosmeticItem::Paint(PaintColor::InnerSun)],
+            Self::ReachedStrange => &[CosmeticItem::Paint(PaintColor::Prism)],
+            Self::ReachedAncients => &[CosmeticItem::Paint(PaintColor::Alloy)],
+            Self::ReachedHeart => &[CosmeticItem::Paint(PaintColor::Heartlight)],
+            Self::BeatSinkhole => &[CosmeticItem::Paint(PaintColor::Rubble)],
+            Self::BeatStarCore => &[CosmeticItem::Paint(PaintColor::Corona)],
+            Self::BeatMind => &[CosmeticItem::Paint(PaintColor::Mycelium)],
+            Self::BeatLeviathan => &[CosmeticItem::Paint(PaintColor::DeepScale)],
+            Self::BeatSerpent => &[CosmeticItem::Paint(PaintColor::SerpentGold)],
+            Self::BeatGlitch => &[CosmeticItem::Paint(PaintColor::DeadPixel)],
+            Self::BeatColossus => &[CosmeticItem::Paint(PaintColor::GateGold)],
+            Self::PeopleBelow => &[CosmeticItem::Paint(PaintColor::Nacre)],
+            Self::HollowWorldRead => &[CosmeticItem::Paint(PaintColor::Jungle)],
+            Self::WearsThin => &[CosmeticItem::Paint(PaintColor::Mirrorglass)],
+            Self::BuildersCity => &[CosmeticItem::Paint(PaintColor::Lamplight)],
+            Self::StarDriveChapter => &[CosmeticItem::Paint(PaintColor::DriveWhite)],
+            Self::WholeTrail => &[CosmeticItem::Paint(PaintColor::FathersLoad)],
+            Self::LookUp => &[CosmeticItem::Paint(PaintColor::Starward)],
         }
     }
 
@@ -552,6 +728,7 @@ impl Milestone {
 
     /// Whether `player` (with the world's `facts` about them) has met this milestone.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per milestone")]
     pub fn met(self, player: &Player, facts: &MilestoneFacts) -> bool {
         let reached = |band: Band| {
             facts
@@ -613,6 +790,95 @@ impl Milestone {
             Self::EveryAnomaly => crate::expedition::anomaly::AnomalyKind::SHALLOW
                 .iter()
                 .all(|kind| facts.anomaly_kinds & kind.bit() != 0),
+            // Wave 10 story: the Descents reached, the gate bosses beaten, the deeper chapters,
+            // the whole trail and the ending (all crew-wide, from the shared journal).
+            Self::ReachedOldDeep => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(crate::descent::Descent::OldDeep)
+                    != 0
+            }
+            Self::ReachedLivingDark => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(crate::descent::Descent::LivingDark)
+                    != 0
+            }
+            Self::ReachedDrowned => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(
+                        crate::descent::Descent::DrownedAndFrozen,
+                    )
+                    != 0
+            }
+            Self::ReachedHollow => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(crate::descent::Descent::HollowWorld)
+                    != 0
+            }
+            Self::ReachedStrange => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(
+                        crate::descent::Descent::StrangeLayers,
+                    )
+                    != 0
+            }
+            Self::ReachedAncients => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(crate::descent::Descent::Ancients)
+                    != 0
+            }
+            Self::ReachedHeart => {
+                facts.descents
+                    & crate::expedition::progress::descent_bit(crate::descent::Descent::Heart)
+                    != 0
+            }
+            Self::BeatSinkhole => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(
+                        crate::descent::DescentBoss::TheSinkhole,
+                    )
+                    != 0
+            }
+            Self::BeatStarCore => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(crate::descent::DescentBoss::StarCore)
+                    != 0
+            }
+            Self::BeatMind => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(
+                        crate::descent::DescentBoss::MycelialMind,
+                    )
+                    != 0
+            }
+            Self::BeatLeviathan => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(crate::descent::DescentBoss::Leviathan)
+                    != 0
+            }
+            Self::BeatSerpent => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(crate::descent::DescentBoss::SunSerpent)
+                    != 0
+            }
+            Self::BeatGlitch => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(crate::descent::DescentBoss::TheGlitch)
+                    != 0
+            }
+            Self::BeatColossus => {
+                facts.bosses
+                    & crate::expedition::progress::boss_bit(
+                        crate::descent::DescentBoss::GatekeeperColossus,
+                    )
+                    != 0
+            }
+            Self::PeopleBelow => chapter_done(facts, crate::descent::Descent::DrownedAndFrozen),
+            Self::HollowWorldRead => chapter_done(facts, crate::descent::Descent::HollowWorld),
+            Self::WearsThin => chapter_done(facts, crate::descent::Descent::StrangeLayers),
+            Self::BuildersCity => chapter_done(facts, crate::descent::Descent::Ancients),
+            Self::StarDriveChapter => chapter_done(facts, crate::descent::Descent::Heart),
+            Self::WholeTrail => usize::from(facts.expedition_logs) >= crate::expedition::LOGS.len(),
+            Self::LookUp => facts.cable_lit,
         }
     }
 

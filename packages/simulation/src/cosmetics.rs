@@ -127,6 +127,48 @@ cosmetic_enum! {
         Anomaly => ("Anomaly Violet", false),
         /// Milestone reward (enter every kind of anomaly room): a corrupted magenta-green.
         Glitch => ("Glitch", false),
+        /// Milestone reward (reach the Old Deep; Wave 10 story).
+        Quartz => ("Fault Quartz", false),
+        /// Milestone reward (reach the Living Dark; Wave 10 story).
+        Spore => ("Spore Green", false),
+        /// Milestone reward (reach the Drowned and Frozen; Wave 10 story).
+        Brine => ("Brine Blue", false),
+        /// Milestone reward (reach the Hollow World; Wave 10 story).
+        InnerSun => ("Inner Sun", false),
+        /// Milestone reward (reach the Strange Layers; Wave 10 story).
+        Prism => ("Prism", false),
+        /// Milestone reward (reach the Ancients; Wave 10 story).
+        Alloy => ("Builder Alloy", false),
+        /// Milestone reward (reach the Heart; Wave 10 story).
+        Heartlight => ("Heartlight", false),
+        /// Milestone reward (beat the Sinkhole; Wave 10 story).
+        Rubble => ("Sinkhole Grey", false),
+        /// Milestone reward (beat the Star Core; Wave 10 story).
+        Corona => ("Core Corona", false),
+        /// Milestone reward (beat the Mycelial Mind; Wave 10 story).
+        Mycelium => ("Mycelium", false),
+        /// Milestone reward (beat the Leviathan; Wave 10 story).
+        DeepScale => ("Deep Scale", false),
+        /// Milestone reward (beat the Sun Serpent; Wave 10 story).
+        SerpentGold => ("Serpent Gold", false),
+        /// Milestone reward (beat the Glitch; Wave 10 story).
+        DeadPixel => ("Dead Pixel", false),
+        /// Milestone reward (beat the Gatekeeper Colossus; Wave 10 story).
+        GateGold => ("Gate Gold", false),
+        /// Milestone reward (read the Drowned and Frozen's logs; Wave 10 story).
+        Nacre => ("Nacre", false),
+        /// Milestone reward (read the Hollow World's logs; Wave 10 story).
+        Jungle => ("Jungle", false),
+        /// Milestone reward (read the Strange Layers' logs; Wave 10 story).
+        Mirrorglass => ("Mirrorglass", false),
+        /// Milestone reward (read the Ancients' logs; Wave 10 story).
+        Lamplight => ("Lamplight", false),
+        /// Milestone reward (read the Heart's logs; Wave 10 story).
+        DriveWhite => ("Drive White", false),
+        /// Milestone reward (read every log of the expedition; Wave 10 story).
+        FathersLoad => ("Fathers' Load", false),
+        /// Milestone reward (wake the Heart: the ending; Wave 10 story).
+        Starward => ("Starward", false),
     }
 }
 
@@ -451,7 +493,9 @@ mod tests {
     fn the_starter_set_is_generous_but_leaves_unlocks() {
         let all = CosmeticItem::all();
         let starter = all.iter().filter(|item| item.is_starter()).count();
-        assert!(starter * 10 >= all.len() * 6, "most items are starters");
+        // At least half are starters (Wave 10's finale milestones brought the earned paints to
+        // about as many as the starter set).
+        assert!(starter * 2 >= all.len(), "half the items are starters");
         assert!(starter < all.len(), "some items are left to unlock");
     }
 
@@ -490,8 +534,8 @@ mod tests {
     #[test]
     fn options_cycle_both_ways() {
         assert_eq!(PaintColor::Gold.cycled(1), PaintColor::Tangerine);
-        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Glitch);
-        assert_eq!(PaintColor::Glitch.cycled(1), PaintColor::Gold);
+        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Starward);
+        assert_eq!(PaintColor::Starward.cycled(1), PaintColor::Gold);
         assert_eq!(PaintColor::Stealth.cycled(1), PaintColor::Jade);
         assert_eq!(RearAttachment::None.cycled(-1), RearAttachment::Lantern);
     }

@@ -873,6 +873,10 @@ pub enum SoundCue {
     HeartWellGroan,
     /// A mercury eel breaking the metal.
     HeartMetalSplash,
+    /// A new Descent reached: a bell call over the cable's hum (wave 10 story).
+    StoryDescentCall,
+    /// The ending: the Heart wakes and the cable lights to the Moon (wave 10 story).
+    StoryCableLit,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

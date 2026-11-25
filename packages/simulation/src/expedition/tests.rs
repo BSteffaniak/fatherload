@@ -27,7 +27,7 @@ fn v11(seed: u64) -> WorldSettings {
 const SEEDS: [u64; 4] = [0, 0x5EED, 0x00FA_7E45, 0x0DD_BA11];
 
 #[test]
-fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_six() {
+fn logs_follow_the_strata_in_depth_order_and_cover_every_descent() {
     let mut previous = 0;
     for log in &LOGS {
         let index = log.stratum.index();
@@ -37,7 +37,6 @@ fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_six() {
             log.title
         );
         previous = index;
-        assert!(log.descent() <= Descent::StrangeLayers);
         assert!(
             !log.text.is_empty() && log.text.len() < 340,
             "{}: {} characters",
@@ -49,15 +48,11 @@ fn logs_follow_the_strata_in_depth_order_and_cover_descents_one_to_six() {
     // Titles are unique (the journal lists them by title).
     let titles: BTreeSet<&str> = LOGS.iter().map(|log| log.title).collect();
     assert_eq!(titles.len(), LOGS.len());
-    // Every stratum of Descents I-VI holds at least one log, and each chapter is written.
-    for descent in [
-        Descent::Crust,
-        Descent::OldDeep,
-        Descent::LivingDark,
-        Descent::DrownedAndFrozen,
-        Descent::HollowWorld,
-        Descent::StrangeLayers,
-    ] {
+    // Every stratum of every Descent holds at least one log, and each chapter is written
+    // (Wave 10: the trail is whole, 80 logs from the Topsoil to the Heart).
+    assert_eq!(LOGS.len(), 80);
+    assert_eq!(CHAPTERS.len(), Descent::ALL.len());
+    for descent in Descent::ALL {
         for stratum in descent.strata() {
             assert!(
                 LOGS.iter().any(|log| log.stratum == stratum),
@@ -98,12 +93,22 @@ fn the_fathers_stay_behind_one_by_one_and_write_no_more() {
     assert!(last_by(Member::Sefa) <= 37);
     assert!(last_by(Member::Bran) <= 45);
     assert!(last_by(Member::Dov) < 48);
+    // Wave 10: Ines stays in the Archive of Stars (log 67) and Amos goes on alone to the Heart,
+    // where the last log is his.
+    assert_eq!(number("Ines Stays"), 67);
+    assert_eq!(LOGS[66].stratum, Stratum::ArchiveOfStars);
+    assert!(last_by(Member::Ines) <= 67);
+    assert!(LOGS[67..].iter().all(|log| log.author == Member::Amos));
+    assert_eq!(number("Wake It"), 80);
+    assert_eq!(LOGS[79].stratum, Stratum::TheHeart);
     // The chapters end with their Descent's last log, which is a rig or a grave-side cairn
     // in the Descent's last stratum.
     for descent in [
         Descent::DrownedAndFrozen,
         Descent::HollowWorld,
         Descent::StrangeLayers,
+        Descent::Ancients,
+        Descent::Heart,
     ] {
         let last = LOGS
             .iter()
@@ -139,16 +144,27 @@ fn echoes_run_down_the_strata_radio_then_ghosts_then_builders() {
             .all(|e| e.kind == EchoKind::Ghost)
     );
     // Dov's tapes stop at his grave; below it the builders speak, and only once, out of time
-    // in the Time Sludge, does his voice come back.
+    // in the Time Sludge, does his voice come back. In the Archive Ines reads aloud, and from
+    // the Heart's first stratum on it is Amos on Dov's recorder, to the end (Wave 10).
     assert_eq!(ECHOES[first_builder].stratum, Stratum::TheSunforge);
     for echo in &ECHOES[first_builder..] {
+        let ghost_allowed = match echo.speaker {
+            Member::Dov => echo.stratum == Stratum::TimeSludge,
+            Member::Ines => echo.stratum == Stratum::ArchiveOfStars,
+            Member::Amos => echo.stratum.descent() == Descent::Heart,
+            _ => false,
+        };
         assert!(
-            echo.kind == EchoKind::Builder
-                || (echo.kind == EchoKind::Ghost && echo.stratum == Stratum::TimeSludge),
+            echo.kind == EchoKind::Builder || (echo.kind == EchoKind::Ghost && ghost_allowed),
             "{}",
             echo.title
         );
     }
+    let last = ECHOES.last().expect("echoes");
+    assert_eq!(
+        (last.kind, last.speaker, last.stratum),
+        (EchoKind::Ghost, Member::Amos, Stratum::TheHeart)
+    );
     for echo in &ECHOES {
         assert!(echo.text.len() < 260, "{}", echo.title);
         if echo.kind == EchoKind::Builder {
@@ -410,7 +426,7 @@ fn a_journal_reads_as_a_prefix_and_memories_open_with_the_trail() {
     assert!(lines_for(Settlement::GravelHollow, &state).count() > early);
     assert!(
         !state.chapter_read(Descent::Heart),
-        "no logs written there yet"
+        "the Heart chapter waits for logs 73-80"
     );
     let ids: BTreeSet<&str> = MEMORIES.iter().map(|memory| memory.id).collect();
     assert_eq!(ids.len(), MEMORIES.len(), "memory ids are unique");
@@ -593,4 +609,163 @@ fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_dr
             }
         }
     }
+}
+
+/// Wave 10: the archivist's voice has lines on every Descent, each of the Fathers, the Heart,
+/// the stars and the time after the end, each opened by the trail or the Descents reached,
+/// never spoiling; extra tables join the rotation.
+#[test]
+fn the_archivist_speaks_on_every_topic_without_spoiling_the_trail() {
+    use super::archivist::{
+        ARCHIVIST_LINES, ArchivistLine, ArchivistTopic, answer, answer_from, remark, topics,
+    };
+    static EXTRA: [ArchivistLine; 1] = [ArchivistLine {
+        id: "archivist.fathers.extra",
+        topic: ArchivistTopic::Fathers,
+        after_log: Some(80),
+        line: "An extra line.",
+    }];
+    let ids: BTreeSet<&str> = ARCHIVIST_LINES.iter().map(|line| line.id).collect();
+    assert_eq!(ids.len(), ARCHIVIST_LINES.len(), "ids are unique");
+    for line in &ARCHIVIST_LINES {
+        assert!(line.id.starts_with("archivist.") && line.id.split('.').count() == 3);
+        assert!(line.line.len() < 220, "{}", line.id);
+        assert!(
+            line.after_log
+                .is_none_or(|log| usize::from(log) <= LOGS.len())
+        );
+    }
+    let every_topic = Descent::ALL
+        .into_iter()
+        .map(ArchivistTopic::Descent)
+        .chain(Member::ALL.into_iter().map(ArchivistTopic::Member))
+        .chain([
+            ArchivistTopic::Fathers,
+            ArchivistTopic::Heart,
+            ArchivistTopic::Stars,
+            ArchivistTopic::AfterTheEnd,
+        ]);
+    for topic in every_topic {
+        assert!(
+            ARCHIVIST_LINES.iter().any(|line| line.topic == topic),
+            "{topic:?} has no line"
+        );
+    }
+    // A fresh crew: only the Fathers in general.
+    let mut state = ExpeditionState::default();
+    assert_eq!(topics(&state), vec![ArchivistTopic::Fathers]);
+    assert!(answer(ArchivistTopic::Member(Member::Amos), &state, 0).is_none());
+    // Reaching the Ancients and reading to Ines's staying opens the city, Ines and the stars.
+    state.descents = 0x7F;
+    state.found = 67;
+    let open = topics(&state);
+    for topic in [
+        ArchivistTopic::Descent(Descent::Ancients),
+        ArchivistTopic::Member(Member::Ines),
+        ArchivistTopic::Stars,
+    ] {
+        assert!(open.contains(&topic), "{topic:?}");
+    }
+    assert!(!open.contains(&ArchivistTopic::Descent(Descent::Heart)));
+    assert!(!open.contains(&ArchivistTopic::AfterTheEnd));
+    // Amos's lamp waits for the last log.
+    assert!(
+        !(0..4)
+            .filter_map(|visit| answer(ArchivistTopic::Member(Member::Amos), &state, visit))
+            .any(|line| line.id == "archivist.amos.lamp")
+    );
+    // Remarks alternate the place and the people, and are deterministic.
+    let place = remark(&state, Descent::Ancients, 0).expect("a remark");
+    assert_eq!(place.topic, ArchivistTopic::Descent(Descent::Ancients));
+    let people = remark(&state, Descent::Ancients, 1).expect("a remark");
+    assert!(matches!(
+        people.topic,
+        ArchivistTopic::Fathers | ArchivistTopic::Member(_)
+    ));
+    assert_eq!(remark(&state, Descent::Ancients, 1), Some(people));
+    // After the end it speaks of what comes next.
+    state.found = 80;
+    state.cable_lit = true;
+    assert_eq!(
+        remark(&state, Descent::Heart, 0).map(|line| line.topic),
+        Some(ArchivistTopic::AfterTheEnd)
+    );
+    // The companion track's own lines join the rotation.
+    let tables: [&'static [ArchivistLine]; 2] = [&ARCHIVIST_LINES, &EXTRA];
+    assert_eq!(
+        answer_from(&tables, ArchivistTopic::Fathers, &state, 0).map(|line| line.id),
+        Some("archivist.fathers.extra")
+    );
+}
+
+/// Wave 10: the ending passes every place one of the Fathers stayed, and the progress page
+/// pairs each Descent with its gate.
+#[test]
+fn the_ending_passes_every_father_and_the_progress_page_matches_the_gates() {
+    use super::{
+        ending::{EPILOGUE, ending_text},
+        progress::{descent_rows, gate_boss, totals},
+    };
+    let text = ending_text();
+    for needle in [
+        "Amos", "Ines", "Teo", "Sefa", "Ruth", "headset", "Wren", "Moon",
+    ] {
+        assert!(text.contains(needle), "the ending forgets {needle}");
+    }
+    assert_eq!(EPILOGUE.first().map(|beat| beat.place), Some("The Heart"));
+    assert_eq!(EPILOGUE.last().map(|beat| beat.place), Some("The Moon"));
+    for descent in Descent::ALL {
+        assert_eq!(
+            descent.gate().map(|gate| gate.boss),
+            Some(gate_boss(descent)),
+            "{descent:?}"
+        );
+    }
+    let state = ExpeditionState {
+        found: 30,
+        descents: 0b111,
+        bosses: super::progress::boss_bit(crate::descent::DescentBoss::StarCore),
+        ..ExpeditionState::default()
+    };
+    let rows = descent_rows(&state);
+    assert_eq!(rows.len(), 8);
+    assert!(rows[2].reached && !rows[3].reached);
+    assert!(rows[1].boss_beaten && !rows[0].boss_beaten);
+    assert_eq!((rows[2].logs_read, rows[2].chapter.is_some()), (9, true));
+    assert_eq!(
+        rows.iter().map(|row| row.logs_total).sum::<usize>(),
+        LOGS.len()
+    );
+    assert_eq!(totals(&state), (3, 1, 30, LOGS.len()));
+}
+
+/// Wave 10: the Descent VII and VIII outposts remember the Fathers by their plan names, cast
+/// speakers by trade, and every speaker has lines.
+#[test]
+fn the_ancients_and_heart_outposts_remember_the_fathers() {
+    use super::memories::{ANCIENTS_OUTPOST_NAMES, HEART_CAMP_NAMES, line_for_visit};
+    use crate::people::Role;
+    for (settlement, names) in [
+        (Settlement::ArchivePost, ANCIENTS_OUTPOST_NAMES),
+        (Settlement::HeartCamp, HEART_CAMP_NAMES),
+    ] {
+        for name in names {
+            assert_eq!(Settlement::of_place_name(name), Some(settlement), "{name}");
+        }
+        let state = ExpeditionState::default();
+        assert!(line_for_visit(settlement, &state, 0).is_some());
+        let full = ExpeditionState {
+            found: 80,
+            ..ExpeditionState::default()
+        };
+        assert!(
+            lines_for(settlement, &full).count() > lines_for(settlement, &state).count(),
+            "{settlement:?} opens up with the trail"
+        );
+    }
+    assert_eq!(
+        Settlement::ArchivePost.speaker_for_role(Role::Scholar),
+        Some("curator")
+    );
+    assert!(MEMORIES.iter().any(|memory| memory.line.contains("Wren")));
 }

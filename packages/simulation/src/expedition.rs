@@ -22,6 +22,11 @@
 //!   also sideways, sunlit, weightless and bent), each with a small reward.
 //! * **The codex** ([`codex`], Wave 9): the Crust's strongbox diary and the builders' tablets
 //!   and inscriptions, as pages of the journal beside the numbered logs.
+//! * **The finale** (Wave 10): logs 61-80 through the builders' city to the Heart, where Amos
+//!   Varga kept the sleeping Star Drive company to the end; the crew's progress through the
+//!   Descent ([`progress`]: Descents reached, gate bosses beaten); the ending ([`ending`]: the
+//!   Heart wakes and the cable to the Moon lights past every place one of the Fathers stayed);
+//!   and the builders' archivist's voice ([`archivist`]) for the Ancients' companion.
 //!
 //! The crew shares one [`ExpeditionState`] (`WorldState::expedition`, the shared
 //! `SectionKey::Expedition` section, saved with the world and hashed only once something was
@@ -29,9 +34,12 @@
 //! place sites, echoes and rooms; every older world keeps an empty state.
 
 pub mod anomaly;
+pub mod archivist;
 pub mod codex;
+pub mod ending;
 pub mod logs;
 pub mod memories;
+pub mod progress;
 pub mod sites;
 
 use std::collections::BTreeSet;
@@ -40,7 +48,7 @@ use serde::{Deserialize, Serialize};
 
 pub use logs::{CHAPTERS, Chapter, ECHOES, Echo, EchoKind, ExpeditionLog, LOGS, chapter};
 
-use crate::descent::Descent;
+use crate::descent::{Descent, DescentBoss};
 
 /// A member of the Fathers' expedition.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -163,6 +171,12 @@ pub struct ExpeditionState {
     pub anomalies: BTreeSet<(i32, i32)>,
     /// Kinds of anomaly room entered ([`anomaly::AnomalyKind::bit`]).
     pub anomaly_kinds: u8,
+    /// Descents the crew has reached ([`progress::descent_bit`]; Wave 10).
+    pub descents: u8,
+    /// Descent gate bosses the crew has beaten ([`progress::boss_bit`]; Wave 10).
+    pub bosses: u16,
+    /// The ending played: the Heart woke and the cable to the Moon lit (Wave 10).
+    pub cable_lit: bool,
 }
 
 impl ExpeditionState {
@@ -206,6 +220,24 @@ impl ExpeditionState {
     pub fn chapter_read(&self, descent: Descent) -> bool {
         let (read, total) = self.chapter_progress(descent);
         total > 0 && read == total
+    }
+
+    /// Whether the crew has reached `descent` (Wave 10).
+    #[must_use]
+    pub const fn reached(&self, descent: Descent) -> bool {
+        self.descents & progress::descent_bit(descent) != 0
+    }
+
+    /// Whether the crew has beaten `boss` (Wave 10).
+    #[must_use]
+    pub const fn beat(&self, boss: DescentBoss) -> bool {
+        self.bosses & progress::boss_bit(boss) != 0
+    }
+
+    /// Whether every log of the trail has been read (Wave 10).
+    #[must_use]
+    pub const fn trail_complete(&self) -> bool {
+        self.found as usize >= LOGS.len()
     }
 
     /// How many kinds of anomaly room the crew has entered.
