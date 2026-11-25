@@ -614,5 +614,8 @@ fn fog_shortens_what_the_scanner_sees() {
             checked += 1;
         }
     }
-    assert!(checked > 0, "no nebula star with bodies past the fogged range");
+    assert!(
+        checked > 0,
+        "no nebula star with bodies past the fogged range"
+    );
 }

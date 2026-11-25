@@ -13,8 +13,8 @@ use crate::{
     field::trig::wrap_angle,
     flight::{
         AIR_REFILL_PER_SECOND, AIR_WARNINGS, BodyKind, DOCK_ALIGN, DOCK_RANGE, DOCK_SPEED,
-        FlightCommand, FlightEvent, FlightGearKind, FlightPlace, FlightShared, HEAT_WARNING,
-        GeneratedSpace, PARK_ABOVE_ROWS, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS,
+        FlightCommand, FlightEvent, FlightGearKind, FlightPlace, FlightShared, GeneratedSpace,
+        HEAT_WARNING, PARK_ABOVE_ROWS, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS,
         STATION_FUEL_PRICE, STATION_REPAIR_PRICE, SpaceQuery, StarDrive, StationService, SystemRef,
         UNDOCK_SPEED, WarpRefusal, WarpRun, air_capacity, beacon_fee,
         nav::{self, NavTarget, ScanPing},

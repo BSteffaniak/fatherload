@@ -441,10 +441,7 @@ impl GeneratedSpace {
         self.space.system(resolved).map_or_else(
             || SystemRef {
                 id: chart.system,
-                sector: (
-                    i64::from(resolved.sector.x),
-                    i64::from(resolved.sector.y),
-                ),
+                sector: (i64::from(resolved.sector.x), i64::from(resolved.sector.y)),
             },
             |system| Self::reference(resolved.sector, &system),
         )
@@ -538,7 +535,12 @@ impl SpaceQuery for GeneratedSpace {
         };
         let mut bodies = Vec::with_capacity(found.stars.len() + found.bodies.len() + 2);
         let (star_gravity, corona) = star_shape(found.class);
-        for (index, star) in found.stars.iter().take(usize::from(FIRST_BODY_INDEX)).enumerate() {
+        for (index, star) in found
+            .stars
+            .iter()
+            .take(usize::from(FIRST_BODY_INDEX))
+            .enumerate()
+        {
             let radius = tiles(star.radius as f32);
             bodies.push(FlightBody {
                 body: BodyRef {

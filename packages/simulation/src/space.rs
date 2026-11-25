@@ -69,8 +69,8 @@ pub use generate::{
     ChartTarget, chart_target, generate_sector, resolve_chart, surface_columns, system_uid,
 };
 pub use home::{
-    DEPARTURE_ABOVE_MOON, HALCYON_DOCK_OFFSET, HOME_ORBIT, HOME_SUN_RADIUS, HOME_WORLD_BODY, HOME_WORLD_RADIUS,
-    MOON_BODY, MOON_ORBIT, MOON_RADIUS,
+    DEPARTURE_ABOVE_MOON, HALCYON_DOCK_OFFSET, HOME_ORBIT, HOME_SUN_RADIUS, HOME_WORLD_BODY,
+    HOME_WORLD_RADIUS, MOON_BODY, MOON_ORBIT, MOON_RADIUS,
 };
 pub use model::*;
 pub use query::{

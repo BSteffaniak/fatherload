@@ -123,6 +123,7 @@ mod heart_tests;
 mod star_flight_tests;
 pub use flight::warp_arrival as flight_warp_arrival;
 pub use heart::CablePath;
+mod body_flight;
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;
@@ -165,12 +166,9 @@ mod pilot_weather;
 pub(crate) mod places;
 #[cfg(test)]
 mod places_tests;
-mod body_flight;
 pub use body_flight::{
     BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
 };
-#[cfg(test)]
-mod space_journey_tests;
 pub mod planet;
 #[cfg(test)]
 mod planet_tests;
@@ -205,6 +203,8 @@ mod soak_tests;
 mod sonar;
 #[cfg(test)]
 mod sonar_tests;
+#[cfg(test)]
+mod space_journey_tests;
 mod state_hash;
 #[cfg(test)]
 mod story_finale_tests;

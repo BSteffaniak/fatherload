@@ -9,9 +9,7 @@
 use std::collections::VecDeque;
 
 use crate::{
-    ControlState, PlayerCommand, PlayerId, WorldState,
-    field::trig::wrap_angle,
-    terrain::TILE_SIZE,
+    ControlState, PlayerCommand, PlayerId, WorldState, field::trig::wrap_angle, terrain::TILE_SIZE,
 };
 
 use super::{
@@ -58,6 +56,7 @@ struct LegState {
     still: u32,
     last: i64,
     travelled: i64,
+    last_travelled: i64,
     start_row: i64,
     burn: u32,
     stuck: u32,
@@ -246,7 +245,9 @@ impl SpaceBot {
                     self.finish();
                     return (
                         ControlState::default(),
-                        Some(PlayerCommand::Flight(FlightCommand::SetWaypoint(Some(target)))),
+                        Some(PlayerCommand::Flight(FlightCommand::SetWaypoint(Some(
+                            target,
+                        )))),
                     );
                 }
                 Leg::Warp(target) => {
@@ -404,7 +405,9 @@ impl SpaceBot {
                     (altitude * 0.4).clamp(60.0, 400.0),
                 )
             };
-            let heading = (altitude < space::tiles(1_500.0)).then_some(up);
+            // Nose at the target on the way in (the retro thrusters only brake), then up, away
+            // from the centre, for the last stretch: gravity brings it down.
+            let heading = (altitude < space::tiles(450.0)).then_some(up);
             return Some(steer(world, player, target, speed, heading));
         }
         // On the ground: the fall (slowed by the rig's drag under a small moon's pull) ends in
@@ -459,9 +462,26 @@ impl SpaceBot {
         }
         if self.state.stuck > hz / 10 && self.state.burn == 0 {
             // A short hop: a small moon's pull is light, and a long burn would leave the
-            // ground (the strip's top hands a rig back to space).
-            self.state.burn = 2;
+            // ground (the strip's top hands a rig back to space). Hops that get nowhere grow
+            // (out of a pit), and progress resets them.
+            if self.state.travelled > self.state.start_row {
+                self.state.start_row = self.state.travelled;
+                self.state.nudge = 0;
+            } else {
+                self.state.nudge = (self.state.nudge + 1).min(hz / 4);
+            }
+            self.state.burn = (hz / 15).max(2) + self.state.nudge;
             self.state.stuck = 0;
+        }
+        // No progress for a second (wedged under an overhang): drill on through the wall.
+        if self.state.travelled == self.state.last_travelled {
+            self.state.still += 1;
+        } else {
+            self.state.still = 0;
+            self.state.last_travelled = self.state.travelled;
+        }
+        if self.state.still > hz {
+            return Some((ControlState::new(1.0, false, false), None));
         }
         let thrust = self.state.burn > 0 && rig.velocity_y > -120.0;
         self.state.burn = self.state.burn.saturating_sub(1);
@@ -526,7 +546,8 @@ impl SpaceBot {
         let final_leg = to_lineup < space::tiles(4.0) || to_port < space::tiles(25.0);
         let target = if final_leg { port } else { lineup };
         let heading = (to_port < space::tiles(60.0)).then_some(dock_heading);
-        let error = wrap_angle(heading.unwrap_or(rig.attitude.orientation) - rig.attitude.orientation);
+        let error =
+            wrap_angle(heading.unwrap_or(rig.attitude.orientation) - rig.attitude.orientation);
         if final_leg && to_port < space::tiles(2.5) && flight.speed() < 60.0 && error.abs() < 0.2 {
             return (
                 ControlState::default(),
@@ -541,7 +562,9 @@ impl SpaceBot {
 /// A chart from the Archive (a plinth of the world seeded `seed`) whose real system has a
 /// small, light moon with round ground: a quick landing and lap.
 #[must_use]
-pub fn chart_with_a_small_moon(seed: u64) -> Option<(crate::star_chart::StarChart, SystemRef, FlightBody)> {
+pub fn chart_with_a_small_moon(
+    seed: u64,
+) -> Option<(crate::star_chart::StarChart, SystemRef, FlightBody)> {
     let galaxy = super::GeneratedSpace::new(seed);
     for x in 0..400 {
         let chart = crate::star_chart::chart_at_site(

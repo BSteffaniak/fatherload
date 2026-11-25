@@ -1221,7 +1221,9 @@ impl Terrain {
     /// The points of interest whose bounds overlap `rect`, in id order.
     #[must_use]
     pub fn pois_touching(&self, rect: &TileRect) -> Vec<WorldFeature> {
-        if (self.body.is_some() || self.planet.is_some()) || !self.settings.generator.has_points_of_interest() {
+        if (self.body.is_some() || self.planet.is_some())
+            || !self.settings.generator.has_points_of_interest()
+        {
             return Vec::new();
         }
         if self.is_streamed() {

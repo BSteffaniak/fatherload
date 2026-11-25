@@ -14,10 +14,7 @@ use super::{
     },
 };
 use crate::{
-    attitude::RigAttitude,
-    field::trig::wrap_angle,
-    position::WorldPos,
-    star_chart::StarClass,
+    attitude::RigAttitude, field::trig::wrap_angle, position::WorldPos, star_chart::StarClass,
 };
 
 const SYSTEM: SystemRef = SystemRef {
@@ -615,12 +612,19 @@ fn the_generated_galaxy_is_deterministic_and_honours_the_charts() {
         Some(crate::space::HOME_WORLD_BODY)
     );
     assert_eq!(
-        space.body_ref(crate::space::MOON_BODY).map(|body| body.index),
+        space
+            .body_ref(crate::space::MOON_BODY)
+            .map(|body| body.index),
         Some(space::MOON_INDEX)
     );
     // A chart names a real system of the generator, with its class and worlds.
-    let target =
-        crate::star_chart::chart_at_site(0xF00D, 40, 9_900, 500, crate::ids::SimulationTick::new(0));
+    let target = crate::star_chart::chart_at_site(
+        0xF00D,
+        40,
+        9_900,
+        500,
+        crate::ids::SimulationTick::new(0),
+    );
     let charted_ref = space.chart_system(&target);
     let charted = space.system(charted_ref).expect("charted");
     assert_eq!(charted.class, target.class);

@@ -128,7 +128,9 @@ fn deep_space() -> WorldPos {
         let (dx, dy) = neighbour.star.delta_f64(home);
         let length = dx.hypot(dy);
         for step in 0..200_u16 {
-            let reach = f64::from(space::tiles(4_000.0f32.mul_add(-f32::from(step), 900_000.0)));
+            let reach = f64::from(space::tiles(
+                4_000.0f32.mul_add(-f32::from(step), 900_000.0),
+            ));
             let at = space::advance(neighbour.star, dx / length * reach, dy / length * reach);
             let bodies = galaxy.bodies_near(at);
             let (gap, _) = space::nearest_surface(&bodies, at);

@@ -87,8 +87,7 @@ fn journey_world(hz: u32) -> (WorldState, SystemRef, FlightBody) {
     world.ancient_city.charts.push(chart);
     assert!(world.known_systems().contains(&system));
     let line = world.space_line_row().expect("space line");
-    let column =
-        crate::worldgen::sky::moon_column(world.terrain().settings()).expect("moon") + 600;
+    let column = crate::worldgen::sky::moon_column(world.terrain().settings()).expect("moon") + 600;
     world.teleport_rig_to(
         PLAYER,
         WorldPos::tile_center(i64::from(column), i64::from(line + 6)),

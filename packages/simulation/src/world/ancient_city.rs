@@ -203,6 +203,15 @@ impl WorldState {
         &self.ancient_city.charts
     }
 
+    /// Records a read star chart (scenes, tests and tools; play reads them at the Archive's
+    /// plinths). A system already charted is not added twice.
+    #[doc(hidden)]
+    pub fn record_star_chart(&mut self, chart: StarChart) {
+        if !self.star_chart_known(chart.system) {
+            self.ancient_city.charts.push(chart);
+        }
+    }
+
     /// Whether the crew has charted star system `system`.
     #[must_use]
     pub fn star_chart_known(&self, system: u64) -> bool {

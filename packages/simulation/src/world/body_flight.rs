@@ -28,8 +28,8 @@ use crate::{
     event::{GameplayEventKind, TickOutput},
     field::trig::wrap_angle,
     flight::{
-        AIR_REFILL_PER_SECOND, AIR_WARNINGS, BodyRef, FlightEvent, FlightPlace,
-        RigFlight, StarDrive, beacon_fee,
+        AIR_REFILL_PER_SECOND, AIR_WARNINGS, BodyRef, FlightEvent, FlightPlace, RigFlight,
+        StarDrive, beacon_fee,
         space::{BodyKind, SpaceQuery},
     },
     ids::PlayerId,
@@ -147,7 +147,9 @@ impl WorldState {
         let along = flight
             .velocity_x
             .mul_add(tangent.0, flight.velocity_y * tangent.1);
-        let toward_core = flight.velocity_x.mul_add(down.0, flight.velocity_y * down.1);
+        let toward_core = flight
+            .velocity_x
+            .mul_add(down.0, flight.velocity_y * down.1);
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
