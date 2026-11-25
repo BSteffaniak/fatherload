@@ -1687,9 +1687,6 @@ impl LocalGame {
 
     /// Descent VIII's news for each local seat (Wave 10): dark matter's weight, wells, rails,
     /// the Heart's beats; a story card when the crew finds one of its places.
-    /// Space flight for local seats (Wave 11): the seat whose rig it was hears what happened
-    /// (a refused warp says why; low air says what to do), and docking opens the station's
-    /// counter.
     /// Space's things for local seats (Wave 12 systems): what a star, a hole, a wormhole, a
     /// nebula, a rock or a comet did, in plain words for the seat whose rig it was.
     fn announce_systems(&mut self, players: &[PlayerId]) {
@@ -1751,6 +1748,9 @@ impl LocalGame {
         }
     }
 
+    /// Space flight for local seats (Wave 11): the seat whose rig it was hears what happened
+    /// (a refused warp says why; low air says what to do), and docking opens the station's
+    /// counter.
     fn announce_flight(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::flight::{FlightEvent, WarpRefusal};
         let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);

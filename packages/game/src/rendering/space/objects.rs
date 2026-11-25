@@ -48,6 +48,12 @@ fn toward(centre: (f32, f32), angle: f32, distance: f32) -> (f32, f32) {
     )
 }
 
+/// `a` moved `share` of the way toward `b` (opaque).
+fn mix_colour(a: Color, b: Color, share: f32) -> Color {
+    let lerp = |x: u8, y: u8| (f32::from(y) - f32::from(x)).mul_add(share, f32::from(x)) as u8;
+    Color::new(lerp(a.r, b.r), lerp(a.g, b.g), lerp(a.b, b.b), 255)
+}
+
 fn v(point: (f32, f32)) -> Vector2 {
     Vector2::new(point.0, point.1)
 }
@@ -608,16 +614,28 @@ pub fn draw_rock_shaped(
     light: (f32, f32),
     ore: Option<Color>,
 ) {
-    const SIDES: usize = 10;
+    // A real rock is round to its contact radius, so it gets more sides (a big one would
+    // read as a flat polygon with ten).
+    const MAX_SIDES: usize = 64;
+    let sides = if ore.is_some() {
+        ((radius / 12.0) as usize).clamp(12, MAX_SIDES)
+    } else {
+        10
+    };
     let tones = match (h >> 56) % 5 {
         0 => [palette::RUST, palette::COPPER, palette::SAND],
         1 => [palette::SLATE_DARK, palette::SLATE, palette::SLATE_LIGHT],
         _ => [palette::STONE_DARK, palette::STONE, palette::STONE_LIGHT],
     };
+    // A real rock's stone takes a cast of its ore (an ice rock reads cold, iron rusty).
+    let tones = ore.map_or(tones, |ore| {
+        [palette::STONE_DARK, palette::STONE, palette::STONE_LIGHT]
+            .map(|tone| mix_colour(tone, ore, 0.28))
+    });
     let turn = unit(h, 4) * TAU;
-    let mut outline = [(0.0_f32, 0.0_f32); SIDES];
-    for (index, slot) in outline.iter_mut().enumerate() {
-        let angle = turn + index as f32 / SIDES as f32 * TAU;
+    let mut outline = [(0.0_f32, 0.0_f32); MAX_SIDES];
+    for (index, slot) in outline.iter_mut().take(sides).enumerate() {
+        let angle = turn + index as f32 / sides as f32 * TAU;
         let lump = if ore.is_some() {
             1.02 + 0.06 * unit(hash64(&[h as i64, index as i64]), 0)
         } else {
@@ -627,8 +645,8 @@ pub fn draw_rock_shaped(
     }
     let fan = |draw: &mut dyn FnMut(Vector2, Vector2, Vector2), scale: f32, shift: (f32, f32)| {
         let centre = Vector2::new(point.0 + shift.0, point.1 + shift.1);
-        for index in 0..SIDES {
-            let (a, b) = (outline[index], outline[(index + 1) % SIDES]);
+        for index in 0..sides {
+            let (a, b) = (outline[index], outline[(index + 1) % sides]);
             let pa = Vector2::new(centre.x + a.0 * scale, centre.y + a.1 * scale);
             let pb = Vector2::new(centre.x + b.0 * scale, centre.y + b.1 * scale);
             // raylib wants counter-clockwise triangles; the outline turns clockwise on screen.
@@ -667,20 +685,86 @@ pub fn draw_rock_shaped(
             );
         }
     }
-    if ore.is_some() || (h >> 40).is_multiple_of(3) {
+    if let Some(ore) = ore {
+        draw_ore_veins(draw, point, radius, h, ore, tones[0]);
+    } else if (h >> 40).is_multiple_of(3) {
         for glint in 0..3 {
             let hg = hash64(&[h as i64, 80 + glint]);
             let at = toward(point, unit(hg, 0) * TAU, radius * 0.55 * unit(hg, 16));
-            let colour = match ore {
-                Some(ore) => ore,
-                None if glint == 0 => palette::GOLD,
-                None => palette::MINT,
+            let colour = if glint == 0 {
+                palette::GOLD
+            } else {
+                palette::MINT
             };
             let size = (radius * 0.12).clamp(1.0, 3.0);
             draw.draw_rectangle_rec(
                 Rectangle::new(at.0.round(), at.1.round(), size, size),
                 colour,
             );
+        }
+    }
+}
+
+/// A real rock's ore veins across its face (see [`draw_rock_shaped`]): pixel flecks of `ore`
+/// on a dark `seat`, a few with a bright core, scattered on a grid anchored to the rock (so
+/// they ride with it) at a steady density on screen, so a rock's ore reads at any zoom, from a
+/// pebble to a boulder filling the view. Only the grid cells on screen are visited.
+fn draw_ore_veins(
+    draw: &mut impl RaylibDraw,
+    point: (f32, f32),
+    radius: f32,
+    h: u64,
+    ore: Color,
+    seat: Color,
+) {
+    // Small rocks: a handful of flecks over the face.
+    if radius < 40.0 {
+        let size = (radius * 0.12).clamp(1.0, 3.0).round();
+        for fleck in 0..4 {
+            let hg = hash64(&[h as i64, 80 + fleck]);
+            let at = toward(point, unit(hg, 0) * TAU, radius * 0.6 * unit(hg, 16));
+            draw.draw_rectangle_rec(Rectangle::new(at.0.round(), at.1.round(), size, size), ore);
+        }
+        return;
+    }
+    // Big rocks: one chance of a fleck per grid cell, over the cells on screen.
+    let (width, height) = unsafe { (ffi::GetScreenWidth(), ffi::GetScreenHeight()) };
+    let (width, height) = (width.max(1) as f32, height.max(1) as f32);
+    let cell = (height / 12.0).clamp(36.0, 96.0);
+    let size = (cell * 0.12).round().max(2.0);
+    let reach = radius - cell * 0.4;
+    let cells = |low: f32, high: f32, at: f32| {
+        let from = ((low.max(at - reach) - at) / cell).floor() as i64;
+        let to = ((high.min(at + reach) - at) / cell).ceil() as i64;
+        from..=to
+    };
+    for row in cells(-cell, height + cell, point.1) {
+        for column in cells(-cell, width + cell, point.0) {
+            let hg = hash64(&[h as i64, 80, column, row]);
+            if unit(hg, 0) > 0.38 {
+                continue;
+            }
+            let x = (column as f32 + unit(hg, 8)).mul_add(cell, point.0);
+            let y = (row as f32 + unit(hg, 16)).mul_add(cell, point.1);
+            let (dx, dy) = (x - point.0, y - point.1);
+            if dx.mul_add(dx, dy * dy) > reach * reach {
+                continue;
+            }
+            let edge = if unit(hg, 24) < 0.5 {
+                size
+            } else {
+                (size * 0.6).round().max(2.0)
+            };
+            let (x, y) = (x.round(), y.round());
+            draw.draw_rectangle_rec(
+                Rectangle::new(x + 1.0, y + 1.0, edge, edge),
+                fade(seat, 0.9),
+            );
+            draw.draw_rectangle_rec(Rectangle::new(x, y, edge, edge), ore);
+            if edge >= 4.0 && unit(hg, 32) < 0.3 {
+                let core = (edge * 0.4).round().max(1.0);
+                draw.draw_rectangle_rec(Rectangle::new(x, y, core, core), palette::BONE);
+            }
         }
     }
 }
