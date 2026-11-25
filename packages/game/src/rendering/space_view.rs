@@ -318,19 +318,7 @@ fn fill_ring(
         draw.draw_ring(at, inner.max(0.0), outer, 0.0, 360.0, segments, colour);
         return;
     }
-    let towards = (frame.centre.y - at.y)
-        .atan2(frame.centre.x - at.x)
-        .to_degrees();
-    let half = ((screen * 1.2 / outer).min(std::f32::consts::PI)).to_degrees();
-    draw.draw_ring(
-        at,
-        inner.max(0.0),
-        outer,
-        towards - half,
-        towards + half,
-        160,
-        colour,
-    );
+    huge_band(draw, frame, at, inner, outer, colour);
 }
 
 /// A filled disc that stays round however large (huge discs draw only the arc near the view).
@@ -353,16 +341,115 @@ fn fill_disc(
         draw.draw_circle_sector(at, radius, 0.0, 360.0, segments, colour);
         return;
     }
-    // Only the arc facing the view: a fan around the direction to the view's middle.
-    let to_view = (frame.centre.y - at.y)
-        .atan2(frame.centre.x - at.x)
-        .to_degrees();
-    let half = ((screen * 1.2 / radius).min(std::f32::consts::PI)).to_degrees();
-    draw.draw_circle_sector(at, radius, to_view - half, to_view + half, 160, colour);
+    huge_band(draw, frame, at, 0.0, radius, colour);
+}
+
+/// The part of a huge disc or ring (`inner` 0 for a disc) near the view, as a strip of quads
+/// computed in double precision relative to the view, so its edge is a smooth curve however
+/// far its centre is (a landed rig's horizon).
+fn huge_band(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    at: Vector2,
+    inner: f32,
+    outer: f32,
+    colour: Color,
+) {
+    const SEGMENTS: usize = 96;
+    let screen = f64::from(frame.rect.width.hypot(frame.rect.height));
+    let (cx, cy) = (f64::from(at.x), f64::from(at.y));
+    let towards = (f64::from(frame.centre.y) - cy).atan2(f64::from(frame.centre.x) - cx);
+    let outer = f64::from(outer);
+    let half = (screen * 1.5 / outer).min(std::f64::consts::PI);
+    // A disc's fill only needs to reach a little past the view (the view may lie deep inside
+    // it: an atmosphere seen from its floor).
+    let to_view = (f64::from(frame.centre.x) - cx).hypot(f64::from(frame.centre.y) - cy);
+    let inner = if inner > 0.0 {
+        f64::from(inner)
+    } else {
+        (to_view - screen).min(outer - screen * 2.0).max(0.0)
+    };
+    let point = |angle: f64, reach: f64| {
+        Vector2::new(
+            angle.cos().mul_add(reach, cx) as f32,
+            angle.sin().mul_add(reach, cy) as f32,
+        )
+    };
+    let mut previous: Option<(Vector2, Vector2)> = None;
+    for step in 0..=SEGMENTS {
+        let angle = towards - half + 2.0 * half * step as f64 / SEGMENTS as f64;
+        let (edge, depth) = (point(angle, outer), point(angle, inner));
+        if let Some((last_edge, last_depth)) = previous {
+            // Both windings: raylib culls one.
+            draw.draw_triangle(last_edge, last_depth, edge, colour);
+            draw.draw_triangle(last_edge, edge, last_depth, colour);
+            draw.draw_triangle(edge, last_depth, depth, colour);
+            draw.draw_triangle(edge, depth, last_depth, colour);
+        }
+        previous = Some((edge, depth));
+    }
+}
+
+/// Specks of ground under a surface seen up close (a landed rig's view): pixel grit in the
+/// body's colours, fixed to the body so they do not swim as the rig moves.
+fn draw_ground_grit(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    body: &FlightBody,
+    at: Vector2,
+    radius: f32,
+    colours: (Color, Color, Color),
+) {
+    let screen = frame.rect.width.hypot(frame.rect.height);
+    if radius < screen * 2.0 {
+        return;
+    }
+    let (cx, cy) = (f64::from(at.x), f64::from(at.y));
+    let towards = (f64::from(frame.centre.y) - cy).atan2(f64::from(frame.centre.x) - cx);
+    let pixel = f64::from((frame.scale * 4.0).max(2.0));
+    let radius = f64::from(radius);
+    let step = pixel * 2.0 / radius;
+    let span = f64::from(screen) * 0.6 / radius;
+    let first = ((towards - span) / step).floor() as i64;
+    let last = ((towards + span) / step).ceil() as i64;
+    let size = pixel as f32;
+    for column in first..=last {
+        for layer in 1..14_i64 {
+            let roll = space::hash64(
+                body.body.system.id ^ u64::from(body.body.index),
+                0x6A17,
+                column,
+                layer,
+            );
+            if !roll.is_multiple_of(3) {
+                continue;
+            }
+            let angle = column as f64 * step + ((roll >> 8) & 0xFF) as f64 / 255.0 * step;
+            let reach =
+                radius - (layer as f64 + ((roll >> 16) & 0xFF) as f64 / 255.0) * pixel * 2.5;
+            let spot = Vector2::new(
+                angle.cos().mul_add(reach, cx) as f32,
+                angle.sin().mul_add(reach, cy) as f32,
+            );
+            if !frame.visible(spot, size) {
+                continue;
+            }
+            let colour = match (roll >> 24) % 3 {
+                0 => colours.0,
+                1 => colours.1,
+                _ => colours.2,
+            };
+            let fade = (255 - layer * 14).clamp(60, 255) as u8;
+            draw.draw_rectangle_v(spot, Vector2::new(size, size), with_alpha(colour, fade));
+        }
+    }
 }
 
 /// One body.
-#[allow(clippy::too_many_lines, reason = "each kind of body's look in one place")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "each kind of body's look in one place"
+)]
 fn draw_body(
     draw: &mut RaylibDrawHandle<'_>,
     frame: &SpaceFrame,
@@ -444,14 +531,7 @@ fn draw_body(
             // The crust at the limb: a bright rim and a darker band under it (the ground a
             // landed rig stands on reads as a surface, not a flat fill).
             let rim = (radius * 0.012).clamp(1.0, 10.0 * frame.scale.max(0.2));
-            fill_ring(
-                draw,
-                frame,
-                at,
-                radius - rim * 6.0,
-                radius - rim,
-                with_alpha(INK, 70),
-            );
+            draw_ground_grit(draw, frame, body, at, radius, (detail, lit, base));
             fill_ring(
                 draw,
                 frame,
@@ -510,7 +590,7 @@ fn draw_station(
     let unit = radius / 5.0;
     // The solar wings (outlined, with cell lines), the spar.
     for side in [-1.0_f32, 1.0] {
-        let (sin, cos) = (body.port_angle - frame.roll + std::f32::consts::FRAC_PI_2).sin_cos();
+        let (sin, cos) = (body.port_angle - frame.roll).sin_cos();
         let centre = Vector2::new(
             at.x + cos * side * unit * 7.5,
             at.y + sin * side * unit * 7.5,
@@ -723,7 +803,10 @@ fn draw_flyer(
 
 /// The seat's own rig in the middle, upright (or turned, chart-up), with its drive's glow and
 /// re-entry plasma.
-#[allow(clippy::too_many_lines, reason = "the rig and its drive's and heat's glows")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the rig and its drive's and heat's glows"
+)]
 fn draw_own_rig(
     draw: &mut RaylibDrawHandle<'_>,
     terrain: &fatherload_simulation::terrain::Terrain,
@@ -801,11 +884,18 @@ fn draw_own_rig(
             frame.centre.x + vx * 6.0 * zoom,
             frame.centre.y + vy * 6.0 * zoom,
         );
+        fill_disc(
+            draw,
+            frame,
+            lead,
+            30.0 * zoom,
+            with_alpha(ORANGE, (50.0 * glow) as u8),
+        );
         for (inner, outer, colour, alpha) in [
-            (14.0, 22.0, RED, 90.0),
-            (11.0, 16.0, ORANGE, 170.0),
-            (9.0, 12.0, AMBER, 220.0),
-            (8.0, 9.5, CREAM, 240.0),
+            (20.0, 32.0, RED, 100.0),
+            (16.0, 24.0, ORANGE, 180.0),
+            (13.0, 18.0, AMBER, 220.0),
+            (11.5, 13.5, CREAM, 240.0),
         ] {
             draw.draw_ring(
                 lead,
@@ -1466,7 +1556,19 @@ fn draw_nav_panel(
     let (dx, dy) = flight.pos.delta_f64(pos);
     let distance = dx.hypot(dy);
     let far = matches!(target, NavTarget::System(system) if space::galaxy_sector_of(flight.pos) != system.sector);
-    let eta = nav::eta_seconds(distance, far);
+    let eta = match flight.drive {
+        // Mid-warp: what is left of the jump, then the cruise in from the system's edge.
+        StarDrive::Warp(run) => {
+            let left = (run.start + u64::from(run.duration_millis))
+                .saturating_sub(snapshot.space.millis) as f32
+                / 1_000.0;
+            left + nav::eta_seconds(
+                f64::from(fatherload_simulation::flight::physics::WARP_ARRIVAL),
+                false,
+            )
+        }
+        _ => nav::eta_seconds(distance, far),
+    };
     let line = ui_kit::truncate(
         &format!(
             "{}  ETA {}",
