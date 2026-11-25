@@ -171,7 +171,7 @@ fn draw_backdrop(draw: &mut impl RaylibDraw, scene: &PlaceScene<'_>, visible: Re
     for row in first_y..first_y + rows {
         for column in first_x..first_x + columns {
             let hash = star_hash(column + origin_x, row + origin_y);
-            if !hash.is_multiple_of(5) {
+            if !hash.is_multiple_of(3) {
                 continue;
             }
             let x = (column as f32).mul_add(cell, ((hash >> 8) % 96) as f32 * 2.0);

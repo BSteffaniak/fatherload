@@ -1047,21 +1047,26 @@ fn hud_warnings(
     }
     // Warning depths are classic nominal rows (deep worlds stretch them with their bands). A
     // tomb run's vault keeps its own climate (WP-TOMBS): no depth warnings inside.
+    // Away from the home store (F11) the seat's own place's ground is the one that counts.
+    let terrain = view
+        .place_scene
+        .as_ref()
+        .map_or(snapshot.terrain, |scene| scene.terrain);
     let depth = if snapshot.tombs.run_of(view.player_id).is_some() {
         0
     } else {
-        snapshot.terrain.nominal_row(view.hud.row.max(0))
+        terrain.nominal_row(view.hud.row.max(0))
     };
     // Heat warns only where it cracks this rig's hull: the heat past its radiator and shielding
     // (Wave 10 polish; the tick's own reading), never where its cooling tier covers it.
-    let hot = depth > 0 && heat_bites(snapshot.terrain, player);
+    let hot = depth > 0 && heat_bites(terrain, player);
     if hot {
         warnings.push(("HEAT", &icons::HEAT));
     }
     if view.deep_instability >= 60.0 {
         warnings.push(("UNSTABLE", &icons::WARNING));
     }
-    if depth >= 80 && snapshot.signal_relay_count == 0 {
+    if depth >= 80 && snapshot.signal_relay_count == 0 && view.place_scene.is_none() {
         warnings.push(("NO SIGNAL", &icons::WARNING));
     }
     warnings

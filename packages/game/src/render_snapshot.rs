@@ -1287,6 +1287,17 @@ fn away_view<'w>(
         .map_or((view.player.x, view.player.y), |(x, y, _)| (x, y));
     view.world_scale = world_scale;
     view.camera = camera_for(view.viewport, world_scale, x, y);
+    // Depth and altitude over the place's own ground (free flight has none: the flight
+    // track's nav HUD reads space, TODO-SEAM w11-flight).
+    let tile = scene.frame.tile_at(x, y);
+    let (depth, altitude) = if scene.place == fatherload_simulation::place::Place::Space {
+        (0, None)
+    } else {
+        depth_and_altitude(tile.y, scene.terrain.surface_row(tile.x))
+    };
+    view.hud.depth = depth;
+    view.hud.altitude = altitude;
+    view.hud.row = tile.y;
     view.fields = fatherload_simulation::field::FieldSample::NEUTRAL;
     view.hollow = None;
     view.heart = None;

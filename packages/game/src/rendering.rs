@@ -726,8 +726,8 @@ impl GameRenderer {
                 view.world_scale,
                 density,
             );
-            let home = crate::view_frame::frame();
-            let _ = crate::view_frame::set(scene.frame);
+            // Drawn and read in the place's own frame (the HUD's heat reading too).
+            let _frame = crate::view_frame::scoped(scene.frame);
             {
                 let mut world_draw = draw.begin_mode2D(camera);
                 self.places.draw(
@@ -738,7 +738,6 @@ impl GameRenderer {
                     shell.update_ticks,
                 );
             }
-            let _ = crate::view_frame::set(home);
             let _canvas = UiCanvasScope::begin(draw);
             draw_view_hud(draw, shell, snapshot, view);
             return;

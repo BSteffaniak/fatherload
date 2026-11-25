@@ -20,7 +20,7 @@ use super::{Scene, SceneStage, park_rig, sink_rig};
 /// The body every place scene lands on.
 const BODY: SpaceBodyKey = SpaceBodyKey::new(5, -3, 1, 2);
 
-fn body() -> Place {
+const fn body() -> Place {
     Place::OnBody(BodyId::Space(BODY))
 }
 
