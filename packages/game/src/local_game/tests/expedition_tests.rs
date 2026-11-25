@@ -80,9 +80,18 @@ fn reading_a_canister_puts_its_log_card_up_and_the_journal_lists_it() {
         },
     );
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::ExpeditionCodex));
-    // Nothing found yet: only "Turn the page", which goes on to the map.
+    // Nothing found yet: only "Turn the page", which goes on to the star charts (Wave 10)
+    // and from there, with none read, to the map.
     let entries = crate::shell::expedition::codex_entries(game.world());
     assert_eq!(crate::shell::expedition::codex_rows(&entries).len(), 1);
+    let _ = press(
+        &mut game,
+        PlayerInput {
+            menu_pick: Some(0),
+            ..PlayerInput::default()
+        },
+    );
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::StarCharts));
     let _ = press(
         &mut game,
         PlayerInput {

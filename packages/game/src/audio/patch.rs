@@ -981,7 +981,12 @@ impl Patch {
                 .instances(2)
                 .send(0.35)
                 .jitter(0.04, 0.8),
-            Self::CityCrusherSlam | Self::CityVaultGive => PatchInfo::new(Big)
+            Self::CityCrusherSlam => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.4)
+                .jitter(0.03, 0.6)
+                .priority(6),
+            Self::CityVaultGive => PatchInfo::new(Big)
                 .instances(2)
                 .send(0.4)
                 .jitter(0.03, 0.6)

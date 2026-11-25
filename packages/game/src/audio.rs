@@ -134,8 +134,8 @@ mod tests {
     )]
     fn every_patch_meets_the_quality_bar() {
         for &patch in Patch::ALL {
-            let samples = render_patch(patch, variation_seed(11, patch, 0));
             let name = patch.name();
+            let samples = render_patch(patch, variation_seed(11, patch, 0));
             let info = patch.info();
             assert!(!samples.is_empty(), "{name} is empty");
             assert!(samples.iter().all(|s| s.is_finite()), "{name} has NaN/inf");
@@ -281,7 +281,13 @@ mod tests {
                 // The far Strange Layers (wave 9): The Glitch's crushed drums and bass, the
                 // Echo Caves' low breath under its rare notes.
                 | Patch::GlitchLoop
-                | Patch::EchoCavesLoop => (40.0, 3_000.0),
+                | Patch::EchoCavesLoop
+                // The buried city (wave 10): a rig thrown off a piston, the crusher's blow and
+                // the city's low hum.
+                | Patch::CityPistonThump
+                | Patch::CityCrusherSlam
+                | Patch::CityHumLoop
+                | Patch::CityEngineBedLoop => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

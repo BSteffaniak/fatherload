@@ -33,11 +33,11 @@ pub(super) fn lift_chime(rng: &mut Rng) -> Vec<f32> {
 
 /// A piston's hiss: steam venting, bright then falling away.
 pub(super) fn piston_hiss(rng: &mut Rng) -> Vec<f32> {
-    let mut noise = Noise::new(NoiseColor::White, rng.next_u64());
-    let mut band = Svf::new(FilterMode::HighPass, 3_000.0, 0.7);
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 1_800.0, 0.9);
     render(0.7, |t| {
         let shape = segments(t, &[(0.0, 0.0), (0.04, 1.0), (0.4, 0.5), (0.7, 0.0)]);
-        band.run(noise.next(), 2_500.0 + 2_000.0 * shape, 0.7) * shape * 0.4
+        band.run(noise.next(), 1_400.0 + 1_600.0 * shape, 0.9) * shape * 0.55
     })
 }
 
@@ -101,7 +101,7 @@ pub(super) fn archivist_scan(rng: &mut Rng) -> Vec<f32> {
 
 /// A star chart read: a shimmering major chord rolling up, sparkles over it.
 pub(super) fn chart_chord(rng: &mut Rng) -> Vec<f32> {
-    let mut out = render(2.6, |_| 0.0);
+    let mut out = render(1.9, |_| 0.0);
     for (index, note) in [523.25_f32, 659.26, 783.99, 1_046.5, 1_318.5]
         .into_iter()
         .enumerate()
@@ -110,12 +110,12 @@ pub(super) fn chart_chord(rng: &mut Rng) -> Vec<f32> {
         let start = index as f32 * 0.09;
         mix_into(
             &mut out,
-            &bell(note * rng.jitter(0.002), 3.0, 0.7, 1.8),
+            &bell(note * rng.jitter(0.002), 3.0, 0.7, 1.4),
             start,
             0.22,
         );
     }
-    grains(rng, &mut out, 14, (0.2, 1.6), (6_000.0, 10_000.0), 0.05);
+    grains(rng, &mut out, 14, (0.2, 1.3), (6_000.0, 10_000.0), 0.05);
     out
 }
 
