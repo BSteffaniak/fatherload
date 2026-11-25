@@ -36,24 +36,24 @@ struct Layer {
 const LAYERS: [Layer; 3] = [
     Layer {
         factor: 0.000_25,
-        cell: 22.0,
-        density: 0.55,
-        bright: (0.25, 0.6),
+        cell: 15.0,
+        density: 0.5,
+        bright: (0.3, 0.7),
         big: 0.0,
     },
     Layer {
         factor: 0.001,
-        cell: 46.0,
-        density: 0.5,
-        bright: (0.45, 0.85),
-        big: 0.05,
+        cell: 34.0,
+        density: 0.55,
+        bright: (0.5, 0.95),
+        big: 0.06,
     },
     Layer {
         factor: 0.004,
-        cell: 110.0,
-        density: 0.45,
-        bright: (0.7, 1.0),
-        big: 0.25,
+        cell: 90.0,
+        density: 0.5,
+        bright: (0.75, 1.0),
+        big: 0.3,
     },
 ];
 
@@ -71,8 +71,8 @@ const STAR_TINTS: [Color; 8] = [
 
 /// The galaxy's band: its direction in layer space and the spacing of its repeats.
 const BAND_ANGLE: f64 = 0.42;
-const BAND_SPACING: f64 = 5_200.0;
-const BAND_WIDTH: f64 = 520.0;
+const BAND_SPACING: f64 = 1_700.0;
+const BAND_WIDTH: f64 = 230.0;
 
 /// How close `(x, y)` (deep-layer points) is to the galaxy's band (1 on its spine).
 fn band_weight(x: f64, y: f64) -> f32 {
@@ -219,7 +219,7 @@ fn draw_haze(
                             point,
                             (size, size * 0.6),
                             BAND_ANGLE.to_degrees() as f32 - projection.roll.to_degrees(),
-                            fade(tint, 0.09 * weight),
+                            fade(tint, 0.13 * weight),
                         );
                     }
                 } else if unit(h, 48) < 0.06 && projection.visible(point, 20.0) {

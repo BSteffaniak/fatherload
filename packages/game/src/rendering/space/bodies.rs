@@ -48,7 +48,9 @@ fn rgb(colour: Color) -> [f32; 3] {
 
 impl PlanetShader {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread) -> Self {
-        let source = shaders::fragment_source(cfg!(target_os = "emscripten"), shaders::PLANET_BODY);
+        let mut source = shaders::fragment_source(cfg!(target_os = "emscripten"), shaders::PLANET_BODY);
+        if let Ok(path) = std::env::var("PLANET_SRC") { source = std::fs::read_to_string(path).unwrap(); }
+        if std::env::var("PLANET_DUMP").is_ok() { std::fs::write("/private/tmp/claude-501/-Volumes-ehdd-GitHub-drillgame/5f697626-c304-4d9a-bd61-7ff8a8b0fdd2/scratchpad/planet.glsl", &source).unwrap(); }
         let shader = super::load_shader(raylib, thread, &source, "planet");
         let locations = shader.as_ref().map_or_else(Locations::default, |shader| {
             let at = |name: &str| shader.get_shader_location(name);

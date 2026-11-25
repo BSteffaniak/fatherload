@@ -26,6 +26,9 @@ pub const GROUND_PX_PER_TILE: f32 = 32.0;
 /// Screen points per tile far out in a star system.
 pub const SYSTEM_PX_PER_TILE: f32 = 0.004;
 
+/// Rows over the ground that keep the ground zoom.
+const HOVER_ROWS: f32 = 6.0;
+
 /// Where the seat's camera is and how it looks: always locked to the craft.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpaceCamera {
@@ -45,17 +48,21 @@ impl SpaceCamera {
         self.px_per_tile / TILE_SIZE
     }
 
-    /// The smooth approach zoom: the ground zoom at a body's surface, easing out (a smooth
-    /// power of the altitude, so it never jumps) until a small moon of radius 400 shows whole
-    /// from about a thousand tiles up, and the system zoom far away. The flight track picks the
-    /// altitude (to the nearest surface); this keeps every scene and the real flight on one
-    /// curve.
+    /// The smooth approach zoom over a body of `radius_tiles`, `altitude_tiles` above its
+    /// surface, in a view `view_height` points tall: the ground zoom at the surface, and from
+    /// far away a zoom that keeps the whole body (centre and far side) inside the view below
+    /// the craft, blended harmonically so it never jumps; never below the system zoom. The
+    /// flight track picks the body (the nearest) and the altitude; this keeps every scene and
+    /// the real flight on one curve.
     #[must_use]
-    pub fn zoom_for_altitude(altitude_tiles: f32) -> f32 {
-        const KNEE: f32 = 80.0;
-        const POWER: f32 = 1.4;
-        let altitude = altitude_tiles.max(0.0);
-        (GROUND_PX_PER_TILE / (1.0 + (altitude / KNEE).powf(POWER))).max(SYSTEM_PX_PER_TILE)
+    pub fn zoom_for_altitude(altitude_tiles: f32, radius_tiles: f32, view_height: f32) -> f32 {
+        // The first few rows keep the ground zoom (taking off and landing).
+        let altitude = (altitude_tiles - HOVER_ROWS).max(0.0);
+        let radius = radius_tiles.max(1.0);
+        // How much of the far side must fit: none at the surface, all of it far away.
+        let reach = altitude + radius * altitude / (altitude + radius);
+        let fit = 0.34 * view_height.max(1.0);
+        (1.0 / (1.0 / GROUND_PX_PER_TILE + reach / fit)).max(SYSTEM_PX_PER_TILE)
     }
 }
 
@@ -462,22 +469,25 @@ mod tests {
 
     #[test]
     fn the_zoom_eases_from_the_ground_to_the_system() {
-        assert!((SpaceCamera::zoom_for_altitude(0.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
-        // Hovering a few rows up barely zooms out.
-        assert!(SpaceCamera::zoom_for_altitude(8.0) > GROUND_PX_PER_TILE * 0.95);
-        let far = SpaceCamera::zoom_for_altitude(1e9);
-        assert!((far - SYSTEM_PX_PER_TILE).abs() < 1e-6);
-        // A small moon (radius 400) shows whole from about a thousand tiles up.
-        let moon = 800.0 * SpaceCamera::zoom_for_altitude(1_000.0);
-        assert!((250.0..800.0).contains(&moon), "{moon}");
-        // Monotonic and never jumping by more than a few percent per tile-scale step.
+        let zoom = |altitude: f32, radius: f32| SpaceCamera::zoom_for_altitude(altitude, radius, 720.0);
+        assert!((zoom(0.0, 400.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
+        assert!((zoom(4.0, 5_000.0) - GROUND_PX_PER_TILE).abs() < 1e-4);
+        assert!((zoom(1e9, 400.0) - SYSTEM_PX_PER_TILE).abs() < 1e-6);
+        // Far out, the whole body fits below the craft (the camera is locked to the craft).
+        for (altitude, radius) in [(600.0, 400.0), (2_000.0, 5_000.0), (40_000.0, 9_000.0)] {
+            let z = zoom(altitude, radius);
+            let far_side = (altitude + 2.0 * radius) * z;
+            assert!(far_side < 720.0, "{altitude} {radius}: {far_side}");
+            assert!(radius * z > 20.0, "{altitude} {radius}: too small");
+        }
+        // Monotonic and never jumping by more than a few percent per small step.
         let mut last = GROUND_PX_PER_TILE;
         let mut altitude = 1.0_f32;
         while altitude < 3e6 {
-            let zoom = SpaceCamera::zoom_for_altitude(altitude);
-            assert!(zoom <= last + 1e-6);
-            assert!(zoom >= last * 0.9, "{altitude}: {last} -> {zoom}");
-            last = zoom;
+            let z = zoom(altitude, 1_500.0);
+            assert!(z <= last + 1e-6);
+            assert!(z >= last * 0.9, "{altitude}: {last} -> {z}");
+            last = z;
             altitude *= 1.05;
         }
     }

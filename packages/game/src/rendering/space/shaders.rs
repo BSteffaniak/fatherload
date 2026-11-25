@@ -62,7 +62,7 @@ float hash3(vec3 p) {
     return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
 
-float noise3(vec3 x) {
+float valueNoise(vec3 x) {
     vec3 i = floor(x);
     vec3 f = fract(x);
     f = f * f * (3.0 - 2.0 * f);
@@ -95,14 +95,14 @@ void main() {
         float h;
         if (uKind.x > 0.5) {
             // Weather stripes, gently warped.
-            float warp = noise3(turned * 3.0 + seed) * 0.35;
+            float warp = valueNoise(turned * 3.0 + seed) * 0.35;
             h = fract(n.y * 3.2 + warp + uLook.w);
             h = abs(h * 2.0 - 1.0);
         } else {
-            h = noise3(turned * 2.2 + seed) * 0.6 + noise3(turned * 5.0 + seed) * 0.3
-                + noise3(turned * 11.0 + seed) * 0.1;
+            h = valueNoise(turned * 2.2 + seed) * 0.6 + valueNoise(turned * 5.0 + seed) * 0.3
+                + valueNoise(turned * 11.0 + seed) * 0.1;
         }
-        h += dither * 0.08;
+        h += dither * 0.05;
         vec3 surface = h < 0.42 ? uDark : (h < 0.62 ? uMid : uLight);
         // Polar caps on rocky worlds read as rounder.
         if (uKind.x < 0.5 && abs(n.y) > 0.86 + dither * 0.05) {
@@ -110,11 +110,10 @@ void main() {
         }
         float lambert = dot(n, sun);
         // Four light steps with a dithered terminator.
-        float light = clamp(lambert * 1.25 + 0.1 + dither * 0.18, 0.0, 1.0);
-        light = floor(light * 4.0 + 0.5) / 4.0;
-        float lit = max(light, uSun.w);
-        vec3 night = surface * vec3(0.10, 0.11, 0.20);
-        vec3 colour = mix(night, surface, lit);
+        float light = clamp(lambert * 1.3 + 0.12 + dither * 0.12, 0.0, 1.0);
+        light = max(floor(light * 4.0 + 0.5) / 4.0, uSun.w);
+        // The night side keeps a cold trace of its colour.
+        vec3 colour = surface * (vec3(0.05, 0.06, 0.12) + vec3(0.95, 0.94, 0.88) * light);
         // The atmosphere's rim, brighter on the day side.
         float rim = pow(1.0 - z, 3.0) * uKind.y;
         float day = clamp(dot(normalize(p + vec2(0.0001)), sun2) * 0.5 + 0.6, 0.0, 1.0);
@@ -227,9 +226,11 @@ void main() {
     float buried = smoothstep(1.5, 9.0, depth);
     float lampR = uGeo.w;
     float lamp = 1.0 - smoothstep(lampR * 0.45, lampR, length(screen));
-    float light = max(daylight * (1.0 - buried * 0.94), lamp * 0.92);
-    if (r < coreR * 1.6) {
-        light = max(light, 1.0 - smoothstep(coreR, coreR * 1.6, r));
+    // Deep ground keeps a dim ambient (the strata stay readable), whatever the hour.
+    float light = max(mix(daylight, 0.26, buried), lamp * 0.95);
+    // The core lights the rings round it.
+    if (r < coreR * 3.0) {
+        light = max(light, 1.0 - smoothstep(coreR, coreR * 3.0, r));
     }
     vec3 colour = texel.rgb * light;
 
@@ -326,6 +327,12 @@ mod tests {
 
     #[test]
     fn every_space_shader_is_well_formed_for_both_versions() {
+        // GLSL reserves the old built-in noise1..noise4 names.
+        for body in [PLANET_BODY, POLAR_BODY, LENS_BODY] {
+            for reserved in ["noise1(", "noise2(", "noise3(", "noise4("] {
+                assert!(!body.contains(reserved), "{reserved}");
+            }
+        }
         check_body(
             PLANET_BODY,
             &[

@@ -65,6 +65,22 @@ pub struct FixtureStrip {
     whole: bool,
 }
 
+impl FixtureStrip {
+    /// The first solid row of surface column `column` (where things stand).
+    fn ground_row(&self, column: f64) -> i32 {
+        let Some(tile) = self.tile_at(0, column.floor() as u32, 0) else {
+            return self.geometry.surface_row;
+        };
+        (self.terrain.min_y()..self.terrain.height())
+            .find(|&row| {
+                self.terrain
+                    .tile(TilePosition { x: tile.x, y: row })
+                    .is_some_and(|found| !found.kind.is_open())
+            })
+            .unwrap_or(self.geometry.surface_row)
+    }
+}
+
 impl PolarStrip for FixtureStrip {
     fn geometry(&self) -> &PolarGeometry {
         &self.geometry
@@ -111,7 +127,7 @@ fn moon_tile(column: i32, row: i32, depth: i32) -> TileKind {
     }
     match depth {
         d if d < 3 => {
-            if unit(hash64(&[i64::from(column / 14), 1]), 0) < 0.35 {
+            if (column as f32 * 0.043).sin() + (column as f32 * 0.11).sin() * 0.5 > 0.9 {
                 lunar(LunarTile::MareDust)
             } else {
                 lunar(LunarTile::Regolith)
@@ -142,20 +158,21 @@ fn moon_tile(column: i32, row: i32, depth: i32) -> TileKind {
                 lunar(LunarTile::Basalt)
             }
         }
-        d if d < 360 => {
-            if roll < 0.15 {
+        d if d < 350 => {
+            if roll < 0.04 {
                 TileKind::MagmaVent
             } else {
                 TileKind::HardRock
             }
         }
-        _ => {
-            if roll < 0.6 {
+        d if d < 372 => {
+            if roll < 0.85 {
                 TileKind::Lava
             } else {
                 TileKind::HardRock
             }
         }
+        _ => TileKind::HardRock,
     }
 }
 
@@ -170,7 +187,12 @@ fn build_moon(shaft: bool) -> FixtureStrip {
     let height = geometry.last_row() + 2;
     let mut terrain = Terrain::new_seeded(width, height, 41);
     for x in 0..width {
-        let ground = terrain.surface_row(x);
+        // Gentle hills on top of the generator's line (only ever up: open air below that line
+        // reads as cave to the tile art).
+        let hill = (1.4 * (x as f32 * 0.047).sin() + 0.9 * (x as f32 * 0.131 + 1.0).sin() + 0.9)
+            .round()
+            .max(0.0) as i32;
+        let ground = terrain.surface_row(x) - hill;
         for y in 0..height {
             let columns = geometry.columns_at(y) as i32;
             let kind = if y < ground || x >= columns {
@@ -182,7 +204,7 @@ fn build_moon(shaft: bool) -> FixtureStrip {
         }
     }
     if shaft {
-        for y in terrain.surface_row(MOON_COLUMN as i32)..height {
+        for y in 0..height {
             let band = geometry.band(y);
             let centre = (MOON_COLUMN as i64 >> band) as i32;
             let half = if band == 0 { 1 } else { 0 };
@@ -451,29 +473,21 @@ fn moon_sky(fixture: &mut SpaceFixture) {
     });
 }
 
-fn surface_things(column: f64, row: f32) -> Vec<GroundThing> {
-    vec![
-        GroundThing {
-            column: column + 4.0,
-            row,
-            kind: GroundThingKind::Pilot,
-        },
-        GroundThing {
-            column: column - 7.0,
-            row,
-            kind: GroundThingKind::ParkedRig,
-        },
-        GroundThing {
-            column: column + 11.0,
-            row,
-            kind: GroundThingKind::Creature(0),
-        },
-        GroundThing {
-            column: column + 7.5,
-            row,
-            kind: GroundThingKind::Drop,
-        },
+/// A pilot, a parked rig, a creature and a drop on the ground round `column`.
+fn surface_things(strip: &FixtureStrip, column: f64) -> Vec<GroundThing> {
+    [
+        (4.0, GroundThingKind::Pilot),
+        (-7.0, GroundThingKind::ParkedRig),
+        (11.0, GroundThingKind::Creature(0)),
+        (7.5, GroundThingKind::Drop),
     ]
+    .into_iter()
+    .map(|(offset, kind)| GroundThing {
+        column: column + offset,
+        row: strip.ground_row(column + offset) as f32,
+        kind,
+    })
+    .collect()
 }
 
 /// Every fixture's scene name, in order.
@@ -549,7 +563,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             let strip = moon(false);
             let ground_row = strip.geometry().surface_row as f32;
             let (altitude, zoom) = match name {
-                "space_approach_moon" => (1_500.0, SpaceCamera::zoom_for_altitude(1_500.0)),
+                "space_approach_moon" => (600.0, SpaceCamera::zoom_for_altitude(600.0, 400.0, 720.0)),
                 _ => (36.0, 7.0),
             };
             fixture.stand_on(
@@ -557,7 +571,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 strip,
                 (MOON_COLUMN, ground_row - altitude, 0.0),
                 zoom,
-                surface_things(MOON_COLUMN, ground_row),
+                surface_things(strip, MOON_COLUMN),
             );
             fixture.force_quads = name == "space_polar_quads";
             fixture.craft = Some(CraftView { thrusting: true });
@@ -565,7 +579,6 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
         "space_moon_surface" | "space_moon_night" | "space_moon_rolled" => {
             moon_sky(&mut fixture);
             let strip = moon(false);
-            let ground = f64::from(strip.terrain().surface_row(MOON_COLUMN as i32)) as f32;
             let (column, roll) = match name {
                 // Round the far side, where the star has set.
                 "space_moon_night" => (MOON_COLUMN + 1_200.0, 0.0),
@@ -573,12 +586,13 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 "space_moon_rolled" => (MOON_COLUMN, 2.1),
                 _ => (MOON_COLUMN, 0.0),
             };
+            let ground = strip.ground_row(column) as f32;
             let row = if name == "space_moon_rolled" {
                 ground - 9.0
             } else {
                 ground - 0.45
             };
-            let things = surface_things(column, ground);
+            let things = surface_things(strip, column);
             fixture.stand_on(moon_body(), strip, (column, row, roll), 32.0, things);
             fixture.craft = Some(CraftView {
                 thrusting: name == "space_moon_rolled",
@@ -597,21 +611,21 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 ..moon_body()
             });
             let strip = big_planet();
-            let ground = strip.terrain().surface_row(BIG_WINDOW / 2) as f32;
+            let ground = strip.ground_row(BIG_COLUMN) as f32;
             if name == "space_planet_surface" {
                 fixture.stand_on(
                     jungle_body(),
                     strip,
                     (BIG_COLUMN, ground - 0.45, 0.0),
                     32.0,
-                    surface_things(BIG_COLUMN, ground),
+                    surface_things(strip, BIG_COLUMN),
                 );
             } else {
                 fixture.stand_on(
                     jungle_body(),
                     strip,
-                    (BIG_COLUMN, ground - 3_800.0, 0.0),
-                    SpaceCamera::zoom_for_altitude(3_800.0),
+                    (BIG_COLUMN, ground - 2_000.0, 0.0),
+                    SpaceCamera::zoom_for_altitude(2_000.0, 5_000.0, 720.0),
                     Vec::new(),
                 );
                 fixture.craft = Some(CraftView { thrusting: true });

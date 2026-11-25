@@ -239,7 +239,9 @@ impl SpaceRenderer {
         size: (i32, i32),
     ) {
         if let Some(ground) = &view.ground {
-            self.polar.sync(raylib, thread, ground, view.camera.px_per_tile);
+            let reach = (size.0 as f32).hypot(size.1 as f32) * 0.5;
+            self.polar
+                .sync(raylib, thread, ground, view.camera.px_per_tile, reach);
         }
         let wants_lens = self.lens.is_some()
             && view.black_holes.iter().any(|hole| {

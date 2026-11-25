@@ -68,12 +68,12 @@ pub const SPACE_SCENES: &[Scene] = &[
     },
     Scene {
         name: "space_approach_moon",
-        summary: "Wave 11: approaching a small moon (radius 400) from 1,500 tiles up",
+        summary: "Wave 11: approaching a small moon (radius 400) from 600 tiles up",
         setup: |stage| stage.space_view("space_approach_moon"),
     },
     Scene {
         name: "space_approach_planet",
-        summary: "Wave 11: approaching a big jungle world (radius 5,000) from 3,800 tiles up",
+        summary: "Wave 11: approaching a big jungle world (radius 5,000) from 2,000 tiles up",
         setup: |stage| stage.space_view("space_approach_planet"),
     },
     Scene {

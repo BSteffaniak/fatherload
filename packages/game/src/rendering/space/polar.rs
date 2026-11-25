@@ -42,17 +42,17 @@ use crate::rendering::{
     terrain::tile_art::{self, TILE_ART},
 };
 
-/// The fine window (tiles).
+/// The fine window's smallest size (tiles); it grows to cover the view when zoomed out.
 pub const FINE_TILES: (i32, i32) = (96, 64);
+/// The fine window's largest side (tiles): 3,840 art pixels, inside every `WebGL1` GPU's
+/// 4,096.
+const FINE_MAX: i32 = 240;
 /// Windows move in steps of this many tiles (fewer repaints).
 const WINDOW_STEP: i32 = 16;
 /// Largest coarse map side (texels): every `WebGL1` GPU takes 4,096.
 const COARSE_MAX: i32 = 4_096;
 /// A coarse window of a big world (texels).
 const COARSE_WINDOW: (i32, i32) = (2_048, 1_024);
-/// Below this zoom (points per tile) the fine window no longer covers the view and the coarse
-/// map is painted and drawn.
-const COARSE_BELOW_PX_PER_TILE: f32 = 16.0;
 /// Rows of sky above the surface row the windows keep.
 const SKY_ROWS: i32 = 48;
 
@@ -99,6 +99,8 @@ pub struct PolarGround {
     coarse_window: Option<Window>,
     /// Draw the curved quads even with the shader (the fallback's own screenshot).
     pub force_quads: bool,
+    /// Whether this frame's view reaches past the fine window (the coarse map is drawn).
+    coarse_used: bool,
 }
 
 /// Where the camera is on the ring this frame (all the shader's and the quads' numbers).
@@ -176,6 +178,7 @@ impl PolarGround {
             coarse: None,
             coarse_window: None,
             force_quads: false,
+            coarse_used: false,
         }
     }
 
@@ -192,17 +195,25 @@ impl PolarGround {
         thread: &RaylibThread,
         ground: &GroundView<'_>,
         px_per_tile: f32,
+        reach: f32,
     ) {
         let strip = ground.strip;
         let geometry = strip.geometry();
-        let fine = fine_window(ground, geometry, strip.revision());
+        // Tiles from the craft to the view's farthest corner, plus a window step of slack.
+        let needed = (2.0 * reach / px_per_tile.max(0.001)).ceil() as i32 + 2 * WINDOW_STEP;
+        // Close to the centre the view takes in a wide angle of the deep rings, more columns
+        // than the window holds: the coarse map fills in round it.
+        let reach_tiles = reach / px_per_tile.max(0.001);
+        self.coarse_used =
+            needed > FINE_MAX || reach_tiles > geometry.radius_of_row(ground.row).max(1.0) * 0.35;
+        let fine = fine_window(ground, geometry, strip.revision(), needed);
         if self.fine_window.as_ref() != Some(&fine) {
             let pixels = paint_fine(strip, &fine);
             let size = (fine.size.0 * TILE_ART, fine.size.1 * TILE_ART);
             upload(raylib, thread, &mut self.fine, size, &pixels);
             self.fine_window = Some(fine);
         }
-        if px_per_tile < COARSE_BELOW_PX_PER_TILE {
+        if self.coarse_used {
             let coarse = coarse_window(ground, geometry, strip.revision());
             if self.coarse_window.as_ref() != Some(&coarse) {
                 let pixels = paint_coarse(strip, &coarse);
@@ -253,7 +264,7 @@ impl PolarGround {
             return;
         };
         let geometry = ground.strip.geometry();
-        let coarse_used = camera.px_per_tile < COARSE_BELOW_PX_PER_TILE;
+        let coarse_used = self.coarse_used;
         let coarse_texture = self.coarse.as_ref().filter(|_| coarse_used).unwrap_or(fine);
         let coarse_window = self
             .coarse_window
@@ -281,7 +292,7 @@ impl PolarGround {
             *slot = *row as f32 - camera.row;
         }
         let (body_atmosphere, atmos) = atmosphere(ground);
-        let lamp = 5.5 * camera.px_per_tile.max(4.0);
+        let lamp = (7.0 * camera.px_per_tile).max(60.0);
         let uniforms: [(i32, [f32; 4]); 12] = [
             (
                 self.locations.view,
@@ -430,7 +441,7 @@ impl PolarGround {
                     let daylight = ground.night_light
                         + (1.0 - ground.night_light) * smoothstep(-0.14, 0.2, day);
                     let buried = smoothstep(1.5, 9.0, depth);
-                    let light = (daylight * (1.0 - buried * 0.94)).max(0.0);
+                    let light = daylight + (0.26 - daylight) * buried;
                     let shade = (light * 255.0) as u8;
                     ffi::rlColor4ub(shade, shade, shade, alpha);
                     for ((sx, sy), (u, v)) in corners.into_iter().zip([(u0, v0), (u0, v1), (u1, v1), (u1, v0)]) {
@@ -516,8 +527,17 @@ fn snap_down(value: i64, step: i64) -> i64 {
 }
 
 /// The fine window the camera needs.
-fn fine_window(ground: &GroundView<'_>, geometry: &PolarGeometry, revision: u64) -> Window {
-    let (width, height) = FINE_TILES;
+fn fine_window(
+    ground: &GroundView<'_>,
+    geometry: &PolarGeometry,
+    revision: u64,
+    needed: i32,
+) -> Window {
+    let fit = |least: i32| {
+        let snapped = (needed + WINDOW_STEP - 1) / WINDOW_STEP * WINDOW_STEP;
+        snapped.clamp(least, FINE_MAX)
+    };
+    let (width, height) = (fit(FINE_TILES.0), fit(FINE_TILES.1));
     let step = i64::from(WINDOW_STEP);
     let row0 = snap_down(ground.row.floor() as i64 - i64::from(height / 2), step) as i32;
     let mut origins = [0_i64; MAX_HALVINGS + 1];
