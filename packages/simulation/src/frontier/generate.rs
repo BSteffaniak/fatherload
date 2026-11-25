@@ -620,8 +620,9 @@ fn island_height(ground: &PlanetGround, column: i64) -> i32 {
 /// Rows from the Caldera's crater floor down to its magma heart.
 const CALDERA_THROAT_ROWS: i32 = 6;
 
-// The Sleeping Sentinel: a giant stone head half buried in the dune world's sand.
-const SENTINEL_CENTRE_ROW: i32 = -8;
+// The Sleeping Sentinel: a giant stone head half buried in the dune world's sand (its brow,
+// glowing lids and mouth at a rig's eye level on the flat ground round it).
+const SENTINEL_CENTRE_ROW: i32 = -4;
 const SENTINEL_HALF_WIDTH: i64 = 12;
 const SENTINEL_HALF_HEIGHT: i32 = 9;
 const SENTINEL_VAULT_DEPTH: i32 = 9;

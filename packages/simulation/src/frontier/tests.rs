@@ -100,7 +100,7 @@ fn digest(ground: &PlanetGround) -> u64 {
 
 /// The theme digests: generation of every frontier theme at radius 600.
 const THEME_DIGESTS: [(FrontierStyle, u64); 3] = [
-    (FrontierStyle::Desert, 0x0349_b4b0_4903_f7ca),
+    (FrontierStyle::Desert, 0x5025_1c50_e20c_1843),
     (FrontierStyle::Volcanic, 0x2341_f441_f8a7_6cf2),
     (FrontierStyle::Crystal, 0x0aa7_fd7b_ed64_40c9),
 ];
