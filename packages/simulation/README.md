@@ -8977,7 +8977,9 @@ too (`BodyLife::of_planet`: the theme's typical climate, a 20-minute day).
     wind). It is tick-rate safe (`the_wind_drifts_the_same_at_every_tick_rate`);
   - an **airborne pilot** is nudged at `PILOT_WIND_SHARE` where its box fits, and the suit
     takes the weather's suit damage (`pilot_weather`);
-  - a **rig** takes the weather's hull damage through its mitigation (the hazard pass).
+  - a **rig** takes the weather's hull damage through its mitigation (the hazard pass);
+  - a **pilot** under the open sky also takes its theme's corrosive air
+    (`ThemeHazards::corrosive_air_milli`, suit damage a second; 0 on the placeholders).
 - `body_visibility_at(x, y)`: the share of a clear day's sight (TODO-SEAM w12-aliens: scale
   creatures' line-of-sight noticing by it).
 - **Events** (netcode 880-899): `GameplayEventKind::BodyLife { what: BodyLifeEvent, player_id,
@@ -8992,7 +8994,9 @@ too (`BodyLife::of_planet`: the theme's typical climate, a 20-minute day).
 ground's playable 0.25-2.5 g) is the ground's field-zone strength, flight's approach gravity
 (`flight::GeneratedSpace` now clamps a body's pull the same way, so a light moon pulls the
 same in its sky as on its ground) and the HUD's number (`body_gravity_of`). Rigs, pilots,
-drops, charges, creatures and fluids feel it through the planet's gravity zone. Test:
+drops, charges and creatures feel it through the planet's gravity zone (`BodyParams::at_fields`,
+the pilot's `fields_at`). Fluids do not: the cellular fluid model flows a fixed amount a tick
+whatever the gravity (review note; a theme track that wants slow or fast liquids scales it). Test:
 `gravity_scales_with_each_body_and_shows_one_number` (a rig falls about four times as far on
 a 1.2 g body as on a 0.3 g one).
 
@@ -9072,7 +9076,8 @@ pub trait PlanetThemeHooks: Sync {
   the craft moves, and scaled by the screen-effects setting (fewer particles at Reduced, none
   at Off; fog and gloom stay, softer). Nothing flashes. Plain raylib shapes (browser-safe).
 - **The body badge** replaces the clock badge on a body: the name, the local hour (DAY SIDE,
-  TWILIGHT or NIGHT SIDE when locked), temperature and gravity, air, and the weather and wind.
+  TWILIGHT or NIGHT SIDE when locked), temperature, gravity and pressure (kPa; none shown in
+  vacuum), air, and the weather and wind.
 - **Audio**: `away_ambience` hears the body: the wind rises with a storm's gusts, rain hisses
   (`RainLoop`), snow and grit whistle (`HighWindLoop`), an aurora shimmers softly
   (`SkyAirLoop`), and an airless ground is near silent. Event cues: the weather turning
@@ -9124,7 +9129,10 @@ pub trait PlanetThemeHooks: Sync {
 - Known limits: a body's strip does not turn in space (flight's handover is static), so the
   renderer lights a turning body from its clock's sun rather than the star's bearing (the lit
   face of a turning world follows its clock); weather is one per body (no fronts by longitude,
-  the aurora aside); the theme music beds are names only.
+  the aurora aside); the theme music beds are names only. When more stores are occupied
+  than `MAX_AWAKE_STORES_PER_TICK` the round-robin skips a store's tick, and a dawn, dusk or
+  weather-turn edge that falls in a skipped tick is not heard (the state itself, a pure
+  function of time, is never wrong).
 
 ## Replication
 

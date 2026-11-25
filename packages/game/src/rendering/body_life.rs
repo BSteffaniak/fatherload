@@ -296,8 +296,13 @@ pub fn draw_body_badge(
     } else {
         format!("{hours:02}:{minutes:02} LOCAL")
     };
+    // Temperature, gravity and the air's pressure where the seat stands (none in vacuum).
+    let pressure = match reading.climate.pressure_kpa {
+        0 => String::new(),
+        kpa => format!("  {kpa} kPa"),
+    };
     let climate = format!(
-        "{} C  {:.2} g",
+        "{} C  {:.2} g{pressure}",
         reading.climate.temperature_c,
         f32::from(life.gravity_milli) / 1_000.0
     );
