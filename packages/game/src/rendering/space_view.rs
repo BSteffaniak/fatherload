@@ -1584,7 +1584,11 @@ fn draw_nav_panel(
         let off = fatherload_simulation::field::trig::wrap_angle(
             view.player.attitude.orientation - nav::bearing(flight.pos, pos),
         );
-        let (text, colour) = if off.abs() <= WARP_ALIGN {
+        let (text, colour) = if matches!(flight.drive, StarDrive::Warp(_)) {
+            ("IN WARP: hold the heading".to_owned(), SKY_LIGHT)
+        } else if matches!(flight.drive, StarDrive::Spool { .. }) {
+            ("SPOOLING: hold the heading".to_owned(), LIME)
+        } else if off.abs() <= WARP_ALIGN {
             ("ALIGNED: warp ready".to_owned(), LIME)
         } else if off.abs() <= WARP_ABORT_ANGLE {
             (format!("ALIGN {:+.0} deg", off.to_degrees()), AMBER)
