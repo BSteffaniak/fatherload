@@ -73,6 +73,12 @@ const ICICLE_FALL_SPEED: f32 = 140.0;
 const ICICLE_LIFE_MILLIS: u64 = 4_000;
 /// Columns round the settlement site that creatures leave alone.
 pub const WILD_SITE_MARGIN: i32 = 6;
+/// The enemy tier (health and damage, [`crate::enemy::tier_scale`]) of a wild world's surface;
+/// each stratum down adds one, up to [`WILD_MAX_TIER`]. The stars open after the Heart, so the
+/// wild worlds hit like the deep Descents (whose tiers end at 11), not like the topsoil.
+/// TODO-SEAM w12-systems/w12-hostiles: a body's danger (its distance from home) may move this.
+pub const WILD_BASE_TIER: u8 = 8;
+pub const WILD_MAX_TIER: u8 = 11;
 /// A hazard event repeats at most this often while it lasts.
 const HAZARD_EVENT_MILLIS: u64 = 3_000;
 /// The cold is everywhere on a glacier: its reminder (a message and a cue) comes this rarely.
@@ -109,6 +115,23 @@ impl WorldState {
         self.wild_world().is_some_and(|(planet, _)| {
             life::is_night(planet.params(), self.millis_at(self.simulation_tick))
         })
+    }
+
+    /// The enemy tier at `tile` on a wild world (`None` elsewhere): [`WILD_BASE_TIER`] on the
+    /// surface, one more per stratum down. Creatures and the hazards' hull damage scale by it.
+    #[must_use]
+    pub fn wild_tier(&self, tile: TilePosition) -> Option<u8> {
+        let (planet, _) = self.wild_world()?;
+        let stratum = if tile.y < planet.surface_row(tile.x) {
+            0
+        } else {
+            planet.stratum_index(tile.x, tile.y).min(2) + 1
+        };
+        Some(
+            WILD_BASE_TIER
+                .saturating_add(u8::try_from(stratum).unwrap_or(0))
+                .min(WILD_MAX_TIER),
+        )
     }
 
     /// Whether creatures leave `tile` alone on a wild world (`None` elsewhere): only at the
@@ -263,11 +286,14 @@ impl WorldState {
                     } else {
                         scale
                     };
-                    let per_second = match hazard {
-                        PlanetHazard::Heat => SMOKER_DAMAGE_PER_SECOND,
-                        PlanetHazard::Pressure => PRESSURE_DAMAGE_PER_SECOND,
-                        _ => SPORE_AIR_DAMAGE_PER_SECOND,
-                    };
+                    // Scaled by the world's tier like every Descent hazard (a geyser's scald,
+                    // the deep's pressure), so it still matters to a rig built for the stars.
+                    let per_second =
+                        match hazard {
+                            PlanetHazard::Heat => SMOKER_DAMAGE_PER_SECOND,
+                            PlanetHazard::Pressure => PRESSURE_DAMAGE_PER_SECOND,
+                            _ => SPORE_AIR_DAMAGE_PER_SECOND,
+                        } * crate::enemy::tier_scale(self.wild_tier(tile).unwrap_or(0));
                     if self.damage_player(player_id, per_second * scale * dt) {
                         output.push_event(GameplayEventKind::PlayerDamaged { player_id });
                     }

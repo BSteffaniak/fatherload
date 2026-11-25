@@ -417,7 +417,9 @@ impl WorldState {
                 .filter(|creature| !peaceful || creature.neutral)
                 .filter(|creature| match creature.habitat {
                     Habitat::Surface | Habitat::Hanging => !underground,
-                    Habitat::Water => true,
+                    // The turtles and the schools keep to the open sea; only hunters
+                    // follow a rig down into flooded caves and shafts.
+                    Habitat::Water => !underground || !creature.neutral,
                     Habitat::Caves(n) | Habitat::CaveAir(n) => {
                         underground && planet.stratum_index(rig.x, rig.y) == usize::from(n)
                     }

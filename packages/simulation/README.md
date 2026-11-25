@@ -9298,6 +9298,15 @@ rig leave. Swimmers never leave the water (`wilds_after_move`).
 - The game tells a seat each wild stratum's rule the first time its rig enters it
   (`LocalGame::announce_wild_strata`); wild water is painted with ripples, not star dots;
   the Frozen Titan's tusk is one two-tile-thick curve.
+- **Tiers**: the wild worlds had the home topsoil's enemy tier (band 0 at the surface), so
+  their creatures bit for 9-16 against a post-Heart rig's ~2,500 hull and the smoker, the
+  Trench's pressure and the spore air barely scratched it. `WorldState::wild_tier` now gives
+  a wild world tier 8 at the surface and one more per stratum (up to 11, the deep Descents'
+  top): creatures' health and bite scale by it (`tier_at`), and the hazards' hull damage is
+  scaled by `tier_scale` like every Descent hazard. TODO-SEAM w12-systems/w12-hostiles: a
+  body's danger by distance from home may move `WILD_BASE_TIER`.
+- The sea's neutral swimmers (shellstriders, glimmerfins) keep to the open sea; only the
+  sawjaw follows a rig down into flooded caves and shafts.
 - `wild_world_tour` (ignored): a ten-minute bot tour of each theme that prints the strata,
   encounters, events and tick cost.
 

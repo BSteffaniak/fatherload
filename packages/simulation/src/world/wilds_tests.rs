@@ -1110,3 +1110,27 @@ fn a_real_glacier_body_plays_its_rules_for_its_rig_only_while_the_crew_is_split(
         "no wild creature at home"
     );
 }
+
+#[test]
+fn the_wild_worlds_hit_like_the_deep_descents_and_harder_deeper_down() {
+    use crate::world::wilds::{WILD_BASE_TIER, WILD_MAX_TIER};
+    let mut world = world(PlanetThemeId::JUNGLE, 2_000, 30);
+    let planet = *world.planet().expect("planet");
+    let (column, floor) = site(&world);
+    assert_eq!(
+        world.wild_tier(TilePosition {
+            x: column,
+            y: floor - 1
+        }),
+        Some(WILD_BASE_TIER)
+    );
+    let deep = planet.core_chamber_top() - 20;
+    assert_eq!(
+        world.wild_tier(TilePosition { x: column, y: deep }),
+        Some(WILD_MAX_TIER)
+    );
+    // A creature spawned there carries the tier (its health and bite scale with it).
+    place_rig(&mut world, column, floor - 1);
+    let id = creature_beside(&mut world, EnemyKind::Mossprowler, 6, -1);
+    assert!(enemy_state(&world, id).tier >= WILD_BASE_TIER);
+}

@@ -434,6 +434,10 @@ impl WorldState {
     }
 
     pub(super) fn tier_at(&self, tile: TilePosition) -> u8 {
+        // A wild world (Wave 12 planets-a) is past the Heart: its own tiers.
+        if let Some(tier) = self.wild_tier(tile) {
+            return tier;
+        }
         if self.terrain.settings().generator.has_descents() {
             return self.terrain.stratum_at(tile).enemy_tier();
         }
