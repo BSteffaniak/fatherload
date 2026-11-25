@@ -100,7 +100,12 @@ pub(super) static ALIEN_SCENES: &[Scene] = &[
     Scene {
         name: "alien_home_and_monument",
         summary: "A Siphra town with the player's lantern-pod home finished and the memory pylon's heart raised",
-        setup: home_and_monument,
+        setup: |stage| home_and_monument(stage, false),
+    },
+    Scene {
+        name: "alien_monument_raised",
+        summary: "The Siphra town's monument plinth crowned: the memory pylon's heart a chapter raised, standing for everyone",
+        setup: |stage| home_and_monument(stage, true),
     },
 ];
 
@@ -300,8 +305,9 @@ fn talk_scene(
     stage.settle(2);
 }
 
-/// The player's home finished and the town's monument raised.
-fn home_and_monument(stage: &mut SceneStage<'_>) {
+/// The player's home finished and the town's monument raised, the rig at the home (or at the
+/// monument: the two stand too far apart for one view).
+fn home_and_monument(stage: &mut SceneStage<'_>, at_monument: bool) {
     stage.play(1, |world, seats| {
         flight_scenes::space_world(world);
         let seed = world.world_seed();
@@ -317,9 +323,9 @@ fn home_and_monument(stage: &mut SceneStage<'_>) {
             .copied();
         let monument = found.building(AlienBuildingKind::Monument).copied();
         let column = match (plot, monument) {
-            (Some(plot), Some(monument)) => {
-                i32::midpoint(plot.door_column(), monument.door_column())
-            }
+            // Beside the plinth, not on it.
+            (_, Some(monument)) if at_monument => monument.door_column() - 4,
+            (Some(plot), _) if !at_monument => plot.door_column(),
             _ => found.site.centre,
         };
         set_down_at(world, seats[0].player, id, column, found.ground_row());

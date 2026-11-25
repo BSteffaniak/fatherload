@@ -558,18 +558,96 @@ pub fn draw_alien_portrait(
     art.clip = Some(frame);
     match species {
         AlienSpecies::Vessi => {
-            draw_vessi(
-                draw,
-                art,
-                seed,
-                character.role,
-                character.age,
-                pose,
-                seconds,
-            );
+            // The standing figure's head is a few pixels on a long neck: up close it gets its
+            // own head-and-shoulders painting at the frame's own scale.
+            let mut close = ArtPen::new(pen.x, pen.y, pen.pixel, 1.0);
+            close.clip = Some(frame);
+            draw_vessi_portrait(draw, close, seed, character, talking, seconds);
         }
         AlienSpecies::Tokkari => draw_tokkari(draw, art, seed, character.role, pose, seconds),
         AlienSpecies::Siphra => draw_siphra(draw, art, seed, character.role, pose, seconds),
+    }
+}
+
+/// A Vessi up close in a 32 x 32 portrait (the pen at the frame's top-left): the frost-fur
+/// bell of the shoulders, the long neck with its throat lantern, the head turned to the viewer
+/// with its frost spikes.
+fn draw_vessi_portrait(
+    draw: &mut impl RaylibDraw,
+    pen: ArtPen,
+    seed: u64,
+    character: &Character,
+    talking: bool,
+    seconds: f32,
+) {
+    let (fur, shade) = VESSI_FUR[(seed % 3) as usize];
+    let lantern = VESSI_LANTERN[((seed >> 8) % 3) as usize];
+    let bob = ((seconds * 1.6 + (seed % 7) as f32).sin() * 0.6).round() as i32;
+    // The shoulders: the top of the fur bell, tufted along its rim.
+    pen.dome(draw, 11, 33, 15, 9, fur);
+    pen.rect(draw, -4, 30, 30, 2, shade);
+    for tuft in (-2..26).step_by(3) {
+        pen.px(draw, tuft, 25 + (tuft % 2), shade);
+    }
+    // The neck curves up and to the right, banded fur.
+    for (i, (x, y)) in [(13, 22), (14, 19), (15, 16), (17, 13), (18, 11)]
+        .iter()
+        .enumerate()
+    {
+        pen.rect(
+            draw,
+            *x,
+            *y + bob,
+            5,
+            4,
+            if i % 2 == 0 { fur } else { shade },
+        );
+    }
+    // The throat lantern, brighter and quicker while they speak.
+    let pulse = if talking {
+        0.75 + 0.25 * (seconds * 9.0).sin()
+    } else {
+        0.55 + 0.15 * (seconds * 1.3 + (seed % 5) as f32).sin()
+    };
+    pen.glow(
+        draw,
+        12,
+        14 + bob,
+        8,
+        8,
+        alpha(lantern, (pulse * 70.0) as u8),
+    );
+    pen.glow(
+        draw,
+        14,
+        16 + bob,
+        4,
+        4,
+        alpha(lantern, (pulse * 255.0) as u8),
+    );
+    pen.glow(draw, 15, 17 + bob, 1, 1, alpha(CREAM, 230));
+    // The head: long and soft, a dark eye, a muzzle with a breathing slit.
+    pen.ellipse(draw, 21, 8 + bob, 6, 4, fur);
+    pen.rect(draw, 24, 9 + bob, 4, 2, fur);
+    pen.rect(draw, 16, 10 + bob, 10, 1, shade);
+    pen.rect(draw, 22, 6 + bob, 2, 2, INK);
+    pen.px(draw, 22, 6 + bob, CREAM);
+    pen.px(draw, 27, 9 + bob, shade);
+    if talking && (seconds * 6.0) as i32 % 2 == 0 {
+        pen.rect(draw, 24, 11 + bob, 3, 1, INK);
+    }
+    // Frost spikes, a storyteller's gold among them.
+    for (x, y) in [(17, 3), (18, 2), (19, 3), (20, 1)] {
+        pen.px(draw, x, y + bob, ICE);
+    }
+    if character.role == Role::Storyteller {
+        pen.px(draw, 18, 1 + bob, GOLD);
+        pen.px(draw, 21, 2 + bob, GOLD);
+    }
+    if character.age >= 70 {
+        // An elder's long frost beard.
+        pen.rect(draw, 23, 12 + bob, 3, 5, BONE);
+        pen.px(draw, 24, 17 + bob, BONE);
     }
 }
 
@@ -1218,16 +1296,14 @@ fn draw_plot(
                 seconds,
             ),
         }
+        // The owner's pennant on a short staff at the plot's corner, beside the door (a staff
+        // as tall as the home stood apart from it and read as a lone pole).
         let sway = ((seconds * 2.0).sin() * 1.5).round() as i32;
-        pen.rect(
-            draw,
-            w / 2 - 4,
-            -height * 16 - 6,
-            1,
-            height * 16 + 6,
-            STEEL_LIGHT,
-        );
-        pen.rect(draw, w / 2 - 3, -height * 16 - 6, 6 + sway, 4, GOLD);
+        let staff = 26;
+        pen.rect(draw, w / 2 - 6, -2, 5, 2, STONE_LIGHT);
+        pen.rect(draw, w / 2 - 4, -staff, 1, staff, STEEL_LIGHT);
+        pen.rect(draw, w / 2 - 3, -staff, 7 + sway, 3, GOLD);
+        pen.rect(draw, w / 2 - 3, -staff + 3, 4 + sway, 2, lit(GOLD, 0.75));
         return;
     }
     if look.sold {
@@ -1277,22 +1353,29 @@ pub fn glyph_bits(species: AlienSpecies, index: u8) -> [u8; 6] {
     let roll = mix(u64::from(index) ^ (u64::from(species.index()) << 8) ^ 0x474C_5950_4800);
     match species {
         AlienSpecies::Vessi => {
-            // A ring (a sung note) with a tick at one of eight places, sometimes a dot inside.
-            let mut bits = [0b01110, 0b10001, 0b10001, 0b10001, 0b01110, 0];
-            match index % 8 {
-                0 => bits[5] = 0b00100,
-                1 => bits[0] |= 0b10000,
-                2 => bits[0] |= 0b00001,
-                3 => bits[5] = 0b10001,
-                4 => {
-                    bits[2] = 0b10101;
-                }
-                5 => bits[5] = 0b01100,
-                6 => bits[5] = 0b00110,
-                _ => bits[0] = 0b11111,
+            // A sung note: a small ring (the note's head) high or low, left or right, with a
+            // stem and a flag or a held dot. (Full-cell rings with ticks all read as the same
+            // "o" at text size; the heads and stems give each glyph its own outline.)
+            let shape = index % 12;
+            let low = shape & 1 == 1;
+            let right = shape & 2 == 2;
+            let deco = shape / 4;
+            let mut bits = [0_u8; 6];
+            let head_row = if low { 3 } else { 0 };
+            let shift = if right { 0 } else { 2 };
+            bits[head_row] |= 0b111 << shift;
+            bits[head_row + 1] |= (if deco == 2 { 0b111 } else { 0b101 }) << shift;
+            bits[head_row + 2] |= 0b111 << shift;
+            // The stem runs up (or down) the head's outer edge across the rest of the cell.
+            let stem_col: u8 = if right { 0b00001 } else { 0b10000 };
+            let stem_rows = if low { 0..3 } else { 3..6 };
+            for row in stem_rows {
+                bits[row] |= stem_col;
             }
-            if index >= 8 || roll.is_multiple_of(3) {
-                bits[2] |= 0b00100;
+            if deco >= 1 {
+                // A flag off the stem's free end, pointing inward.
+                let row = if low { 0 } else { 5 };
+                bits[row] |= if right { 0b00010 } else { 0b01000 };
             }
             bits
         }
