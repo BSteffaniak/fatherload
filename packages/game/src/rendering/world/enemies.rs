@@ -1925,7 +1925,9 @@ mod tests {
     fn every_contact_box_and_hit_area_matches_the_drawn_body() {
         let mut misfits = Vec::new();
         for kind in EnemyKind::ALL {
-            if kind == EnemyKind::MothSwarm {
+            // A moth swarm is a cloud; the Heart is drawn at full size by its own renderer
+            // (`world/heart.rs`: its 72 px core is its contact box).
+            if matches!(kind, EnemyKind::MothSwarm | EnemyKind::StarHeart) {
                 continue;
             }
             let sprite = enemy_sprite(kind);

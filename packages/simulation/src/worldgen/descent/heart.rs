@@ -100,13 +100,17 @@ pub fn hall_in_cell(
     let y = top + cy * HALL_CELL.1 + 18 + i32::try_from((roll >> 20) % 34).unwrap_or(0);
     let half_width = 12 + i32::try_from((roll >> 30) % 9).unwrap_or(0) + if big { 6 } else { 0 };
     let half_height = 6 + i32::try_from((roll >> 36) % 4).unwrap_or(0) + if big { 2 } else { 0 };
-    (y - half_height > top + EDGE_ROWS / 2 && y + half_height < bottom - EDGE_ROWS / 2).then_some(
-        Hall {
-            centre: TilePosition { x, y },
-            half_width,
-            half_height,
-        },
-    )
+    let hall = Hall {
+        centre: TilePosition { x, y },
+        half_width,
+        half_height,
+    };
+    // Wave 10 integration: never under the Heart Seal (Descent VII part B seals the top of
+    // the Veins; a hall cut into it would be a way round the Heart Key).
+    (y - half_height > top + EDGE_ROWS / 2
+        && y + half_height < bottom - EDGE_ROWS / 2
+        && !super::garrison::crosses_heart_seal(settings, layout, &hall.bounds().expanded(4)))
+    .then_some(hall)
 }
 
 /// The weightless halls touching `rect`.

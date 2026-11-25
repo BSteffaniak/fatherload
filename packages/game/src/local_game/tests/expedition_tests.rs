@@ -308,7 +308,8 @@ fn a_new_descent_has_its_card_and_the_progress_page_follows_the_codex() {
             ..PlayerInput::default()
         },
     );
-    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::Map));
+    // The star charts come next on a Deep Descent world (Wave 10 integration).
+    assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::StarCharts));
 }
 
 /// Wave 10: waking the Heart opens the ending's pages on every local seat; a tap turns each

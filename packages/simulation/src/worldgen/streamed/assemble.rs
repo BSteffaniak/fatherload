@@ -455,6 +455,11 @@ pub fn assemble(ctx: &Ctx, chunk: ChunkPosition) -> Vec<Tile> {
                 let Some(slot) = chunk_kinds.slot(position.x, position.y) else {
                     continue;
                 };
+                // The Heart Seal over Descent VIII (Wave 10 ancients-b) stays whole: only the
+                // Heart Key cuts it.
+                if chunk_kinds.kinds[slot] == TileKind::Cave(crate::cave::CaveTile::HeartSeal) {
+                    continue;
+                }
                 if let Some(kind) = heart::heart_pass_tile(
                     &ctx.settings,
                     layout,

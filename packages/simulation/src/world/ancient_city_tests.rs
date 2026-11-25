@@ -68,6 +68,11 @@ fn world_at(hz: u32) -> WorldState {
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     world.grant_deep_claim();
     fit(&mut world, PLAYER);
+    // A tinted lamp needs a set of filter glass (Wave 10 polish): the kit carries a few, as a
+    // crew bound for the Archive's light vaults would.
+    let _ = world
+        .logistics
+        .add_supplies(PLAYER, crate::workshop::DeepSupply::LampFilter, 4);
     world
 }
 

@@ -241,17 +241,28 @@ fn dark_matter_runs_in_veins_and_hangs_from_the_weightless_halls_roofs() {
     };
     let halls = halls_touching(&settings, &layout, &area);
     assert!(halls.len() >= 4, "{} halls", halls.len());
-    let hall = halls[0];
-    assert!(kind_at(&terrain, hall.centre.x, hall.centre.y).is_open());
-    let roof = (hall.centre.x - 4..=hall.centre.x + 4)
-        .filter(|x| {
-            (1..=3).any(|up| {
-                kind_at(&terrain, *x, hall.centre.y - hall.half_height - up)
-                    == TileKind::Core(CoreTile::DarkMatter)
-            })
+    // Most halls hang dark matter from their roofs (one whose roof a cave or another set
+    // piece opened has none; Wave 10 integration: the first hall is no longer always whole).
+    let roofed = halls
+        .iter()
+        .filter(|hall| {
+            assert!(kind_at(&terrain, hall.centre.x, hall.centre.y).is_open());
+            let roof = (hall.centre.x - 4..=hall.centre.x + 4)
+                .filter(|x| {
+                    (1..=3).any(|up| {
+                        kind_at(&terrain, *x, hall.centre.y - hall.half_height - up)
+                            == TileKind::Core(CoreTile::DarkMatter)
+                    })
+                })
+                .count();
+            roof >= 2
         })
         .count();
-    assert!(roof >= 2, "dark matter on the roof ({roof})");
+    assert!(
+        roofed * 2 >= halls.len(),
+        "dark matter on {roofed} of {} halls' roofs",
+        halls.len()
+    );
     // The Upfall.
     let shaft = upfall(&settings, &layout);
     assert!(kind_at(&terrain, shaft.center().x - 6, shaft.center().y).is_open());

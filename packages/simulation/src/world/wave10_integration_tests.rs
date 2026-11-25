@@ -246,3 +246,38 @@ fn the_heart_key_opens_both_seals_and_only_it_does() {
     }
     assert!(!world.heart_seal_refuses(PLAYER, TileKind::Core(CoreTile::StarRock)));
 }
+
+/// The Heart Seal over Descent VIII is whole where the Heart's own pass runs under it: no
+/// weightless hall, vein or cave of the Veins cuts it, so only the Heart Key opens the way
+/// down (three seeds, a wide span of columns).
+#[test]
+fn the_heart_seal_is_whole_over_the_hearts_own_halls() {
+    use crate::{cave::CaveTile, terrain::TileKind, worldgen::streamed::generated_tile};
+    for seed in [SEED, 0, 7] {
+        let settings = settings(seed);
+        let layout = layout(&settings);
+        let (top, _) = layout.rows(Stratum::DarkMatterVeins);
+        for x in (-700..700).step_by(3) {
+            let rows: Vec<i32> = (top - 80..top + 80)
+                .filter(|y| {
+                    crate::worldgen::descent::garrison::heart_seal(&settings, &layout, x, *y)
+                })
+                .collect();
+            assert!(!rows.is_empty(), "the seal spans column {x} (seed {seed})");
+            for y in rows {
+                let tile = crate::terrain::TilePosition { x, y };
+                let kind = generated_tile(&settings, tile).kind;
+                // The cable's lift shaft (ruin masonry) and bedrock hold the line too.
+                assert!(
+                    matches!(
+                        kind,
+                        TileKind::Cave(CaveTile::HeartSeal)
+                            | TileKind::Bedrock
+                            | TileKind::Built(crate::base::BuiltTile::RuinWall)
+                    ),
+                    "the seal at {tile:?} is {kind:?} (seed {seed})"
+                );
+            }
+        }
+    }
+}
