@@ -11,7 +11,7 @@ use crate::{
     expedition::memories::Settlement as Remembering,
     people::{
         ArcId, ArcKind, ArcRun, PeopleCommand, TalkTopic,
-        deep_folk::{AMBER_COURT, ARCHIVE_POST, CATHEDRAL_STATION},
+        deep_folk::{AMBER_COURT, ARCHIVE_POST, CATHEDRAL_STATION, HEARTS_EDGE},
         routine::{self, Settlement},
         story::{ARC_TEMPLATES, SeedSource, StorySeed, Trigger},
     },
@@ -50,7 +50,7 @@ fn world() -> WorldState {
 }
 
 /// The deep settlements with people in a V11 world, and what each remembers.
-fn deep_settlements() -> [(VillageId, Remembering); 7] {
+fn deep_settlements() -> [(VillageId, Remembering); 8] {
     [
         (underground_id(0), Remembering::GravelHollow),
         (CATHEDRAL_STATION, Remembering::OldDeepCamp),
@@ -69,6 +69,8 @@ fn deep_settlements() -> [(VillageId, Remembering); 7] {
         ),
         // Descent VII's outpost (Wave 10 ancients-a), its stories the story track's.
         (ARCHIVE_POST, Remembering::ArchivePost),
+        // Descent VIII's outpost (Wave 11 carryover: Heart's Edge has residents now).
+        (HEARTS_EDGE, Remembering::HeartCamp),
     ]
 }
 

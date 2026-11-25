@@ -201,3 +201,104 @@ fn co_op_partners_meet_the_same_residents() {
     let loaded: WorldState = serde_json::from_str(&json).expect("load");
     assert_eq!(folk_of(&loaded, CATHEDRAL_STATION), folk);
 }
+
+/// Wave 11 carryover: the Archive Post's and Heart's Edge's residents talk about their own
+/// place (their own chatter, no generic village small talk) beside their memories.
+#[test]
+fn the_archive_post_and_hearts_edge_talk_about_their_own_place() {
+    let mut world = world(0x5EED_0012);
+    world.set_expedition(ExpeditionState {
+        found: 80,
+        ..ExpeditionState::default()
+    });
+    let settings = *world.terrain().settings();
+    for place in [DeepSettlement::ArchivePost, DeepSettlement::HeartsEdge] {
+        park(&mut world, PLAYER, place);
+        run(&mut world, 40);
+        let folk = folk_of(&world, place.id());
+        assert_eq!(folk.len(), place.cast().len(), "{}", place.name());
+        for (npc, state) in folk {
+            let character = routine::character(&settings, state.character).expect("who");
+            let cast = place.cast()[usize::from(character.id.index)];
+            assert!(
+                !cast.chatter.is_empty(),
+                "{} has its own talk",
+                cast.speaker
+            );
+            let said = chat(&mut world, npc);
+            // Greeting, their own talk, then a memory of the Fathers: nothing generic.
+            assert_eq!(said.len(), 3, "{}: {said:?}", cast.speaker);
+            assert_eq!(said[0], cast.greeting);
+            assert!(cast.chatter.contains(&said[1].as_str()), "{said:?}");
+            let (remembered, speaker) =
+                deep_folk::resident_speaker(&character).expect("a resident");
+            assert!(
+                memories::lines_by(remembered, speaker, world.expedition())
+                    .any(|memory| memory.line == said[2]),
+                "{said:?}"
+            );
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(
+                tick,
+                &TickInputs::default().act(PLAYER, PlayerCommand::People(PeopleCommand::Goodbye)),
+            );
+        }
+    }
+}
+
+/// Wave 11 carryover: Heart's Edge, Descent VIII's outpost, is a settlement with residents who
+/// remember the Fathers, and its people offer its own stories.
+#[test]
+fn hearts_edge_has_residents_who_remember_the_fathers_and_offer_its_stories() {
+    let mut world = world(0x5EED_0013);
+    let place = DeepSettlement::HeartsEdge;
+    assert_eq!(
+        memories::Settlement::of_place_name(place.name()),
+        Some(memories::Settlement::HeartCamp),
+        "registered by name"
+    );
+    // The hall is Descent VIII's logistics outpost.
+    let settings = *world.terrain().settings();
+    let (ground, _, _) = deep_folk::hall(&settings, place).expect("a hall");
+    assert_eq!(
+        usize::from(crate::depth_progression::descent_index_at_row(
+            &settings, ground
+        )),
+        crate::descent::Descent::Heart.index()
+    );
+    park(&mut world, PLAYER, place);
+    run(&mut world, 40);
+    let folk = folk_of(&world, place.id());
+    assert_eq!(folk.len(), 5, "Heart's Edge's people come out");
+    let offers = folk
+        .iter()
+        .filter_map(|(npc, _)| match world.arc_talk(PLAYER, *npc) {
+            super::ArcTalk::HasWork(arc) => arc.template(),
+            _ => None,
+        })
+        .filter(|template| {
+            template
+                .triggers
+                .contains(&crate::people::story::Trigger::Settlement(
+                    memories::Settlement::HeartCamp,
+                ))
+        })
+        .count();
+    assert!(offers > 0, "its own stories are offered there");
+    // Every resident has something of the Fathers to say from the first visit.
+    for (npc, _) in folk {
+        let said = chat(&mut world, npc);
+        assert!(
+            said.iter()
+                .any(|line| memories::MEMORIES.iter().any(|memory| {
+                    memory.settlement == memories::Settlement::HeartCamp && memory.line == *line
+                })),
+            "{said:?}"
+        );
+        let tick = world.simulation_tick();
+        let _ = world.simulate_tick(
+            tick,
+            &TickInputs::default().act(PLAYER, PlayerCommand::People(PeopleCommand::Goodbye)),
+        );
+    }
+}

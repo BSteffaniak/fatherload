@@ -838,8 +838,16 @@ impl WorldState {
                                 }
                             }));
                         }
-                        // Hive folk keep to their own words; station folk chat as well.
-                        if !people::deep_folk::is_hive_folk(id.village) {
+                        // Residents with their own talk say it (the Archive Post and Heart's
+                        // Edge, Wave 11 carryover); hive folk keep to their own words; station
+                        // folk chat as well.
+                        if let Some(text) = people::deep_folk::chatter(&character, time.day, visit)
+                        {
+                            lines.push(ConversationLine {
+                                speaker: Speaker::Them,
+                                text: text.to_owned(),
+                            });
+                        } else if !people::deep_folk::is_hive_folk(id.village) {
                             lines.extend(spoken.into_iter().skip(1).map(|line| ConversationLine {
                                 speaker: Speaker::Them,
                                 text: line.text,

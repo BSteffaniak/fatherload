@@ -500,8 +500,16 @@ impl SeatUi {
         let mut about = String::with_capacity(role.len() + 8);
         about.push_str(&role[..1].to_uppercase());
         about.push_str(&role[1..]);
+        // The builders' machines have no age (Wave 11 carryover).
         about.push_str(", ");
-        about.push_str(&character.age.to_string());
+        if fatherload_simulation::people::deep_folk::is_automaton(
+            character.id.village,
+            character.id.index,
+        ) {
+            about.push_str("builder machine");
+        } else {
+            about.push_str(&character.age.to_string());
+        }
         if contractor_profile(&character).is_some() {
             about.push_str(" - takes building work");
         }

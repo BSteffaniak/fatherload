@@ -145,7 +145,7 @@ impl Settlement {
             (Self::GravelHollow, Role::Prospector | Role::RetiredMiner) => Some("miner"),
             (Self::OldDeepCamp, Role::Quartermaster) => Some("quartermaster"),
             (Self::OldDeepCamp, Role::Prospector) => Some("prospector"),
-            (Self::OldDeepCamp, Role::Healer) => Some("medic"),
+            (Self::OldDeepCamp | Self::HeartCamp, Role::Healer) => Some("medic"),
             (Self::OldDeepCamp, Role::Cartographer) => Some("surveyor"),
             (Self::OldDeepCamp, Role::Innkeeper | Role::Baker) => Some("cook"),
             (Self::TheHive, Role::Storyteller) => Some("elder"),
@@ -169,6 +169,7 @@ impl Settlement {
                 Self::PrismRelay | Self::HeartCamp,
                 Role::Courier | Role::Prospector | Role::Hermit,
             ) => Some("drifter"),
+            (Self::HeartCamp, Role::Storyteller) => Some("listener"),
             (Self::ArchivePost, Role::Storyteller | Role::RetiredMiner) => Some("lamplighter"),
             (Self::ArchivePost, Role::Mechanic | Role::Tinkerer | Role::Smith) => Some("tinker"),
             (Self::ArchivePost, Role::Courier | Role::Apprentice) => Some("sweeper"),
@@ -224,7 +225,7 @@ impl SettlementMemory {
 }
 
 /// Every remembered line.
-pub const MEMORIES: [SettlementMemory; 66] = [
+pub const MEMORIES: [SettlementMemory; 73] = [
     SettlementMemory {
         id: "gravel_hollow.smith.rails",
         settlement: Settlement::GravelHollow,
@@ -766,6 +767,63 @@ pub const MEMORIES: [SettlementMemory; 66] = [
         after_log: Some(79),
         line: "I went as far as the gold light once. There's a chair down there made of a sled \
                board and a crutch, by the cable root, facing the drive. I didn't sit in it.",
+    },
+    // --- Wave 11 carryover: Heart's Edge's residents (`people::deep_folk::HeartsEdge`). -----
+    SettlementMemory {
+        id: "heart_camp.keeper.plate",
+        settlement: Settlement::HeartCamp,
+        speaker: "the camp keeper",
+        after_log: None,
+        line: "We found this hall dark, with a tin plate nailed to the lift door: A. VARGA, GONE \
+               DOWN. We lit the lamps and stayed, in case he ever came back up for it.",
+    },
+    SettlementMemory {
+        id: "heart_camp.listener.count",
+        settlement: Settlement::HeartCamp,
+        speaker: "the listener",
+        after_log: None,
+        line: "I count the hum. Ninety beats a minute. The old man with the crutch counted it \
+               too, scratched it on the wall by his bunk: ninety. Same as now. So it sleeps.",
+    },
+    SettlementMemory {
+        id: "heart_camp.listener.moon",
+        settlement: Settlement::HeartCamp,
+        speaker: "the listener",
+        after_log: Some(75),
+        line: "His letter says he saw the Moon through the rock, in a well. I lay in that well a \
+               whole night. Saw nothing. Felt looked at, though.",
+    },
+    SettlementMemory {
+        id: "heart_camp.railhand.strips",
+        settlement: Settlement::HeartCamp,
+        speaker: "the rail hand",
+        after_log: None,
+        line: "Somebody wiped the rails' magnet strips clean before we came, every one, right \
+               across the sea. One man with a rag and a crutch. Devotion, or boredom.",
+    },
+    SettlementMemory {
+        id: "heart_camp.railhand.face",
+        settlement: Settlement::HeartCamp,
+        speaker: "the rail hand",
+        after_log: Some(77),
+        line: "Everyone rides the rails across on their back the first time, watching their face \
+               go by in the metal. Everyone looks old in it. His letter says so too.",
+    },
+    SettlementMemory {
+        id: "heart_camp.medic.peg",
+        settlement: Settlement::HeartCamp,
+        speaker: "the camp medic",
+        after_log: None,
+        line: "There are marks in the rock all the way to the gold light: a boot and a peg, a \
+               boot and a peg. Someone walked down here on a crutch made of tram rail.",
+    },
+    SettlementMemory {
+        id: "heart_camp.medic.splint",
+        settlement: Settlement::HeartCamp,
+        speaker: "the camp medic",
+        after_log: Some(64),
+        line: "A rail splint, a crutch, and a thousand rows of walking after. Medically, he \
+               should have stopped. Medically, I'd have liked him.",
     },
 ];
 

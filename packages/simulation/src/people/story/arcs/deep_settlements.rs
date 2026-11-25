@@ -1,7 +1,7 @@
 //! Batch: the deep settlements' own stories (Wave 10 story). Two or three arcs for each
 //! settlement down the builders' cable: Gravel Hollow (I), Cathedral Station (II), the Amber
 //! Court of the Hive (III), Merrow City (IV), the Sunfolk Kraal (V), Parallax Station (VI) and
-//! the Megacity outpost (VII). Ids 1401-1469.
+//! the Megacity outpost (VII), and Heart's Edge (VIII, Wave 11 carryover). Ids 1401-1469.
 //!
 //! Each arc is offered only by the people of its own settlement
 //! ([`Trigger::Settlement`], matched by the population's registered name,
@@ -1503,6 +1503,174 @@ pub const BATCH: &[ArcTemplate] = &[
             "The Megacity's scholar has the archivist's request for a chart reading.",
             "Scan the chart vault, dig its face open, bring the sums back.",
             "The rig was logged as a ship.",
+        ),
+    },
+    // --- Heart's Edge (Descent VIII, the Dark Matter Veins; Wave 11 carryover) ---------------
+    ArcTemplate {
+        id: ArcId(1464),
+        title: "Gone Down",
+        kind: ArcKind::Deep,
+        contact_other: false,
+        hook: "When Heart's Edge was found, a tin plate was nailed to the lift door: A. VARGA, GONE DOWN. The keeper has kept it polished for years and thinks it is time it went down after him.",
+        twist: "At the Fathers' camp the rock is scratched with a tally of the hum, ninety a minute, and under it in the same hand: BACK SOON. HA.",
+        consequence: "Amos Varga's plate hangs at his last camp, and Heart's Edge keeps the nail.",
+        tier: QuestTier::Deep,
+        prerequisites: &[],
+        triggers: &[Trigger::Settlement(Settlement::HeartCamp)],
+        roles: &[Role::Quartermaster, Role::Trader],
+        slots: &[],
+        targets: &[place(StoryPlace::Home), place(StoryPlace::FathersSite)],
+        stages: &[
+            &[Objective::PickUp {
+                target: 0,
+                parcel: "Amos's door plate",
+            }],
+            &[Objective::OnFoot { target: 1 }],
+            &[Objective::Speak { target: 0 }],
+        ],
+        beats: &[
+            "Take the plate off the door",
+            "Carry it down on foot",
+            "Tell the keeper",
+        ],
+        steps: &[
+            step(
+                "{Giver} wants Amos Varga's tin plate taken down off the lift door at {village}.",
+                "Mind the nail, it's the only nail we've got. We'll be keeping the nail.",
+            ),
+            step(
+                "Carry the plate on foot to {dest2}, {where2}, where the Fathers last camped above the Heart.",
+                "On foot. He walked it on a crutch; you can walk it on two legs.",
+            ),
+            meet(
+                "The plate hangs at his camp now. Tell {contact} at {village}.",
+                "Is it up? Is it straight? He'd have wanted it crooked. He'd have wanted it crooked on purpose.",
+                "BACK SOON. HA. That's him, that is. Well. The door looks bare. Good. Bare means he's further on.",
+            ),
+        ],
+        climax: "You hang the plate on a peg of rock over the Fathers' last camp. Beside it someone has scratched a tally of the hum, ninety to the minute, and under it in a big careful hand: BACK SOON. HA.",
+        twists: &[],
+        reward: reward(3_200, &[(StrategicResourceKind::CoreShard, 2)], 20),
+        outcomes: &[
+            ending(
+                "Leave the plate at his camp",
+                &[
+                    ArcEffect::Reputation(20),
+                    ArcEffect::Furniture(Furniture::RockingChair),
+                    ArcEffect::Credits(3_200),
+                    ArcEffect::Settlement(5),
+                    ArcEffect::Remember,
+                ],
+                "Take the chair by my stove. Rocks the way the hum goes, if you sit still. Somebody should sit in a chair down here who isn't waiting.",
+                "Amos Varga's tin plate hangs over his last camp, and Heart's Edge's door stands bare.",
+            ),
+            choice(
+                "Bring it back to the door",
+                &[ArcEffect::Reputation(10), ArcEffect::Credits(2_200)],
+                "Back on the door. Fair enough. Some of us still like a door that says somebody's coming back.",
+                "The plate went down to the Fathers' camp and came back up again, and hangs on Heart's Edge's door.",
+            ),
+            give_up(
+                &[],
+                "Amos's plate stays nailed to Heart's Edge's lift door.",
+            ),
+        ],
+        pitch: voices(
+            &["There's a tin plate on our door that says GONE DOWN. Take it down after him."],
+            &[
+                "Amos Varga nailed a plate to our door before we ever came! Will you carry it down to where he last camped?",
+            ],
+            &[
+                "A plate on a door that says gone down has hung long enough. Would you carry it after the man who wrote it?",
+            ],
+        ),
+        thanks: NO_THANKS,
+        log: log(
+            "Heart's Edge's keeper wants Amos Varga's door plate carried down to him.",
+            "Take the plate off the door, carry it to the Fathers' camp on foot, tell the keeper.",
+            "BACK SOON. HA.",
+        ),
+    },
+    ArcTemplate {
+        id: ArcId(1465),
+        title: "Ninety Beats",
+        kind: ArcKind::Deep,
+        contact_other: false,
+        hook: "Nan Orrin has counted the Heart's hum every night for twenty years: ninety beats a minute. Lately she hears a ninety-first, and wants it read by an instrument in the veins below, not by an old woman's ears.",
+        twist: "The scanner hears ninety beats, and a ninety-first, small and quick and a little behind: the rig's own engine, keeping time with the drive.",
+        consequence: "The listener writes the rig's engine into her count, and Heart's Edge stops being afraid of the ninety-first beat.",
+        tier: QuestTier::Deep,
+        prerequisites: &[],
+        triggers: &[Trigger::Settlement(Settlement::HeartCamp)],
+        roles: &[Role::Storyteller, Role::Healer],
+        slots: &[],
+        targets: &[place(StoryPlace::DeepSeam), place(StoryPlace::Home)],
+        stages: &[
+            &[Objective::Reach { target: 0 }],
+            &[Objective::Scan { target: 0 }],
+            &[Objective::Speak { target: 1 }],
+        ],
+        beats: &[
+            "Go down to the veins",
+            "Read the hum",
+            "Bring Nan the count",
+        ],
+        steps: &[
+            step(
+                "{Giver} hears the hum loudest at {dest}, {where}. Take the rig down into the veins there.",
+                "Quietly. It's not asleep the way you sleep. It's asleep the way a held breath is.",
+            ),
+            step(
+                "Pulse the scanner over the veins and count what it hears.",
+                "Ninety. Then listen for the other one. It's small. It hides behind the big ones.",
+            ),
+            meet(
+                "The ninety-first beat is your own engine, keeping time with the drive. Tell {contact} at {village}.",
+                "Well? Is it waking? Tell me straight, I've been brave for twenty years and I'm tired of it.",
+                "Your engine? Keeping time with it? Oh. Oh, that's all right, then. That's company. I'll write you in.",
+            ),
+        ],
+        climax: "On the scanner's screen the hum draws itself: ninety slow peaks, and between two of them a small quick one, a little behind, the rig's own engine falling into step with the drive.",
+        twists: &[],
+        reward: reward(3_100, &[(StrategicResourceKind::VoidGlass, 2)], 18),
+        outcomes: &[
+            ending(
+                "Let her write the rig into the count",
+                &[
+                    ArcEffect::Reputation(18),
+                    ArcEffect::Furniture(Furniture::Clock),
+                    ArcEffect::Credits(3_100),
+                    ArcEffect::UnlockOffer,
+                    ArcEffect::Remember,
+                ],
+                "Take my clock. It runs at ninety. Every clock up top runs fast, you'll find, once you've had this one.",
+                "Nan Orrin's count has a ninety-first beat in it now, and it is the rig's engine.",
+            ),
+            choice(
+                "Tell her it was nothing",
+                &[ArcEffect::Reputation(9), ArcEffect::Credits(2_000)],
+                "Nothing. Good. I'll keep counting, then. It's what I'm for.",
+                "The listener keeps counting ninety beats at Heart's Edge, and never mentions the ninety-first.",
+            ),
+            give_up(
+                &[],
+                "Nobody reads the hum, and the listener keeps counting alone.",
+            ),
+        ],
+        pitch: voices(
+            &["Nan hears a ninety-first beat in the hum. Read it with the scanner."],
+            &[
+                "The listener hears a new beat in the Heart's hum! Will you go down into the veins and read it with your scanner?",
+            ],
+            &[
+                "I have counted ninety beats a minute for twenty years and now I count ninety-one. Would you read it for me?",
+            ],
+        ),
+        thanks: NO_THANKS,
+        log: log(
+            "Heart's Edge's listener hears a ninety-first beat in the hum.",
+            "Go down to the veins, scan the hum, bring her the count.",
+            "The ninety-first beat was the rig's engine.",
         ),
     },
 ];
