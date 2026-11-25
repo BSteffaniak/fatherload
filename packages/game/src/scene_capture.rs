@@ -26,6 +26,7 @@ mod crew_scenes;
 mod enemy_scenes;
 mod moon_scenes;
 mod night_scenes;
+mod planet_scenes;
 mod reward_scenes;
 mod rig_scenes;
 mod sky_isle_scenes;
@@ -599,6 +600,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(polish_scenes::POLISH_SCENES)
         .chain(ancient_city_scenes::ANCIENT_CITY_SCENES)
         .chain(garrison_scenes::GARRISON_SCENES)
+        .chain(planet_scenes::PLANET_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

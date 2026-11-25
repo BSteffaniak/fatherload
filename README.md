@@ -1269,6 +1269,25 @@ worlds generate exactly as before, but any world can hold fluid once something p
   beside the rig. Review scenes: `fluid_pools`, `fluid_rig_submerged`, `fluid_pilot_swimming`,
   `fluid_flood`, `fluid_metal_meets_water`.
 
+### Round bodies (wave 11, Part III F12)
+
+Planets and moons past the Moon are fully round. Their ground is laid out in rings of curved
+tiles (the columns halve toward the core so tiles stay roughly square) and played on the
+planet unrolled into a strip that wraps around, so digging, caves, fluids, drops and creatures
+work exactly as at home. Gravity pulls toward the body's centre at the body's own strength.
+
+- **You do the tilting**: nothing turns the craft but your rotation thrusters. Landing is a
+  skill: touch down level and it is clean; tilted, the rig slides the way it leans and scrapes
+  its hull; too steep and it tips over onto its side ("hold the rotation thrusters toward
+  upright" rights it). On the ground it rests on its tracks, leaning where a track hangs over
+  a step. Landing legs (an upgrade, not sold yet) widen the safe angle.
+- **Small moons** (radius 400-1,000 tiles) are quick landings: drive all the way round one, or
+  dig straight down through its strata to the core chamber.
+- Placeholder themes for now (a barren moon, a rocky world, an ice world); the space waves add
+  real ones and the round, bent drawing. Review scenes (drawn flat): `planet_moon_surface`,
+  `planet_moon_halving_ring`, `planet_moon_core_chamber`, `planet_rocky_surface`,
+  `planet_ice_surface`, `planet_tipped_over`.
+
 ### Art and audio pass (wave 6)
 
 A polish pass over everything from waves 3-5, presentation only (no gameplay, save, protocol or
