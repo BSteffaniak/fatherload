@@ -606,6 +606,60 @@ fn an_escape_jump_always_gets_away() {
 }
 
 #[test]
+fn a_lair_meets_the_rig_and_an_escape_jump_gets_away_from_it() {
+    let mut world = world_at(60);
+    let lair = world.boss_lair(Faction::Pirates).expect("a pirate lair");
+    // Right in the lair: the boss comes.
+    launch_to(&mut world, lair.pos, 0.0);
+    let mut met = false;
+    for _ in 0..seconds(&world, 3.0) {
+        let events = tick_with(&mut world, ControlState::default());
+        if hostile_events(&events)
+            .iter()
+            .any(|(what, _)| *what == HostileEvent::BossAppeared)
+        {
+            met = true;
+            break;
+        }
+    }
+    assert!(met, "the Pirate King waits in his lair");
+    assert!(world.hostiles().boss().is_some());
+    // The escape jump (30,000 tiles) is shorter than the lair's reach (45,000): the rest after
+    // it must keep the boss from finding the rig again straight away.
+    let _ = act(
+        &mut world,
+        ControlState::default(),
+        PlayerCommand::Flight(FlightCommand::Warp),
+    );
+    let mut escaped = false;
+    for _ in 0..seconds(&world, 4.0) {
+        let events = tick_with(&mut world, ControlState::default());
+        if hostile_events(&events)
+            .iter()
+            .any(|(what, _)| *what == HostileEvent::Escaped)
+        {
+            escaped = true;
+            break;
+        }
+    }
+    assert!(escaped, "the jump went");
+    assert!(
+        rig_pos(&world).distance(lair.pos) < space::tiles(45_000.0),
+        "still inside the lair's reach (the case this test is about)"
+    );
+    for _ in 0..seconds(&world, 30.0) {
+        let events = tick_with(&mut world, ControlState::default());
+        assert!(
+            !hostile_events(&events)
+                .iter()
+                .any(|(what, _)| *what == HostileEvent::EncounterStarted),
+            "an escaped rig rests before anything finds it again"
+        );
+    }
+    assert!(world.hostiles().engaged(PLAYER).is_none());
+}
+
+#[test]
 fn a_rig_wrecked_in_a_fight_leaves_a_pod_and_is_towed_home() {
     let mut world = world_at(30);
     launch_to(&mut world, open_space(3), 0.0);

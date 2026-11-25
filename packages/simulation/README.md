@@ -10069,7 +10069,9 @@ lengths are plain IEEE (`combat::length`, no platform `hypot`).
   space; its encounters end.
 * **Pirates can be paid** (credits first, then the dearest cargo for the rest) and leave.
 * **Calm**: the home sector never rolls encounters, nor does the space within 9,000 tiles of a
-  station; after an encounter a rig rests 60 s. A world whose enemy setting is Peaceful rolls
+  station; after an encounter or an escape jump a rig rests 60 s, meeting nothing at all (not even
+  a lair, bounty or patrol it is still near: the jump is shorter than a lair's reach, and the rest
+  is what keeps it from landing back in the same fight). A world whose enemy setting is Peaceful rolls
   no encounters, lairs, patrols or raids at all.
 
 ### Bosses (`hostiles::boss`)

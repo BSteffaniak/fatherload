@@ -723,7 +723,10 @@ impl WorldState {
                 continue;
             }
             let combat = self.rig_combat(rig.id);
-            if let Some(step) = place_step {
+            // A rig resting after a fight or an escape jump meets nothing at all for a while,
+            // not even a lair, a bounty or a patrol it is still near: an escape jump (shorter
+            // than a lair's reach) must not drop it straight back into the same fight.
+            if let Some(step) = place_step.filter(|step| *step >= combat.next_roll) {
                 // Bosses in their lairs (not beaten yet).
                 let mut met = false;
                 for faction in Faction::ALL {
