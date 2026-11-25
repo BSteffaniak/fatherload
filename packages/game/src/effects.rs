@@ -1199,7 +1199,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Garrison { player_id, .. }
         | GameplayEventKind::Heart { player_id, .. }
         | GameplayEventKind::Story { player_id, .. }
-        | GameplayEventKind::Planet { player_id, .. } => player_id,
+        | GameplayEventKind::Planet { player_id, .. }
+        | GameplayEventKind::Wilds { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

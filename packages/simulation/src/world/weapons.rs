@@ -198,6 +198,7 @@ impl WorldState {
             if let EntityState::Enemy(state) = &entity.state
                 && (self.living_peaceful(state)
                     || Self::hollow_peaceful(state)
+                    || Self::wilds_peaceful(state)
                     || self.far_unseen_by(player_id, id, state))
             {
                 // A lens wraith outside its colour of light is unseen too (Wave 9).

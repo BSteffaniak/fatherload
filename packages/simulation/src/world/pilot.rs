@@ -98,7 +98,7 @@ impl PilotTerrain for PilotView<'_> {
         matches!(
             self.world.bases.fixtures_at(tile).front,
             Some((crate::base::Fixture::Ladder | crate::base::Fixture::Rope, _))
-        )
+        ) || self.world.wild_vine_at(tile)
     }
 
     fn water(&self, tile: TilePosition) -> bool {

@@ -168,7 +168,7 @@ pub const fn is_ice(kind: crate::terrain::TileKind) -> bool {
     matches!(
         kind,
         TileKind::Cave(CaveTile::BrineIce | CaveTile::PackIce | CaveTile::Rime)
-    )
+    ) || matches!(kind, TileKind::Wild(tile) if tile.is_slick())
 }
 
 /// How long a tunnel tile dug at `along` per mille down the Brine Glaciers takes to refreeze.

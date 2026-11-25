@@ -1364,6 +1364,16 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         detail: u32,
     },
+    // The wild worlds (Wave 12 planets-a; netcode codes 900-919).
+    /// Something of a jungle, ocean archipelago or glacier world happened at tile `(x, y)`
+    /// (a puffcap burst, lifesap mended, an icicle cracked, the cold bit, a storm rose, ...);
+    /// `player_id` is whose rig, if anyone's.
+    Wilds {
+        what: crate::planet::wilds::WildsEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

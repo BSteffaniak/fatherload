@@ -450,6 +450,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::BodyLife {
             what, player_id, ..
         } => (880 + what.code() as u32, Some(player_id)),
+        // The wild worlds (wave 12 planets-a): 900-919.
+        GameplayEventKind::Wilds {
+            what, player_id, ..
+        } => (900 + what.code() as u32, player_id),
     }
 }
 

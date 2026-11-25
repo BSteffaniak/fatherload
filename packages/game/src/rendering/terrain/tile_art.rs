@@ -53,6 +53,7 @@ mod living_art;
 mod lunar_art;
 mod poi_art;
 mod sky_art;
+mod wilds_art;
 
 pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
@@ -65,6 +66,7 @@ pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
+pub use wilds_art::wild_color;
 
 /// Art pixels per tile edge (a tile is 32 world pixels at 2 world pixels per art pixel).
 pub const TILE_ART: i32 = 16;
@@ -434,6 +436,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Warped(tile) => return distortion_art::warped_color(tile),
         TileKind::City(tile) => return city_art::city_color(tile),
         TileKind::Core(tile) => return heart_art::core_color(tile),
+        TileKind::Wild(tile) => return wilds_art::wild_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -620,7 +623,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Hollow(_)
         | TileKind::Warped(_)
         | TileKind::City(_)
-        | TileKind::Core(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Core(_)
+        | TileKind::Wild(_) => base_pixel(host, strata, host, x, y),
     }
 }
 
@@ -826,6 +830,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         if lunar_art::paint_lunar_air(&mut canvas, terrain, position) {
             return canvas;
         }
+        // The wild worlds (Wave 12 planets-a): vines, the sea and the strata's walls.
+        if wilds_art::paint_wilds_air(&mut canvas, terrain, position, up, left, right) {
+            return canvas;
+        }
         if cell_at(terrain, x, y) == Cell::Sky {
             paint_grass_blades(&mut canvas, terrain, position, down);
         } else if crust_art::paint_crust_air(&mut canvas, terrain, position, &strata) {
@@ -950,6 +958,24 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     if let TileKind::City(tile) = kind {
         city_art::paint(
             &mut canvas,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // The wild worlds' materials (Wave 12 planets-a).
+    if let TileKind::Wild(tile) = kind {
+        wilds_art::paint(
+            &mut canvas,
+            terrain,
+            position,
             tile,
             &strata,
             Edges {
@@ -1452,6 +1478,9 @@ fn grass_colors(terrain: &Terrain, x: i32) -> (PaletteIndex, PaletteIndex, Palet
 
 /// Whether `material` grows grass where it meets the sky.
 const fn grows_grass(material: TileKind) -> bool {
+    if let TileKind::Wild(tile) = material {
+        return wilds_art::grows_grass(tile);
+    }
     !matches!(
         material,
         TileKind::Surface(_)
@@ -1584,7 +1613,7 @@ fn paint_grass_blades(
             let [tips, blades, roots, _] = sky_art::turf_colors(biome);
             (tips, blades, roots)
         }
-        _ => grass_colors(terrain, position.x),
+        _ => wilds_art::grass(terrain).unwrap_or_else(|| grass_colors(terrain, position.x)),
     };
     for px in 0..TILE_ART {
         let h = hash(canvas.origin_x + px, 4, 43);

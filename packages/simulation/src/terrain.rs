@@ -353,6 +353,11 @@ pub enum TileKind {
     /// vein shale and dark matter, event glass and singularities, the metal sea's rails and
     /// pylons, star rock, the Heart's shell and seal, the builders' cable.
     Core(crate::heart::CoreTile),
+    /// A tile of the wild planet themes (Wave 12 planets-a: jungle, ocean archipelago and
+    /// glacier worlds; see [`crate::planet::wilds`]): roots, trunks, canopy, spore stone,
+    /// heartwood and lifesap; sea sand, reef, ruins and smokers; glacier and sea ice, rime,
+    /// permafrost, icicles and the landmarks' relics.
+    Wild(crate::planet::wilds::WildTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -466,6 +471,7 @@ impl TileKind {
             Self::Warped(tile) => tile.name(),
             Self::City(tile) => tile.name(),
             Self::Core(tile) => tile.name(),
+            Self::Wild(tile) => tile.name(),
         }
     }
 
@@ -566,6 +572,7 @@ impl Tile {
             TileKind::Warped(tile) => crate::distortion::WARPED_TILE_CODE_BASE | tile.code(),
             TileKind::City(tile) => crate::ancient_city::CITY_TILE_CODE_BASE | tile.code(),
             TileKind::Core(tile) => crate::heart::CORE_TILE_CODE_BASE | tile.code(),
+            TileKind::Wild(tile) => crate::planet::wilds::WILD_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -2343,6 +2350,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Warped(tile) => tile.hardness(),
         TileKind::City(tile) => tile.hardness(),
         TileKind::Core(tile) => tile.hardness(),
+        TileKind::Wild(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2390,6 +2398,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Warped(tile) => tile.durability(),
         TileKind::City(tile) => tile.durability(),
         TileKind::Core(tile) => tile.durability(),
+        TileKind::Wild(tile) => tile.durability(),
     }
 }
 

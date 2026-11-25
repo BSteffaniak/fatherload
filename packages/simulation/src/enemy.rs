@@ -185,6 +185,25 @@
 //! | [`EnemyKind::StarHeart`] | machine (final boss) | the Heart's chamber | the ring contracts before a pull, the beams fade in, the core brightens before it exhales | break the coils, dodge the beams, strike while it exhales |
 //! | [`EnemyKind::DriveCoil`] | machine (boss part) | orbiting the sleeping drive | glows before its bolt | shoot every coil |
 //! | [`EnemyKind::HeartSpark`] | machine (swarmer) | thrown by the ignited drive | a hot spark | anything |
+//!
+//! The wild worlds' creatures (Wave 12 planets-a, [`crate::planet::wilds`]) live on jungle,
+//! ocean archipelago and glacier planets, in the planet's local frame (its strip: "down" is
+//! toward the core); `world/enemies/wilds.rs` gives them their ways and spawns them:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::Trundlehorn`] | creature (megafauna, neutral) | the jungle's floor | grazes in herds; lowers its horns and stamps before a charge, only once struck | leave it be |
+//! | [`EnemyKind::Vinestalker`] | creature (ambusher) | hanging under the canopy | hangs still among the vines, then drops on a rig passing below | look up under the trees |
+//! | [`EnemyKind::Mossprowler`] | creature (ambush predator) | the jungle's floor | lies flat in the undergrowth, a twitch of its tail, then a pounce from close | keep your distance, blasts |
+//! | [`EnemyKind::Sporewing`] | creature (swarmer) | the Spore Caves | a flapping cloud of spore-dusted wings | anything; fire |
+//! | [`EnemyKind::Shellstrider`] | creature (megafauna, neutral) | the open sea | a great turtle cruising the shallows; it rams only when struck | leave it be |
+//! | [`EnemyKind::Glimmerfin`] | creature (school, harmless) | the sea | a glittering school that scatters from rigs | none needed |
+//! | [`EnemyKind::Sawjaw`] | creature (hunter, swims) | the sea | circles its prey, then dashes in | keep moving, shoot it as it turns |
+//! | [`EnemyKind::Tidesnapper`] | creature (guard) | beaches and reefs | raises its claws when something comes close, then snaps | keep away, or fight it |
+//! | [`EnemyKind::Woolhorn`] | creature (megafauna, neutral) | the glacier | grazes in herds; charges only once struck | leave it be |
+//! | [`EnemyKind::Rimeskipper`] | creature (harmless) | the glacier | hops away from rigs | none needed |
+//! | [`EnemyKind::Rimewolf`] | creature (pack predator) | the glacier, bolder in a blizzard | the pack circles, then leaps together | break the circle, blasts |
+//! | [`EnemyKind::Crevassewyrm`] | creature (ambusher, burrower) | crevasses and the Permafrost Caves | ice cracks round it, then it lunges out of the wall | stop drilling near it, blasts |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -503,6 +522,31 @@ pub enum EnemyKind {
     DriveCoil,
     /// A spark the ignited Star Drive throws out.
     HeartSpark,
+    // --- The wild worlds (Wave 12 planets-a, `crate::planet::wilds`), appended ---------------
+    /// Jungle: a neutral horned herbivore the size of a hill; it charges only once struck.
+    Trundlehorn,
+    /// Jungle: an ambusher hanging under the canopy that drops on rigs below.
+    Vinestalker,
+    /// Jungle: a moss-backed predator lying flat in the undergrowth; it pounces from close.
+    Mossprowler,
+    /// Jungle's Spore Caves: a spore-dusted bat swarm.
+    Sporewing,
+    /// Ocean: a neutral giant turtle cruising the shallows.
+    Shellstrider,
+    /// Ocean: a harmless glittering school fish.
+    Glimmerfin,
+    /// Ocean: a saw-jawed hunter that circles, then dashes.
+    Sawjaw,
+    /// Ocean: a beach crab that guards its patch and snaps.
+    Tidesnapper,
+    /// Glacier: a neutral shaggy herbivore; it charges only once struck.
+    Woolhorn,
+    /// Glacier: a harmless hopping snow critter.
+    Rimeskipper,
+    /// Glacier: a pack predator that circles, then leaps together.
+    Rimewolf,
+    /// Glacier: an ambusher in the ice walls of crevasses and caves; it lunges out of them.
+    Crevassewyrm,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -966,7 +1010,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 150] = [
+    pub const ALL: [Self; 162] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1117,7 +1161,39 @@ impl EnemyKind {
         Self::StarHeart,
         Self::DriveCoil,
         Self::HeartSpark,
+        Self::Trundlehorn,
+        Self::Vinestalker,
+        Self::Mossprowler,
+        Self::Sporewing,
+        Self::Shellstrider,
+        Self::Glimmerfin,
+        Self::Sawjaw,
+        Self::Tidesnapper,
+        Self::Woolhorn,
+        Self::Rimeskipper,
+        Self::Rimewolf,
+        Self::Crevassewyrm,
     ];
+
+    /// Whether this is one of the wild worlds' creatures (Wave 12 planets-a).
+    #[must_use]
+    pub const fn is_wilds(self) -> bool {
+        matches!(
+            self,
+            Self::Trundlehorn
+                | Self::Vinestalker
+                | Self::Mossprowler
+                | Self::Sporewing
+                | Self::Shellstrider
+                | Self::Glimmerfin
+                | Self::Sawjaw
+                | Self::Tidesnapper
+                | Self::Woolhorn
+                | Self::Rimeskipper
+                | Self::Rimewolf
+                | Self::Crevassewyrm
+        )
+    }
 
     /// Whether this is one of the Heart's creatures (Wave 10, Descent VIII).
     #[must_use]
@@ -1263,6 +1339,10 @@ impl EnemyKind {
                 | Self::Leviathan
                 // The Heart's metal sea (Wave 10).
                 | Self::MercuryEel
+                // The wild worlds' seas (Wave 12 planets-a).
+                | Self::Shellstrider
+                | Self::Glimmerfin
+                | Self::Sawjaw
         )
     }
 
@@ -3745,6 +3825,184 @@ impl EnemyKind {
                 knockback: 90.0,
                 ..stats("Heart Spark", Machine, Flying, AttackStyle::Contact)
             },
+            // The wild worlds (Wave 12 planets-a).
+            Self::Trundlehorn => EnemyStats {
+                radius: 14.0,
+                health: 420.0,
+                speed: 30.0,
+                dash_speed: 210.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 16.0,
+                windup_millis: 900,
+                cooldown_millis: 4_000,
+                attack_range_tiles: 3.0,
+                knockback: 300.0,
+                ..stats("Trundlehorn", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Vinestalker => EnemyStats {
+                radius: 9.0,
+                health: 80.0,
+                speed: 55.0,
+                dash_speed: 360.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 12.0,
+                contact_damage: 13.0,
+                windup_millis: 420,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 7.0,
+                knockback: 210.0,
+                ..stats("Vinestalker", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Mossprowler => EnemyStats {
+                radius: 9.0,
+                health: 90.0,
+                speed: 115.0,
+                dash_speed: 330.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 18.0,
+                contact_damage: 12.0,
+                windup_millis: 520,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 4.0,
+                knockback: 200.0,
+                ..stats("Mossprowler", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Sporewing => EnemyStats {
+                radius: 6.0,
+                health: 18.0,
+                speed: 120.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 22.0,
+                contact_damage: 4.0,
+                windup_millis: 0,
+                cooldown_millis: 1_200,
+                attack_range_tiles: 0.8,
+                knockback: 90.0,
+                ..stats("Sporewing", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Shellstrider => EnemyStats {
+                radius: 13.0,
+                health: 380.0,
+                speed: 40.0,
+                dash_speed: 220.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 14.0,
+                windup_millis: 900,
+                cooldown_millis: 4_000,
+                attack_range_tiles: 3.0,
+                knockback: 280.0,
+                ..stats("Shellstrider", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Glimmerfin => EnemyStats {
+                radius: 5.0,
+                health: 10.0,
+                speed: 90.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Glimmerfin", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Sawjaw => EnemyStats {
+                radius: 9.0,
+                health: 110.0,
+                speed: 95.0,
+                dash_speed: 330.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 14.0,
+                windup_millis: 420,
+                cooldown_millis: 2_500,
+                attack_range_tiles: 5.0,
+                knockback: 220.0,
+                ..stats("Sawjaw", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::Tidesnapper => EnemyStats {
+                radius: 8.0,
+                health: 70.0,
+                speed: 55.0,
+                dash_speed: 200.0,
+                sight_tiles: 5.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 8.0,
+                contact_damage: 9.0,
+                windup_millis: 600,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 2.0,
+                knockback: 170.0,
+                ..stats("Tidesnapper", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Woolhorn => EnemyStats {
+                radius: 13.0,
+                health: 380.0,
+                speed: 32.0,
+                dash_speed: 220.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 15.0,
+                windup_millis: 900,
+                cooldown_millis: 4_000,
+                attack_range_tiles: 3.0,
+                knockback: 290.0,
+                ..stats("Woolhorn", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Rimeskipper => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 110.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 16.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.0,
+                knockback: 0.0,
+                ..stats("Rimeskipper", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Rimewolf => EnemyStats {
+                radius: 9.0,
+                health: 80.0,
+                speed: 125.0,
+                dash_speed: 330.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 9.0,
+                leash_tiles: 30.0,
+                contact_damage: 11.0,
+                windup_millis: 460,
+                cooldown_millis: 2_500,
+                attack_range_tiles: 5.0,
+                knockback: 190.0,
+                ..stats("Rimewolf", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Crevassewyrm => EnemyStats {
+                radius: 9.0,
+                health: 150.0,
+                speed: 70.0,
+                dash_speed: 300.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 7.0,
+                leash_tiles: 10.0,
+                contact_damage: 16.0,
+                windup_millis: 650,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 4.0,
+                knockback: 240.0,
+                ..stats("Crevassewyrm", Creature, Burrowing, AttackStyle::Lunge)
+            },
         }
     }
 
@@ -3996,6 +4254,20 @@ impl EnemyKind {
             Self::StarHeart => (76.0, 76.0),
             Self::DriveCoil => (26.0, 26.0),
             Self::HeartSpark => (7.0, 7.0),
+            // The wild worlds (Wave 12 planets-a), sized to their art (the megafauna drawn at
+            // one and a half times).
+            Self::Trundlehorn => (40.0, 26.0),
+            Self::Vinestalker => (12.0, 13.0),
+            Self::Mossprowler => (17.0, 9.0),
+            Self::Sporewing => (11.0, 7.0),
+            Self::Shellstrider => (36.0, 18.0),
+            Self::Glimmerfin => (9.0, 5.0),
+            Self::Sawjaw => (22.0, 9.0),
+            Self::Tidesnapper => (14.0, 9.0),
+            Self::Woolhorn => (38.0, 25.0),
+            Self::Rimeskipper => (9.0, 8.0),
+            Self::Rimewolf => (17.0, 10.0),
+            Self::Crevassewyrm => (20.0, 10.0),
         }
     }
 
@@ -4182,6 +4454,14 @@ impl EnemyKind {
                 DamageKind::Fire,
             ) => 0.2,
             (Self::NullMoth | Self::AccretionMote, DamageKind::Fire) => 1.6,
+            // The wild worlds (Wave 12 planets-a): the jungle's hunters and the wolves burn,
+            // shells and hides turn bullets.
+            (
+                Self::Vinestalker | Self::Mossprowler | Self::Sporewing | Self::Rimewolf,
+                DamageKind::Fire,
+            ) => 1.5,
+            (Self::Shellstrider | Self::Tidesnapper, DamageKind::Kinetic) => 0.6,
+            (Self::Trundlehorn | Self::Woolhorn, DamageKind::Kinetic) => 0.7,
             (Self::UpfallBeetle | Self::CableWarden, DamageKind::Kinetic) => 0.7,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
@@ -5307,6 +5587,19 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 16 + extra);
             add(ItemKind::Layer(crate::descent::Stratum::TheHeart), 8);
             add(ItemKind::Material(StrategicResourceKind::CoreShard), 4);
+        }
+        // The wild worlds (Wave 12 planets-a): small game gives little, the megafauna and
+        // hunters give ore; harmless fauna give nothing (TODO-SEAM w12-aliens: hides and
+        // shells for alien traders).
+        EnemyKind::Glimmerfin | EnemyKind::Rimeskipper => {}
+        EnemyKind::Sporewing | EnemyKind::Tidesnapper => add(mineral, 1),
+        EnemyKind::Vinestalker
+        | EnemyKind::Mossprowler
+        | EnemyKind::Sawjaw
+        | EnemyKind::Rimewolf
+        | EnemyKind::Crevassewyrm => add(richer, 1 + extra),
+        EnemyKind::Trundlehorn | EnemyKind::Shellstrider | EnemyKind::Woolhorn => {
+            add(richer, 2 + extra);
         }
     }
     drops

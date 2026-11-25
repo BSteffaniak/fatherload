@@ -585,6 +585,13 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
         TileKind::Warped(tile) => tile.base_chip_seconds(),
         TileKind::City(tile) => tile.base_chip_seconds(),
         TileKind::Core(tile) => tile.base_chip_seconds(),
+        // The wild worlds (Wave 12 planets-a): leaves, sap and rime give at once.
+        TileKind::Wild(tile) => match tile.hardness() {
+            1 => 0.06,
+            2 => 0.11,
+            3 => 0.15,
+            _ => 0.19,
+        },
         TileKind::Sky(tile) => match tile.hardness() {
             1 => 0.08,
             2 => 0.12,

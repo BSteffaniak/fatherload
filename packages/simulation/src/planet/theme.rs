@@ -25,6 +25,15 @@ impl PlanetThemeId {
     pub const ROCKY: Self = Self(1);
     /// A frozen world of snow and granite.
     pub const ICE: Self = Self(2);
+    /// A jungle world: towering canopy, roots, spore caves and heartwood (Wave 12 planets-a,
+    /// [`crate::planet::wilds::jungle`]).
+    pub const JUNGLE: Self = Self(3);
+    /// An ocean archipelago: islands over a planet-wide sea, reefs, drowned ruins and the
+    /// trench (Wave 12 planets-a, [`crate::planet::wilds::ocean`]).
+    pub const OCEAN: Self = Self(4);
+    /// A glacier world: ice sheets, crevasses, frozen seas and permafrost caves (Wave 12
+    /// planets-a, [`crate::planet::wilds::glacier`]; the space generator's ice tag).
+    pub const GLACIER: Self = Self(5);
 }
 
 /// Colours the renderer draws a theme's world with (sRGB).
@@ -160,7 +169,7 @@ const ICE_STRATA: [PlanetStratum; 2] = [
 ];
 
 /// Every theme, by id (append only).
-pub const PLANET_THEMES: [PlanetTheme; 3] = [
+pub const PLANET_THEMES: [PlanetTheme; 6] = [
     PlanetTheme {
         id: PlanetThemeId::BARREN,
         name: "Barren Moon",
@@ -215,6 +224,10 @@ pub const PLANET_THEMES: [PlanetTheme; 3] = [
         caves_per_256_columns: 1,
         hill_permille: 15,
     },
+    // Wave 12 planets-a: the wild worlds.
+    crate::planet::wilds::jungle::JUNGLE_THEME,
+    crate::planet::wilds::ocean::OCEAN_THEME,
+    crate::planet::wilds::glacier::GLACIER_THEME,
 ];
 
 /// The theme with id `id` (an unknown id, from a newer build, reads as the first theme).

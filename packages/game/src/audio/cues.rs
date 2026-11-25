@@ -662,6 +662,26 @@ pub const fn planet_cue(
     }
 }
 
+/// What each wild world event sounds like (Wave 12 planets-a; exhaustive: a new event needs a
+/// sound).
+#[must_use]
+pub const fn wilds_cue(what: fatherload_simulation::planet::wilds::WildsEvent) -> SoundCue {
+    use fatherload_simulation::planet::wilds::WildsEvent as E;
+    match what {
+        E::RootsSnag => SoundCue::ImpactRock,
+        E::SporeBurst => SoundCue::SmokeBurst,
+        E::LifesapMended => SoundCue::RepairWeld,
+        E::Scalded => SoundCue::FireCrackle,
+        E::PressureCreak => SoundCue::GateRumble,
+        E::ColdBite | E::Refroze => SoundCue::Icing,
+        E::IcicleCrack => SoundCue::StalactiteCrack,
+        E::LandmarkRelic => SoundCue::MilestoneFanfare,
+        E::SecretCache => SoundCue::CacheOpened,
+        E::StormRising => SoundCue::Thunderclap,
+        E::RimeBroke => SoundCue::PickBreak,
+    }
+}
+
 /// What each flight event sounds like (Wave 11; exhaustive: a new event needs a sound).
 #[must_use]
 pub const fn flight_cue(what: fatherload_simulation::flight::FlightEvent) -> SoundCue {
@@ -1275,6 +1295,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // Space's things (Wave 12 systems).
         GameplayEventKind::SpaceSystems { what, .. } => Some(systems_cue(*what)),
         GameplayEventKind::BodyLife { what, detail, .. } => Some(body_life_cue(*what, *detail)),
+        // The wild worlds (Wave 12 planets-a).
+        GameplayEventKind::Wilds { what, .. } => Some(wilds_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1628,7 +1650,8 @@ mod tests {
             | GameplayEventKind::Planet { .. }
             | GameplayEventKind::Flight { .. }
             | GameplayEventKind::SpaceSystems { .. }
-            | GameplayEventKind::BodyLife { .. } => {}
+            | GameplayEventKind::BodyLife { .. }
+            | GameplayEventKind::Wilds { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2092,6 +2115,14 @@ mod tests {
                 what,
                 player_id,
                 detail: 0,
+            });
+        }
+        for what in fatherload_simulation::planet::wilds::WildsEvent::ALL {
+            events.push(GameplayEventKind::Wilds {
+                what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
             });
         }
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {

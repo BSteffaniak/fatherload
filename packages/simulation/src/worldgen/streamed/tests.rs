@@ -561,6 +561,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Warped(_) => 'w',
         TileKind::City(_) => 'y',
         TileKind::Core(_) => 'K',
+        TileKind::Wild(_) => 'W',
     }
 }
 

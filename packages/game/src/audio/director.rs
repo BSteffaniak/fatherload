@@ -163,6 +163,21 @@ impl Material {
                 | fatherload_simulation::distortion::WarpedTile::ShearPlate
                 | fatherload_simulation::distortion::WarpedTile::RotBlock => Self::Hard,
             },
+            // The wild worlds (Wave 12 planets-a): soil, leaves, sap, sand, rime and snow
+            // give, crystal, glyphs and relics ring, the rest grinds.
+            TileKind::Wild(tile) => match tile.hardness() {
+                1 | 2 => Self::Soft,
+                _ if tile.is_treasure()
+                    || matches!(
+                        tile,
+                        fatherload_simulation::planet::wilds::WildTile::FrostCrystal
+                            | fatherload_simulation::planet::wilds::WildTile::RuinGlyph
+                    ) =>
+                {
+                    Self::Ore
+                }
+                _ => Self::Hard,
+            },
             // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
             // rest grinds.
             TileKind::Core(tile) => match tile {

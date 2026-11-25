@@ -29,7 +29,7 @@ use crate::rendering::pixel_art::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
         drowned as drowned_art, enemies as art, far_strange as far_art, garrison as garrison_art,
         heart as heart_art, hollow as hollow_art, living as living_art, moon as moon_art,
-        old_deep as deep_art, tomb as tomb_art,
+        old_deep as deep_art, tomb as tomb_art, wilds as wilds_art,
     },
 };
 
@@ -200,6 +200,19 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::StarHeart => &heart_art::STAR_HEART,
         EnemyKind::DriveCoil => &heart_art::DRIVE_COIL,
         EnemyKind::HeartSpark => &heart_art::HEART_SPARK,
+        // The wild worlds (Wave 12 planets-a).
+        EnemyKind::Trundlehorn => &wilds_art::TRUNDLEHORN,
+        EnemyKind::Vinestalker => &wilds_art::VINESTALKER,
+        EnemyKind::Mossprowler => &wilds_art::MOSSPROWLER,
+        EnemyKind::Sporewing => &wilds_art::SPOREWING,
+        EnemyKind::Shellstrider => &wilds_art::SHELLSTRIDER,
+        EnemyKind::Glimmerfin => &wilds_art::GLIMMERFIN,
+        EnemyKind::Sawjaw => &wilds_art::SAWJAW,
+        EnemyKind::Tidesnapper => &wilds_art::TIDESNAPPER,
+        EnemyKind::Woolhorn => &wilds_art::WOOLHORN,
+        EnemyKind::Rimeskipper => &wilds_art::RIMESKIPPER,
+        EnemyKind::Rimewolf => &wilds_art::RIMEWOLF,
+        EnemyKind::Crevassewyrm => &wilds_art::CREVASSEWYRM,
     }
 }
 
@@ -864,6 +877,36 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 usize::from((phase * 0.7).fract() > 0.92)
             }
         }
+        // The wild worlds (Wave 12 planets-a): wings and fins loop; walkers stride while
+        // moving and stand still at rest (a herd asleep, a prowler lying flat, a stalker
+        // hanging); every charger, pouncer and biter shows its attack pose winding up.
+        EnemyKind::Sporewing | EnemyKind::Glimmerfin => sprite.frame_at(phase),
+        EnemyKind::Rimeskipper => usize::from(moving),
+        EnemyKind::Trundlehorn
+        | EnemyKind::Woolhorn
+        | EnemyKind::Mossprowler
+        | EnemyKind::Tidesnapper
+        | EnemyKind::Rimewolf => {
+            if attacking {
+                2
+            } else if moving {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Vinestalker
+        | EnemyKind::Shellstrider
+        | EnemyKind::Sawjaw
+        | EnemyKind::Crevassewyrm => {
+            if attacking {
+                2
+            } else if state.mode == EnemyMode::Dormant {
+                0
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
     }
 }
 
@@ -912,6 +955,8 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::SplitterSpire
         | EnemyKind::LensWraith
         | EnemyKind::GlitchShard => ART * 1.5,
+        // The wild worlds' megafauna (Wave 12 planets-a) tower over a rig.
+        EnemyKind::Trundlehorn | EnemyKind::Shellstrider | EnemyKind::Woolhorn => ART * 1.5,
         _ => ART,
     }
 }
@@ -1004,6 +1049,17 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::RailLeech
             | EnemyKind::SlagSkimmer
             | EnemyKind::CableWarden
+            // The wild worlds' (Wave 12 planets-a) asymmetric kinds.
+            | EnemyKind::Trundlehorn
+            | EnemyKind::Mossprowler
+            | EnemyKind::Shellstrider
+            | EnemyKind::Glimmerfin
+            | EnemyKind::Sawjaw
+            | EnemyKind::Tidesnapper
+            | EnemyKind::Woolhorn
+            | EnemyKind::Rimeskipper
+            | EnemyKind::Rimewolf
+            | EnemyKind::Crevassewyrm
     )
 }
 

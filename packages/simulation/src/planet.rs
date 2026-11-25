@@ -34,6 +34,8 @@ pub mod landing;
 #[cfg(test)]
 mod tests;
 pub mod theme;
+pub mod wilds;
+pub mod world;
 
 use std::{
     collections::BTreeMap,
@@ -44,6 +46,7 @@ use serde::{Deserialize, Serialize};
 
 pub use hooks::{PlanetThemeHooks, SecretSite, hooks};
 pub use theme::{PLANET_THEMES, PlanetPalette, PlanetStratum, PlanetTheme, PlanetThemeId, theme};
+pub use world::{SurfaceSite, ThemeWorld, world_of};
 
 use crate::{
     polar::{MIN_LANDABLE_RADIUS, PolarGrid},
@@ -157,6 +160,9 @@ pub struct PlanetGround {
     top: i32,
     /// The body's secret (Wave 12: one on every small body, [`hooks::default_secret`]).
     secret: Option<SecretSite>,
+    /// The first row of the indestructible core floor (the grid's core, or a theme world's
+    /// strata bottom: [`ThemeWorld::core_floor_row`]).
+    core_floor: i32,
 }
 
 /// A splitmix64 step (stable hashing for generation).
@@ -176,13 +182,22 @@ impl PlanetGround {
     /// The ground of the planet `params` describe.
     #[must_use]
     pub fn new(params: PlanetParams) -> Self {
+        let grid = params.grid();
+        let world = world_of(params.theme);
+        let grid_floor = grid.bottom_row() - CORE_FLOOR_ROWS + 1;
+        let core_floor = world
+            .and_then(|world| world.core_floor_row(&params, &grid))
+            .unwrap_or(grid_floor)
+            .min(grid_floor);
         let mut ground = Self {
             params,
-            grid: params.grid(),
+            grid,
             top: 0,
             secret: None,
+            core_floor,
         };
-        ground.top = -ground.max_hill_rows() - SKY_ROWS;
+        ground.top =
+            -ground.max_hill_rows() - SKY_ROWS - world.map_or(0, world::ThemeWorld::extra_sky_rows);
         ground.secret = ground.hooks().secret(&ground);
         ground
     }
@@ -255,7 +270,7 @@ impl PlanetGround {
     /// The first row of the core floor (indestructible).
     #[must_use]
     pub const fn core_floor_row(&self) -> i32 {
-        self.bottom_row() - CORE_FLOOR_ROWS + 1
+        self.core_floor
     }
 
     /// The first (top) row of the core chamber.
@@ -273,7 +288,8 @@ impl PlanetGround {
     /// Periodic value noise at `column` with lattice spacing `spacing` (`0..=1024`): wraps
     /// with the strip.
     #[allow(clippy::cast_possible_truncation, reason = "a 10-bit value")]
-    fn periodic_noise(&self, purpose: u64, column: i64, spacing: i64) -> i64 {
+    #[must_use]
+    pub fn periodic_noise(&self, purpose: u64, column: i64, spacing: i64) -> i64 {
         let width = i64::from(self.grid.surface_columns());
         let column = column.rem_euclid(width);
         let cells = width / spacing;
@@ -290,7 +306,8 @@ impl PlanetGround {
 
     /// Hill height (rows above the datum) at strip column `column`: the theme's surface
     /// shaper ([`hooks::PlanetThemeHooks::surface_rows`]), kept within the hill limit.
-    fn hill(&self, column: i64) -> i32 {
+    #[must_use]
+    pub fn hill(&self, column: i64) -> i32 {
         self.hooks()
             .surface_rows(self, column)
             .clamp(-MAX_HILL_ROWS, self.max_hill_rows())
@@ -345,11 +362,14 @@ impl PlanetGround {
     }
 
     fn surface_row_of(&self, column: i64) -> i32 {
+        if let Some(world) = world_of(self.params.theme) {
+            return world.surface_row(self, column);
+        }
         -self.hill(column)
     }
 
     /// The caves: `(centre column, centre row, half width, half height)` in strip tiles.
-    fn caves(&self) -> Vec<(i64, i32, i64, i32)> {
+    pub(crate) fn caves(&self) -> Vec<(i64, i32, i64, i32)> {
         let width = i64::from(self.grid.surface_columns());
         let count = width * i64::from(self.theme().caves_per_256_columns) / 256;
         let depth = i64::from(self.core_chamber_top());
@@ -375,7 +395,7 @@ impl PlanetGround {
 
     /// Whether strip tile `(column, row)` lies in a cave (its physical shape: an inner ring's
     /// strip columns are narrower, so the cave keeps its shape in ring tiles).
-    fn in_cave(&self, caves: &[(i64, i32, i64, i32)], column: i64, row: i32) -> bool {
+    pub(crate) fn in_cave(&self, caves: &[(i64, i32, i64, i32)], column: i64, row: i32) -> bool {
         let width = i64::from(self.grid.surface_columns());
         let span = i64::from(self.grid.span_at(row));
         caves.iter().any(|&(cx, cy, hw, hh)| {
@@ -391,7 +411,7 @@ impl PlanetGround {
         })
     }
 
-    const fn tile_of_kind(kind: TileKind) -> Tile {
+    pub(crate) const fn tile_of_kind(kind: TileKind) -> Tile {
         Tile {
             kind,
             durability: tile_durability(kind),
@@ -399,7 +419,12 @@ impl PlanetGround {
     }
 
     /// The generated tile at strip tile `(column, row)` with the cave list precomputed.
-    fn generated_with(&self, caves: &[(i64, i32, i64, i32)], column: i32, row: i32) -> Tile {
+    pub(crate) fn generated_with(
+        &self,
+        caves: &[(i64, i32, i64, i32)],
+        column: i32,
+        row: i32,
+    ) -> Tile {
         let air = Self::tile_of_kind(TileKind::Air);
         if row > self.bottom_row() {
             return Self::tile_of_kind(TileKind::Bedrock);
@@ -459,6 +484,9 @@ impl PlanetGround {
     /// columns wrap, rows past the strip read as bedrock).
     #[must_use]
     pub fn chunk_tiles(&self, chunk: ChunkPosition) -> Vec<Tile> {
+        if let Some(world) = world_of(self.params.theme) {
+            return world.chunk_tiles(self, chunk);
+        }
         let caves = self.caves();
         let origin = chunk.origin();
         let mut tiles = Vec::with_capacity((CHUNK_SIZE_TILES * CHUNK_SIZE_TILES) as usize);

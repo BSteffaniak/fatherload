@@ -77,6 +77,7 @@ pub(super) mod hollow;
 mod living;
 mod sky;
 mod tomb;
+mod wilds;
 
 pub use crypt::SLAM_REACH;
 pub(super) use distortion::distortion_event;
@@ -268,6 +269,17 @@ const fn diggable_by(enemy: EnemyKind, kind: TileKind) -> bool {
         EnemyKind::MawWorm => {
             diggable(kind) || matches!(kind, TileKind::Cave(crate::cave::CaveTile::Flesh))
         }
+        // Wave 12 planets-a: a crevassewyrm tunnels through ice and permafrost, nothing else.
+        EnemyKind::Crevassewyrm => matches!(
+            kind,
+            TileKind::Wild(
+                crate::planet::wilds::WildTile::GlacierIce
+                    | crate::planet::wilds::WildTile::BlueIce
+                    | crate::planet::wilds::WildTile::SeaIce
+                    | crate::planet::wilds::WildTile::Rime
+                    | crate::planet::wilds::WildTile::Permafrost
+            )
+        ),
         _ => diggable(kind),
     }
 }
@@ -693,6 +705,9 @@ impl WorldState {
             || !Self::heart_spawn_allowed(kind)
         {
             return false;
+        }
+        if let Some(fits) = self.wilds_habitat(kind, tile) {
+            return fits;
         }
         if let Some(fits) = self.hollow_habitat(kind, tile) {
             return fits;
@@ -1246,6 +1261,10 @@ impl WorldState {
             // Seals slide, beetles ride geysers, snails seal tunnels (Wave 9).
             self.drowned_after_move(id, &mut body, &mut state, now);
         }
+        if state.kind.is_wilds() {
+            // The wild worlds' swimmers stay in the sea (Wave 12 planets-a).
+            self.wilds_after_move(&mut body, &state);
+        }
         self.keep_off_bodies(id, &mut body, &state);
         self.contact_attack(&mut body, &mut state, now, output);
         if body != start_body || state != start_state {
@@ -1316,6 +1335,9 @@ impl WorldState {
             // Descent VII part B (Wave 10): a fort's machines know its holders, the Colossus
             // its hall.
             .or_else(|| self.garrison_notice(body, state))
+            // The wild worlds (Wave 12 planets-a): the peaceful fight back, ambushers look
+            // below, packs see farther in a blizzard.
+            .or_else(|| self.wilds_notice(body, state, || self.perceive(body, state)))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1378,6 +1400,13 @@ impl WorldState {
         // The Hollow World's creatures have ways of their own (Wave 9).
         if state.kind.is_hollow()
             && let Some(intent) = self.hollow_behave(body, state, now)
+        {
+            return intent;
+        }
+        // The wild worlds' (Wave 12 planets-a): herds graze, ambushers wait, packs circle,
+        // schools scatter.
+        if state.kind.is_wilds()
+            && let Some(intent) = self.wilds_behave(body, state, now)
         {
             return intent;
         }
@@ -3029,5 +3058,19 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::StarHeart
         | EnemyKind::DriveCoil
         | EnemyKind::HeartSpark => false,
+        // The wild worlds (Wave 12 planets-a): placed by their planet's own roster
+        // (`world/enemies/wilds.rs`), never in the home world's cave lairs.
+        EnemyKind::Trundlehorn
+        | EnemyKind::Vinestalker
+        | EnemyKind::Mossprowler
+        | EnemyKind::Sporewing
+        | EnemyKind::Shellstrider
+        | EnemyKind::Glimmerfin
+        | EnemyKind::Sawjaw
+        | EnemyKind::Tidesnapper
+        | EnemyKind::Woolhorn
+        | EnemyKind::Rimeskipper
+        | EnemyKind::Rimewolf
+        | EnemyKind::Crevassewyrm => false,
     }
 }

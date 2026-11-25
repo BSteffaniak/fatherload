@@ -1148,6 +1148,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Warped(tile) => super::terrain::tile_art::warped_color(tile),
         TileKind::City(tile) => super::terrain::tile_art::city_color(tile),
         TileKind::Core(tile) => super::terrain::tile_art::core_color(tile),
+        TileKind::Wild(tile) => super::terrain::tile_art::wild_color(tile),
     }
 }
 

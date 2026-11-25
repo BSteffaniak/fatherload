@@ -968,6 +968,10 @@ impl Tile {
                 Some(tile) => TileKind::Core(tile),
                 None => return None,
             },
+            0x2000..=0x20FF => match crate::planet::wilds::WildTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Wild(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

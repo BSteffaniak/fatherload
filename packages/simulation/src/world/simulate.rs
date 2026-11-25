@@ -621,6 +621,10 @@ impl WorldState {
                 MineResult::Mined(TileKind::Crust(crate::crust::CrustTile::SinkholeCore)) => {
                     self.start_sinkhole(player_id, &mut output);
                 }
+                // The wild worlds (Wave 12 planets-a): puffcaps, lifesap, relics, caches.
+                MineResult::Mined(TileKind::Wild(tile)) => {
+                    self.wild_tile_mined(player_id, target, tile, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -643,6 +647,8 @@ impl WorldState {
             output.discoveries = self.take_discoveries();
             // Its weather and its day (Wave 12 bodylife).
             self.advance_body_life(&mut output);
+            // A wild world's hazards, rules, weather and creatures (Wave 12 planets-a).
+            self.advance_wilds(next_tick, &mut output);
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();
@@ -674,6 +680,9 @@ impl WorldState {
         // The Drowned and Frozen (Wave 9): refreezing ice, clams, frost, pressure, geysers,
         // sonar, lore, the eel-dragon and the Leviathan.
         self.advance_drowned(next_tick, &mut output);
+        // A world that is one wild planet (Wave 12 planets-a; bodies' ground passes run it
+        // above).
+        self.advance_wilds(next_tick, &mut output);
         // The distortion strata (Wave 9): mirror halls and their twins, gazes, rot, landmarks.
         self.advance_distortion(next_tick, &mut output);
         // The far Strange Layers (Wave 9): amber, pings, keyed walls, landmarks, The Glitch.

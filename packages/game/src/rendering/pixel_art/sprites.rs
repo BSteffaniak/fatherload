@@ -27,6 +27,7 @@ pub mod terrain;
 pub mod tomb;
 pub mod ui;
 pub mod weapons;
+pub mod wilds;
 pub mod world;
 
 use super::sprite::SpriteDef;
@@ -610,6 +611,19 @@ pub const ALL: &[&SpriteDef] = &[
     &heart::DRIVE_COIL,
     &heart::HEART_SPARK,
     &heart::STAR_HEART,
+    // The wild worlds (Wave 12 planets-a).
+    &wilds::TRUNDLEHORN,
+    &wilds::VINESTALKER,
+    &wilds::MOSSPROWLER,
+    &wilds::SPOREWING,
+    &wilds::SHELLSTRIDER,
+    &wilds::GLIMMERFIN,
+    &wilds::SAWJAW,
+    &wilds::TIDESNAPPER,
+    &wilds::WOOLHORN,
+    &wilds::RIMESKIPPER,
+    &wilds::RIMEWOLF,
+    &wilds::CREVASSEWYRM,
 ];
 
 #[cfg(test)]

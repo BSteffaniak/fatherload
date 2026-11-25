@@ -392,7 +392,8 @@ impl WorldState {
         horizontal: f32,
         thrust: bool,
     ) {
-        if !self.drowned_world() {
+        // A wild world's glacier is slick too (Wave 12 planets-a).
+        if !self.drowned_world() && !self.wild_water_rules() {
             return;
         }
         let ice = self
@@ -478,7 +479,8 @@ impl WorldState {
 
     /// Ballast and currents (after the fluid step; see the module docs).
     pub(super) fn apply_submarine(&mut self, player_id: PlayerId, thrust: bool, dive: bool) {
-        if !self.drowned_world() {
+        // A wild world's sea is the submarine's too (Wave 12 planets-a).
+        if !self.drowned_world() && !self.wild_water_rules() {
             return;
         }
         let Some((x, y)) = self.players.get(&player_id).map(|p| (p.x, p.y)) else {

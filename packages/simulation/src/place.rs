@@ -504,17 +504,22 @@ pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::
     })
 }
 
-/// The polar track's ground theme for a space theme (the planet theme registry has the
-/// barren, rocky and icy grounds so far; Waves 12-13 append the rest and refine this map).
+/// The polar track's ground theme for a space theme.
+///
+/// The planet theme registry has the barren, rocky and icy grounds of Wave 11 and the wild
+/// worlds of Wave 12 planets-a (jungle, ocean archipelago and glacier); Waves 12-13 append the
+/// rest and refine this map.
 #[must_use]
 pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme::PlanetThemeId {
     use crate::{planet::theme::PlanetThemeId, space::Theme};
     match theme {
         Theme::Barren | Theme::DeadWorld | Theme::Moon | Theme::Home => PlanetThemeId::BARREN,
-        Theme::Ice => PlanetThemeId::ICE,
-        Theme::Jungle
-        | Theme::OceanArchipelago
-        | Theme::DesertDunes
+        // Wave 12 planets-a: the wild worlds (the Wave 11 ice placeholder stays registered
+        // for bodies saved with it).
+        Theme::Ice => PlanetThemeId::GLACIER,
+        Theme::Jungle => PlanetThemeId::JUNGLE,
+        Theme::OceanArchipelago => PlanetThemeId::OCEAN,
+        Theme::DesertDunes
         | Theme::Volcanic
         | Theme::Crystal
         | Theme::Fungal
