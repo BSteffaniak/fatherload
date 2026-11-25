@@ -7886,9 +7886,11 @@ On a round body nothing turns the craft but the player (gravity never rotates it
 - netcode `tests::world_planet`: three clients over 120 ms / 2 % loss with duplication and
   reordering play a radius-400 moon from just short of its seam; every client matches the host.
 - Game review scenes (drawn flat by the ordinary renderer until the polar renderer lands):
-  `planet_moon_surface`, `planet_moon_halving_ring`, `planet_moon_core_chamber`,
-  `planet_rocky_surface`, `planet_ice_surface`, `planet_tipped_over`. The game shows the home
-  sky, sun and town pointer over a planet for now (the space-render / regions seam).
+  `planet_moon_surface`, `planet_moon_spawn`, `planet_moon_halving_ring`,
+  `planet_moon_core_chamber`, `planet_rocky_surface`, `planet_ice_surface`,
+  `planet_tipped_over`. The game shows the home sky and sun over a planet for now (the
+  space-render / regions seam); the home town's pointer and ambience are off on a planet, and
+  the status line says how far round the body the rig is.
 
 ### Seams for the integrator and the other Wave 11 tracks
 
