@@ -665,3 +665,56 @@ fn a_rig_parked_on_a_body_stays_put_through_frame_moves() {
         "parked at {parked_at:?}, back at {back_at:?}"
     );
 }
+
+/// A real landable planet of `seed`'s space near home.
+fn a_planet_near_home(seed: u64) -> SpaceBodyKey {
+    let space = crate::space::Space::shared(seed);
+    crate::space::report::sectors_around_home(3)
+        .into_iter()
+        .find_map(|coords| {
+            let sector = space.sector(coords);
+            sector.systems.iter().find_map(|system| {
+                system.bodies.iter().find_map(|body| {
+                    let id = crate::space::SpaceBodyId {
+                        sector: coords,
+                        system: system.index,
+                        body: body.index,
+                    };
+                    crate::place::planet_params_for(seed, id).map(|_| id)
+                })
+            })
+        })
+        .expect("a landable planet near home")
+}
+
+#[test]
+fn a_body_whose_ground_a_newer_build_regenerated_loads_fresh() {
+    let mut world = deep_world(2);
+    world.enable_test_mode();
+    let planet = a_planet_near_home(SEED);
+    world
+        .move_to_place(TWO, place_of(planet), WorldPos::tile_center(0, -40))
+        .expect("arrives");
+    run(&mut world, 60, |_| ControlState::new(0.0, false, false));
+    let store = world
+        .places()
+        .store(StoreKey::Body(planet))
+        .expect("the planet's store");
+    assert!(store.planet().is_some(), "a round body");
+    let fingerprint = store.fingerprint();
+    let json = serde_json::to_string(&world).expect("saves");
+    // As if an older build had generated other ground there (Wave 11's barren ground on a
+    // body Wave 12 re-themes): the save still loads, that body afresh.
+    let older = json.replace(
+        &format!("\"fingerprint\":{fingerprint}"),
+        "\"fingerprint\":1",
+    );
+    assert_ne!(older, json);
+    let loaded: WorldState = serde_json::from_str(&older).expect("loads");
+    let body = loaded
+        .places()
+        .store(StoreKey::Body(planet))
+        .expect("the body is still there");
+    assert!(body.is_pristine());
+    assert_eq!(body.fingerprint(), fingerprint);
+}
