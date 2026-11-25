@@ -57,6 +57,11 @@ impl WorldState {
         &self.flight
     }
 
+    /// Replaces space flight's shared state (scenes, tests, tools).
+    pub fn set_flight_shared(&mut self, shared: FlightShared) {
+        self.flight = shared;
+    }
+
     /// `player_id`'s rig's flight state.
     #[must_use]
     pub fn rig_flight(&self, player_id: PlayerId) -> Option<&RigFlight> {

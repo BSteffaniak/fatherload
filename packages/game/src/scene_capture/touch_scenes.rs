@@ -11,6 +11,11 @@ use crate::input::{
 /// The scenes, chained after the main list.
 pub const TOUCH_SCENES: &[Scene] = &[
     Scene {
+        name: "touch_space",
+        summary: "Touch controls in space (Wave 11): CRUISE, PING, WARP and the rotation pair; the stick thrusts",
+        setup: |stage| restage(stage, "space_nav_hud", TouchView::default()),
+    },
+    Scene {
         name: "touch_hud",
         summary: "Touch controls while digging: the resting stick, bomb, scan and tools buttons, the top row",
         setup: |stage| restage(stage, "shallow_dig", TouchView::default()),

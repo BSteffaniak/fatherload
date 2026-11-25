@@ -122,6 +122,7 @@ mod heart_tests;
 #[cfg(test)]
 mod star_flight_tests;
 pub use heart::CablePath;
+pub use flight::warp_arrival as flight_warp_arrival;
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;
