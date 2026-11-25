@@ -7192,6 +7192,8 @@ offered only by their settlement; no other arc carries a settlement trigger.
   page, a soft glint climbing it (no flashing), the beat's place and words beside it. Confirm or
   a tap anywhere turns the page (the whole screen is one pointer row, and `pick_row` keeps the
   page); back closes it; the last page closes it and play goes on.
+  Once the cable is lit, choosing the Heart's row on the progress page reads the ending again
+  (review fix: it otherwise played once and no page kept it).
 - Camps dressed for Descent VII (a builder street: tram rails, a street lamp that came on for
   them with its cold blue light, Amos's rail crutch from log 64) and VIII (Amos alone: the name
   board leaning on the tent, the sled gone, his crutch, gold motes rising), and Amos's chair at
