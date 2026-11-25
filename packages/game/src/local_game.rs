@@ -175,6 +175,9 @@ pub struct LocalGame {
     resumed_play_seconds: Option<f32>,
     /// Who lay in bed through tonight (no dawn banner for them).
     dawn_witnesses: crate::night_text::DawnWitnesses,
+    /// The wild strata each seat has had explained (body seed, stratum), so each stratum's
+    /// rule is told once, not every time a ragged boundary is crossed (Wave 12 planets-a).
+    wild_strata_told: Vec<std::collections::BTreeSet<(u64, &'static str)>>,
 }
 
 impl LocalGame {
@@ -201,6 +204,7 @@ impl LocalGame {
             pending_welcome: None,
             resumed_play_seconds: None,
             dawn_witnesses: crate::night_text::DawnWitnesses::default(),
+            wild_strata_told: Vec::new(),
         }
     }
 
@@ -579,6 +583,7 @@ impl LocalGame {
         self.announce_ancient_city(&players);
         self.announce_garrison(&players);
         self.announce_heart(&players);
+        self.announce_wild_strata(&players);
         self.announce_flight(&players);
         self.announce_systems(&players);
         self.announce_settlement_memories(&players);
@@ -1804,6 +1809,46 @@ impl LocalGame {
                 ui.modal = Some(crate::shell::ModalScreen::Station);
                 ui.selected_menu_item = 0;
             }
+        }
+    }
+
+    /// A wild world's stratum rule, told to a seat the first time its rig enters that stratum
+    /// (Wave 12 planets-a: each stratum has one rule that changes how it is played).
+    fn announce_wild_strata(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::planet::wilds::life;
+        let world = self.runtime.world();
+        self.wild_strata_told
+            .resize_with(players.len(), Default::default);
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for (seat, player) in players.iter().enumerate() {
+            let Some(rig) = world.player(*player) else {
+                continue;
+            };
+            let Some(planet) = world
+                .store_terrain(world.store_of(*player))
+                .and_then(|terrain| terrain.planet_ground())
+            else {
+                continue;
+            };
+            if life::wild_theme(planet.params().theme).is_none() {
+                continue;
+            }
+            let tile = world
+                .store_frame(world.store_of(*player))
+                .map(|frame| frame.tile_at(rig.x, rig.y));
+            let Some(tile) = tile else {
+                continue;
+            };
+            let Some(rule) = life::signature_at(planet, tile.x, tile.y) else {
+                continue;
+            };
+            let name = planet.layer_name(tile.x, tile.y);
+            if self.wild_strata_told[seat].insert((planet.params().seed, name)) {
+                messages.push((seat, format!("{name}: {}.", rule.summary())));
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
         }
     }
 
