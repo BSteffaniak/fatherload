@@ -8448,6 +8448,14 @@ deep: no strain in the Heart's chamber, the Gatekeeper's hall or the Glitch's an
 Leviathan's arenas. The HUD shows **FAR FROM SUPPLY** (`ViewSnapshot::supply_strain`). Classic worlds and the
 Crust never feel it. Test: `far_below_every_supply_stop_thrust_strains_the_tank_and_a_beacon_eases_it`.
 
+Review fixes: a rig standing in an outpost's hall is above the hall's floor row, so the first
+cut skipped that outpost and measured from the stop before it (Cathedral Station and Heart's
+Edge showed FAR FROM SUPPLY, and charged it, in their own halls). A stop up to
+`logistics::SUPPLY_STOP_SLACK_ROWS` (16) rows below the rig now counts as the rig's own; the
+test checks every outpost's hall. The game's onboarding adds a one-time tip per seat
+(`Hint::SupplyLine`, appended) the first time the strain bites: what it is, and that a depth
+beacon extends the line.
+
 The descent probe models it on every trip (`supply_strain_share` over the climb back to the
 trip's stop) and on every expedition (the Descent's span, plus two minutes at the bottom), and
 now **fights the Heart** at the end of Descent VIII from its bot fight (the gate loop never did:
