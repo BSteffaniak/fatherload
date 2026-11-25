@@ -7928,6 +7928,265 @@ On a round body nothing turns the craft but the player (gravity never rotates it
   way round. The terrain itself is unaffected (`slot()` wraps). The fix belongs with F11's
   per-body regions: wrap tile keys into `0..W0` where they are stored and compare tiles
   modulo the lap. Parked crew rigs are not lap-wrapped either.
+## Wave 11 flight: the Star Drive, rotation in space, docking, life support and the nav HUD (`src/flight.rs`, `src/flight/{space,physics,nav}.rs`, `src/world/flight.rs`)
+
+The flight track of Wave 11 (expansion plan F12 "Flight in space", §18 decision 1 and 4). A
+rig with the Star Drive flies up past the Moon into space with no loading screen, turns all
+the way round on its own thrusters, cruises across star systems, warps between stars, docks
+at stations and lands on worlds. Life support and the nav HUD come with it.
+
+### Leaving home and coming back
+
+- **The space line** (`WorldState::space_line_row`) is `SPACE_ENTRY_ROWS` (400) rows above the
+  Moon's top. Only Deep Descent worlds (V11+, `space_enabled`) have one.
+- A rig crosses it into space when `space_access(player).may_leave()` holds (the Heart
+  ending gives every rig the Star Drive). It must also be in the rig and not wrecked.
+  Crossing raises `FlightEvent::EnteredSpace`.
+- On crossing, the rig appears at `space::home_launch()`, just outside the home world's
+  approach sphere. It keeps the climb's velocity and turn. Home's up is space's up there.
+- **The Moon stays as it is**: it is part of the home world's sky. In space the home world
+  is a round body (`BodyKind::Home`), drawn with its Moon. The home world gets no Moon
+  pointer.
+- **The parked rig**: while away, the rig's home-world position is parked at
+  `WorldState::space_park()`, `PARK_ABOVE_ROWS` over the space line above the Moon's column.
+  - Every away rig parks at the same spot, so netcode relevance keeps flyers in reach of
+    each other.
+  - The classic movement and the home world's hazard pass (vacuum, cold, heat) skip away
+    rigs.
+  - Commands that need the home world are refused in space. The scanner pings instead, and
+    the rescue call is the beacon.
+- **Coming home**: flying into the home world's approach sphere hands the rig back to the
+  home sky, over the column it left from (`RigFlight::exit_column`), `RETURN_BELOW_ROWS`
+  under the line.
+  - Its velocity and orientation are turned from space's frame into the sky's: home's up
+    where it came in becomes up, so a rig coming in belly first is level.
+  - The home world's lean limit then eases it back inside ±35° as before.
+
+### State and the step
+
+- **`Player::flight: RigFlight`** is per tick, predicted and reconciled like the pose (it
+  is in `PlayerRig` and `PlayerTickState`). It holds:
+  - `place: FlightPlace` (Home, Space, Approach, Landed, Docked);
+  - the exact space position `pos: WorldPos` (space pixels, 32 to a tile; never `f32`
+    absolutes);
+  - the velocity, the `StarDrive` mode (Off, Cruise, Spool, Warp with its `WarpRun`), hull
+    heat, seconds of air, the exit column and the warnings already raised.
+- **`WorldState::step_star_flight`** replaces the classic movement for an away rig, in the
+  per-player input loop of `simulate_tick`. It handles:
+  - the warp's spool and jump, then `physics::step_flight` (rotation, thrust, cruise,
+    gravity, contact, heat), then fuel, hull damage, edge events and the handover home.
+- **`WorldState::advance_star_flight`** runs after the per-player loop. It moves rigs that
+  crossed the line into space, then runs life support and the beacon.
+- Integration runs in fixed internal steps of at most 1/240 s
+  (`physics::FLIGHT_STEP_SECONDS`), with deterministic trig. A warp's position is a closed
+  form of world time (`physics::warp_position`). The result is deterministic and tick-rate
+  safe; the tests compare 30, 60 and 120 Hz.
+
+### Rotation in space (the player's, always)
+
+- `attitude::AttitudeContext` gained `drag_scale`, `inertia` and `max_spin`. The home world
+  passes 1, 1 and infinity, so its step is unchanged bit for bit.
+- In space there is no lean limit and no angular drag. A spin keeps going until the player
+  counter-thrusts (angular momentum is conserved), and the thrusters top out at
+  `MAX_SPACE_SPIN` (3.5 rad/s).
+- A laden bay spins up slower (`flight::rotation_inertia`: a full bay doubles the inertia).
+  The rotation thrusters burn `ROTATION_FUEL_SHARE` of the main thruster's fuel.
+- **Gravity never turns the rig.** `space::gravity_at` sums every nearby body's pull
+  (`g = g_surface (R / r)^2`, blending between bodies). It only accelerates, and the tests
+  check an idle tilted rig keeps its exact angle while it falls.
+- **Thrust is craft-relative**: the main and retro thrusters push along the rig's up axis
+  and the side thrusters along its right axis. `FlightControls::screen_relative` (an
+  accessibility option) pushes along the chart's axes instead, and the game keeps that
+  seat's camera chart-up.
+- The camera is locked to the craft (game side), and the HUD stays upright.
+
+### The Star Drive
+
+- **Cruise** (`FlightCommand::ToggleCruise`, only in open space) follows the heading.
+  - Its speed limit is the distance to the nearest surface over `CRUISE_TAU_SECONDS` (10 s),
+    clamped to 600 px/s .. 20,000 tiles/s (`physics::cruise_limit`). Leaving a body it ramps
+    up; nearing one it slows by itself.
+  - Entering any approach sphere drops it out, capped to the impulse top speed.
+  - Crossing a star system (120,000-250,000 tiles) takes 60-120 s, at 30, 60 and 120 Hz
+    alike (`crossing_a_star_system_on_cruise_takes_a_minute_or_two`).
+  - Forward throttles up, back brakes, rotation steers. Cruise burns 2 fuel a second.
+- **Warp** (`FlightCommand::Warp`) goes to the waypoint's star system. It needs:
+  - open space, and a heading within `WARP_ALIGN` (6°) of the bearing;
+  - no surface within `WARP_CLEARANCE` (5,000 tiles);
+  - `warp_fuel` aboard: 60 plus 8 a galactic sector.
+- A warp then runs in three steps:
+  - It spools for `WARP_SPOOL_MILLIS` (2 s), coasting; turning past 25° breaks it.
+  - It crosses the real straight line to `WARP_ARRIVAL` (200,000 tiles) short of the star,
+    eased (slow out, fast across, slow in), in 6 s plus 0.4 s a sector (30 s at most).
+  - It drops into cruise at the system's edge.
+- Passing within half the clearance of a body outside the target system pulls it out
+  (`WarpInterrupted`, detail 1), and so does turning off the line.
+- Refusals raise `WarpRefused` with a `WarpRefusal` code: no target, not aligned, gravity
+  well, fuel, or not in free flight.
+- **Online**, the flight state is per tick, so other players see a rig streak. A warping
+  rig's velocity is the warp's real speed (the game draws the streak from it).
+
+### Approach, re-entry heat and landing
+
+- Inside a body's approach sphere, the place is `Approach(body)` and the view zooms in. The
+  smallest sphere wins, so a station near a world takes over.
+- **Re-entry heat** builds in a body's air:
+  - It counts the speed into the ground plus 0.3 of the tangential speed, over
+    `REENTRY_SAFE_SPEED` (450 px/s), times the air's density. A steep fast dive heats; a
+    shallow glide does not.
+  - Stars' coronas heat regardless of speed. Heat cools by 0.3 a second.
+  - Over 1 the hull burns (30 hull a second for each unit over). `HeatWarning` fires on the
+    edge past 0.6.
+  - The **Re-entry Shield** upgrade (3 tiers) raises the safe speed and divides the heating.
+- **Landing is a skill** (on `BodyKind::Planet`):
+  - Touching down slower than 330 px/s into the ground and within `LANDING_TILT` (29°) of the
+    local up lands (`Landed`). The rig then rests and settles level by contact, never by a
+    camera snap.
+  - A tilted touchdown scrapes the hull, bounces and tips the rig over (spin toward its
+    lean). A fast one crashes (`HullScraped` with the damage).
+  - Thrust that beats gravity along the local up takes off (`TookOff`).
+  - A star's surface burns and pushes the rig back out. A station's hull stops it.
+- **Auto-land** (`FlightGear::auto_land`, plus the seat's switch) acts only while both are
+  on, within 10 tiles of a landable surface and descending. It holds the descent to
+  150 px/s and levels to the local down. Without it the same drop lands hard.
+
+### Life support and the emergency beacon
+
+- `RigFlight::air` is seconds of air: `air_capacity(life_support tier)`, 360 s plus 360 a
+  tier (the Moon's `LifeSupport` upgrade).
+  - It drains in space, on approach and landed on airless worlds.
+  - It refills at 30 a second landed on a breathable world, fully when docked, and on leaving
+    home.
+- `AirLow` warns at 50 %, 25 % and 10 %. The warnings re-arm over 60 %.
+- At zero air, or with a wrecked hull, the **emergency beacon** tows the rig home: to the
+  rescue crew's drop point, with at least half a hull and half a tank, for `beacon_fee` (120
+  plus 5 % of the credits, never more than held). The beacon is also a command (the nav
+  chart), so a stranded rig with no fuel or credits always gets home. It is never an
+  unwinnable countdown.
+
+### Stations (the stub Wave 12 fills)
+
+- To dock (`FlightCommand::Use`), the rig must be within `DOCK_RANGE` (3 tiles) of the port,
+  slower than `DOCK_SPEED` (70 px/s), within `DOCK_ALIGN` (15°) of the port's axis (its up
+  axis pointing into the port), and off the drive.
+- Docked, it is clamped (it holds still whatever the sticks do) and its air is full. Use
+  again undocks it, backing off at 60 px/s.
+- `FlightCommand::Station(StationService)` sells fuel (2 credits a unit), repairs (4 a hull
+  point) and flight gear: the Nav Suite (3 tiers), the Re-entry Shield (3), the Gyro
+  Stabiliser, Horizon Hold and Auto-Land.
+
+### Assists (all off by default)
+
+- The gyro stabiliser and horizon hold are the Wave 7 attitude gear and switches. In space,
+  horizon hold levels to the strongest body's local down, and does nothing where gravity is
+  under 2 px/s².
+- Auto-land is described above.
+- Each works only when fitted **and** switched on (`ControlState::assists`, and the new
+  `ControlState::flight` bits). Test: `assists_and_flight_switches_are_off_by_default`.
+
+### Navigation (`flight::nav`, a ship upgrade)
+
+- `FlightShared` is a world field in the appended shared `SectionKey::Flight` section. It is
+  saved with serde defaults and hashed only once non-empty. It holds:
+  - each player's waypoint (`NavTarget::System` or `Body`) and the crew's shared waypoint
+    (`ShareWaypoint`);
+  - systems found by flying (a warp's arrival) or scanning;
+  - each player's last `ScanPing`.
+- `WorldState::known_systems()` is home, then the Archive's charts, then the finds.
+- **The scanner pings in space** (`PlayerCommand::UseScanner`, 2 s apart). It finds every
+  system whose star is within `ping_range(nav tier)`: 40,000 tiles with no suite, up to
+  1.2 million with the top one. A nebula star's fog (within 220,000 tiles of it) halves the
+  range.
+- The nav HUD's readouts (distance, `eta_seconds`, alignment) are presentation helpers here.
+
+### Placeholders and seams (for the integrator)
+
+- **TODO-SEAM(w11-regions)**: `FlightPlace` / `BodyRef` stand in for `place::Place` /
+  `BodyId`, and the home world is `space::HOME_BODY`.
+  - `FlightPlace::Landed` on a generated body should call `move_to_place(OnBody(..))` to hand
+    over to the polar ground.
+  - The parked home position stands in for per-region frames (F11).
+- **TODO-SEAM(w11-space-gen)**: `space::PlaceholderSpace` is the galaxy:
+  - home in galactic sector (0, 0), each Archive chart's system in its sector (y up the
+    plane), and procedural systems in two sectors of three;
+  - a star, 1-6 worlds of 400-3,000 tiles on static orbits, and one station per system.
+  - `space::SpaceQuery` (`system_at`, `bodies_of`, `systems_near`, `bodies_near`, `system`,
+    `body`) is all flight reads. The generator implements it and `WorldState::space()`
+    returns the generator.
+- **TODO-SEAM(w11-polar)**: a landed rig rests on the body's surface circle; the polar ground
+  replaces it.
+- **TODO-SEAM(w11-space-render)**: the game's `rendering/space_view.rs` draws placeholder
+  space art (discs, glows, a starfield) and keeps the HUD and flight cues.
+
+### Formats and codes
+
+- **`PROTOCOL_VERSION` 19** (this track's one bump):
+  - the `ControlState::flight` byte, `Player::flight` / `PlayerTickState::flight` and
+    `HazardGear::flight`;
+  - `PlayerCommand::Flight`, `TestModeAction::GrantStarDrive`, and the `Flight` world field
+    and section.
+  - An away rig poses at the shared park spot with netcode's `SPACE_POSE_MODE`.
+- **Save format**: no bump. Every new field has a serde default.
+- **Events 800-819**: `GameplayEventKind::Flight { what: FlightEvent, player_id, detail }`.
+- No V1-V11 golden digest changed: generation is untouched.
+
+### Tests
+
+- `flight/tests.rs` covers:
+  - conserved spin and counter-thrust, the top spin, a laden bay, rotation fuel;
+  - gravity that pulls but never turns, blending between two bodies;
+  - craft- and screen-relative thrust;
+  - the cruise crossing in 60-120 s at three tick rates;
+  - the warp's closed form, re-entry heat (steep, shallow, shielded);
+  - landing, scraping, tipping and crashing, resting and take-off, auto-land only when
+    fitted and on;
+  - assists off by default, and the placeholder galaxy (deterministic, charts honoured,
+    landable bodies 400+ tiles).
+- `world/star_flight_tests.rs` covers:
+  - leaving home with the Star Drive and not without it, the test-mode grant on V11 only;
+  - the lean limit at home and its lifting in space, coming home belly-first;
+  - the warp's spool, time and fuel at 30 and 60 Hz, refusal off the bearing, and a gravity
+    well breaking it;
+  - docking (misaligned refused) and the station's fuel and repairs;
+  - air warnings and the beacon (also with no fuel or credits), the ping;
+  - determinism and agreement at 30, 60 and 120 Hz;
+  - saves and replication (keyframe, per-tick state, the `Flight` section).
+- Netcode `world_rigs_fly_in_space_predict_and_converge`: two clients over 60 ms / 2 % loss
+  fly in space and watch one rig warp. Every client converges with no hash mismatch.
+
+### Game side
+
+- **Controls in space** (`input_mapping::space_actions`, exhaustive touch answers):
+  - the stick thrusts (up forward, down back, sideways strafe), and the rotation keys, d-pad
+    or touch pair turn the rig;
+  - the anchor button (`/`, Num9, LB held, touch CRUISE) toggles cruise;
+  - the bomb button (touch WARP) warps to the waypoint, and use (touch DOCK) docks or
+    undocks;
+  - the scanner pings, and the map button opens the **nav chart**.
+- Options gained **Auto-land** and **Space thrust: craft / screen** (saved; off and craft by
+  default). The pause menu's test-mode entries gained **Grant Star Drive**.
+- **The nav chart** (`ModalScreen::NavChart`) lists, with a nav suite, the known systems and
+  the bodies of the current system to set a waypoint on. It also offers the warp, sharing or
+  clearing the waypoint, the station's counter when docked, and the emergency beacon (with
+  its fee). Without a nav suite it charts only the way home.
+- **The station's counter** (`ModalScreen::Station`) opens on docking.
+- **The space view** (`rendering/space_view.rs`, placeholder art):
+  - the camera is locked to the craft, and the zoom follows the nearest surface;
+  - a three-layer parallax starfield that streaks with speed;
+  - lit discs for the bodies: star coronas, atmosphere glow, the home world with its Moon;
+  - stations with solar wings, a pulsing port light and a dashed approach guide;
+  - crewmates (streaks in warp), the warp's tunnel tinted by the target star, re-entry
+    plasma and the ping's ring.
+  - The warp tunnel and streaks scale with the screen effects setting. Nothing flashes.
+- **The HUD**:
+  - where the rig is and the drive (impulse, cruise speed, spool, warp %);
+  - hull, fuel, air and heat bars, and plain early warnings (heat, air, fuel);
+  - the docking guide (range, speed, alignment ticked off), and the prompts;
+  - with a nav suite, the nav panel (systems three sectors around, the waypoint, distance,
+    ETA, warp alignment) and edge arrows to the waypoint and every crewmate.
+- Scenes (`scene_capture/flight_scenes.rs`): `space_leaving_home`, `space_full_turn`,
+  `space_cruise`, `space_warp`, `space_nav_hud`, `space_nav_chart`, `space_docking`,
+  `space_station`, `space_reentry`, `space_landed`, `space_split_screen`, and `touch_space`.
 
 ## Replication
 

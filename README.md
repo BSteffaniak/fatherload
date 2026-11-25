@@ -1185,6 +1185,44 @@ world dug to the floor, the browser memory fixture) show it.
 - Saves pack a streamed world's dug chunks into one compressed stream (save format 13); a V11
   world explored to the bottom holds about 20 MiB of simulation heap.
 
+### Space flight (wave 11)
+
+After the Heart's ending every rig carries the **Star Drive**. Fly up past the Moon and space
+opens with no loading screen. The Moon stays where it is, and the home world hangs below you
+as a round world.
+
+- **You turn the rig, not the camera.** In space the rotation thrusters turn it all the way
+  round, and a spin keeps going until you counter-thrust. A laden bay spins slower, and
+  turning burns a little fuel.
+- The camera stays locked to your craft and the HUD stays upright. Gravity pulls you toward
+  a world but never turns you.
+- Thrust is relative to the craft. **Space thrust: Screen** in Options pushes the way you
+  press instead, and keeps the view chart-up.
+- **Cruise** (`/`) follows your heading. It speeds up far from everything and slows near
+  worlds and stations: crossing a star system takes a minute or two.
+- **Warp** (`B`) goes to a star system set as your waypoint. Face it, keep clear of gravity
+  wells and carry the fuel. The jump is a streak of light lasting 6-30 seconds. It really
+  crosses the distance, and a star in the way pulls you out.
+- **Coming down**: diving too steep or too fast through a world's air heats the hull. A
+  shallow glide does not, and the Re-entry Shield helps. Touch down slow and upright to
+  land; tilted, you scrape and tip over.
+- **Air** runs out in space and on airless worlds. Warnings come at half, a quarter and a
+  tenth. Dock, land somewhere breathable, or call the **emergency beacon** from the nav chart
+  to be towed home for a fee. The beacon comes by itself if the air runs out.
+- **Stations**: line up with the port (the docking guide ticks off range, speed and
+  alignment) and press `E`. The counter sells fuel, repairs and flight gear: the Nav Suite,
+  the Re-entry Shield, the gyro, horizon hold and auto-land. All assists stay off until you
+  switch them on in Options.
+- **Navigation** (with a Nav Suite): `M` opens the nav chart (known star systems including
+  the Archive's charts, nearby worlds, sharing a waypoint with the crew). The HUD shows the
+  waypoint's distance and ETA, the warp's alignment, and arrows to the waypoint and
+  crewmates. The scanner pings for new stars (nebula fog halves its reach).
+- Test mode's pause menu has **Grant Star Drive**.
+- Scenes: `space_leaving_home`, `space_full_turn`, `space_cruise`, `space_warp`,
+  `space_nav_hud`, `space_nav_chart`, `space_docking`, `space_station`, `space_reentry`,
+  `space_landed`, `space_split_screen`, `touch_space`. The space art is a placeholder until
+  the space-render track's.
+
 ### The Fathers' expedition (wave 8 story)
 
 A generation ago six people from the town went down the builders' cable to find out what hums.
@@ -1347,6 +1385,10 @@ world generation changes):
   work only once fitted to the rig.
 - `Space`: on foot, jump (held in the air: the jetpack)
 - `R`: on foot, the rope (grapple / the rig's winch / let go)
+- In space (wave 11, see Space flight): `W` / `S` main and retro thrusters, `A` / `D` side
+  thrusters, `,` / `.` turn the rig (a spin keeps going until you counter it), `/` engages
+  or drops the Star Drive's cruise, `B` warps to the waypoint, `E` docks or undocks, `C`
+  pings, and `M` opens the nav chart
 - `Backspace` / `Esc`: close menus; `P` pauses/resumes
 - `M`: large mine map with ore, hazard, rescue, and lost-cargo markers
 - `H`: help screen
