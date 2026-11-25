@@ -884,6 +884,30 @@ impl Terrain {
         self.planet.as_ref()
     }
 
+    /// `tile` with its column folded into one lap of a round body's strip (`0..` its surface
+    /// columns); any other terrain's tile as it is (Wave 12 systems: tile-keyed state on a
+    /// body is stored and compared by its place on the strip, not by the label its frame gave
+    /// it, so a drill or a pick round the seam is the same work from either side).
+    #[must_use]
+    pub fn lap_tile(&self, tile: TilePosition) -> TilePosition {
+        let Some(planet) = self.planet.as_ref() else {
+            return tile;
+        };
+        let lap = i64::from(planet.grid().surface_columns()).max(1);
+        let column = i64::from(tile.x).rem_euclid(lap);
+        TilePosition {
+            x: i32::try_from(column).unwrap_or(tile.x),
+            y: tile.y,
+        }
+    }
+
+    /// Whether `a` and `b` are the same tile of this ground (a round body's strip compares
+    /// columns round the lap; Wave 12 systems).
+    #[must_use]
+    pub fn same_tile(&self, a: TilePosition, b: TilePosition) -> bool {
+        a == b || (self.planet.is_some() && self.lap_tile(a) == self.lap_tile(b))
+    }
+
     /// How this terrain was generated.
     #[must_use]
     pub const fn settings(&self) -> &WorldSettings {

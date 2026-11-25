@@ -397,3 +397,15 @@ ever. Each seat keeps its own polar ground textures, and the body's tile writes
 `space_landed`, `space_moon_approach`, `space_moon_ground`, `space_moon_far_side`,
 `space_moon_shaft`, `space_split_places`, `space_near_black_hole`. Details in the simulation
 README ("Wave 11 integration").
+
+## Wave 12 systems (space's things on screen)
+
+The flight HUD and world layer read what stars, black holes, wormholes, nebulae, belt rocks and
+comets do (`rendering/space_systems_view.rs`): glare and flare washes (capped, smooth, scaled by
+the screen effects setting), a nebula's tint and faded nav markers, a hole's dashed
+point-of-no-return ring with its warnings and the `TIME x / CLOCK -` dilation readout, the
+wormhole tunnel and edge markers to known routes, drill sparks and the Mining Beam with their
+gauges, comet dust, and the parking hold. Belt boulders are the flight model's real rocks.
+On a round body the map button opens the body's own map (`rendering/body_map.rs`). Five
+`systems_*` sound patches. Scenes `systems_*` (`scene_capture/systems_scenes.rs`). Details in the
+simulation README ("Wave 12 systems").

@@ -429,7 +429,7 @@ impl WorldState {
         let arc = angle * f64::from(crate::flight::space::HOME_RADIUS_TILES);
         #[allow(clippy::cast_possible_truncation, reason = "a column within the world")]
         let column = (f64::from(moon_column) + arc).round() as i64;
-        let limit = i64::from(self.terrain.column_limit()) - 64;
+        let limit = i64::from(settings.generator.column_limit()) - 64;
         i32::try_from(column.clamp(-limit, limit)).ok()
     }
 

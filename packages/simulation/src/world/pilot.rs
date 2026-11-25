@@ -952,7 +952,7 @@ impl WorldState {
         };
         let before = state
             .pick
-            .filter(|pick| pick.target == target)
+            .filter(|pick| self.terrain.same_tile(pick.target, target))
             .map_or(0.0, |pick| pick.seconds);
         let after = before + dt;
         let swing = |seconds: f32| (seconds / PICK_SWING_SECONDS).floor();

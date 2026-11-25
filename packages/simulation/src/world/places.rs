@@ -55,6 +55,9 @@ pub struct BodyWorld {
     /// The store's own field zones (a planet's gravity), swapped in with its ground; rebuilt
     /// from the ground, never saved.
     pub(crate) fields: crate::field::FieldZones,
+    /// Each player's map of this body (Wave 12 systems: a body's map is its own, apart from
+    /// the home world's), swapped in with its ground; tiles keyed round the lap.
+    pub(crate) discovered: BTreeMap<PlayerId, super::DiscoveredTiles>,
 }
 
 impl BodyWorld {
@@ -89,7 +92,14 @@ impl BodyWorld {
             entities: EntityStore::new(),
             fluids: FluidSchedule::default(),
             fields,
+            discovered: BTreeMap::new(),
         })
+    }
+
+    /// `player`'s map of this ground (Wave 12 systems).
+    #[must_use]
+    pub fn discovered(&self, player: PlayerId) -> Option<&super::DiscoveredTiles> {
+        self.discovered.get(&player)
     }
 
     /// The store this is the ground of.
@@ -170,6 +180,9 @@ struct BodyWorldData {
     entities: EntityStore,
     #[serde(default)]
     fluids: FluidSchedule,
+    /// Each player's map of the body (Wave 12 systems).
+    #[serde(default, with = "crate::pair_list")]
+    discovered: BTreeMap<PlayerId, super::DiscoveredTiles>,
 }
 
 impl Serialize for BodyWorld {
@@ -183,6 +196,7 @@ impl Serialize for BodyWorld {
             packed: PackedChunks(self.terrain.edited_chunk_diffs()),
             entities: self.entities.clone(),
             fluids: self.fluids.clone(),
+            discovered: self.discovered.clone(),
         }
         .serialize(serializer)
     }
@@ -211,6 +225,7 @@ impl<'de> Deserialize<'de> for BodyWorld {
         }
         world.entities = data.entities;
         world.fluids = data.fluids;
+        world.discovered = data.discovered;
         Ok(world)
     }
 }
@@ -266,6 +281,9 @@ impl Places {
     /// Drops a removed player's place.
     pub(crate) fn forget(&mut self, player: PlayerId) {
         self.players.remove(&player);
+        for world in self.stores.values_mut() {
+            world.discovered.remove(&player);
+        }
     }
 
     /// Hashes the places of the live players `live` accepts and the stores `sees_store`
@@ -407,6 +425,20 @@ impl WorldState {
     #[must_use]
     pub const fn in_ground_pass(&self) -> bool {
         self.place_pass.ground_only
+    }
+
+    /// `player_id`'s map of `store`'s ground (a body's own map, Wave 12 systems; the home
+    /// world's map is [`Self::discovered_tiles`]).
+    #[must_use]
+    pub fn store_discovered(
+        &self,
+        store: StoreKey,
+        player_id: PlayerId,
+    ) -> Option<&super::DiscoveredTiles> {
+        if store.is_home() {
+            return self.discovered_tiles(player_id);
+        }
+        self.places.stores.get(&store)?.discovered(player_id)
     }
 
     /// The terrain of `store` (outside the tick).
@@ -984,15 +1016,21 @@ impl WorldState {
             next_revision.max(world.entities.next_revision()),
         );
         self.swap_ground(&mut world);
-        // Discovery is the home world's map; a body's own map is Wave 12's (its ground is
-        // drawn round the rig, not from a discovered map).
-        let discovered = std::mem::take(&mut self.discovered_tiles);
+        // Each body keeps its own map (Wave 12 systems): its players' discoveries are swapped
+        // in with its ground and out again; the op log's discovery stays the home world's.
+        let discovered = std::mem::replace(
+            &mut self.discovered_tiles,
+            std::mem::take(&mut world.discovered),
+        );
         self.place_pass.store = store;
         self.place_pass.ground_only = true;
         self.place_pass.awake_cells = self.awake_cells_here();
         let mut output = self.simulate_pass(tick, &store_inputs);
         output.discoveries.clear();
-        self.discovered_tiles = discovered;
+        world.discovered = std::mem::replace(&mut self.discovered_tiles, discovered);
+        for tiles in world.discovered.values_mut() {
+            let _ = tiles.take_revealed();
+        }
         let counters = (self.entities.next_id(), self.entities.next_revision());
         self.swap_ground(&mut world);
         self.entities.set_counters(counters.0, counters.1);

@@ -1283,7 +1283,11 @@ fn map_focus_row(terrain: &Terrain, tile: TilePosition, rows: i32) -> i32 {
 
 /// The map colour of `position`: open sky above the column's ground always shows, the rest
 /// only once explored (`None`: leave the map's background).
-fn map_tile_color(terrain: &Terrain, position: TilePosition, explored: bool) -> Option<Color> {
+pub(super) fn map_tile_color(
+    terrain: &Terrain,
+    position: TilePosition,
+    explored: bool,
+) -> Option<Color> {
     let biomes = terrain.settings().generator.has_biomes();
     let surface = terrain.surface_row(position.x);
     let sky = position.y < surface || (!biomes && position.y <= 4);
@@ -1427,7 +1431,13 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::ExpeditionBoard => counters::draw_expedition_board(draw, ui),
         ModalScreen::ResearchLog => draw_research_log_ui(draw, ui),
         ModalScreen::Inventory => draw_inventory_ui(draw, ui),
-        ModalScreen::Map => draw_map_ui(draw, ui),
+        // On a round body the map is the body's own (Wave 12 systems).
+        ModalScreen::Map => match ui.view.place_scene.as_ref() {
+            Some(scene) if scene.terrain.planet_ground().is_some() => {
+                super::body_map::draw_body_map(draw, ui, scene);
+            }
+            _ => draw_map_ui(draw, ui),
+        },
         ModalScreen::Help => draw_help_ui(draw),
         ModalScreen::WorldSetup => menus::draw_world_setup(draw, ui),
         ModalScreen::WarpToLayer => menus::draw_warp_layers(draw, ui),

@@ -110,7 +110,9 @@ impl WorldState {
         if !self.space_enabled() {
             return None;
         }
-        let moon = crate::worldgen::sky::moon(self.terrain.settings())?;
+        // The home world's (also from inside another store's pass: free flight's store has
+        // its own ground; Wave 12 systems).
+        let moon = crate::worldgen::sky::moon(&self.home_settings())?;
         Some(moon.top_row - SPACE_ENTRY_ROWS)
     }
 
@@ -341,7 +343,9 @@ impl WorldState {
         }
         if outcome.reached_home {
             self.return_home(player_id, output);
+            return;
         }
+        self.sync_space_store_position(player_id);
     }
 
     /// Space flight's world pass (after the rigs moved): rigs crossing the space line leave
@@ -354,7 +358,6 @@ impl WorldState {
             return;
         };
         let frame = self.frame();
-        let seconds = self.timing.delta_seconds;
         let ids: Vec<PlayerId> = self.players.keys().copied().collect();
         for player_id in ids {
             // A rig handed to a body's ground this tick is on its way (F11's queued move).
@@ -375,19 +378,98 @@ impl WorldState {
                 }
                 continue;
             }
+            // A rig away still in the home store's parked slot (just left, or from an older
+            // save) moves into free flight's store (Wave 12 systems).
+            if self.store_of(player_id).is_home() {
+                self.move_into_space_store(player_id);
+            }
+            self.life_support(player_id, output);
+        }
+    }
+
+    /// Free flight's store's pass (Wave 12 systems: a rig in free flight lives in the
+    /// `StoreKey::Space` store): life support and the beacon for its rigs.
+    pub(super) fn advance_space_store(&mut self, output: &mut TickOutput) {
+        if self.active_store() != crate::place::StoreKey::Space {
+            return;
+        }
+        let ids: Vec<PlayerId> = self.players.keys().copied().collect();
+        for player_id in ids {
+            if self.moving_places(player_id)
+                || !self
+                    .players
+                    .get(&player_id)
+                    .is_some_and(|player| player.flight.away())
+            {
+                continue;
+            }
+            self.life_support(player_id, output);
+        }
+    }
+
+    /// Queues `player_id`'s rig (away, in the home store) into free flight's store at its
+    /// space position, when that is within the store's ground (else it stays parked).
+    pub(super) fn move_into_space_store(&mut self, player_id: PlayerId) {
+        let Some(pos) = self.players.get(&player_id).map(|player| player.flight.pos) else {
+            return;
+        };
+        if within_space_store(pos) {
+            let _ = self.move_to_place(player_id, crate::place::Place::Space, pos);
+        }
+    }
+
+    /// Keeps a rig in free flight's store where its exact space position is (its store
+    /// position follows the flight model), and parks it home when it flies past the store's
+    /// ground.
+    pub(super) fn sync_space_store_position(&mut self, player_id: PlayerId) {
+        if self.active_store() != crate::place::StoreKey::Space || self.moving_places(player_id) {
+            return;
+        }
+        let frame = self.frame();
+        let Some(player) = self.players.get(&player_id) else {
+            return;
+        };
+        if !player.flight.away() {
+            return;
+        }
+        let pos = player.flight.pos;
+        if !within_space_store(pos) {
+            if let Some(park) = self.space_park_at_home() {
+                let _ = self.move_to_place(player_id, crate::place::Place::HOME, park);
+            }
+            return;
+        }
+        let (x, y) = frame.local(pos);
+        if let Some(player) = self.players.get_mut(&player_id) {
+            player.x = x;
+            player.y = y;
+            player.x_remainder = 0.0;
+            player.velocity_x = 0.0;
+            player.velocity_y = 0.0;
+        }
+    }
+
+    /// Life support for `player_id`'s rig away (on its own clock), the low-air warnings and the
+    /// beacon at zero air or a wrecked hull.
+    fn life_support(&mut self, player_id: PlayerId, output: &mut TickOutput) {
+        let seconds = self.timing.delta_seconds;
+        {
+            let Some(player) = self.players.get(&player_id) else {
+                return;
+            };
             let place = player.flight.place;
             // Life support, on the rig's own clock (a black hole slows it; Wave 12).
             let scale = self.dilate(player_id, seconds);
             let capacity = self.air_capacity_of(player_id);
             let Some(player) = self.players.get(&player_id) else {
-                continue;
+                return;
             };
             let bodies = match place {
                 FlightPlace::Landed(_) => self.space_bodies_near(player.flight.pos),
                 _ => Vec::new(),
             };
             let Some(player) = self.players.get_mut(&player_id) else {
-                continue;
+                return;
             };
             let flight = &mut player.flight;
             let breathable = match flight.place {
@@ -462,6 +544,8 @@ impl WorldState {
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;
         output.push_event(flight_event(FlightEvent::EnteredSpace, player_id, 0));
+        // Into free flight's store (Wave 12 systems); parked here only until the move applies.
+        self.move_into_space_store(player_id);
     }
 
     /// `player_id`'s rig flew into the home world's approach sphere: back to the home sky over
@@ -499,6 +583,9 @@ impl WorldState {
         output: &mut TickOutput,
     ) {
         let frame = self.frame();
+        // A rig in free flight's store moves home (Wave 12 systems); one parked in the home
+        // store is set down in place.
+        let home_store_move = !self.store_of(player_id).is_home();
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
@@ -512,9 +599,12 @@ impl WorldState {
             flight.velocity_x.mul_add(sin, flight.velocity_y * cos),
         );
         let cap = super::AUTHORITATIVE_ABSOLUTE_MAX_SPEED;
-        let (x, y) = frame.centre_of(column, row);
-        player.x = x;
-        player.y = y;
+        let at_home = !home_store_move;
+        if at_home {
+            let (x, y) = frame.centre_of(column, row);
+            player.x = x;
+            player.y = y;
+        }
         player.x_remainder = 0.0;
         player.velocity_x = vx.clamp(-cap, cap);
         player.velocity_y = vy.clamp(-cap, cap);
@@ -531,6 +621,10 @@ impl WorldState {
             ..RigFlight::default()
         };
         output.push_event(flight_event(FlightEvent::ReturnedHome, player_id, 0));
+        if home_store_move {
+            let at = crate::position::WorldPos::tile_center(i64::from(column), i64::from(row));
+            let _ = self.move_to_place(player_id, crate::place::Place::HOME, at);
+        }
     }
 
     /// The emergency beacon: `player_id`'s rig is towed home (where the rescue crew drops it)
@@ -541,13 +635,18 @@ impl WorldState {
         let (home_x, home_y) = self
             .rescue_home(player_id)
             .unwrap_or_else(|| frame.from_legacy_px(12.0 * TILE_SIZE, 4.0 * TILE_SIZE));
+        // From free flight's store (Wave 12 systems) the tow moves the rig home: the same
+        // point, as an absolute position (the pass's frame measured it).
+        let tow = (!self.store_of(player_id).is_home()).then(|| frame.world(home_x, home_y));
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
         let fee = beacon_fee(player.credits);
         player.credits -= fee;
-        player.x = home_x;
-        player.y = home_y;
+        if tow.is_none() {
+            player.x = home_x;
+            player.y = home_y;
+        }
         player.x_remainder = 0.0;
         player.velocity_x = 0.0;
         player.velocity_y = 0.0;
@@ -559,6 +658,9 @@ impl WorldState {
             ..RigFlight::default()
         };
         output.push_event(flight_event(FlightEvent::BeaconReturn, player_id, fee));
+        if let Some(at) = tow {
+            let _ = self.move_to_place(player_id, crate::place::Place::HOME, at);
+        }
     }
 
     // --- Commands -----------------------------------------------------------------------------
@@ -891,6 +993,15 @@ impl WorldState {
         self.heart.star_drive.insert(player_id);
         PlayerScopedCommandOutcome::Applied
     }
+}
+
+/// Whether `pos` lies within free flight's store's ground (its tiles end where `i32` tile
+/// coordinates do; farther out a rig flies parked in the home store as in Wave 11).
+#[must_use]
+pub fn within_space_store(pos: crate::position::WorldPos) -> bool {
+    let reach = i64::from(crate::place::EmptySpaceGenerator::REACH / 2);
+    let tile = crate::space::SpaceTile::of_pos(pos);
+    tile.x.abs() < reach && tile.y.abs() < reach
 }
 
 /// Where a warp toward `star` from `from` drops out ([`WARP_ARRIVAL`] short of it).

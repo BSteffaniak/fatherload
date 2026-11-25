@@ -257,7 +257,9 @@ impl WorldState {
             let drill = self
                 .active_drills
                 .get(&player_id)
-                .filter(|drill| drill.target == target && drill.direction == direction)
+                .filter(|drill| {
+                    self.terrain.same_tile(drill.target, target) && drill.direction == direction
+                })
                 .map_or_else(
                     || {
                         authoritative_drill_state(

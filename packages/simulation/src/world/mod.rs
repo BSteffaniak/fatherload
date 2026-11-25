@@ -124,6 +124,8 @@ mod star_flight_tests;
 pub use flight::warp_arrival as flight_warp_arrival;
 pub use heart::CablePath;
 mod body_flight;
+#[cfg(test)]
+mod body_map_tests;
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;
@@ -709,8 +711,10 @@ impl WorldState {
 
     pub(crate) fn set_active_drill(&mut self, player_id: PlayerId, drill: Option<DrillState>) {
         if let Some(drill) = drill {
+            // Lap-aware on a round body: the same tile round the seam is the same work.
             let continuing = self.active_drills.get(&player_id).is_some_and(|current| {
-                current.target == drill.target && current.direction == drill.direction
+                self.terrain.same_tile(current.target, drill.target)
+                    && current.direction == drill.direction
             }) && self.active_drill_timers.contains_key(&player_id);
             if continuing {
                 // Keep the tick deadline; only presentation fields and the period change.

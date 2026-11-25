@@ -286,7 +286,7 @@ impl SpaceBot {
                     self.finish();
                 }
                 Leg::TakeOff => {
-                    if world.store_of(player).is_home() {
+                    if !matches!(world.store_of(player), crate::place::StoreKey::Body(_)) {
                         self.finish();
                         continue;
                     }
@@ -384,7 +384,7 @@ impl SpaceBot {
         body: FlightBody,
     ) -> Option<(ControlState, Option<PlayerCommand>)> {
         let rig = world.player(player)?;
-        if world.store_of(player).is_home() {
+        if !matches!(world.store_of(player), crate::place::StoreKey::Body(_)) {
             // Still in space: come in over the body, nose up, and descend to the hand-over.
             let ground = world.body_ground(body.body)?;
             #[allow(clippy::cast_possible_truncation, reason = "a radius in tiles")]

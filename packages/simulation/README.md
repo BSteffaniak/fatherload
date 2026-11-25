@@ -8670,6 +8670,202 @@ places.
 - Browser: the polar ground and the galaxy draw in WebGL1 (GLSL ES 100) as the space-render
   track timed; see the integration report for this stack's numbers.
 
+## Wave 12 systems: what space's things do, and the Wave 11 flight leftovers (`src/flight/systems.rs`, `src/world/space_systems.rs`, game `rendering/space_systems_view.rs`, `rendering/body_map.rs`)
+
+Expansion plan §16 "Star systems". Wave 11 drew stars, black holes, wormholes, nebulae, belts
+and comets; this track gives them physics, and closes the flight track's open items. Everything
+is a pure function of the world seed (the flight body list), the rig's exact `WorldPos` and the
+world clock, integrated inside flight's fixed substeps, so host, predicting clients and every
+tick rate agree. No generation changed: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST`
+(`0x0c0c_b46c_12ea_7136`) are untouched.
+
+### Flight bodies grew (`flight::space`)
+
+- `FlightBody::extra: systems::BodyExtra` (`Star(StarFacts)`, `Hole(HoleFacts)`,
+  `Mouth(MouthFacts)`, `Rock(RockFacts)`, `Comet(CometFacts)`), and `BodyKind` gained (appended)
+  `BlackHole`, `Wormhole`, `Asteroid`, `Comet`.
+- `GeneratedSpace::bodies_near` adds the black holes and wormhole mouths of the 3 x 3 galactic
+  sectors (`interstellar_near`; `BodyRef` index `HOLE_INDEX` 250 / `MOUTH_INDEX` 251, the
+  system field carrying their own id and sector) and every system's comets (`COMET_INDEX` 230+).
+  Stars carry their heat radius, light and flare period/phase from the generator.
+- Belt rocks are looked up per tick round the rig (`GeneratedSpace::rocks_near`,
+  `WorldState::flight_bodies_near`: `ROCK_QUERY_TILES` plus a quarter of a tick's travel),
+  minus the ones the crew mined out. Rocks and comets never pace the cruise
+  (`nearest_surface` skips them): they bump it out instead.
+
+### Stars: heat, light, flares, no landing
+
+- **Radiance** (`radiant_heat`): `RADIANT_HEAT` (1.1/s) x light share (0.5-2, the home sun 1,
+  blue stars hottest) x `(heat_radius / r)^2`, out to 6 heat radii. At the heat radius the hull
+  heats past burning in a second or two; at twice it the rate is under the hull's cooling, so a
+  rig can hang there. The re-entry shield divides it.
+- **Flares** (`flare_at`): a pure function of the world clock and the star's period/phase:
+  `Quiet { next }`, `Warning` (`FLARE_WARNING_MILLIS` 15 s ahead), `Burst` (6 s, eased in and
+  out over 1.2 s). A flare reaches `FLARE_REACH_HEAT_RADII` (3.5) and heats at `FLARE_HEAT`
+  (6/s at the heat radius, square law) unless a world, station or rock stands between the star
+  and the rig (`shadowed`): shelter behind a body or fly out of reach. White dwarfs never
+  flare.
+- **Glare** (`star_glare`, presentation): light over the home sun's glares from farther, a
+  flare doubles it, blocked by the same shadows; the game washes the view with it (capped at
+  0.42 alpha x the Exposure setting, smooth, never flashing).
+- Stars can't be landed on (their surface burns 40 hull/s and pushes the rig back, as before).
+
+### Black holes: a real well, time dilation, a fair horizon
+
+- A hole is a flight body with the generator's horizon as its radius and its gravity there
+  (30-60 g): `gravity_at` blends it with every other source; it accelerates, never turns. Its
+  approach sphere is the lensing radius (the view zooms, a cruise drops out at the rim).
+- **Time dilation**: `Space::time_scale_at` (IEEE `f64`, the same bits everywhere) slows the
+  rig's own clock: life support drains by it, and `RigFlight::lag_seconds` (per tick,
+  replicated) counts how far its clock fell behind the crew's. The HUD shows `TIME x0.42  CLOCK
+  -2m 14s`. Host-safe online: it is a pure function of the replicated position.
+- **Warnings** (`hole_warning`, alert bits 4-6, each once until the rig climbs back out):
+  `Well` inside the lensing, `Strain` when the pull passes `HOLE_STRAIN_SHARE` (55 %) of the
+  rig's best thrust, `NoReturn` past `no_return_radius` (pull = thrust). The game draws the
+  no-return radius as a dashed red ring. From the strain line, full thrust still climbs out
+  (tested).
+- **The horizon** is a rescue, never a game over: the beacon's tug pulls the rig home for the
+  beacon's fee, the hold's ore and finds lost to the hole (`HoleRescued`).
+
+### Wormholes: flying through
+
+- Crossing into a mouth starts `StarDrive::Transit(TransitRun)` (appended): a closed form of time
+  like the warp (`TRANSIT_MILLIS` 3.2 s, `warp_position`), really crossing to
+  `transit_exit` (past the far mouth's rim by `TRANSIT_EXIT_TILES` along the heading it came in
+  with, leaving at `TRANSIT_EXIT_SPEED`), so it never falls straight back in. Rotation is held
+  still through the tunnel; warp and cruise are refused while in it.
+- The crew learns the pair (`SystemsShared::wormholes`, `found_wormhole`, `wormhole_from` from
+  either end); the nav HUD marks every mouth within two sectors as `WORMHOLE ?` or `WORMHOLE >
+  x,y` once flown.
+
+### Nebulae: sensor fog
+
+- The scanner's ping reach is cut by the fog where the rig is (`fog_range_share`: up to 70 %),
+  on top of the nebula star's halving. Nav markers (waypoint, crewmates, wormholes) fade with
+  `marker_visibility`; the view takes the nebula's tint (Fog setting). `NebulaEntered` /
+  `NebulaLeft` are edge events.
+- TODO-SEAM(w12-hostiles): `WorldState::nebula_cover(pos)` is the hook for pirates hiding in
+  the fog.
+
+### Asteroids and comets: mining from flight
+
+- Belt rocks are solid (`contact`: rest against them, or bounce with a dent past
+  `ROCK_SAFE_SPEED`; a cruise or warp drops out).
+- **The drill** bites when the rig's underside rests against a rock (`drill_contact`, within
+  `DRILL_FACING`): a unit every `contact_mine_seconds(drill tier)` (1.6 s at tier 1).
+- **The Mining Beam** (`FlightGearKind::MiningBeam`, appended; `FlightGear::mining_beam`,
+  3,400 credits at a station, test mode fits it): the trigger mines the nearest rock within
+  `BEAM_RANGE` (14 tiles) of the nose's cone, a unit a second, 1 fuel a second.
+- Each rock gives its generator's `yield_units` of its ore (`asteroid_mineral`; TODO-SEAM
+  (w12-planets): iron, silver, skystone, ruby, platinum, diamond and uranium stand in until a
+  track adds space items) and is mined out for the whole crew (`SystemsShared::mined`, keyed by
+  the generator's `AsteroidId`, bounded at `MAX_MINED_RECORDS`); a mined-out rock leaves flight
+  and the screen.
+- **Comets**: inside a tail (`in_comet_tail`, widening from the nucleus) dust gathers into the
+  bay, a unit every 2.5 s, `COMET_HARVEST_CAP` (6) per comet for the crew (`COMET_MINERAL`,
+  mythril for now).
+
+### The Wave 11 flight leftovers
+
+- **Free flight lives in the Space store.** A rig crossing the space line (or taking off from a
+  body) is moved with `move_to_place(Place::Space, pos)`; in `StoreKey::Space`'s ground pass
+  it flies, its store position follows its exact space position every tick
+  (`sync_space_store_position`) and the store's floating frame follows it, so netcode poses,
+  relevance and streaming are the store's (two flyers near each other share a region). Life
+  support runs in that pass (`advance_space_store`). Coming home, docking rescues and the
+  beacon move it back with `move_to_place(Place::HOME, ..)`. Rigs from older saves (parked in
+  the home store) move into the Space store on their next tick; a rig past the store's ground
+  (`within_space_store`, ±2^29 tiles) flies parked in the home store as in Wave 11.
+- **Coming home where you choose**: the home world's approach sphere hands the rig to the home
+  sky under the point it approached (`home_column_under`: the arc round the round home world
+  from the Moon's column, `HOME_RADIUS_TILES` columns a radian), not the column it left from.
+- **The Moon**: its approach sphere only zooms the view in; coming down within
+  `MOON_LAND_HEIGHT` (60 tiles) of its surface hands the rig to the home sky over the matching
+  point of the Moon (`moon_arrival`: the round Moon's upper half across its width, 30 rows over
+  its top; from below, under it). A fly-by never snaps home.
+- **The parking hold**: an idle rig (no translation thrust) in open space (or a station's
+  sphere), slower than `PARK_HOLD_SPEED` and where gravity is under `PARK_HOLD_MAX_GRAVITY`
+  (about a quarter g), holds station: its drift dies away and gravity is held off. Its turn is
+  never touched; any thrust lets go. The departure point over the Moon is such a place, so an
+  idle rig there never drifts home (`ParkingHold`, HUD `PARKING HOLD`).
+- **Deterministic maths**: `field::trig::hypot`, `polar::trig::{hypot, ln}` and
+  `WorldPos::span` (plain IEEE) replace every platform `hypot` / `ln` in flight, the polar
+  crossing and the places' relevance. `WorldPos::distance` stays as the home world always
+  measured it.
+- **Lap-aware tile keys**: `Terrain::lap_tile` / `same_tile` fold a round body's columns into
+  one lap; drill continuation, the drill intent's reuse and the pilot's pick compare tiles
+  round the seam, and discovery is stored by lap tile.
+- **Body maps**: each body store keeps its players' own map (`BodyWorld::discovered`, swapped
+  in with its ground, saved with the body, forgotten with a leaving player);
+  `WorldState::store_discovered(store, player)`. The home map is untouched by a body. The game's
+  map button on a body opens the **Body Map** (`rendering/body_map.rs`): the strip round the
+  rig, wrapping with no edge, the body's top marked, every rig in the store.
+
+### Events, formats and codes
+
+- `GameplayEventKind::SpaceSystems { what: SystemsEvent, player_id, detail }`, netcode 860-878:
+  `StarHeat`, `FlareWarning` (seconds), `FlareStruck`, `FlareSheltered`, `HoleWell`,
+  `HoleStrain`, `HoleNoReturn`, `HoleRescued` (fee), `WormholeEntered` (1: a new pair),
+  `WormholeExited`, `NebulaEntered` (fog), `NebulaLeft`, `OreMined` (ore index),
+  `AsteroidDepleted`, `HoldFull`, `CometDust` (units), `RockBump` (damage), `ParkingHold`,
+  `MoonApproach`.
+- **`PROTOCOL_VERSION` 20** (this track's one bump): `RigFlight::{lag_seconds, mining,
+  gathering, marks}`, `StarDrive::Transit`, `FlightGear::mining_beam`, the new body kinds, the
+  `space_systems` world field in the appended shared `SectionKey::SpaceSystems` section, the
+  events. Saves: no format bump (serde defaults; `BodyWorld`'s saved data gained `discovered`
+  with a default).
+- Sounds (appended at the end of `patches!`): `systems_flare_warning`, `systems_flare_burst`,
+  `systems_hole_warning`, `systems_transit`, `systems_ore_crunch`.
+
+### Game side
+
+- `rendering/space_systems_view.rs`: the world layer (no-return and lensing rings, drill
+  sparks, the beam in the ore's colour, comet dust, the wormhole tunnel's rings, the nebula
+  tint, glare and flare washes, all scaled by the screen effects setting) and the HUD
+  (hole warnings, the flare forecast, `TIME x / CLOCK -`, `SENSORS FOGGED`, the drilling /
+  beam and comet gauges with units left, `PARKING HOLD`), wormhole edge markers and faded nav
+  markers in fog.
+- Belt scenery is gravel only now; the boulders are the real rocks (`LiveSpace::refresh_rocks`
+  each frame, drawn by `draw_rock_shaped` within a few per cent of their contact radius, with
+  their ore's glint).
+- `local_game` voices the systems events like flight's; touch needs nothing new (the beam is
+  the fire button, the drill is contact).
+- Scenes (`scene_capture/systems_scenes.rs`): `systems_star_flare`, `systems_blue_glare`,
+  `systems_black_hole_dilation`, `systems_wormhole_transit`, `systems_nebula_fog`,
+  `systems_mining_asteroid`, `systems_mining_beam`, `systems_comet_tail`,
+  `systems_moon_approach`, `systems_moon_arrival`, `systems_parking_hold`.
+
+### Tests
+
+- `flight/systems_tests.rs`: flare cycle (telegraphed, eased, periodic, never for a white
+  dwarf), radiance (burns inside, hangs at twice, class light), shelter, glare, hole warnings
+  and the strain line's escape margin, horizon and mouth crossings stop the step, transit exit,
+  fog, drill facing and the beam's cone, rocks solid with dents, comet tails, the parking hold
+  (holds, never turns, lets go on thrust, never near a world), the Moon's sphere vs handover,
+  the crew's wormhole record.
+- `world/space_systems_tests.rs` (V11 world, real generated things near home): a black hole's
+  well (dilation, lag, slower air, pulled not turned, escape from the strain line, the
+  no-return warning and the tug rescue with the hold lost), a wormhole transit to its pair
+  (route learned, out past the far rim, not back in), nebula fog on the ping, mining a belt rock
+  by drill then beam until it crumbles (cargo, record, save and section round trip), comet
+  dust, a star's radiance and flare with the warning first, the Moon fly-by and landing, coming
+  home under the point approached, the parking hold at 30 and 60 Hz, and determinism (twice at
+  30 Hz bit for bit; 60 Hz agrees).
+- `world/body_map_tests.rs`: a body's own map, round the lap, saved, the home map untouched.
+- `star_flight_tests::flying_back_into_the_home_world_hands_the_rig_to_its_sky` now expects the
+  column under the point approached.
+
+### Seams and still open
+
+- TODO-SEAM(w12-hostiles): `nebula_cover` for pirates in nebulae.
+- TODO-SEAM(w12-planets / stations): the mined ores and comet dust map to stand-in minerals in
+  `asteroid_mineral` / `COMET_MINERAL`; the Mining Beam is a `FlightGearKind` the stations
+  track's shops can list.
+- Body maps travel in keyframes with the body (every player's); the op log's discovery stays
+  the home world's, so a client's body map is its own prediction until the next keyframe.
+- Flares come every 5-120 minutes (the generator's periods); a crew rarely meets one by chance,
+  so the HUD forecasts the next within two minutes.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

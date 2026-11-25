@@ -129,7 +129,7 @@ impl DiscoveredTiles {
     }
 
     /// Tiles revealed since the previous call.
-    fn take_revealed(&mut self) -> Vec<TilePosition> {
+    pub(super) fn take_revealed(&mut self) -> Vec<TilePosition> {
         std::mem::take(&mut self.revealed)
     }
 
@@ -280,7 +280,8 @@ fn reveal_around(discovered: &mut DiscoveredTiles, terrain: &Terrain, (x, y): (f
         (center.y - radius_y).max(terrain.min_y())..=(center.y + radius_y).min(terrain.height() - 1)
     {
         for x in x_range.clone() {
-            discovered.reveal(TilePosition { x, y });
+            // Round a body's lap, a tile is one tile whatever its frame's label (Wave 12).
+            discovered.reveal(terrain.lap_tile(TilePosition { x, y }));
         }
     }
 }
@@ -306,7 +307,7 @@ impl WorldState {
         for y in (center.y - radius).max(min_y)..=(center.y + radius).min(height - 1) {
             for x in (center.x - radius).max(min_x)..=(center.x + radius).min(max_x) {
                 if (x - center.x).abs() + (y - center.y).abs() <= radius {
-                    discovered.reveal(TilePosition { x, y });
+                    discovered.reveal(self.terrain.lap_tile(TilePosition { x, y }));
                 }
             }
         }

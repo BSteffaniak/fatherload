@@ -277,7 +277,13 @@ impl WorldState {
             player_id,
             detail: 0,
         });
-        let _ = self.move_to_place(player_id, Place::HOME, park);
+        // Into free flight's store (Wave 12 systems), or parked home past its ground.
+        let pos = grid.to_world(ground.centre, u, v);
+        if super::flight::within_space_store(pos) {
+            let _ = self.move_to_place(player_id, Place::Space, pos);
+        } else {
+            let _ = self.move_to_place(player_id, Place::HOME, park);
+        }
     }
 
     /// The emergency beacon on a body: the rig is towed home (the spawn point) for the fee,

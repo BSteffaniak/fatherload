@@ -573,6 +573,7 @@ impl LocalGame {
         self.announce_garrison(&players);
         self.announce_heart(&players);
         self.announce_flight(&players);
+        self.announce_systems(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1682,6 +1683,67 @@ impl LocalGame {
     /// Space flight for local seats (Wave 11): the seat whose rig it was hears what happened
     /// (a refused warp says why; low air says what to do), and docking opens the station's
     /// counter.
+    /// Space's things for local seats (Wave 12 systems): what a star, a hole, a wormhole, a
+    /// nebula, a rock or a comet did, in plain words for the seat whose rig it was.
+    fn announce_systems(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::flight::systems::SystemsEvent as E;
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut news: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::SpaceSystems {
+                what,
+                player_id,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let Some(seat) = seat_of(player_id) else {
+                continue;
+            };
+            let message = match what {
+                E::FlareWarning => format!(
+                    "Solar flare in {detail} s: get behind a world or fly out of its reach."
+                ),
+                E::HoleStrain => "Escape thrust failing: burn away from the hole now.".to_owned(),
+                E::HoleNoReturn => {
+                    "Past the point of no return: call the emergency beacon (nav chart).".to_owned()
+                }
+                E::HoleRescued => format!(
+                    "The event horizon: the beacon's tug pulled you out for {detail} credits; \
+                     the hold went into the hole."
+                ),
+                E::WormholeEntered if detail == 1 => {
+                    "Wormhole transit: a new route, now on the nav HUD.".to_owned()
+                }
+                E::OreMined => {
+                    let ore = fatherload_simulation::space::AsteroidOre::ALL
+                        .get(usize::try_from(detail).unwrap_or(0))
+                        .copied()
+                        .unwrap_or_default();
+                    format!(
+                        "+1 {} from the rock ({}).",
+                        fatherload_simulation::flight::systems::asteroid_mineral(ore).name(),
+                        ore.name()
+                    )
+                }
+                E::CometDust => format!(
+                    "+1 comet dust ({detail}/{}).",
+                    fatherload_simulation::flight::systems::COMET_HARVEST_CAP
+                ),
+                E::ParkingHold => "Parking hold: thrust to fly on.".to_owned(),
+                other => other.headline().to_owned(),
+            };
+            news.push((seat, message));
+        }
+        for (seat, message) in news {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
     fn announce_flight(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::flight::{FlightEvent, WarpRefusal};
         let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);

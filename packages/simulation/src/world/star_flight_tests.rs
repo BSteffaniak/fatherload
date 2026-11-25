@@ -164,10 +164,11 @@ fn a_rig_with_the_star_drive_flies_past_the_moon_into_space_and_one_without_does
             let flight = flight(&world);
             assert_eq!(flight.exit_column, column);
             assert!(flight.air > 0.0, "a full tank of air");
-            // The home position is parked over the Moon, where nothing reaches it.
-            let (x, y) = world.space_park().expect("park");
-            let rig = world.player(PLAYER).expect("rig");
-            assert!((rig.x - x).abs() < 1.0 && (rig.y - y).abs() < 1.0);
+            // Wave 12 systems: the rig lives in free flight's store, its store position its
+            // exact space position.
+            assert_eq!(world.store_of(PLAYER), crate::place::StoreKey::Space);
+            let (_, at) = world.rig_world_pos(PLAYER).expect("rig");
+            assert!(at.span(flight.pos) < 2.0, "{}", at.span(flight.pos));
             // No loading screen: the rig keeps the climb's speed, away from the home world.
             let home = space::home_centre();
             assert!(flight.pos.distance(home) > space::tiles(space::HOME_APPROACH_TILES));

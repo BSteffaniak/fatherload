@@ -123,7 +123,8 @@ fn journey(hz: u32) -> WorldState {
     // 1. Up past the Moon into space, seamlessly: the rig is now in free flight.
     assert!(fly(&mut world, &mut bot, 1).contains(&FlightEvent::EnteredSpace));
     assert_eq!(world.place_of(PLAYER), Place::Space);
-    assert!(world.store_of(PLAYER).is_home());
+    // Wave 12 systems: free flight lives in its own store.
+    assert_eq!(world.store_of(PLAYER), crate::place::StoreKey::Space);
     let launched = world.player(PLAYER).expect("rig").flight.pos;
     assert!(launched.distance(space::home_launch()) < space::tiles(50.0));
     // 2. Warp to the charted system.

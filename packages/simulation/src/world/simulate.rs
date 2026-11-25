@@ -619,6 +619,11 @@ impl WorldState {
             self.advance_fluids(next_tick, &mut output);
             // A body's round ground: take-offs into space and life support (Wave 11).
             self.advance_body_flight(&mut output);
+            // Free flight's store: life support and the beacon (Wave 12 systems).
+            self.advance_space_store(&mut output);
+            // The body's own map (Wave 12 systems): what its players see is revealed on it.
+            self.reveal_tiles_near_players();
+            output.discoveries = self.take_discoveries();
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();

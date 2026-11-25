@@ -647,6 +647,9 @@ pub struct PlaceScene<'w> {
     pub body: Option<PlaceBody>,
     /// The world's seed (the space generator's galaxy round the body).
     pub seed: u64,
+    /// The seat's player's own map of this ground (Wave 12 systems: a body's map is its own;
+    /// tiles keyed round the lap, `Terrain::lap_tile`).
+    pub discovered: Option<&'w fatherload_simulation::world::DiscoveredTiles>,
 }
 
 /// A body store's place in space (see [`PlaceScene::body`]).
@@ -694,6 +697,7 @@ impl<'w> PlaceScene<'w> {
             pilots: PilotPresentation::in_store(world, entities),
             body,
             seed: world.world_seed(),
+            discovered: world.store_discovered(store, player_id),
         })
     }
 }

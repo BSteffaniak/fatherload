@@ -18,6 +18,7 @@ use fatherload_simulation::{
 };
 
 pub mod ancient_city_hud;
+mod body_map;
 mod build;
 mod counters;
 mod crypt_map;
