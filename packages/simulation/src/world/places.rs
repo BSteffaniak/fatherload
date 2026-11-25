@@ -39,24 +39,63 @@ use crate::{
 use super::{ActiveDrillTimer, FluidSchedule, WorldState};
 
 /// The ground of one store other than the home world's: terrain, entities and fluids.
+///
+/// A generated space body's ground is the polar track's round planet ([`Terrain::planet`],
+/// from [`crate::place::planet_params_for`]): its strip wraps, its tiles are ring segments and
+/// its gravity zone ([`super::planet::planet_gravity_zone`]) is the store's own field zone.
+/// Free flight's store is vacuum; a key that names no body of the world's space gets the flat
+/// test ground (tests and tools).
 #[derive(Clone, Debug)]
 pub struct BodyWorld {
+    pub(crate) store: StoreKey,
+    pub(crate) seed: u64,
     pub(crate) terrain: Terrain,
     pub(crate) entities: EntityStore,
     pub(crate) fluids: FluidSchedule,
+    /// The store's own field zones (a planet's gravity), swapped in with its ground; rebuilt
+    /// from the ground, never saved.
+    pub(crate) fields: crate::field::FieldZones,
 }
 
 impl BodyWorld {
-    /// A fresh store's ground (no edits, no entities) in a floating frame at sector
-    /// `(sector_x, sector_y)`. `None` for the home store.
+    /// A fresh store's ground (no edits, no entities) in `frame`. `None` for the home store.
     #[must_use]
     pub fn generate(store: StoreKey, seed: u64, frame: Frame) -> Option<Self> {
-        let source = BodySource::for_store(store, seed)?;
+        Self::build(store, seed, frame, Vec::new())
+    }
+
+    /// The store's ground in `frame` with `edits` over the generated tiles.
+    fn build(
+        store: StoreKey,
+        seed: u64,
+        frame: Frame,
+        edits: Vec<(ChunkPosition, TileDiffs)>,
+    ) -> Option<Self> {
+        let planet = match store {
+            StoreKey::Body(key) => crate::place::planet_params_for(seed, key),
+            StoreKey::Home | StoreKey::Space => None,
+        };
+        let mut fields = crate::field::FieldZones::default();
+        let terrain = if let Some(params) = planet {
+            let _id = fields.insert(super::planet::planet_gravity_zone(&params));
+            Terrain::planet_with(params, frame, edits)
+        } else {
+            Terrain::for_body(BodySource::for_store(store, seed)?, frame, edits)
+        };
         Some(Self {
-            terrain: Terrain::for_body(source, frame, Vec::new()),
+            store,
+            seed,
+            terrain,
             entities: EntityStore::new(),
             fluids: FluidSchedule::default(),
+            fields,
         })
+    }
+
+    /// The store this is the ground of.
+    #[must_use]
+    pub const fn store(&self) -> StoreKey {
+        self.store
     }
 
     /// The store's terrain.
@@ -71,15 +110,39 @@ impl BodyWorld {
         &self.entities
     }
 
+    /// The round body this store is the ground of, if it is one.
+    #[must_use]
+    pub const fn planet(&self) -> Option<&crate::planet::PlanetGround> {
+        self.terrain.planet_ground()
+    }
+
     /// Whether nothing in the store differs from a fresh one.
     #[must_use]
     pub fn is_pristine(&self) -> bool {
         self.terrain.edited_chunk_count() == 0 && self.entities.is_empty()
     }
 
+    /// A fingerprint of what generates this ground (a restore under a different build fails
+    /// instead of silently loading different ground).
+    #[must_use]
+    pub fn fingerprint(&self) -> u64 {
+        if let Some(planet) = self.terrain.planet_ground() {
+            let mut hash = StateHasher::new();
+            hash.write_serialized(planet.params());
+            let column = 0;
+            let row = crate::planet::BodyGround::surface_row(planet, column);
+            for tile in planet.chunk_tiles(ChunkPosition::of(TilePosition { x: column, y: row })) {
+                hash.write_u64(tile.code());
+            }
+            return hash.finish().get();
+        }
+        self.terrain
+            .body_source()
+            .map_or(0, |source| source.fingerprint())
+    }
+
     fn hash_into(&self, hash: &mut StateHasher) {
-        let source = self.terrain.body_source();
-        hash.write_u64(source.map_or(0, |source| source.fingerprint()));
+        hash.write_u64(self.fingerprint());
         hash.write_serialized(&self.terrain.frame());
         hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
         hash.write_u64(self.terrain.digest());
@@ -90,7 +153,7 @@ impl BodyWorld {
     }
 }
 
-/// How a [`BodyWorld`] is saved and sent in keyframes: the store and seed its generator is
+/// How a [`BodyWorld`] is saved and sent in keyframes: the store and seed its ground is
 /// rebuilt from, the generator's fingerprint and the terrain digest (both checked on load),
 /// its frame, its edited chunks packed ([`crate::terrain::PackedChunks`], runs of equal tiles,
 /// base64 in JSON), its entities and fluid schedule.
@@ -111,14 +174,10 @@ struct BodyWorldData {
 
 impl Serialize for BodyWorld {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let source = self
-            .terrain
-            .body_source()
-            .ok_or_else(|| serde::ser::Error::custom("a body world without a body source"))?;
         BodyWorldData {
-            store: source.store(),
-            seed: source.seed(),
-            fingerprint: source.fingerprint(),
+            store: self.store,
+            seed: self.seed,
+            fingerprint: self.fingerprint(),
             digest: self.terrain.digest(),
             frame: self.terrain.frame(),
             packed: PackedChunks(self.terrain.edited_chunk_diffs()),
@@ -132,30 +191,27 @@ impl Serialize for BodyWorld {
 impl<'de> Deserialize<'de> for BodyWorld {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let data = BodyWorldData::deserialize(deserializer)?;
-        let source = BodySource::for_store(data.store, data.seed)
+        let mut world = Self::build(data.store, data.seed, data.frame, data.packed.0)
             .ok_or_else(|| serde::de::Error::custom("the home store is not a body world"))?;
-        if source.fingerprint() != data.fingerprint {
+        if world.fingerprint() != data.fingerprint {
             return Err(serde::de::Error::custom(format!(
                 "body {:?} was generated by a different build (fingerprint {:#x}, now {:#x})",
                 data.store,
                 data.fingerprint,
-                source.fingerprint()
+                world.fingerprint()
             )));
         }
-        let terrain = Terrain::for_body(source, data.frame, data.packed.0);
-        if terrain.digest() != data.digest {
+        if world.terrain.digest() != data.digest {
             return Err(serde::de::Error::custom(format!(
                 "body {:?} ground digest mismatch (expected {:#x}, got {:#x})",
                 data.store,
                 data.digest,
-                terrain.digest()
+                world.terrain.digest()
             )));
         }
-        Ok(Self {
-            terrain,
-            entities: data.entities,
-            fluids: data.fluids,
-        })
+        world.entities = data.entities;
+        world.fluids = data.fluids;
+        Ok(world)
     }
 }
 
@@ -309,6 +365,15 @@ impl WorldState {
     pub fn place_of(&self, player_id: PlayerId) -> Place {
         if let Some(place) = self.places.players.get(&player_id) {
             return *place;
+        }
+        // Free flight under the Star Drive (Wave 11 flight): the rig's home-store slot is
+        // parked over the Moon while its flight state carries its exact space position.
+        if self
+            .players
+            .get(&player_id)
+            .is_some_and(|player| player.flight.away())
+        {
+            return Place::Space;
         }
         if self.place_pass.store.is_home()
             && self
@@ -549,11 +614,34 @@ impl WorldState {
     }
 
     /// The world's seed (body generation reads it).
-    const fn home_seed(&self) -> u64 {
+    pub(crate) const fn home_seed(&self) -> u64 {
         if self.place_pass.store.is_home() {
             self.terrain.seed()
         } else {
             self.place_pass.home_seed
+        }
+    }
+
+    /// The home world's settings (the home terrain's, also inside another store's ground
+    /// pass, whose terrain is the body's).
+    #[must_use]
+    pub(crate) fn home_settings(&self) -> crate::worldgen::WorldSettings {
+        if self.place_pass.store.is_home() {
+            *self.terrain.settings()
+        } else {
+            self.place_pass
+                .home_settings
+                .unwrap_or_else(|| *self.terrain.settings())
+        }
+    }
+
+    /// The home world's frame (also inside another store's ground pass).
+    #[must_use]
+    pub(crate) const fn home_frame(&self) -> Frame {
+        if self.place_pass.store.is_home() {
+            self.terrain.frame()
+        } else {
+            self.place_pass.home_frame
         }
     }
 
@@ -604,7 +692,9 @@ impl WorldState {
     /// A ground pass's frame move: only the store's own things move (its entities and the
     /// players in the pass); the world's places, homes and sites stay in the home frame.
     fn move_ground_frame(&mut self, next: Frame) {
-        let shift = self.terrain.frame().shift_to(next);
+        // A round body's strip wraps: positions shift only by the nearest copy of `next`
+        // round it, and a frame relabelled by whole laps moves nothing (Wave 11 polar).
+        let shift = self.terrain.frame().shift_to(self.nearest_lap_frame(next));
         self.terrain.set_frame(next);
         if shift.is_zero() {
             return;
@@ -919,6 +1009,8 @@ impl WorldState {
         std::mem::swap(&mut self.terrain, &mut world.terrain);
         std::mem::swap(&mut self.entities, &mut world.entities);
         std::mem::swap(&mut self.fluids, &mut world.fluids);
+        // The store's own field zones (a planet's gravity); the home world's stay out of it.
+        std::mem::swap(&mut self.fields, &mut world.fields);
     }
 
     /// The awake cells round the occupants of the ground swapped in (`None` on worlds that do
@@ -953,6 +1045,16 @@ impl WorldState {
     #[must_use]
     pub(crate) fn player_in_world(&self, player_id: PlayerId) -> bool {
         self.players.contains_key(&player_id) || self.place_pass.set_aside.contains(&player_id)
+    }
+
+    /// Whether `player_id` has a move to another place queued this tick (it is on its way: the
+    /// rest of the tick leaves it be).
+    #[must_use]
+    pub(crate) fn moving_places(&self, player_id: PlayerId) -> bool {
+        self.place_pass
+            .pending_moves
+            .iter()
+            .any(|(player, _, _)| *player == player_id)
     }
 
     /// The players set aside for the running pass (see [`Self::player_in_world`]).
@@ -1020,7 +1122,9 @@ impl WorldState {
         let Some((x, y)) = self.actor_position(anchor) else {
             return;
         };
-        if let Some(next) = frame.recentred_on(x, y) {
+        // A round body's frame stays labelled within one lap of its strip (Wave 11 polar).
+        let next = self.wrapped_frame(frame.recentred_on(x, y).unwrap_or(frame));
+        if next != frame {
             self.move_ground_frame(next);
         }
     }

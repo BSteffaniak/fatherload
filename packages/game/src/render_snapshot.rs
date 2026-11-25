@@ -962,10 +962,10 @@ pub struct SpaceSnapshot<'w> {
 }
 
 impl SpaceSnapshot<'_> {
-    /// The galaxy (TODO-SEAM(w11-space-gen): the generator's query).
+    /// The galaxy: the space generator's, for this world's seed (its shared cache).
     #[must_use]
-    pub const fn galaxy(&self) -> fatherload_simulation::flight::PlaceholderSpace<'_> {
-        fatherload_simulation::flight::PlaceholderSpace::new(self.seed, self.charts)
+    pub fn galaxy(&self) -> fatherload_simulation::flight::GeneratedSpace {
+        fatherload_simulation::flight::GeneratedSpace::new(self.seed)
     }
 }
 

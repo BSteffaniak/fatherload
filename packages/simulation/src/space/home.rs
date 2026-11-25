@@ -2,7 +2,8 @@
 //! sister planets outward. Fixed in [`HOME_SECTOR`] at the sector's centre.
 
 use super::{
-    Atmosphere, BodyKind, HOME_SECTOR, SpaceBody, SpaceBodyId, SpaceTile, StarSystem, TURN, Theme,
+    Atmosphere, BodyKind, HOME_SECTOR, SpaceBody, SpaceBodyId, SpaceTile, StarSystem, Station,
+    StationId, StationKind, TURN, Theme,
     generate::{SystemPlan, generate_system, surface_columns},
     trig::polar,
 };
@@ -25,6 +26,13 @@ pub const DEPARTURE_ABOVE_MOON: u32 = 256;
 pub const HOME_DESCENT_ROWS: u16 = 13_000;
 
 const SALT_HOME_GROUND: u64 = 0x5BAC_E900;
+
+/// Halcyon Dock, the home system's station, from the home world's centre (tiles).
+///
+/// Wave 11 integration: flight's first dock, a short hop up and across from the departure
+/// point, outside the home world's and the Moon's reach, so the straight line there never dips
+/// back into the home sky.
+pub const HALCYON_DOCK_OFFSET: (i64, i64) = (3_000, -42_000);
 
 /// The home world's id.
 pub const HOME_WORLD_BODY: SpaceBodyId = SpaceBodyId {
@@ -107,6 +115,17 @@ pub(super) fn push_home_bodies(seed: u64, system: &mut StarSystem) {
         strata_rows: 240,
         ring: None,
         ground_seed: hash2(seed, SALT_HOME_GROUND, 1, 0),
+    });
+    system.stations.push(Station {
+        id: StationId {
+            sector: HOME_SECTOR,
+            system: 0,
+            index: 0,
+        },
+        kind: StationKind::TradePost,
+        centre: home.offset(HALCYON_DOCK_OFFSET.0, HALCYON_DOCK_OFFSET.1),
+        size: 120,
+        planet: 1,
     });
 }
 

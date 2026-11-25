@@ -1,59 +1,69 @@
 //! The space the flight model flies through: star systems, their bodies and stations, and
 //! the gravity they pull with.
 //!
-//! **TODO-SEAM(w11-space-gen):** this is a **placeholder**: the space generator
-//! (`crate::space`) owns the real galaxy. [`SpaceQuery`] is the whole interface flight reads,
-//! so the integrator implements it on the generator and drops [`PlaceholderSpace`]. What the
-//! placeholder promises (and the generator should keep):
+//! **Wired to the space generator (Wave 11 integration).** [`GeneratedSpace`] reads the real
+//! galaxy ([`crate::space::Space`], one shared cache per world seed) and shows flight the part
+//! it needs as [`FlightBody`]s: every star, every body (the home world and the Moon, planets,
+//! moons and crater rocks) and every station of the systems near the rig. [`SpaceQuery`] is the
+//! whole interface flight reads.
 //!
-//! * Everything is a pure function of the world seed, the galactic sector and the Archive's
-//!   star charts ([`crate::star_chart`]): a chart's system sits in its sector (y "up" the
-//!   galactic plane, so space y is its negative) with its class and world count.
-//! * Positions are space pixels ([`WorldPos`], 32 to a tile). A galactic sector is
-//!   [`GALAXY_SECTOR_TILES`] across; the home system is sector (0, 0) and the home world
-//!   ([`HOME_BODY`]) sits [`HOME_ORBIT_TILES`] from its star.
+//! * Everything is a pure function of the world seed (the generator's) and the Archive's star
+//!   charts resolve to the generator's systems ([`GeneratedSpace::chart_system`]).
+//! * Positions are space pixels ([`WorldPos`], 32 to a tile), the generator's own frame. A
+//!   galactic sector is the generator's space sector ([`GALAXY_SECTOR_TILES`]); the home system
+//!   is sector (0, 0).
 //! * Orbits are static (a body's position never moves), so a body list is valid for a tick.
-//! * Every landable body is at least 400 tiles in radius (expansion plan F12).
+//! * A [`BodyRef`]'s index is the star (0, a twin's second sun 1), the generator's body index
+//!   plus [`FIRST_BODY_INDEX`], or a station's index plus [`STATION_INDEX`]
+//!   ([`GeneratedSpace::space_body`] maps it back to the generator's [`SpaceBodyId`]).
+
+use std::sync::{Arc, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     position::{SECTOR_PX, SECTOR_TILES, WorldPos},
+    space::{Space, SpaceBodyId, SpaceSector, StarSystem},
     star_chart::{StarChart, StarClass},
     terrain::TILE_SIZE,
 };
 
 use super::BodyRef;
 
-/// Tiles across a galactic sector.
-pub const GALAXY_SECTOR_TILES: i64 = 1 << 20;
+/// Tiles across a galactic sector (the space generator's sector).
+pub const GALAXY_SECTOR_TILES: i64 = crate::space::SPACE_SECTOR_TILES;
 /// Position sectors ([`SECTOR_TILES`]) across a galactic sector.
 pub const GALAXY_SECTOR_POSITION_SECTORS: i64 = GALAXY_SECTOR_TILES / SECTOR_TILES;
-/// The home system's id ([`crate::star_chart`] ids are never zero).
+/// The home system's id (charted systems' ids are never zero).
 pub const HOME_SYSTEM_ID: u64 = 0;
 /// The home system.
 pub const HOME_SYSTEM: SystemRef = SystemRef {
     id: HOME_SYSTEM_ID,
     sector: (0, 0),
 };
+/// The first [`BodyRef::index`] of a system's bodies (below it: its suns).
+pub const FIRST_BODY_INDEX: u8 = 2;
 /// The home world's body index.
-pub const HOME_INDEX: u8 = 1;
+pub const HOME_INDEX: u8 = FIRST_BODY_INDEX + crate::space::HOME_WORLD_BODY.body;
+/// The Moon's body index (seen from space; its ground is the home world's sky).
+pub const MOON_INDEX: u8 = FIRST_BODY_INDEX + crate::space::MOON_BODY.body;
 /// The home world.
 pub const HOME_BODY: BodyRef = BodyRef {
     system: HOME_SYSTEM,
     index: HOME_INDEX,
 };
-/// A system's station's body index.
+/// A system's first station's body index (the rest follow).
 pub const STATION_INDEX: u8 = 200;
-/// Tiles from the home star to the home world.
-pub const HOME_ORBIT_TILES: i64 = 60_000;
-/// The home world's radius as seen from space (tiles), and its approach sphere's.
-pub const HOME_RADIUS_TILES: f32 = 6_000.0;
-pub const HOME_APPROACH_TILES: f32 = 8_500.0;
-/// Tiles over the home world's approach sphere a rig leaving it appears at.
-pub const HOME_LAUNCH_CLEARANCE_TILES: f32 = 300.0;
-/// Most worlds a placeholder system has.
-pub const MAX_WORLDS: u8 = 6;
+/// The home world's radius as seen from space (tiles), and its approach sphere's: flying into
+/// it hands the rig back to the home sky.
+pub const HOME_RADIUS_TILES: f32 = 10_000.0;
+pub const HOME_APPROACH_TILES: f32 = 11_500.0;
+/// The Moon's approach sphere over its surface (tiles): flying into it hands the rig back to
+/// the home sky over the Moon (the departure point is just outside it).
+pub const MOON_APPROACH_TILES: f32 = 150.0;
+/// Gravity a body of 1 g pulls with in flight (px/s²): the rig's own on the home world, so a
+/// planet's pull in flight matches its ground's.
+pub const FLIGHT_G_PX: f32 = crate::world::AUTHORITATIVE_RIG_GRAVITY;
 
 /// A star system's reference: its id and galactic sector.
 #[derive(
@@ -195,6 +205,12 @@ pub trait SpaceQuery {
             .filter(|found| found.system.id == system.id)
     }
 
+    /// Sensor fog at `pos`, per mille (nebulae; 0 where the space has none).
+    fn fog_at(&self, pos: WorldPos) -> u16 {
+        let _ = pos;
+        0
+    }
+
     /// One body.
     fn body(&self, body: BodyRef) -> Option<FlightBody> {
         let system = self.system(body.system)?;
@@ -264,9 +280,6 @@ pub const fn at_tile(column: i64, row: i64) -> WorldPos {
     WorldPos::from_tile(column, row)
 }
 
-const SALT_SYSTEM: u64 = 0xF117_0001;
-const SALT_BODY: u64 = 0xF117_0002;
-
 /// A 64-bit hash of a seed, a salt and two 64-bit coordinates.
 #[must_use]
 pub const fn hash64(seed: u64, salt: u64, x: i64, y: i64) -> u64 {
@@ -281,70 +294,88 @@ pub const fn hash64(seed: u64, salt: u64, x: i64, y: i64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// The placeholder galaxy (see the module docs): home, the Archive's charted systems, and
-/// procedural systems in about two sectors of three elsewhere.
-#[derive(Clone, Copy, Debug)]
-pub struct PlaceholderSpace<'a> {
-    pub seed: u64,
-    pub charts: &'a [StarChart],
+const SALT_PORT: u64 = 0xF117_0003;
+
+/// The generated galaxy as flight sees it (see the module docs).
+#[derive(Clone, Debug)]
+pub struct GeneratedSpace {
+    space: Arc<Space>,
 }
 
-impl<'a> PlaceholderSpace<'a> {
-    #[must_use]
-    pub const fn new(seed: u64, charts: &'a [StarChart]) -> Self {
-        Self { seed, charts }
-    }
+/// The home system's fixed layout (the same for every seed: no jitter, fixed orbits).
+struct HomeLayout {
+    star: WorldPos,
+    home: WorldPos,
+    moon: WorldPos,
+    departure: WorldPos,
+    dock: WorldPos,
+}
 
-    /// The galactic sector (space axes) of a chart (its sector's y is "up").
-    #[must_use]
-    pub fn chart_sector(chart: &StarChart) -> (i64, i64) {
-        (i64::from(chart.sector.0), -i64::from(chart.sector.1))
-    }
+fn home_layout() -> &'static HomeLayout {
+    static LAYOUT: OnceLock<HomeLayout> = OnceLock::new();
+    LAYOUT.get_or_init(|| {
+        let space = Space::new(0);
+        let system = space.home_system();
+        let body = |index: u8| {
+            system
+                .bodies
+                .get(usize::from(index))
+                .map_or_else(|| system.centre.pos(), |body| body.centre.pos())
+        };
+        HomeLayout {
+            star: system.centre.pos(),
+            home: body(crate::space::HOME_WORLD_BODY.body),
+            moon: body(crate::space::MOON_BODY.body),
+            departure: space.home_departure(),
+            dock: system
+                .stations
+                .first()
+                .map_or_else(|| system.centre.pos(), |station| station.centre.pos()),
+        }
+    })
 }
 
 /// The home star's position.
 #[must_use]
-pub const fn home_star() -> WorldPos {
-    at_tile(GALAXY_SECTOR_TILES / 2, GALAXY_SECTOR_TILES / 2)
+pub fn home_star() -> WorldPos {
+    home_layout().star
 }
 
 /// The home world's centre as seen from space.
 #[must_use]
-pub const fn home_centre() -> WorldPos {
-    at_tile(
-        GALAXY_SECTOR_TILES / 2,
-        GALAXY_SECTOR_TILES / 2 - HOME_ORBIT_TILES,
-    )
+pub fn home_centre() -> WorldPos {
+    home_layout().home
 }
 
-/// Where a rig leaving the home world appears (straight "up" from it).
+/// The Moon's centre as seen from space.
+#[must_use]
+pub fn moon_centre() -> WorldPos {
+    home_layout().moon
+}
+
+/// Where a rig leaving the home world appears: the space generator's departure point, just
+/// above the Moon, straight "up" from the home world.
 #[must_use]
 pub fn home_launch() -> WorldPos {
-    home_centre().offset(
-        0.0,
-        -tiles(HOME_APPROACH_TILES + HOME_LAUNCH_CLEARANCE_TILES),
-    )
+    home_layout().departure
 }
 
-/// A star's look and size by class: (radius tiles, surface gravity px/s², corona heat).
-const fn star_shape(class: StarClass) -> (f32, f32, f32) {
+/// Halcyon Dock, the home system's station.
+#[must_use]
+pub fn home_dock() -> WorldPos {
+    home_layout().dock
+}
+
+/// A star's flight figures by class: (surface gravity px/s², corona heat).
+const fn star_shape(class: StarClass) -> (f32, f32) {
     match class {
-        StarClass::Yellow => (3_500.0, 520.0, 1.6),
-        StarClass::Red => (2_200.0, 380.0, 1.0),
-        StarClass::Blue => (6_000.0, 700.0, 2.6),
-        StarClass::White => (900.0, 900.0, 2.0),
-        StarClass::Binary => (4_200.0, 620.0, 2.0),
-        StarClass::Nebula => (3_000.0, 480.0, 1.4),
+        StarClass::Yellow => (520.0, 1.6),
+        StarClass::Red => (380.0, 1.0),
+        StarClass::Blue => (700.0, 2.6),
+        StarClass::White => (900.0, 2.0),
+        StarClass::Binary => (620.0, 2.0),
+        StarClass::Nebula => (480.0, 1.4),
     }
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "masked hash bits"
-)]
-const fn class_from(roll: u64) -> StarClass {
-    StarClass::ALL[(roll % 6) as usize]
 }
 
 /// A uniform share in `0..1` from 16 hash bits.
@@ -353,122 +384,209 @@ const fn share(roll: u64) -> f32 {
     (roll & 0xFFFF) as f32 / 65_536.0
 }
 
-impl SpaceQuery for PlaceholderSpace<'_> {
-    fn system_at(&self, sector: (i64, i64)) -> Option<SpaceSystem> {
-        if sector == (0, 0) {
-            return Some(SpaceSystem {
-                system: HOME_SYSTEM,
-                star: home_star(),
-                class: StarClass::Yellow,
-                worlds: 4,
-            });
+impl GeneratedSpace {
+    /// The galaxy of the world seeded `seed` (the shared cache).
+    #[must_use]
+    pub fn new(seed: u64) -> Self {
+        Self {
+            space: Space::shared(seed),
         }
-        let origin = galaxy_sector_origin(sector);
-        #[allow(clippy::cast_precision_loss, reason = "a power of two")]
-        let (middle, jitter) = (
-            tiles(GALAXY_SECTOR_TILES as f32 * 0.5),
-            tiles(GALAXY_SECTOR_TILES as f32 * 0.25),
-        );
-        let roll = hash64(self.seed, SALT_SYSTEM, sector.0, sector.1);
-        // A charted system wins its sector (the first chart read for it).
-        if let Some(chart) = self
-            .charts
+    }
+
+    /// The space generator itself (nebulae, black holes, belts and the rest the renderer and
+    /// the nav HUD read).
+    #[must_use]
+    pub fn space(&self) -> &Space {
+        &self.space
+    }
+
+    /// Flight's reference to the generator's system `system` of `sector`.
+    #[must_use]
+    pub fn reference(sector: SpaceSector, system: &StarSystem) -> SystemRef {
+        SystemRef {
+            id: if system.home {
+                HOME_SYSTEM_ID
+            } else {
+                system.id
+            },
+            sector: (i64::from(sector.x), i64::from(sector.y)),
+        }
+    }
+
+    /// The generator's sector of flight's galactic sector `sector` (`None` past the
+    /// generator's `i32` range).
+    fn space_sector(sector: (i64, i64)) -> Option<SpaceSector> {
+        Some(SpaceSector::new(
+            i32::try_from(sector.0).ok()?,
+            i32::try_from(sector.1).ok()?,
+        ))
+    }
+
+    /// The generator's system `system` refers to, with its index in its sector.
+    #[must_use]
+    pub fn star_system(&self, system: SystemRef) -> Option<StarSystem> {
+        let sector = Self::space_sector(system.sector)?;
+        self.space
+            .sector(sector)
+            .systems
             .iter()
-            .find(|chart| Self::chart_sector(chart) == sector)
-        {
-            let dx = (share(roll) - 0.5).mul_add(jitter, middle);
-            let dy = (share(roll >> 16) - 0.5).mul_add(jitter, middle);
-            return Some(SpaceSystem {
-                system: SystemRef {
-                    id: chart.system,
-                    sector,
-                },
-                star: advance(origin, f64::from(dx), f64::from(dy)),
-                class: chart.class,
-                worlds: chart.worlds.clamp(1, MAX_WORLDS),
-            });
-        }
-        if roll.is_multiple_of(3) {
+            .find(|found| Self::reference(sector, found) == system)
+            .cloned()
+    }
+
+    /// The system a star chart leads to (the generator resolves it, legacy charts too).
+    #[must_use]
+    pub fn chart_system(&self, chart: &StarChart) -> SystemRef {
+        let resolved = self.space.chart_system(chart);
+        self.space.system(resolved).map_or_else(
+            || SystemRef {
+                id: chart.system,
+                sector: (
+                    i64::from(resolved.sector.x),
+                    i64::from(resolved.sector.y),
+                ),
+            },
+            |system| Self::reference(resolved.sector, &system),
+        )
+    }
+
+    /// The generator's id of a flight body (`None` for suns and stations).
+    #[must_use]
+    pub fn space_body(&self, body: BodyRef) -> Option<SpaceBodyId> {
+        if !(FIRST_BODY_INDEX..STATION_INDEX).contains(&body.index) {
             return None;
         }
-        let dx = (share(roll >> 8) - 0.5).mul_add(jitter, middle);
-        let dy = (share(roll >> 24) - 0.5).mul_add(jitter, middle);
-        #[allow(clippy::cast_possible_truncation, reason = "masked")]
-        let worlds = 1 + ((roll >> 40) % u64::from(MAX_WORLDS)) as u8;
-        Some(SpaceSystem {
-            system: SystemRef {
-                id: roll | 1,
-                sector,
-            },
-            star: advance(origin, f64::from(dx), f64::from(dy)),
-            class: class_from(roll >> 48),
-            worlds,
+        let sector = Self::space_sector(body.system.sector)?;
+        let system = self.star_system(body.system)?;
+        let index = body.index - FIRST_BODY_INDEX;
+        (usize::from(index) < system.bodies.len()).then_some(SpaceBodyId {
+            sector,
+            system: system.index,
+            body: index,
         })
     }
 
+    /// Flight's reference to the generator's body `id`.
+    #[must_use]
+    pub fn body_ref(&self, id: SpaceBodyId) -> Option<BodyRef> {
+        let system = self.space.system(id.system_ref())?;
+        let index = FIRST_BODY_INDEX.checked_add(id.body)?;
+        (index < STATION_INDEX).then_some(BodyRef {
+            system: Self::reference(id.sector, &system),
+            index,
+        })
+    }
+
+    fn summary(sector: SpaceSector, system: &StarSystem) -> SpaceSystem {
+        SpaceSystem {
+            system: Self::reference(sector, system),
+            star: system.centre.pos(),
+            class: system.class,
+            worlds: u8::try_from(system.planet_count()).unwrap_or(u8::MAX),
+        }
+    }
+}
+
+impl SpaceQuery for GeneratedSpace {
+    fn fog_at(&self, pos: WorldPos) -> u16 {
+        self.space.fog_at(pos)
+    }
+
+    fn system_at(&self, sector: (i64, i64)) -> Option<SpaceSystem> {
+        let coords = Self::space_sector(sector)?;
+        let found = self.space.sector(coords);
+        found
+            .systems
+            .first()
+            .map(|system| Self::summary(coords, system))
+    }
+
+    fn systems_near(&self, pos: WorldPos, reach: i64) -> Vec<SpaceSystem> {
+        let (sx, sy) = galaxy_sector_of(pos);
+        let mut found = Vec::new();
+        for gy in sy.saturating_sub(reach)..=sy.saturating_add(reach) {
+            for gx in sx.saturating_sub(reach)..=sx.saturating_add(reach) {
+                let Some(coords) = Self::space_sector((gx, gy)) else {
+                    continue;
+                };
+                let sector = self.space.sector(coords);
+                found.extend(
+                    sector
+                        .systems
+                        .iter()
+                        .map(|system| Self::summary(coords, system)),
+                );
+            }
+        }
+        found
+    }
+
+    fn system(&self, system: SystemRef) -> Option<SpaceSystem> {
+        let sector = Self::space_sector(system.sector)?;
+        self.star_system(system)
+            .map(|found| Self::summary(sector, &found))
+    }
+
     #[allow(
+        clippy::cast_precision_loss,
         clippy::too_many_lines,
-        reason = "the star, the worlds and the station in one place"
+        reason = "radii of at most a few hundred thousand tiles; suns, bodies and stations in one place"
     )]
     fn bodies_of(&self, system: &SpaceSystem) -> Vec<FlightBody> {
-        let mut bodies = Vec::with_capacity(usize::from(system.worlds) + 2);
-        let (star_radius, star_gravity, corona) = star_shape(system.class);
-        let star_radius = tiles(star_radius);
-        bodies.push(FlightBody {
-            body: BodyRef {
-                system: system.system,
-                index: 0,
-            },
-            kind: BodyKind::Star,
-            centre: system.star,
-            radius: star_radius,
-            surface_gravity: star_gravity,
-            atmosphere: star_radius * 0.6,
-            approach: star_radius * 1.6,
-            corona_heat: corona,
-            port_angle: 0.0,
-            class: system.class,
-        });
-        let mut first_world = system.star;
-        for index in 1..=system.worlds {
-            let roll = hash64(self.seed ^ system.system.id, SALT_BODY, i64::from(index), 0);
-            let (centre, radius, gravity, air) = if system.system.is_home() && index == HOME_INDEX {
-                (
-                    home_centre(),
-                    tiles(HOME_RADIUS_TILES),
-                    50.0,
+        let Some(found) = self.star_system(system.system) else {
+            return Vec::new();
+        };
+        let mut bodies = Vec::with_capacity(found.stars.len() + found.bodies.len() + 2);
+        let (star_gravity, corona) = star_shape(found.class);
+        for (index, star) in found.stars.iter().take(usize::from(FIRST_BODY_INDEX)).enumerate() {
+            let radius = tiles(star.radius as f32);
+            bodies.push(FlightBody {
+                body: BodyRef {
+                    system: system.system,
+                    index: u8::try_from(index).unwrap_or(0),
+                },
+                kind: BodyKind::Star,
+                centre: star.centre.pos(),
+                radius,
+                surface_gravity: star_gravity,
+                atmosphere: radius * 0.6,
+                approach: radius * 1.6,
+                corona_heat: corona,
+                port_angle: 0.0,
+                class: found.class,
+            });
+        }
+        for body in &found.bodies {
+            let Some(index) = FIRST_BODY_INDEX
+                .checked_add(body.index)
+                .filter(|index| *index < STATION_INDEX)
+            else {
+                continue;
+            };
+            let radius = tiles(body.radius as f32);
+            let (kind, atmosphere, approach) = match body.kind {
+                crate::space::BodyKind::HomeWorld => (
+                    BodyKind::Home,
                     tiles(HOME_APPROACH_TILES - HOME_RADIUS_TILES),
-                )
-            } else {
-                let orbit =
-                    tiles(f32::from(index).mul_add(24_000.0, 8_000.0) + share(roll) * 8_000.0);
-                let angle = share(roll >> 16) * std::f32::consts::TAU;
-                let (sin, cos) = crate::field::trig::sin_cos(angle);
-                let radius = tiles(share(roll >> 32).mul_add(2_600.0, 400.0));
-                let air = if (roll >> 48).is_multiple_of(2) {
-                    (radius * 0.35).max(tiles(200.0))
-                } else {
-                    0.0
-                };
-                (
-                    system.star.offset(sin * orbit, -cos * orbit),
-                    radius,
-                    share(roll >> 24).mul_add(260.0, 180.0),
-                    air,
-                )
-            };
-            if index == 1 {
-                first_world = centre;
-            }
-            let kind = if system.system.is_home() && index == HOME_INDEX {
-                BodyKind::Home
-            } else {
-                BodyKind::Planet
-            };
-            let approach = if kind == BodyKind::Home {
-                tiles(HOME_APPROACH_TILES)
-            } else {
-                radius + air.max(tiles(300.0)) + tiles(200.0)
+                    tiles(HOME_APPROACH_TILES),
+                ),
+                crate::space::BodyKind::HomeMoon => {
+                    (BodyKind::Home, 0.0, radius + tiles(MOON_APPROACH_TILES))
+                }
+                crate::space::BodyKind::Planet
+                | crate::space::BodyKind::Moon
+                | crate::space::BodyKind::CraterRock => {
+                    let air = if matches!(body.atmosphere, crate::space::Atmosphere::Vacuum) {
+                        0.0
+                    } else {
+                        (radius * 0.35).max(tiles(200.0))
+                    };
+                    (
+                        BodyKind::Planet,
+                        air,
+                        radius + air.max(tiles(300.0)) + tiles(200.0),
+                    )
+                }
             };
             bodies.push(FlightBody {
                 body: BodyRef {
@@ -476,43 +594,49 @@ impl SpaceQuery for PlaceholderSpace<'_> {
                     index,
                 },
                 kind,
-                centre,
+                centre: body.centre.pos(),
                 radius,
-                surface_gravity: gravity,
-                atmosphere: air,
+                surface_gravity: body.gravity_g() * FLIGHT_G_PX,
+                atmosphere,
                 approach,
                 corona_heat: 0.0,
                 port_angle: 0.0,
-                class: system.class,
+                class: found.class,
             });
         }
-        // One station, near the first world (near home: a short hop from the launch point,
-        // up and to the side, so the straight line there stays clear of the home world's
-        // approach sphere and does not hand the rig back to the home sky).
-        let roll = hash64(self.seed ^ system.system.id, SALT_BODY, 0, 1);
-        let station = if system.system.is_home() {
-            home_centre().offset(tiles(7_000.0), -tiles(10_500.0))
-        } else {
-            let angle = share(roll) * std::f32::consts::TAU;
-            let (sin, cos) = crate::field::trig::sin_cos(angle);
-            let reach = tiles(6_000.0);
-            first_world.offset(sin * reach, -cos * reach)
-        };
-        bodies.push(FlightBody {
-            body: BodyRef {
-                system: system.system,
-                index: STATION_INDEX,
-            },
-            kind: BodyKind::Station,
-            centre: station,
-            radius: tiles(5.0),
-            surface_gravity: 0.0,
-            atmosphere: 0.0,
-            approach: tiles(60.0),
-            corona_heat: 0.0,
-            port_angle: share(roll >> 16) * std::f32::consts::TAU,
-            class: system.class,
-        });
+        for station in &found.stations {
+            let Some(index) = STATION_INDEX.checked_add(station.id.index) else {
+                continue;
+            };
+            let roll = hash64(
+                found.id,
+                SALT_PORT,
+                i64::from(station.id.index),
+                i64::from(station.planet),
+            );
+            // Halcyon Dock's port faces the departure point (down toward the Moon), so a rig
+            // leaving home flies straight in.
+            let port_angle = if found.home && station.id.index == 0 {
+                std::f32::consts::PI
+            } else {
+                share(roll) * std::f32::consts::TAU
+            };
+            bodies.push(FlightBody {
+                body: BodyRef {
+                    system: system.system,
+                    index,
+                },
+                kind: BodyKind::Station,
+                centre: station.centre.pos(),
+                radius: tiles(5.0),
+                surface_gravity: 0.0,
+                atmosphere: 0.0,
+                approach: tiles(60.0),
+                corona_heat: 0.0,
+                port_angle,
+                class: found.class,
+            });
+        }
         bodies
     }
 }

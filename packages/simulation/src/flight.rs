@@ -71,7 +71,7 @@ pub mod space;
 #[cfg(test)]
 mod tests;
 
-pub use space::{BodyKind, FlightBody, PlaceholderSpace, SpaceQuery, SpaceSystem, SystemRef};
+pub use space::{BodyKind, FlightBody, GeneratedSpace, SpaceQuery, SpaceSystem, SystemRef};
 
 // --- Leaving and returning ------------------------------------------------------------------
 
@@ -188,17 +188,20 @@ pub enum FlightPlace {
     Space,
     /// Inside a body's approach sphere (the view zooms in; re-entry heat in its air).
     Approach(BodyRef),
-    /// Resting on a body's surface.
+    /// On a generated body's round ground (its store, [`crate::place::Place::OnBody`]): the
+    /// ground code moves the rig there (Wave 11 integration, `world/body_flight.rs`).
     Landed(BodyRef),
     /// Clamped to a station's port.
     Docked(BodyRef),
 }
 
 impl FlightPlace {
-    /// Whether the rig is away from the home world (flight replaces its classic movement).
+    /// Whether the rig is flying in space (flight replaces its classic movement). A rig
+    /// [`Self::Landed`] on a body's ground is not: it drives and digs there with the ground
+    /// code, in the body's store (Wave 11 integration).
     #[must_use]
     pub const fn away(self) -> bool {
-        !matches!(self, Self::Home)
+        !matches!(self, Self::Home | Self::Landed(_))
     }
 
     /// The body the rig is at, if any.

@@ -14,7 +14,7 @@ use crate::{
     flight::{
         AIR_REFILL_PER_SECOND, AIR_WARNINGS, BodyKind, DOCK_ALIGN, DOCK_RANGE, DOCK_SPEED,
         FlightCommand, FlightEvent, FlightGearKind, FlightPlace, FlightShared, HEAT_WARNING,
-        PARK_ABOVE_ROWS, PlaceholderSpace, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS,
+        GeneratedSpace, PARK_ABOVE_ROWS, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS,
         STATION_FUEL_PRICE, STATION_REPAIR_PRICE, SpaceQuery, StarDrive, StationService, SystemRef,
         UNDOCK_SPEED, WarpRefusal, WarpRun, air_capacity, beacon_fee,
         nav::{self, NavTarget, ScanPing},
@@ -38,7 +38,7 @@ use super::WorldState;
 /// Shortest time between two scanner pings (ms).
 pub const PING_COOLDOWN_MILLIS: u64 = 2_000;
 /// Air over this share of the tank re-arms the low-air warnings.
-const AIR_REARM_SHARE: f32 = 0.6;
+pub(super) const AIR_REARM_SHARE: f32 = 0.6;
 
 const fn flight_event(what: FlightEvent, player_id: PlayerId, detail: u32) -> GameplayEventKind {
     GameplayEventKind::Flight {
@@ -75,18 +75,26 @@ impl WorldState {
         self.players
             .get(&player_id)
             .is_some_and(|player| player.flight.away())
+            || self.moving_places(player_id)
     }
 
     /// Whether this world has space beyond the Moon (Deep Descent worlds, V11+).
     #[must_use]
-    pub const fn space_enabled(&self) -> bool {
-        self.terrain.settings().generator.has_descents()
+    pub fn space_enabled(&self) -> bool {
+        self.home_settings().generator.has_descents()
     }
 
-    /// The space flight reads (TODO-SEAM(w11-space-gen): the generator's query).
+    /// The space flight reads: the space generator's galaxy of this world's seed (one shared
+    /// cache per seed, [`crate::space::Space::shared`]).
     #[must_use]
-    pub fn space(&self) -> PlaceholderSpace<'_> {
-        PlaceholderSpace::new(self.terrain.settings().seed, self.star_charts())
+    pub fn space(&self) -> GeneratedSpace {
+        GeneratedSpace::new(self.world_seed())
+    }
+
+    /// The world's seed (the home terrain's, also inside a body store's ground pass).
+    #[must_use]
+    pub const fn world_seed(&self) -> u64 {
+        self.home_seed()
     }
 
     /// Every body near `pos` (owned, so the world can be borrowed mutably after).
@@ -121,11 +129,9 @@ impl WorldState {
     #[must_use]
     pub fn known_systems(&self) -> Vec<SystemRef> {
         let mut known = vec![space::HOME_SYSTEM];
+        let space = self.space();
         for chart in self.star_charts() {
-            let system = SystemRef {
-                id: chart.system,
-                sector: PlaceholderSpace::chart_sector(chart),
-            };
+            let system = space.chart_system(chart);
             if !known.contains(&system) {
                 known.push(system);
             }
@@ -141,9 +147,10 @@ impl WorldState {
     /// The chart the Archive gave for `system`, if any.
     #[must_use]
     pub fn chart_of(&self, system: SystemRef) -> Option<&StarChart> {
+        let space = self.space();
         self.star_charts()
             .iter()
-            .find(|chart| chart.system == system.id)
+            .find(|chart| chart.system == system.id || space.chart_system(chart) == system)
     }
 
     /// `player_id`'s waypoint: their own, else the crew's.
@@ -333,6 +340,10 @@ impl WorldState {
         let seconds = self.timing.delta_seconds;
         let ids: Vec<PlayerId> = self.players.keys().copied().collect();
         for player_id in ids {
+            // A rig handed to a body's ground this tick is on its way (F11's queued move).
+            if self.moving_places(player_id) {
+                continue;
+            }
             let Some(player) = self.players.get(&player_id) else {
                 continue;
             };
@@ -557,6 +568,10 @@ impl WorldState {
             FlightCommand::ShareWaypoint => {
                 self.flight.crew_waypoint = self.flight.waypoints.get(&player_id).copied();
                 output.push_event(flight_event(FlightEvent::NavUpdated, player_id, 1));
+                PlayerScopedCommandOutcome::Applied
+            }
+            FlightCommand::Beacon if matches!(flight.place, FlightPlace::Landed(_)) => {
+                self.body_beacon(player_id, output);
                 PlayerScopedCommandOutcome::Applied
             }
             _ if !flight.away() => PlayerScopedCommandOutcome::IgnoredUnavailable,

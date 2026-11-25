@@ -69,7 +69,7 @@ pub use generate::{
     ChartTarget, chart_target, generate_sector, resolve_chart, surface_columns, system_uid,
 };
 pub use home::{
-    DEPARTURE_ABOVE_MOON, HOME_ORBIT, HOME_SUN_RADIUS, HOME_WORLD_BODY, HOME_WORLD_RADIUS,
+    DEPARTURE_ABOVE_MOON, HALCYON_DOCK_OFFSET, HOME_ORBIT, HOME_SUN_RADIUS, HOME_WORLD_BODY, HOME_WORLD_RADIUS,
     MOON_BODY, MOON_ORBIT, MOON_RADIUS,
 };
 pub use model::*;
@@ -112,7 +112,7 @@ pub const HOME_SECTOR: SpaceSector = SpaceSector {
 ///
 /// The `StateHasher` digest of the 25 sectors within two of home on the default world seed.
 /// Change it only on purpose, and say so: every space position moves with it.
-pub const GOLDEN_SPACE_DIGEST: u64 = 0xf303_d220_59a6_d7db;
+pub const GOLDEN_SPACE_DIGEST: u64 = 0x0c0c_b46c_12ea_7136;
 
 /// Whether worlds of `generator` have space (V11, the Deep Descent, and later only).
 #[must_use]

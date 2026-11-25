@@ -37,44 +37,31 @@ use crate::{
 pub use crate::world::places::{BodyWorld, PlaceError, Places};
 
 /// A body the space generator placed: the space sector it is in, the star system's index in
-/// that sector and the body's index in the system.
-///
-/// TODO-SEAM (w11-space-gen): the space generator's own body id should convert into this (or
-/// replace it); the integrator unifies them. The fields are plain coordinates so either side
-/// can build it.
-#[derive(
-    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
-)]
-pub struct SpaceBodyKey {
-    /// The space sector's coordinates (the space generator's grid).
-    pub sector_x: i64,
-    pub sector_y: i64,
-    /// The star system's index in its sector.
-    pub system: u16,
-    /// The body's index in its system.
-    pub body: u16,
-}
+/// that sector and the body's index in the system. It **is** the space generator's own id
+/// ([`crate::space::SpaceBodyId`], Wave 11 integration): every track names a generated body the
+/// same way (regions' stores, the polar ground, flight's landings and the renderer).
+pub use crate::space::SpaceBodyId as SpaceBodyKey;
 
-impl SpaceBodyKey {
+use crate::space::SpaceBodyId;
+
+impl SpaceBodyId {
+    /// The body `body` of system `system` in space sector `(sector_x, sector_y)`.
     #[must_use]
-    pub const fn new(sector_x: i64, sector_y: i64, system: u16, body: u16) -> Self {
+    pub const fn new(sector_x: i32, sector_y: i32, system: u8, body: u8) -> Self {
         Self {
-            sector_x,
-            sector_y,
+            sector: crate::space::SpaceSector::new(sector_x, sector_y),
             system,
             body,
         }
     }
 
-    /// A stable 64-bit mix of the key (seeds and region codes).
+    /// A stable 64-bit mix of the id (seeds and region codes).
     #[must_use]
     pub const fn mix(self) -> u64 {
-        let mut z = self
-            .sector_x
+        let mut z = (self.sector.x as i64)
             .cast_unsigned()
             .wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        z ^= self
-            .sector_y
+        z ^= (self.sector.y as i64)
             .cast_unsigned()
             .wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
         z ^= ((self.system as u64) << 16 | self.body as u64).wrapping_mul(0x1656_67B1_9E37_79F9);
@@ -100,6 +87,31 @@ pub enum BodyId {
 }
 
 impl BodyId {
+    /// The space generator's id of this body: the home world and the Moon are the home
+    /// system's first two bodies ([`crate::space::HOME_WORLD_BODY`],
+    /// [`crate::space::MOON_BODY`]).
+    #[must_use]
+    pub const fn space_id(self) -> SpaceBodyId {
+        match self {
+            Self::Home => crate::space::HOME_WORLD_BODY,
+            Self::Moon => crate::space::MOON_BODY,
+            Self::Space(key) => key,
+        }
+    }
+
+    /// The place id of the space generator's body `id` (the home world and the Moon map to
+    /// their own ids).
+    #[must_use]
+    pub fn of_space(id: SpaceBodyId) -> Self {
+        if id == crate::space::HOME_WORLD_BODY {
+            Self::Home
+        } else if id == crate::space::MOON_BODY {
+            Self::Moon
+        } else {
+            Self::Space(id)
+        }
+    }
+
     /// The store the body's ground lives in.
     #[must_use]
     pub const fn store(self) -> StoreKey {
@@ -471,12 +483,52 @@ impl BodyGenerator for EmptySpaceGenerator {
     }
 }
 
-/// The generator of a store's ground in the world of `seed` (`None` for the home store, which
-/// the world's own generator builds).
+/// The round ground of the generated body `key` in the world of `seed` (Wave 11 integration).
 ///
-/// TODO-SEAM (w11-polar / w11-space-gen): a space body's planet ground comes from
-/// `crate::planet` (its theme, radius and polar strip from `crate::space`); until the
-/// integrator wires it every body gets the [`FlatTestGenerator`].
+/// The space generator's body ([`crate::space::Space::body`]) gives the polar track's planet
+/// its seed, radius, gravity and theme. `None` when `key` names no landable body of this
+/// world's space (or names the home world or the Moon, whose ground is the home store's).
+#[must_use]
+pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::PlanetParams> {
+    let body = crate::space::Space::shared(seed).body(key)?;
+    if body.is_home() || body.radius < crate::polar::MIN_LANDABLE_RADIUS {
+        return None;
+    }
+    Some(crate::planet::PlanetParams {
+        seed: body.ground_seed,
+        radius: body.radius,
+        gravity_milli: body.gravity_milli_g,
+        theme: planet_theme_of(body.theme),
+    })
+}
+
+/// The polar track's ground theme for a space theme (the planet theme registry has the
+/// barren, rocky and icy grounds so far; Waves 12-13 append the rest and refine this map).
+#[must_use]
+pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme::PlanetThemeId {
+    use crate::{planet::theme::PlanetThemeId, space::Theme};
+    match theme {
+        Theme::Barren | Theme::DeadWorld | Theme::Moon | Theme::Home => PlanetThemeId::BARREN,
+        Theme::Ice => PlanetThemeId::ICE,
+        Theme::Jungle
+        | Theme::OceanArchipelago
+        | Theme::DesertDunes
+        | Theme::Volcanic
+        | Theme::Crystal
+        | Theme::Fungal
+        | Theme::MachineWorld
+        | Theme::GasGiant
+        | Theme::TidallyLocked
+        | Theme::RingWorld => PlanetThemeId::ROCKY,
+    }
+}
+
+/// The generator of a store's ground in the world of `seed` when it is not a round body.
+///
+/// `None` for the home store, which the world's own generator builds; free flight's vacuum;
+/// and the flat test ground for a key that names no landable body of the world's space
+/// (tests and tools; a real body's ground is [`planet_params_for`]'s planet, built by
+/// [`BodyWorld::generate`]).
 #[must_use]
 pub fn generator_for(store: StoreKey, seed: u64) -> Option<Arc<dyn BodyGenerator>> {
     match store {

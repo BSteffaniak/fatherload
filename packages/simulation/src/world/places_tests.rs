@@ -331,7 +331,7 @@ fn more_stores_than_the_budget_take_turns() {
     for index in 0..stores {
         let id = PlayerId::new(10 + index as u64);
         world.add_player(id);
-        let key = SpaceBodyKey::new(i64::try_from(index).expect("small"), 0, 0, 0);
+        let key = SpaceBodyKey::new(i32::try_from(index).expect("small"), 0, 0, 0);
         world
             .move_to_place(id, place_of(key), WorldPos::tile_center(0, -60))
             .expect("arrives");

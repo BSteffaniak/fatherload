@@ -74,11 +74,16 @@ pub fn ping_range(tier: u8, fogged: bool) -> f32 {
 /// Whether `pos` is inside a nebula's fog.
 #[must_use]
 pub fn in_nebula(space: &dyn SpaceQuery, pos: WorldPos) -> bool {
-    space
-        .systems_near(pos, 1)
-        .iter()
-        .any(|system| system.class == StarClass::Nebula && pos.distance(system.star) < NEBULA_REACH)
+    // The space generator's fog (interstellar nebulae and nebula stars' clouds), or a nebula
+    // star's neighbourhood.
+    space.fog_at(pos) >= NEBULA_FOG_PERMILLE
+        || space.systems_near(pos, 1).iter().any(|system| {
+            system.class == StarClass::Nebula && pos.distance(system.star) < NEBULA_REACH
+        })
 }
+
+/// Fog (per mille) from which the scanner's range halves.
+pub const NEBULA_FOG_PERMILLE: u16 = 250;
 
 /// The orientation that faces `to` from `from` (radians, clockwise from up).
 #[must_use]

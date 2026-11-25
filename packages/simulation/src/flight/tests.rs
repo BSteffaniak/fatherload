@@ -9,7 +9,7 @@ use super::{
         warp_duration_millis, warp_position,
     },
     space::{
-        self, BodyKind, FlightBody, GALAXY_SECTOR_TILES, HOME_SYSTEM, PlaceholderSpace, SpaceQuery,
+        self, BodyKind, FlightBody, GALAXY_SECTOR_TILES, GeneratedSpace, HOME_SYSTEM, SpaceQuery,
         SystemRef, tiles,
     },
 };
@@ -17,7 +17,7 @@ use crate::{
     attitude::RigAttitude,
     field::trig::wrap_angle,
     position::WorldPos,
-    star_chart::{StarChart, StarClass},
+    star_chart::StarClass,
 };
 
 const SYSTEM: SystemRef = SystemRef {
@@ -596,23 +596,10 @@ fn assists_and_flight_switches_are_off_by_default() {
     assert_eq!(controls.with_flight(bits).flight(), bits);
 }
 
-fn chart(system: u64, sector: (i32, i32), class: StarClass, worlds: u8) -> StarChart {
-    StarChart {
-        system,
-        sector,
-        class,
-        worlds,
-        name: crate::star_chart::star_name(system),
-        site: (0, 0),
-        found: crate::ids::SimulationTick::new(0),
-    }
-}
-
 #[test]
-fn the_placeholder_galaxy_is_deterministic_and_honours_the_charts() {
-    let charts = [chart(0x55, (5, 2), StarClass::Blue, 3)];
-    let space = PlaceholderSpace::new(0xF00D, &charts);
-    let again = PlaceholderSpace::new(0xF00D, &charts);
+fn the_generated_galaxy_is_deterministic_and_honours_the_charts() {
+    let space = GeneratedSpace::new(0xF00D);
+    let again = GeneratedSpace::new(0xF00D);
     let home = space.system_at((0, 0)).expect("home");
     assert_eq!(home.system, HOME_SYSTEM);
     let bodies = space.bodies_of(&home);
@@ -622,34 +609,43 @@ fn the_placeholder_galaxy_is_deterministic_and_honours_the_charts() {
             .any(|body| body.body == space::HOME_BODY && body.kind == BodyKind::Home)
     );
     assert!(bodies.iter().any(|body| body.kind == BodyKind::Station));
-    // The chart's system sits in its sector (y up the plane), with its class and worlds.
-    let charted = space.system_at((5, -2)).expect("charted");
-    assert_eq!(charted.system.id, 0x55);
-    assert_eq!(charted.class, StarClass::Blue);
-    let charted_bodies = space.bodies_of(&charted);
+    // The home world and the Moon are the space generator's, and their ids map both ways.
     assert_eq!(
-        charted_bodies
-            .iter()
-            .filter(|body| body.kind == BodyKind::Planet)
-            .count(),
-        3
+        space.space_body(space::HOME_BODY),
+        Some(crate::space::HOME_WORLD_BODY)
     );
+    assert_eq!(
+        space.body_ref(crate::space::MOON_BODY).map(|body| body.index),
+        Some(space::MOON_INDEX)
+    );
+    // A chart names a real system of the generator, with its class and worlds.
+    let target =
+        crate::star_chart::chart_at_site(0xF00D, 40, 9_900, 500, crate::ids::SimulationTick::new(0));
+    let charted_ref = space.chart_system(&target);
+    let charted = space.system(charted_ref).expect("charted");
+    assert_eq!(charted.class, target.class);
+    assert_eq!(usize::from(charted.worlds), usize::from(target.worlds));
+    let charted_bodies = space.bodies_of(&charted);
     for body in &charted_bodies {
         if body.landable() {
             assert!(
                 body.radius >= tiles(400.0),
                 "landable bodies are 400+ tiles"
             );
+            // Every landable body has round ground to land on.
+            let id = space.space_body(body.body).expect("a generated body");
+            assert!(crate::place::planet_params_for(0xF00D, id).is_some());
+            assert_eq!(space.body_ref(id), Some(body.body));
         }
     }
     for sector in [(1, 1), (-4, 9), (30, -2)] {
         assert_eq!(space.system_at(sector), again.system_at(sector));
     }
-    // Every system's star lies in its own sector.
+    // Every system's star lies in its own sector, and resolves from its reference.
     for gx in -3..3 {
         for gy in -3..3 {
-            if let Some(system) = space.system_at((gx, gy)) {
-                assert_eq!(space::galaxy_sector_of(system.star), (gx, gy));
+            for system in space.systems_near(space::galaxy_sector_origin((gx, gy)), 0) {
+                assert_eq!(system.system.sector, (gx, gy));
                 assert_eq!(space.system(system.system), Some(system));
             }
         }
@@ -657,9 +653,17 @@ fn the_placeholder_galaxy_is_deterministic_and_honours_the_charts() {
     let launch = space::home_launch();
     let home_world = bodies
         .iter()
-        .find(|body| body.kind == BodyKind::Home)
+        .find(|body| body.body == space::HOME_BODY)
         .expect("home world");
     assert!(launch.distance(home_world.centre) > home_world.approach);
+    for body in &bodies {
+        if body.kind == BodyKind::Home {
+            assert!(
+                launch.distance(body.centre) > body.approach,
+                "the departure point is outside every home body's approach sphere"
+            );
+        }
+    }
     assert_eq!(
         NavTarget::System(charted.system).position(&space),
         Some(charted.star)

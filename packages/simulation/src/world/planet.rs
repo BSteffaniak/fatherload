@@ -168,9 +168,13 @@ impl WorldState {
                 player.reframe(shift);
             }
         }
-        for site in self.lost_cargo_sites.values_mut() {
-            if let Some(shift) = shift_for(site.x) {
-                site.reframe(shift);
+        // Lost-cargo sites are the world's (home frame) list: a body store's ground pass
+        // leaves them alone (F11).
+        if !self.in_ground_pass() {
+            for site in self.lost_cargo_sites.values_mut() {
+                if let Some(shift) = shift_for(site.x) {
+                    site.reframe(shift);
+                }
             }
         }
         let far: Vec<_> = self

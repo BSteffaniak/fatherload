@@ -111,8 +111,33 @@ fn flight(world: &WorldState) -> RigFlight {
 }
 
 /// A point in deep space in the home galactic sector's corner, far from every body.
+/// Open space between the home star and its nearest neighbour (the space generator's):
+/// within the top nav suite's ping of the neighbour, and far from every surface.
 fn deep_space() -> WorldPos {
-    space::at_tile(20_000, 20_000)
+    use std::sync::OnceLock;
+    static DEEP: OnceLock<WorldPos> = OnceLock::new();
+    *DEEP.get_or_init(|| {
+        let galaxy = space::GeneratedSpace::new(settings().seed);
+        let home = space::home_star();
+        let neighbour = galaxy
+            .systems_near(home, 1)
+            .into_iter()
+            .filter(|system| !system.system.is_home())
+            .min_by(|a, b| home.distance(a.star).total_cmp(&home.distance(b.star)))
+            .expect("a neighbouring star");
+        let (dx, dy) = neighbour.star.delta_f64(home);
+        let length = dx.hypot(dy);
+        for step in 0..200_u16 {
+            let reach = f64::from(space::tiles(4_000.0f32.mul_add(-f32::from(step), 900_000.0)));
+            let at = space::advance(neighbour.star, dx / length * reach, dy / length * reach);
+            let bodies = galaxy.bodies_near(at);
+            let (gap, _) = space::nearest_surface(&bodies, at);
+            if gap > space::tiles(30_000.0) {
+                return at;
+            }
+        }
+        panic!("no open space between home and its neighbour");
+    })
 }
 
 #[test]
@@ -354,7 +379,10 @@ fn a_warp_is_refused_off_its_bearing_and_broken_by_a_gravity_well() {
     assert!(interrupted, "pulled out by the home star's well");
     let flight = flight(&world);
     assert!(!matches!(flight.drive, StarDrive::Warp(_)), "{flight:?}");
-    assert!(flight.pos.distance(home_star) < space::tiles(20_000.0));
+    // Pulled out within half the warp's clearance of the star's surface.
+    #[allow(clippy::cast_precision_loss, reason = "a star's radius")]
+    let reach = space::tiles(crate::space::HOME_SUN_RADIUS as f32 + 5_000.0);
+    assert!(flight.pos.distance(home_star) < reach);
 }
 
 #[test]

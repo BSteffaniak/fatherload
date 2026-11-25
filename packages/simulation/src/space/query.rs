@@ -201,7 +201,31 @@ pub struct ScanContact {
     pub signal: u16,
 }
 
+/// The spaces [`Space::shared`] keeps (a few worlds' seeds at once: a host and its tools).
+const SHARED_SPACES: usize = 4;
+
+static SHARED: Mutex<Vec<Arc<Space>>> = Mutex::new(Vec::new());
+
 impl Space {
+    /// The process-wide space of the world seeded `seed` (Wave 11 integration: one cache per
+    /// world, shared by flight, the body stores and the renderer). The cache is never state:
+    /// every answer is a pure function of the seed, so sharing it changes nothing.
+    #[must_use]
+    pub fn shared(seed: u64) -> Arc<Self> {
+        let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(index) = shared.iter().position(|space| space.seed == seed) {
+            let space = shared.remove(index);
+            shared.push(Arc::clone(&space));
+            return space;
+        }
+        let space = Arc::new(Self::new(seed));
+        if shared.len() >= SHARED_SPACES {
+            shared.remove(0);
+        }
+        shared.push(Arc::clone(&space));
+        space
+    }
+
     /// The space of a world seeded `seed`.
     #[must_use]
     pub fn new(seed: u64) -> Self {

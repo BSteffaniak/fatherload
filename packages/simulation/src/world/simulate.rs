@@ -77,6 +77,8 @@ impl WorldState {
             let away = self.in_space(player_id);
             if away && let Some(controls) = input.controls {
                 self.step_star_flight(player_id, controls, tick.next(), &mut output);
+                // Re-entry ends on a body's round ground (Wave 11 integration).
+                self.land_on_body_ground(player_id);
             }
             // On foot the held controls drive the pilot (`advance_pilots`); the parked rig
             // gets neutral ones.
@@ -225,6 +227,16 @@ impl WorldState {
             for action in &input.actions {
                 let outcome = if !self.players.contains_key(&player_id) {
                     PlayerScopedCommandOutcome::UnknownPlayer
+                } else if ground_only
+                    && matches!(
+                        action.command,
+                        crate::PlayerCommand::Rescue
+                            | crate::PlayerCommand::Flight(crate::flight::FlightCommand::Beacon)
+                    )
+                {
+                    // On a body the rescue call is the emergency beacon (Wave 11).
+                    self.body_beacon(player_id, &mut output);
+                    PlayerScopedCommandOutcome::Applied
                 } else if ground_only && crate::place::home_only_command(&action.command) {
                     // Building, infrastructure, rescue, the Moon, lifts, homes, tombs and
                     // beds belong to the home world (F11; TODO-SEAM w11-flight: a stranded
@@ -606,6 +618,8 @@ impl WorldState {
             self.advance_pilot_pickups(&mut output);
             self.apply_test_mode_refills();
             self.advance_fluids(next_tick, &mut output);
+            // A body's round ground: take-offs into space and life support (Wave 11).
+            self.advance_body_flight(&mut output);
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();

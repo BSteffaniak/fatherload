@@ -935,6 +935,27 @@ impl Terrain {
             body_extent: Some(extent),
             planet: None,
         };
+        terrain.apply_chunk_edits(edits);
+        terrain
+    }
+
+    /// A round body's ground (Wave 11 integration): [`Self::planet`] in `frame` with `edits`
+    /// applied (a body store's saved or replicated ground, [`crate::place::BodyWorld`]).
+    #[must_use]
+    pub fn planet_with(
+        params: crate::planet::PlanetParams,
+        frame: Frame,
+        edits: Vec<(ChunkPosition, TileDiffs)>,
+    ) -> Self {
+        let mut terrain = Self::planet(params);
+        terrain.frame = frame;
+        terrain.apply_chunk_edits(edits);
+        terrain
+    }
+
+    /// Writes saved chunk edits over the generated ground (a body's restore).
+    fn apply_chunk_edits(&mut self, edits: Vec<(ChunkPosition, TileDiffs)>) {
+        let terrain = self;
         for (chunk, diffs) in edits {
             let origin = chunk.origin();
             for (local, tile) in diffs.iter() {
@@ -950,7 +971,6 @@ impl Terrain {
                 }
             }
         }
-        terrain
     }
 
     /// The body this terrain is the ground of (`None` for the home world).
