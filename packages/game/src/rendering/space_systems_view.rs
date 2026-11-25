@@ -411,12 +411,7 @@ pub(super) fn draw_hud(
     let mut top = top;
     let banner = |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, text: &str, colour: Color| {
         let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
-        let plate = Rectangle::new(
-            (rect.x + (rect.width - width as f32) * 0.5).max(rect.x + 158.0),
-            *top,
-            width as f32,
-            15.0,
-        );
+        let plate = Rectangle::new(plate_x(rect, width as f32), *top, width as f32, 15.0);
         ui_kit::panel(draw, plate, PanelStyle::Standard);
         ui_kit::text_centred(
             draw,
@@ -515,12 +510,7 @@ pub(super) fn draw_hud(
     let gauge =
         |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, label: &str, ratio: f32, colour: Color| {
             let width = 170.0_f32.min(rect.width - 12.0);
-            let plate = Rectangle::new(
-                (rect.x + (rect.width - width) * 0.5).max(rect.x + 158.0),
-                *top,
-                width,
-                22.0,
-            );
+            let plate = Rectangle::new(plate_x(rect, width), *top, width, 22.0);
             ui_kit::panel(draw, plate, PanelStyle::Standard);
             ui_kit::text(
                 draw,
@@ -587,6 +577,17 @@ pub(super) fn draw_hud(
         banner(draw, &mut top, "PARKING HOLD", SKY_LIGHT);
     }
     top
+}
+
+/// Where a readout plate `width` wide sits in `rect`: centred, clear of the meters on the
+/// left where the view is wide enough, and never past the view's right edge (a split-screen
+/// seat's view is narrow: a plate pushed right of the meters was cut off there).
+fn plate_x(rect: Rectangle, width: f32) -> f32 {
+    let centred = (rect.width - width).mul_add(0.5, rect.x);
+    let clear = centred.max(rect.x + 158.0);
+    clear
+        .min(rect.x + rect.width - width - 2.0)
+        .max(rect.x + 2.0)
 }
 
 /// The wormhole mouths round the rig the nav HUD points at: every mouth within two galactic
