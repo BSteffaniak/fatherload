@@ -145,6 +145,12 @@ fn split_screen_seats_in_two_places_each_see_their_own() {
         crate::rendering::space::live::LiveStrip::of(ground.terrain).is_some(),
         "the polar renderer reads it"
     );
-    assert!(snapshot.views[1].place_scene.is_none());
+    // Wave 12 systems: free flight is its own store (no ground to draw).
+    assert!(
+        snapshot.views[1]
+            .place_scene
+            .as_ref()
+            .is_none_or(|scene| scene.store == StoreKey::Space && scene.body.is_none())
+    );
     assert!(snapshot.views[1].player.flight.away(), "seat 1 flies");
 }

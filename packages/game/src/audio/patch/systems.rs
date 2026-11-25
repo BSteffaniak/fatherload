@@ -13,13 +13,13 @@ use super::{
 
 /// A flare coming: three slow rising tones over a low solar rumble (unhurried: there is time).
 pub(super) fn flare_warning(rng: &mut Rng) -> Vec<f32> {
-    let seconds = 2.4;
+    let seconds = 1.9;
     let mut out = vec![0.0; samples_for(seconds)];
     let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
-    let mut lowpass = Svf::new(FilterMode::LowPass, 180.0, 0.6);
+    let mut lowpass = Svf::new(FilterMode::LowPass, 420.0, 0.6);
     let rumble = render(seconds, |t| {
         let swell = segments(t, &[(0.0, 0.0), (0.8, 1.0), (seconds, 0.0)]);
-        lowpass.process(noise.next()) * swell * 0.5
+        lowpass.process(noise.next()) * swell * 0.25
     });
     mix_into(&mut out, &rumble, 0.0, 1.0);
     let base = rng.range(392.0, 400.0);
@@ -44,8 +44,8 @@ pub(super) fn flare_burst(rng: &mut Rng) -> Vec<f32> {
     let mut low = Osc::new(Wave::Sine).with_phase(rng.unit());
     render(seconds, |t| {
         let swell = segments(t, &[(0.0, 0.0), (0.4, 1.0), (1.2, 0.8), (seconds, 0.0)]);
-        band.set(600.0 + 1_400.0 * swell, 0.4);
-        (band.process(noise.next()) * 0.8 + low.next(55.0) * 0.4) * swell
+        band.set(1_400.0 + 2_200.0 * swell, 0.5);
+        (band.process(noise.next()) * 0.9 + low.next(120.0) * 0.1) * swell
     })
 }
 
@@ -84,7 +84,7 @@ pub(super) fn transit(rng: &mut Rng) -> Vec<f32> {
         sweep.set(200.0 + 2_600.0 * share * share, 0.3);
         (sweep.process(noise.next()) * 0.6
             + hollow.next(220.0 + 440.0 * share) * 0.15
-            + sub.next(48.0) * 0.35)
+            + sub.next(90.0) * 0.12)
             * swell
     })
 }
