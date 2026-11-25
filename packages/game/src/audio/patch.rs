@@ -1053,12 +1053,16 @@ impl Patch {
             | Self::PbDuneWindLoop
             | Self::PbVolcanoLoop
             | Self::PbCrystalHumLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
-            Self::PbEruption | Self::PbVaultOpen | Self::PbBeamLit => PatchInfo::new(Big)
+            Self::PbEruption
+            | Self::PbVaultOpen
+            | Self::PbBeamLit
+            | Self::PbRumble
+            | Self::PbStormRising => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)
                 .jitter(0.02, 0.5)
                 .priority(7),
-            Self::PbRumble | Self::PbStormRising | Self::PbStormBreak | Self::PbWyrmRipple => {
+            Self::PbStormBreak | Self::PbWyrmRipple => {
                 PatchInfo::new(Alarm).instances(1).send(0.35).jitter(0.02, 0.5)
             }
             Self::PbLavaBomb | Self::PbFloorCrumble => PatchInfo::new(Impact)

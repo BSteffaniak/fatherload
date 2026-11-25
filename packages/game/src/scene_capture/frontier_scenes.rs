@@ -235,7 +235,9 @@ fn spires(planet: &PlanetGround) -> i32 {
 }
 
 fn stratum(planet: &PlanetGround, index: i32) -> i32 {
-    frontier::strata_rows(planet.grid().radius()) * [120, 380, 660, 880][usize::try_from(index).unwrap_or(0).min(3)] / 1_000
+    frontier::strata_rows(planet.grid().radius())
+        * [120, 380, 660, 880][usize::try_from(index).unwrap_or(0).min(3)]
+        / 1_000
 }
 
 fn storm(planet: &PlanetGround) -> u64 {

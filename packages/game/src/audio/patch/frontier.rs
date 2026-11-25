@@ -470,10 +470,10 @@ pub(super) fn crystal_grow(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn drifter_chime(rng: &mut Rng) -> Vec<f32> {
     let base = rng.range(390.0, 400.0);
     let mut fm = Fm::default();
-    let mut out = render(2.4, |t| {
-        fm.next(base, 1.0, 0.5 * (-t * 2.0).exp()) * perc(t, 0.002, 2.0)
+    let mut out = render(1.75, |t| {
+        fm.next(base, 1.0, 0.5 * (-t * 2.0).exp()) * perc(t, 0.002, 1.5)
     });
-    let overtone = bell(base * 2.0, 3.5, 0.4, 1.5);
+    let overtone = bell(base * 2.0, 3.5, 0.4, 1.2);
     mix_into(&mut out, &overtone, 0.0, 0.3);
     out
 }
