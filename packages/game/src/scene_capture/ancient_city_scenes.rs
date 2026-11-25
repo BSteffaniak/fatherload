@@ -470,7 +470,10 @@ fn vault(stage: &mut SceneStage<'_>, kind: VaultKind) {
         };
         let b = found.bounds;
         let local = match kind {
-            VaultKind::Plate | VaultKind::Grand => (2, 5),
+            VaultKind::Plate => (2, 5),
+            // Between the second gate and the glass, so both gates, the three colours and the
+            // plinth are all in view.
+            VaultKind::Grand => (20, 5),
             VaultKind::Light => (1, 5),
             VaultKind::Lever => (12, 6),
         };

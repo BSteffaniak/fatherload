@@ -243,8 +243,13 @@ impl SeatUi {
             self.open_modal(ModalScreen::ExpeditionLog);
             return;
         }
-        // The star charts come next (Wave 10), then the map.
-        let next = ModalScreen::StarCharts;
+        // The star charts come next on Deep Descent worlds (Wave 10; only they have the
+        // Archive of Stars), then the map.
+        let next = if world.terrain().settings().generator.has_descents() {
+            ModalScreen::StarCharts
+        } else {
+            ModalScreen::Map
+        };
         if input.tab_next {
             self.open_modal(next);
             return;
