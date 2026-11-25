@@ -101,7 +101,9 @@ pub fn order(
         return drift(ship);
     };
     let (dx, dy) = ship.pos.delta(rig.pos);
-    let distance = length(dx, dy);
+    // Never zero: the orbits below divide by it, and a ship exactly on the rig (a mite's
+    // dive) would otherwise turn its velocity, and then its position, into NaN.
+    let distance = length(dx, dy).max(1.0e-3);
     if ship.mode == ShipMode::Leaving {
         // Away from the rig, nose first.
         let away = if distance > 0.0 {
