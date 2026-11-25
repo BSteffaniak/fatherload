@@ -951,6 +951,24 @@ pub enum SoundCue {
     AlienSiphraVoice,
     AlienFirstContact,
     AlienWordLearned,
+    /// The rig's cannon or turret (wave 12 hostiles).
+    SpaceCannon,
+    /// A missile leaving the rack.
+    SpaceMissile,
+    /// A rig's shot hitting a ship.
+    SpaceShipHit,
+    /// A ship breaking up.
+    SpaceShipBoom,
+    /// The deflector failing.
+    SpaceShieldDown,
+    /// A pirate hail.
+    SpaceHail,
+    /// A boss winding up an attack.
+    SpaceBossWarn,
+    /// A boss arriving.
+    SpaceBossAppear,
+    /// A hostile ship's shot.
+    SpaceEnemyShot,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

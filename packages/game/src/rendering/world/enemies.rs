@@ -28,8 +28,9 @@ use crate::rendering::pixel_art::{
     sprites::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
         drowned as drowned_art, enemies as art, far_strange as far_art, frontier as frontier_art,
-        garrison as garrison_art, heart as heart_art, hollow as hollow_art, living as living_art,
-        moon as moon_art, old_deep as deep_art, tomb as tomb_art, wilds as wilds_art,
+        garrison as garrison_art, heart as heart_art, hollow as hollow_art, hostiles as hostile_art,
+        living as living_art, moon as moon_art, old_deep as deep_art, tomb as tomb_art,
+        wilds as wilds_art,
     },
 };
 
@@ -226,6 +227,10 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::GlintMoth => &frontier_art::GLINT_MOTH,
         EnemyKind::ChimeDrifter => &frontier_art::CHIME_DRIFTER,
         EnemyKind::GeodeMimic => &frontier_art::GEODE_MIMIC,
+        // Ground raids (Wave 12 hostiles).
+        EnemyKind::RaidCorsair => &hostile_art::RAID_CORSAIR,
+        EnemyKind::SwarmSkitter => &hostile_art::SWARM_SKITTER,
+        EnemyKind::MachineTrooper => &hostile_art::MACHINE_TROOPER,
     }
 }
 
@@ -894,6 +899,17 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         | EnemyKind::DriveCoil
         | EnemyKind::HeartSpark
         | EnemyKind::StarHeart => sprite.frame_at(phase),
+        // Ground raids (Wave 12 hostiles): a stride while moving, the aim or crouch winding
+        // up.
+        EnemyKind::RaidCorsair | EnemyKind::SwarmSkitter | EnemyKind::MachineTrooper => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 6.0) as usize) % 2
+            } else {
+                0
+            }
+        }
         EnemyKind::UpfallBeetle => {
             if matches!(state.mode, EnemyMode::Strike | EnemyMode::Recover) {
                 2

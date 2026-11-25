@@ -56,4 +56,10 @@ pub enum TestModeAction {
     /// Fit the submitting rig with the Star Drive and open space (Wave 11's debug grant; on
     /// Deep Descent worlds only).
     GrantStarDrive,
+    /// Call a `Faction`'s encounter on the submitting rig in space (Wave 12 hostiles).
+    SpawnHostiles(crate::hostiles::Faction),
+    /// Call a `Faction`'s boss on the submitting rig in space (Wave 12 hostiles).
+    SpawnBoss(crate::hostiles::Faction),
+    /// Land a `Faction`'s raid by the submitting rig on a body's ground (Wave 12 hostiles).
+    SpawnRaid(crate::hostiles::Faction),
 }

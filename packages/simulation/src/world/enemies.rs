@@ -3122,6 +3122,10 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::ShardCrab
         | EnemyKind::GlintMoth
         | EnemyKind::ChimeDrifter
-        | EnemyKind::GeodeMimic => false,
+        | EnemyKind::GeodeMimic
+        // Raiders come only by dropship (Wave 12 hostiles).
+        | EnemyKind::RaidCorsair
+        | EnemyKind::SwarmSkitter
+        | EnemyKind::MachineTrooper => false,
     }
 }

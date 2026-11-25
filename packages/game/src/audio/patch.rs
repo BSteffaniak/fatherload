@@ -23,6 +23,7 @@ mod frontier;
 mod garrison;
 mod heart;
 mod hollow;
+mod hostiles;
 mod old_deep;
 mod story_finale;
 mod systems;
@@ -577,6 +578,19 @@ patches! {
     AlienSiphraVoice => "alien_siphra_voice",
     AlienFirstContact => "alien_first_contact",
     AlienWordLearned => "alien_word_learned",
+    // Space combat (wave 12 hostiles), appended at the end so every earlier patch keeps its
+    // seeds.
+    HxCannon => "hx_cannon",
+    HxMissile => "hx_missile",
+    HxShipHit => "hx_ship_hit",
+    HxShipBoom => "hx_ship_boom",
+    HxShieldDown => "hx_shield_down",
+    HxHail => "hx_hail",
+    HxBossWarn => "hx_boss_warn",
+    HxBossAppear => "hx_boss_appear",
+    HxEnemyShot => "hx_enemy_shot",
+    HxCombatLoop => "loop_hx_combat",
+    HxBossLoop => "loop_hx_boss",
 }
 
 /// Playback metadata of a patch.
@@ -1131,6 +1145,29 @@ impl Patch {
                 .instances(3)
                 .send(0.2)
                 .jitter(0.06, 1.0),
+            // Space combat (wave 12 hostiles): guns are quick and many, hits tick, a ship
+            // breaking up and a boss arriving are big, the warnings are alarms, and two music
+            // loops.
+            Self::HxCannon | Self::HxEnemyShot => PatchInfo::new(Impact)
+                .instances(4)
+                .send(0.05)
+                .jitter(0.04, 1.5),
+            Self::HxShipHit => PatchInfo::new(Feedback)
+                .instances(3)
+                .send(0.05)
+                .jitter(0.05, 1.5),
+            Self::HxMissile => PatchInfo::new(Impact).instances(2).send(0.1),
+            Self::HxShipBoom => PatchInfo::new(Big).instances(3).send(0.2).jitter(0.06, 1.0),
+            Self::HxShieldDown | Self::HxHail | Self::HxBossWarn => {
+                PatchInfo::new(Alarm).instances(1).jitter(0.0, 0.5)
+            }
+            Self::HxBossAppear => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.4)
+                .jitter(0.0, 0.3)
+                .ducking(0.3)
+                .priority(8),
+            Self::HxCombatLoop | Self::HxBossLoop => PatchInfo::new(Loop),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -1931,6 +1968,17 @@ impl Patch {
             Self::AlienSiphraVoice => aliens::siphra_voice(rng),
             Self::AlienFirstContact => aliens::first_contact(rng),
             Self::AlienWordLearned => aliens::word_learned(rng),
+            Self::HxCannon => hostiles::hx_cannon(rng),
+            Self::HxMissile => hostiles::hx_missile(rng),
+            Self::HxShipHit => hostiles::hx_ship_hit(rng),
+            Self::HxShipBoom => hostiles::hx_ship_boom(rng),
+            Self::HxShieldDown => hostiles::hx_shield_down(rng),
+            Self::HxHail => hostiles::hx_hail(rng),
+            Self::HxBossWarn => hostiles::hx_boss_warn(rng),
+            Self::HxBossAppear => hostiles::hx_boss_appear(rng),
+            Self::HxEnemyShot => hostiles::hx_enemy_shot(rng),
+            Self::HxCombatLoop => hostiles::hx_combat_loop(rng),
+            Self::HxBossLoop => hostiles::hx_boss_loop(rng),
         }
     }
 }

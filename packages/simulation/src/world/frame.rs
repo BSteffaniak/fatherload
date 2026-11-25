@@ -206,6 +206,9 @@ impl WorldState {
             aliens: _,
             // Stations are space ids, not home positions (Wave 12).
             stations: _,
+            // Ships, shots and wrecks fly in space coordinates; raids name stores and entity
+            // ids (Wave 12).
+            hostiles: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

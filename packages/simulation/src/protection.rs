@@ -100,6 +100,9 @@ pub struct HazardGear {
     /// shipyards (see [`crate::station::ShipGear`]).
     #[serde(default)]
     pub ship: crate::station::ShipGear,
+    /// Space weapons and the deflector (Wave 12 hostiles, see [`crate::hostiles::ShipGear`]).
+    #[serde(default)]
+    pub arms: crate::hostiles::ShipGear,
 }
 
 impl HazardGear {
@@ -134,6 +137,7 @@ impl HazardGear {
             gravity_struts: 0,
             alien: 0,
         },
+        arms: crate::hostiles::ShipGear::MAXED,
     };
 
     /// Whether the Deep Descent rig system `system` is fitted.

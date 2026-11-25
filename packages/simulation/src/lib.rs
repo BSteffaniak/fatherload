@@ -47,6 +47,7 @@ pub mod hazard;
 pub mod heart;
 pub mod hollow;
 pub mod home;
+pub mod hostiles;
 pub mod ids;
 pub mod infrastructure;
 pub mod input;

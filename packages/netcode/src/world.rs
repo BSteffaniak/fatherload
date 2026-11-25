@@ -466,6 +466,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Station {
             what, player_id, ..
         } => (960 + what.code() as u32, Some(player_id)),
+        // Hostile factions and space combat (wave 12 hostiles): 980-999.
+        GameplayEventKind::Hostile {
+            what, player_id, ..
+        } => (980 + what.code() as u32, player_id),
     }
 }
 

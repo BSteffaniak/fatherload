@@ -153,6 +153,7 @@ impl WorldState {
             aliens: _,
             // A leaving player's hold and missions go with them (Wave 12).
             stations,
+            hostiles,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).
@@ -161,6 +162,7 @@ impl WorldState {
         }
         flight.forget(player_id);
         stations.forget(player_id);
+        hostiles.forget(player_id);
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
         heart.forget(player_id);

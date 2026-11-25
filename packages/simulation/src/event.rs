@@ -1403,6 +1403,14 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         detail: u32,
     },
+    // Hostile factions and space combat (Wave 12 hostiles; netcode codes 980-999).
+    /// Something happened in a fight in space or a raid on a body; `player_id` is whose rig
+    /// (if any), `detail` the event's number (a faction, a class, damage, credits, ...).
+    Hostile {
+        what: crate::hostiles::HostileEvent,
+        player_id: Option<PlayerId>,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1494,7 +1502,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::Tomb(_)
         | PlayerCommand::Logistics(_)
         | PlayerCommand::Flight(_)
-        | PlayerCommand::Alien(_) => {
+        | PlayerCommand::Alien(_)
+        | PlayerCommand::Combat(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

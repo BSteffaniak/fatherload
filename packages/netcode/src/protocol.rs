@@ -318,6 +318,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `Stations` world field and `SectionKey::Stations` section (holds, missions, boards,
 ///   market shifts, salvage, rumours heard, bodies scanned) and the station events 960-979
 ///   (`GameplayEventKind::Station`).
+/// * Hostiles (w12-hostiles): the appended `HazardGear::ship` (cannon, turret, missiles,
+///   deflector), `PlayerCommand::Combat`, `TestModeAction::{SpawnHostiles, SpawnBoss,
+///   SpawnRaid}`, the `Hostiles` world field and `SectionKey::Hostiles` section (ships, shots,
+///   wrecks, encounters, each rig's guns and deflector, bosses beaten, bounties, raids), the
+///   raid troopers (`EnemyKind::{RaidCorsair, SwarmSkitter, MachineTrooper}`) and the hostile
+///   events 980-999 (`GameplayEventKind::Hostile`).
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

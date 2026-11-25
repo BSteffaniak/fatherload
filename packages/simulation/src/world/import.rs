@@ -237,6 +237,7 @@ impl WorldState {
             space_systems: crate::flight::systems::SystemsShared::default(),
             aliens: crate::alien::AlienState::default(),
             stations: crate::station::StationLedger::default(),
+            hostiles: crate::hostiles::HostileSpace::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

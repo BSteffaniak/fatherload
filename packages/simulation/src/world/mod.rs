@@ -144,6 +144,7 @@ mod hollow_tests;
 #[cfg(test)]
 mod home_tests;
 mod homes;
+mod hostiles;
 mod import;
 mod living_dark;
 #[cfg(test)]
@@ -636,6 +637,11 @@ pub struct WorldState {
     /// market shifts, salvage and rumours, bodies scanned.
     #[serde(default)]
     stations: crate::station::StationLedger,
+    /// Hostile factions and space combat (Wave 12 hostiles, see [`crate::hostiles`]): ships,
+    /// shots, wrecks, encounters, each rig's guns and deflector, bosses beaten, bounties and
+    /// ground raids.
+    #[serde(default)]
+    hostiles: crate::hostiles::HostileSpace,
 }
 
 impl WorldState {

@@ -105,6 +105,9 @@ pub enum PlayerCommand {
     /// An action with a friendly alien species (Wave 12, see [`crate::alien::AlienCommand`]):
     /// trade, lessons, the elders' chapters and homes in their towns.
     Alien(crate::alien::AlienCommand),
+    /// A space combat action (Wave 12 hostiles, see [`crate::hostiles::CombatCommand`]):
+    /// missiles, paying pirates off, the escape jump, the shipyard.
+    Combat(crate::hostiles::CombatCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

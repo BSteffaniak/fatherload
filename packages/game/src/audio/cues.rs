@@ -370,6 +370,15 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::AlienSiphraVoice => Patch::AlienSiphraVoice,
         SoundCue::AlienFirstContact => Patch::AlienFirstContact,
         SoundCue::AlienWordLearned => Patch::AlienWordLearned,
+        SoundCue::SpaceCannon => Patch::HxCannon,
+        SoundCue::SpaceMissile => Patch::HxMissile,
+        SoundCue::SpaceShipHit => Patch::HxShipHit,
+        SoundCue::SpaceShipBoom => Patch::HxShipBoom,
+        SoundCue::SpaceShieldDown => Patch::HxShieldDown,
+        SoundCue::SpaceHail => Patch::HxHail,
+        SoundCue::SpaceBossWarn => Patch::HxBossWarn,
+        SoundCue::SpaceBossAppear => Patch::HxBossAppear,
+        SoundCue::SpaceEnemyShot => Patch::HxEnemyShot,
     }
 }
 
@@ -867,6 +876,45 @@ pub const fn station_cue(what: fatherload_simulation::station::StationEvent) -> 
         E::Refused => SoundCue::UiError,
         E::BodyScanned => SoundCue::Scanner,
         E::HazardBiting => SoundCue::VacuumAlarm,
+    }
+}
+
+/// The cue of a space combat event (Wave 12 hostiles; exhaustive: a new event needs a sound).
+/// `detail` tells a missile from the guns.
+#[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "each event's sound reads next to its own"
+)]
+pub const fn hostile_cue(
+    what: fatherload_simulation::hostiles::HostileEvent,
+    detail: u32,
+) -> Option<SoundCue> {
+    use fatherload_simulation::hostiles::{HostileEvent as E, ShotKind};
+    match what {
+        E::EncounterStarted | E::Interdicted => Some(SoundCue::StormSiren),
+        E::Hailed => Some(SoundCue::SpaceHail),
+        E::TributePaid => Some(SoundCue::Sell),
+        E::TurnedHostile => Some(SoundCue::SpaceBossWarn),
+        E::ShipDestroyed => Some(SoundCue::SpaceShipBoom),
+        // The hull hit is `PlayerDamaged`'s.
+        E::RigHit => None,
+        E::ShieldDown => Some(SoundCue::SpaceShieldDown),
+        E::Fired => match ShotKind::from_code(detail) {
+            Some(ShotKind::Missile) => Some(SoundCue::SpaceMissile),
+            Some(ShotKind::Cannon | ShotKind::Turret) => Some(SoundCue::SpaceCannon),
+            Some(_) | None => Some(SoundCue::SpaceEnemyShot),
+        },
+        E::ShipHit => Some(SoundCue::SpaceShipHit),
+        E::EscapeSpooling => Some(SoundCue::MachineCharge),
+        E::Escaped => Some(SoundCue::UplinkWarp),
+        E::EncounterOver => Some(SoundCue::UiBack),
+        E::WreckLooted => Some(SoundCue::Sell),
+        E::BossAppeared => Some(SoundCue::SpaceBossAppear),
+        E::BossTelegraph => Some(SoundCue::SpaceBossWarn),
+        E::BossDefeated | E::BountyClaimed => Some(SoundCue::Milestone),
+        E::RaidLanded => Some(SoundCue::StormSiren),
+        E::GearBought => Some(SoundCue::Upgrade),
     }
 }
 
@@ -1410,6 +1458,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Alien { what, species, .. } => Some(alien_cue(*what, *species)),
         // Space stations (Wave 12).
         GameplayEventKind::Station { what, .. } => Some(station_cue(*what)),
+        // Space combat (Wave 12).
+        GameplayEventKind::Hostile { what, detail, .. } => hostile_cue(*what, *detail),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1767,7 +1817,8 @@ mod tests {
             | GameplayEventKind::Wilds { .. }
             | GameplayEventKind::Frontier { .. }
             | GameplayEventKind::Alien { .. }
-            | GameplayEventKind::Station { .. } => {}
+            | GameplayEventKind::Station { .. }
+            | GameplayEventKind::Hostile { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2247,6 +2298,13 @@ mod tests {
                 player_id: Some(player_id),
                 x: 0,
                 y: 0,
+            });
+        }
+        for what in fatherload_simulation::hostiles::HostileEvent::ALL {
+            events.push(GameplayEventKind::Hostile {
+                what,
+                player_id: Some(player_id),
+                detail: 0,
             });
         }
         for kind in fatherload_simulation::expedition::anomaly::AnomalyKind::ALL {
@@ -2989,6 +3047,15 @@ mod tests {
             SoundCue::AlienSiphraVoice,
             SoundCue::AlienFirstContact,
             SoundCue::AlienWordLearned,
+            SoundCue::SpaceCannon,
+            SoundCue::SpaceMissile,
+            SoundCue::SpaceShipHit,
+            SoundCue::SpaceShipBoom,
+            SoundCue::SpaceShieldDown,
+            SoundCue::SpaceHail,
+            SoundCue::SpaceBossWarn,
+            SoundCue::SpaceBossAppear,
+            SoundCue::SpaceEnemyShot,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

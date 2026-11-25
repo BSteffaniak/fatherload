@@ -15,6 +15,7 @@ pub mod frontier;
 pub mod garrison;
 pub mod heart;
 pub mod hollow;
+pub mod hostiles;
 pub mod icons;
 pub mod interior;
 pub mod living;
@@ -557,6 +558,19 @@ pub const ALL: &[&SpriteDef] = &[
     &far_strange::SHOT_PRISM_BLUE,
     &far_strange::SHOT_GLITCH_BOLT,
     // The builders' buried city (Wave 10 ancients-a).
+    // Space combat (Wave 12 hostiles): ships and raid troopers.
+    &hostiles::CUTTER,
+    &hostiles::MARAUDER,
+    &hostiles::PIRATE_KING,
+    &hostiles::MITE,
+    &hostiles::STINGER,
+    &hostiles::SWARM_QUEEN,
+    &hostiles::DRONE,
+    &hostiles::LANCER,
+    &hostiles::ARBITER,
+    &hostiles::RAID_CORSAIR,
+    &hostiles::SWARM_SKITTER,
+    &hostiles::MACHINE_TROOPER,
     &ancient_city::MAINTENANCE_DRONE,
     &ancient_city::SCRAP_CRAWLER,
     &ancient_city::STREET_SENTINEL,

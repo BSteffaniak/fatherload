@@ -223,6 +223,9 @@
 //! | [`EnemyKind::GlintMoth`] | creature (neutral fauna) | crystal spires; drawn to lamps | circles a rig's lights | harmless |
 //! | [`EnemyKind::ChimeDrifter`] | creature (neutral fauna) | the crystal world's caverns | a slow bell; struck, it rings and shatters the crystal round it | use it |
 //! | [`EnemyKind::GeodeMimic`] | creature (ambusher) | geodes and the heavy lattice | a crystal lump that opens when you come close | blasts; keep your distance |
+//! | [`EnemyKind::RaidCorsair`] | creature (ranged) | set down by a pirate dropship on a body (Wave 12 raids) | raises its rifle before it fires | cover, close in |
+//! | [`EnemyKind::SwarmSkitter`] | creature (lunger) | dropped by the swarm on a body | crouches before it leaps | sidestep, shoot it mid-leap |
+//! | [`EnemyKind::MachineTrooper`] | machine (ranged) | set down by the Concord on a body | its eye glows before a pulse | cover, EMP |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -592,6 +595,14 @@ pub enum EnemyKind {
     ChimeDrifter,
     /// A geode mimic: a crystal lump that opens into jaws.
     GeodeMimic,
+    // --- Ground raids (Wave 12 hostiles, `crate::hostiles::raid`), appended ---------------
+    /// A Rustwake corsair a pirate dropship set down on a body: a gunman who keeps his
+    /// distance and fires bolts.
+    RaidCorsair,
+    /// A Bloom skitter the swarm dropped on a body: a quick leaping biter.
+    SwarmSkitter,
+    /// A Concord trooper: a walking machine that fires pulses.
+    MachineTrooper,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -1055,7 +1066,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 174] = [
+    pub const ALL: [Self; 177] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1230,6 +1241,9 @@ impl EnemyKind {
         Self::GlintMoth,
         Self::ChimeDrifter,
         Self::GeodeMimic,
+        Self::RaidCorsair,
+        Self::SwarmSkitter,
+        Self::MachineTrooper,
     ];
 
     /// Whether this is one of the wild worlds' creatures (Wave 12 planets-a).
@@ -4274,6 +4288,60 @@ impl EnemyKind {
                 knockback: 220.0,
                 ..stats("Geode Mimic", Creature, Walking, AttackStyle::Lunge)
             },
+            // Ground raids (Wave 12 hostiles): troopers a faction's dropship sets down.
+            Self::RaidCorsair => EnemyStats {
+                radius: 9.0,
+                health: 70.0,
+                speed: 70.0,
+                sight_tiles: 14.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 40.0,
+                contact_damage: 8.0,
+                windup_millis: 650,
+                cooldown_millis: 1_700,
+                attack_range_tiles: 11.0,
+                knockback: 120.0,
+                ..stats(
+                    "Corsair Raider",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Bolt, 1),
+                )
+            },
+            Self::SwarmSkitter => EnemyStats {
+                radius: 8.0,
+                health: 45.0,
+                speed: 95.0,
+                dash_speed: 300.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 40.0,
+                contact_damage: 9.0,
+                windup_millis: 450,
+                cooldown_millis: 1_600,
+                attack_range_tiles: 3.5,
+                knockback: 150.0,
+                ..stats("Bloom Skitter", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::MachineTrooper => EnemyStats {
+                radius: 10.0,
+                health: 110.0,
+                speed: 55.0,
+                sight_tiles: 15.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 40.0,
+                contact_damage: 10.0,
+                windup_millis: 800,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 12.0,
+                knockback: 120.0,
+                ..stats(
+                    "Concord Trooper",
+                    Machine,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::SentinelBolt, 1),
+                )
+            },
         }
     }
 
@@ -4551,6 +4619,10 @@ impl EnemyKind {
             Self::GlintMoth => (7.5, 6.5),
             Self::ChimeDrifter => (10.0, 12.0),
             Self::GeodeMimic => (13.5, 12.0),
+            // Ground raids (Wave 12 hostiles): the drawn troopers' bodies.
+            Self::RaidCorsair => (8.0, 13.0),
+            Self::SwarmSkitter => (11.0, 7.0),
+            Self::MachineTrooper => (10.0, 14.0),
         }
     }
 
@@ -5876,6 +5948,18 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(richer, 1 + extra);
         }
         EnemyKind::CoronaWisp | EnemyKind::HeartSpark => add(mineral, 1),
+        // Ground raids (Wave 12 hostiles): raiders carry a little of what they took.
+        EnemyKind::RaidCorsair => {
+            add(richer, 1 + extra);
+            if rare < 20 {
+                add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+            }
+        }
+        EnemyKind::SwarmSkitter => add(mineral, 1 + extra / 2),
+        EnemyKind::MachineTrooper => {
+            add(richer, 1);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+        }
         EnemyKind::CableWarden | EnemyKind::DriveCoil => {
             add(richer, 2 + extra);
             add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);

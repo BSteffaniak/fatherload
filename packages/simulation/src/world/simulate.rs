@@ -47,6 +47,7 @@ impl WorldState {
     /// pass.
     #[allow(
         clippy::too_many_lines,
+        clippy::if_not_else,
         reason = "canonical transition keeps tick ordering explicit while gameplay domains are extracted"
     )]
     pub(super) fn simulate_pass(
@@ -255,6 +256,12 @@ impl WorldState {
                     // Friendly aliens (Wave 12, `world/aliens.rs`): its own events.
                     outcome
                 } else if let Some(outcome) =
+                    self.combat_command(player_id, &action.command, &mut output)
+                {
+                    // Space combat (Wave 12, `world/hostiles.rs`): missiles, tribute, the
+                    // escape jump, the shipyard; its own events.
+                    outcome
+                } else if let Some(outcome) =
                     self.flight_command(player_id, &action.command, &mut output)
                 {
                     // Space flight (Wave 11, `world/flight.rs`): its own events.
@@ -337,12 +344,17 @@ impl WorldState {
             self.advance_tombs(next_tick, &mut output);
             // Space flight (Wave 11): leaving home over the Moon, life support, the beacon.
             self.advance_star_flight(&mut output);
+            // Hostile factions and space combat (Wave 12 hostiles, `world/hostiles.rs`).
+            self.advance_hostiles(inputs, next_tick, &mut output);
             let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
             for player_id in recovery_player_ids {
                 if self.recover_lost_cargo_for_player(player_id) {
                     output.push_event(GameplayEventKind::CargoChanged { player_id });
                 }
             }
+        } else {
+            // Ground raids on a body (Wave 12 hostiles, `world/hostiles.rs`).
+            self.advance_raids(next_tick, &mut output);
         }
         for (player_id, deadline) in &self.scanner_cooldown_deadlines {
             self.scanner_cooldowns

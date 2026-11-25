@@ -92,6 +92,14 @@ impl WorldState {
             }
             TestModeAction::ClearFieldZones => self.fields.clear(),
             TestModeAction::GrantStarDrive => return self.grant_star_drive(player_id),
+            // Space combat (Wave 12 hostiles, `world/hostiles.rs`).
+            TestModeAction::SpawnHostiles(faction) => {
+                return self.test_spawn_hostiles(player_id, faction, false);
+            }
+            TestModeAction::SpawnBoss(faction) => {
+                return self.test_spawn_hostiles(player_id, faction, true);
+            }
+            TestModeAction::SpawnRaid(faction) => return self.test_spawn_raid(player_id, faction),
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players
