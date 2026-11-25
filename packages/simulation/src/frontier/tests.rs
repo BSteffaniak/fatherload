@@ -597,3 +597,15 @@ fn each_world_has_neutral_fauna_and_hunters_in_its_rosters() {
         );
     }
 }
+
+#[test]
+fn the_space_report_names_each_frontier_ground() {
+    let text = crate::space::report::space_report(0x0D3E_9DE5, 2);
+    for line in [
+        "desert dunes       -> Dune World: Shifting Dunes, Buried City, Worm Galleries, Glass Deep",
+        "volcanic           -> Volcanic World: Ash Fields, Basalt Flows, Obsidian Mantle, Magma Chambers",
+        "crystal            -> Crystal World: Shard Meadows, Prism Beds, Growing Geodes, Heavy Lattice",
+    ] {
+        assert!(text.contains(line), "{line}\n{text}");
+    }
+}

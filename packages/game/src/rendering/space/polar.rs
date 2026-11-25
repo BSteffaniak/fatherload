@@ -870,6 +870,86 @@ fn upload_texture(
     }
 }
 
+/// A frontier world's mark (Wave 12 planets-b) at the origin: a bomb's shadow (a dark ring
+/// closing in, reddening as it falls: the telegraph), a glowing bomb, a beam of light, the
+/// sand's ripple over a wyrm.
+fn draw_frontier_mark(
+    draw: &mut impl RaylibDraw,
+    mark: super::view::FrontierMark,
+    art: f32,
+    seconds: f32,
+) {
+    use super::view::FrontierMark;
+    match mark {
+        FrontierMark::BombShadow(progress) => {
+            let t = f32::from(progress) / 1_000.0;
+            let radius = (1.0 + 2.2 * (1.0 - t)) * 8.0 * art;
+            draw.draw_ellipse(
+                0,
+                (-art) as i32,
+                radius,
+                radius * 0.35,
+                fade(palette::INK, 0.25 + 0.4 * t),
+            );
+            draw.draw_ellipse_lines(
+                0,
+                (-art) as i32,
+                radius * 1.1,
+                radius * 0.4,
+                fade(palette::RED, 0.4 + 0.5 * t),
+            );
+        }
+        FrontierMark::Bomb => {
+            let r = 3.5 * art;
+            draw.draw_circle_v(Vector2::new(0.0, -r), r * 1.8, fade(palette::ORANGE, 0.3));
+            draw.draw_circle_v(Vector2::new(0.0, -r), r, palette::RED);
+            draw.draw_circle_v(Vector2::new(-r * 0.3, -r * 1.3), r * 0.45, palette::GOLD);
+        }
+        FrontierMark::Beam { across } => {
+            let pulse = 0.55 + 0.15 * (seconds * 3.0).sin();
+            let tile = 16.0 * art;
+            let (w, h) = if across {
+                (tile, tile * 0.3)
+            } else {
+                (tile * 0.3, tile)
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(
+                    -w * 0.5 - art,
+                    -tile * 0.5 - h * 0.5 - art,
+                    w + 2.0 * art,
+                    h + 2.0 * art,
+                ),
+                fade(palette::GOLD, 0.25 * pulse),
+            );
+            draw.draw_rectangle_rec(
+                Rectangle::new(-w * 0.5, -tile * 0.5 - h * 0.5, w, h),
+                fade(palette::CREAM, pulse),
+            );
+        }
+        FrontierMark::Ripple => {
+            for ring in 0..3_u8 {
+                let phase = (seconds * 1.5 + f32::from(ring) / 3.0).fract();
+                let radius = (4.0 + 18.0 * phase) * art;
+                draw.draw_ellipse_lines(
+                    0,
+                    (-art) as i32,
+                    radius,
+                    radius * 0.25,
+                    fade(palette::SAND, 1.0 - phase),
+                );
+            }
+        }
+    }
+}
+
+/// `colour` at opacity `alpha` (0-1).
+fn fade(colour: Color, alpha: f32) -> Color {
+    #[allow(clippy::cast_sign_loss, reason = "clamped to 0..=255")]
+    let alpha = (alpha.clamp(0.0, 1.0) * 255.0) as u8;
+    palette::with_alpha(colour, alpha)
+}
+
 /// One thing on the ground, drawn with its feet at the origin, upright in its own frame.
 #[allow(clippy::too_many_lines, reason = "one arm per kind of thing")]
 fn draw_thing(
@@ -951,6 +1031,7 @@ fn draw_thing(
                 shade(palette::AMBER, light),
             );
         }
+        GroundThingKind::Frontier(mark) => draw_frontier_mark(draw, mark, art, seconds),
         GroundThingKind::ParkedRig => {
             let look = crate::rendering::rig_art::RigLook {
                 player_id: fatherload_simulation::PlayerId::new(2),

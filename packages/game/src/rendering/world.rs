@@ -42,7 +42,7 @@ mod drops;
 pub(super) use drops::drop_sprite;
 mod ancient_city;
 mod drowned;
-mod enemies;
+pub mod enemies;
 mod expedition;
 mod explosives;
 mod far_strange;

@@ -426,6 +426,7 @@ pub fn ground_things(
     scene: &crate::render_snapshot::PlaceScene<'_>,
     skip_rig: Option<fatherload_simulation::PlayerId>,
     seconds: f32,
+    millis: u64,
 ) -> Vec<GroundThing> {
     use super::view::GroundThingKind;
     use fatherload_simulation::entity::EntityKind;
@@ -472,6 +473,22 @@ pub fn ground_things(
                     left: state.facing < 0,
                 },
             });
+            if state.kind == fatherload_simulation::enemy::EnemyKind::DuneWyrm
+                && state.mode == fatherload_simulation::enemy::EnemyMode::Windup
+            {
+                // The ripple on the sand over it.
+                if let Some(ground) = scene.terrain.planet_ground() {
+                    let surface = fatherload_simulation::planet::BodyGround::surface_row(
+                        ground,
+                        column.floor() as i32,
+                    );
+                    things.push(GroundThing {
+                        column,
+                        row: surface as f32,
+                        kind: GroundThingKind::Frontier(super::view::FrontierMark::Ripple),
+                    });
+                }
+            }
             continue;
         }
         if entity.kind() == EntityKind::Drop {
@@ -482,6 +499,90 @@ pub fn ground_things(
                 kind: GroundThingKind::Drop,
             });
         }
+    }
+    things.extend(frontier_things(scene, millis));
+    things
+}
+
+/// A frontier world's marks round the seat (Wave 12 planets-b): the lava bombs in the air and
+/// their shadows, the light wells' beams.
+fn frontier_things(
+    scene: &crate::render_snapshot::PlaceScene<'_>,
+    millis: u64,
+) -> Vec<GroundThing> {
+    use super::view::{FrontierMark, GroundThingKind};
+    use fatherload_simulation::frontier::{FrontierStyle, generate, rules, style_of_ground};
+    let mut things = Vec::new();
+    let Some(ground) = scene.terrain.planet_ground() else {
+        return things;
+    };
+    let Some(style) = style_of_ground(ground) else {
+        return things;
+    };
+    let Some(anchor) = scene
+        .rigs
+        .first()
+        .map(|rig| fatherload_simulation::world::strip_point(scene.frame.world(rig.x, rig.y)))
+    else {
+        return things;
+    };
+    match style {
+        FrontierStyle::Volcanic => {
+            for cone in rules::cones_near(ground, anchor.0.floor() as i64, 120) {
+                for bomb in rules::bombs_in_flight(ground, cone, millis) {
+                    let column = bomb.column as f64 + 0.5;
+                    let floor = fatherload_simulation::planet::BodyGround::surface_row(
+                        ground,
+                        bomb.column as i32,
+                    );
+                    let progress = (millis - bomb.launch) as f32 / rules::BOMB_FLIGHT_MILLIS as f32;
+                    things.push(GroundThing {
+                        column,
+                        row: floor as f32,
+                        kind: GroundThingKind::Frontier(FrontierMark::BombShadow(
+                            (progress * 1_000.0) as u16,
+                        )),
+                    });
+                    // Its arc: up from the cone and down onto its shadow.
+                    let found = generate::cone_at(ground, cone);
+                    let from = found.centre as f64 + 0.5;
+                    let t = f64::from(progress);
+                    let height = 30.0 * 4.0 * t * (1.0 - t);
+                    things.push(GroundThing {
+                        column: from + (column - from) * t,
+                        row: (f64::from(-found.peak) * (1.0 - t) + f64::from(floor) * t - height)
+                            as f32,
+                        kind: GroundThingKind::Frontier(FrontierMark::Bomb),
+                    });
+                }
+            }
+        }
+        FrontierStyle::Crystal => {
+            let width = i64::from(ground.grid().surface_columns());
+            for well in generate::light_wells(ground) {
+                let dx = (i64::from(well.column) - anchor.0.floor() as i64).rem_euclid(width);
+                if dx.min(width - dx) > 48 {
+                    continue;
+                }
+                let beam =
+                    rules::trace_beam(&well, |at| scene.terrain.tile(at).map(|tile| tile.kind));
+                let mut previous = fatherload_simulation::terrain::TilePosition {
+                    x: well.column,
+                    y: well.lens_row,
+                };
+                for at in beam.path {
+                    things.push(GroundThing {
+                        column: f64::from(at.x) + 0.5,
+                        row: at.y as f32 + 1.0,
+                        kind: GroundThingKind::Frontier(FrontierMark::Beam {
+                            across: at.y == previous.y,
+                        }),
+                    });
+                    previous = at;
+                }
+            }
+        }
+        FrontierStyle::Desert => {}
     }
     things
 }

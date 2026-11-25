@@ -1902,6 +1902,33 @@ impl LocalGame {
                         }
                     }
                 }
+                // The frontier worlds (Wave 12 planets-b): what the ground did.
+                GameplayEventKind::Frontier {
+                    what, player_id, ..
+                } => {
+                    use fatherload_simulation::frontier::FrontierEvent as F;
+                    let text = match what {
+                        F::FloorCrumbled => "The ruin floor gives way!",
+                        F::GlassShattered => "The glass shatters: shards nick the hull.",
+                        F::BeamLit => "The light reaches the receptor.",
+                        F::VaultOpened => "The crystal seal falls away: the vault is open.",
+                        F::EruptionStarted => "ERUPTION! Get clear of the shadows.",
+                        F::StormRising => "A storm is coming. Find shelter or brace.",
+                        F::DrifterChimed => {
+                            "The chime drifter rings: the crystal round it shatters."
+                        }
+                        _ => continue,
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        let here = matches!(
+                            self.runtime.world().place_of(*player),
+                            fatherload_simulation::place::Place::OnBody(_)
+                        );
+                        if here && player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
                 // Round bodies (Wave 11): a bad touchdown tells the pilot what happened.
                 GameplayEventKind::Planet {
                     what, player_id, ..

@@ -482,6 +482,22 @@ pub enum GroundThingKind {
         frame: u8,
         left: bool,
     },
+    /// A frontier world's mark (Wave 12 planets-b).
+    Frontier(FrontierMark),
+}
+
+/// What a frontier world shows on its round ground (Wave 12 planets-b): every one a pure
+/// function of the world's seed and time, so every seat and client draws the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrontierMark {
+    /// A lava bomb's shadow where it will land, growing as it falls (per mille of its flight).
+    BombShadow(u16),
+    /// A lava bomb in the air.
+    Bomb,
+    /// A light well's beam through an open tile (along the row, or down the column).
+    Beam { across: bool },
+    /// A dune wyrm's ripple in the sand above it (its wind-up).
+    Ripple,
 }
 
 /// The seat's view of a body's ground.

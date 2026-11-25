@@ -391,6 +391,9 @@ enum SeatLoop {
     EngineMusic,
     ArchiveMusic,
     CityHumBed,
+    // The frontier worlds (Wave 12 planets-b): each world's music and its ambience bed.
+    FrontierMusic,
+    FrontierBed,
     EngineBed,
     StacksBed,
     // Descent VII part B's music and beds (Wave 10 ancients-b): a piece and a bed per
@@ -789,6 +792,54 @@ impl Director {
         );
     }
 
+    /// A frontier world's music and ambience bed (Wave 12 planets-b): the dune world's caravan
+    /// walk over its wind, the volcanic world's march over its rumble, the crystal world's
+    /// glass harmonica over its hum. A storm swells the bed and hushes the music. Silent off a
+    /// frontier world.
+    fn frontier_sounds(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        terrain: &fatherload_simulation::terrain::Terrain,
+        millis: u64,
+    ) {
+        use fatherload_simulation::frontier::{FrontierStyle, rules};
+        let Some(ground) = terrain.planet_ground() else {
+            return;
+        };
+        let Some(style) = fatherload_simulation::frontier::style_of_ground(ground) else {
+            return;
+        };
+        let (music, bed) = match style {
+            FrontierStyle::Desert => (Patch::PbDuneMusicLoop, Patch::PbDuneWindLoop),
+            FrontierStyle::Volcanic => (Patch::PbVolcanicMusicLoop, Patch::PbVolcanoLoop),
+            FrontierStyle::Crystal => (Patch::PbCrystalMusicLoop, Patch::PbCrystalHumLoop),
+        };
+        let weather = rules::weather_at(style, ground.params().seed, millis);
+        let storm = f32::from(weather.strength_permille) / 1_000.0;
+        // Deep underground the bed fades: the ground's own sounds take over.
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let depth = (tile.y
+            - fatherload_simulation::planet::BodyGround::surface_row(ground, tile.x))
+        .max(0);
+        #[allow(clippy::cast_precision_loss, reason = "a few hundred rows")]
+        let open = (1.0 - depth as f32 / 40.0).clamp(0.25, 1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::FrontierMusic,
+            music,
+            ((0.34 * (1.0 - 0.5 * storm)), 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::FrontierBed,
+            bed,
+            ((0.22 + 0.4 * storm) * open, listener.pan, 1.0, OPEN_CUTOFF),
+        );
+    }
+
     /// Gain, pan and cutoff for a sound from `source`, or `None` when it is out of earshot.
     fn place(
         source: SoundSource,
@@ -1153,6 +1204,9 @@ impl Director {
             self.away_ambience(live, listener, scene.place, body_life);
             // A wild world's own bed and its storms (Wave 12 planets-a).
             self.wild_world_ambience(live, listener, scene, snapshot.space.millis);
+            let millis =
+                snapshot.tick.saturating_mul(1_000) / u64::from(snapshot.tick_rate.hz().max(1));
+            self.frontier_sounds(live, listener, scene.terrain, millis);
             state.initialized = true;
             state.velocity_x = velocity_x;
             state.velocity_y = velocity_y;

@@ -113,6 +113,7 @@ pub fn strip_actor(view: &ViewSnapshot<'_>, scene: &PlaceScene<'_>) -> ((f64, f6
 /// The ground things of a seat's body (everyone but the seat's own rig when it flies it).
 #[must_use]
 pub fn body_things(
+    snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     scene: &PlaceScene<'_>,
     seconds: f32,
@@ -121,7 +122,8 @@ pub fn body_things(
         .pilots
         .iter()
         .any(|pilot| pilot.player_id == view.player_id);
-    ground_things(scene, (!on_foot).then_some(view.player_id), seconds)
+    let millis = snapshot.tick.saturating_mul(1_000) / u64::from(snapshot.tick_rate.hz().max(1));
+    ground_things(scene, (!on_foot).then_some(view.player_id), seconds, millis)
 }
 
 /// A seat on a generated body: its round ground under the craft, the galaxy above.
