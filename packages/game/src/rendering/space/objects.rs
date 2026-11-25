@@ -537,8 +537,9 @@ fn draw_belt(
                 }
                 let (sx, sy) = projection.turn((x as f32, y as f32));
                 let point = (projection.pivot.0 + sx, projection.pivot.1 + sy);
-                // Mostly gravel, a few boulders, now and then a big one (radius, tiles).
-                let size_tiles = 0.3 + 9.0 * unit(hr, 48).powi(7);
+                // Gravel and pebbles: the boulders are the real, solid rocks the flight
+                // model knows (Wave 12 systems), drawn as loose asteroids.
+                let size_tiles = 0.2 + 1.1 * unit(hr, 48).powi(7);
                 let size = size_tiles * projection.px_per_tile;
                 if !projection.visible(point, size + 2.0) {
                     continue;
@@ -577,6 +578,8 @@ pub fn draw_asteroids(
                 Rectangle::new(point.0.round(), point.1.round(), 2.0, 2.0),
                 palette::STONE_LIGHT,
             );
+        } else if let Some(ore) = rock.ore {
+            draw_rock_shaped(draw, point, size, u64::from(rock.seed), light, Some(ore));
         } else {
             draw_rock(draw, point, size, u64::from(rock.seed), light);
         }
@@ -592,6 +595,19 @@ pub fn draw_rock(
     h: u64,
     light: (f32, f32),
 ) {
+    draw_rock_shaped(draw, point, radius, h, light, None);
+}
+
+/// One rock (see [`draw_rock`]); a real belt rock (`ore`, Wave 12 systems) keeps its outline
+/// within a few per cent of its radius (where the rig touches it) and always shows its ore.
+pub fn draw_rock_shaped(
+    draw: &mut impl RaylibDraw,
+    point: (f32, f32),
+    radius: f32,
+    h: u64,
+    light: (f32, f32),
+    ore: Option<Color>,
+) {
     const SIDES: usize = 10;
     let tones = match (h >> 56) % 5 {
         0 => [palette::RUST, palette::COPPER, palette::SAND],
@@ -602,7 +618,11 @@ pub fn draw_rock(
     let mut outline = [(0.0_f32, 0.0_f32); SIDES];
     for (index, slot) in outline.iter_mut().enumerate() {
         let angle = turn + index as f32 / SIDES as f32 * TAU;
-        let lump = 0.72 + 0.28 * unit(hash64(&[h as i64, index as i64]), 0);
+        let lump = if ore.is_some() {
+            0.94 + 0.08 * unit(hash64(&[h as i64, index as i64]), 0)
+        } else {
+            0.72 + 0.28 * unit(hash64(&[h as i64, index as i64]), 0)
+        };
         *slot = (angle.cos() * radius * lump, angle.sin() * radius * lump);
     }
     let fan = |draw: &mut dyn FnMut(Vector2, Vector2, Vector2), scale: f32, shift: (f32, f32)| {
@@ -647,14 +667,14 @@ pub fn draw_rock(
             );
         }
     }
-    if (h >> 40).is_multiple_of(3) {
+    if ore.is_some() || (h >> 40).is_multiple_of(3) {
         for glint in 0..3 {
             let hg = hash64(&[h as i64, 80 + glint]);
             let at = toward(point, unit(hg, 0) * TAU, radius * 0.55 * unit(hg, 16));
-            let colour = if glint == 0 {
-                palette::GOLD
-            } else {
-                palette::MINT
+            let colour = match ore {
+                Some(ore) => ore,
+                None if glint == 0 => palette::GOLD,
+                None => palette::MINT,
             };
             let size = (radius * 0.12).clamp(1.0, 3.0);
             draw.draw_rectangle_rec(

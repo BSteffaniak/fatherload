@@ -984,6 +984,9 @@ pub struct SpaceSnapshot<'w> {
     pub flyers: Vec<Flyer>,
     /// World milliseconds of the snapshot's tick.
     pub millis: u64,
+    /// What the crew did to space's things (Wave 12 systems): mined rocks, comet dust,
+    /// wormholes flown.
+    pub systems: &'w fatherload_simulation::flight::systems::SystemsShared,
 }
 
 impl SpaceSnapshot<'_> {
@@ -1189,6 +1192,7 @@ impl<'w> RenderSnapshot<'w> {
                     })
                     .collect(),
                 millis: world.millis_at(world.simulation_tick()),
+                systems: world.space_systems(),
             },
             cable_rows: world.world_settings().generator.has_descents().then(|| {
                 let layout =

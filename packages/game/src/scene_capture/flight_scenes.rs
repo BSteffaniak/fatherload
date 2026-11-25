@@ -29,7 +29,7 @@ use super::{Scene, SceneStage};
 use crate::shell::ModalScreen;
 
 /// Seed of every flight scene world (the Deep Descent scenes' seed).
-const SCENE_SEED: u64 = 0x0D3E_9DE5;
+pub(super) const SCENE_SEED: u64 = 0x0D3E_9DE5;
 
 const fn settings() -> WorldSettings {
     WorldSettings {
@@ -40,7 +40,7 @@ const fn settings() -> WorldSettings {
 
 /// A Deep Descent world after the ending: space open, a few charts read, ten minutes on the
 /// clock (so a warp can be staged part way through).
-fn space_world(world: &mut WorldState) {
+pub(super) fn space_world(world: &mut WorldState) {
     *world.terrain_mut() = Terrain::generate(&settings());
     let hz = u64::from(world.tick_rate_hz());
     world.set_simulation_tick(fatherload_simulation::SimulationTick::new(600 * hz));
@@ -64,7 +64,7 @@ fn space_world(world: &mut WorldState) {
 
 /// `player`'s rig fitted for space (the nav suite when `nav`) and put at `pos` in space,
 /// turned `orientation`, moving at `velocity`, its drive `drive`.
-fn launch(
+pub(super) fn launch(
     world: &mut WorldState,
     player: PlayerId,
     pos: WorldPos,
@@ -577,7 +577,7 @@ fn split(stage: &mut SceneStage<'_>) {
     stage.settle(12);
 }
 
-fn set_waypoint(world: &mut WorldState, player: PlayerId, target: NavTarget) {
+pub(super) fn set_waypoint(world: &mut WorldState, player: PlayerId, target: NavTarget) {
     let mut shared = world.flight_shared().clone();
     shared.waypoints.insert(player, target);
     world.set_flight_shared(shared);

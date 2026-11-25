@@ -139,6 +139,23 @@ impl PolarStrip for LiveStrip<'_> {
     }
 }
 
+/// Farthest a frame looks for real belt rocks (tiles; farther, the belt's dust stands in).
+pub const MAX_ROCK_REACH_TILES: i64 = 2_400;
+
+/// The glint of an asteroid's ore (Wave 12 systems).
+#[must_use]
+pub const fn ore_colour(ore: space::AsteroidOre) -> Color {
+    match ore {
+        space::AsteroidOre::Iron => Color::new(196, 112, 84, 255),
+        space::AsteroidOre::Nickel => Color::new(200, 204, 196, 255),
+        space::AsteroidOre::Ice => Color::new(150, 220, 255, 255),
+        space::AsteroidOre::Cobalt => Color::new(80, 120, 240, 255),
+        space::AsteroidOre::Platinum => Color::new(232, 232, 240, 255),
+        space::AsteroidOre::Iridium => Color::new(255, 214, 120, 255),
+        space::AsteroidOre::Voidglass => Color::new(170, 90, 255, 255),
+    }
+}
+
 /// Everything the generator placed round a camera, as the renderer's views (gathered once per
 /// space sector the camera is in; the generator's own cache makes it cheap).
 #[derive(Clone, Debug, Default)]
@@ -262,6 +279,33 @@ impl LiveSpace {
             }
         }
         live
+    }
+
+    /// The real (solid, mineable) belt rocks within `reach_tiles` of `at` that the crew has not
+    /// mined out (Wave 12 systems), refreshed every frame: they are where the flight model's
+    /// rocks are, with their ore's glint.
+    pub fn refresh_rocks(
+        &mut self,
+        seed: u64,
+        at: WorldPos,
+        reach_tiles: i64,
+        mined: &fatherload_simulation::flight::systems::SystemsShared,
+    ) {
+        let space = Space::shared(seed);
+        self.asteroids = space
+            .asteroids_near(
+                SpaceTile::of_pos(at),
+                reach_tiles.clamp(0, MAX_ROCK_REACH_TILES),
+            )
+            .iter()
+            .filter(|rock| mined.mined_from(rock.id) < rock.yield_units)
+            .map(|rock| AsteroidView {
+                centre: rock.centre.pos(),
+                radius_tiles: f32::from(rock.radius),
+                seed: (rock.id.segment.wrapping_mul(31) ^ u32::from(rock.id.index)) | 1,
+                ore: Some(ore_colour(rock.ore)),
+            })
+            .collect();
     }
 
     /// The renderer's view with this gathering, from `camera`.

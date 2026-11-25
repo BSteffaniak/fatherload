@@ -173,6 +173,9 @@ pub struct AsteroidView {
     pub centre: WorldPos,
     pub radius_tiles: f32,
     pub seed: u32,
+    /// A real (solid, mineable) belt rock's ore glint (Wave 12 systems): drawn round to its
+    /// full radius, so its outline is where the rig touches it. `None` for scenery.
+    pub ore: Option<Color>,
 }
 
 /// A coloured cloud.

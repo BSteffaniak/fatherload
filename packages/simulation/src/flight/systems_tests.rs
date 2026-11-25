@@ -2,7 +2,10 @@
 //! black hole warnings, wormhole exits, fog, drill contact, the beam, comet tails, the
 //! parking hold, the Moon's handover and the crew's record.
 
-#![allow(clippy::float_cmp, reason = "exact zeros and ones are the answers here")]
+#![allow(
+    clippy::float_cmp,
+    reason = "exact zeros and ones are the answers here"
+)]
 
 use crate::{
     attitude::RigAttitude,

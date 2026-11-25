@@ -469,6 +469,7 @@ mod second_act_scenes;
 mod side_tomb_scenes;
 mod sky_continent_scenes;
 mod story_scenes;
+mod systems_scenes;
 mod tomb_scenes;
 mod touch_scenes;
 mod wave6_scenes;
@@ -635,6 +636,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(garrison_scenes::GARRISON_SCENES)
         .chain(planet_scenes::PLANET_SCENES)
         .chain(flight_scenes::FLIGHT_SCENES)
+        .chain(systems_scenes::SYSTEMS_SCENES)
         .chain(space_scenes::SPACE_SCENES)
 }
 

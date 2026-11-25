@@ -845,6 +845,7 @@ pub fn loose_rocks(around: WorldPos, count: u32) -> Vec<AsteroidView> {
                 centre: around.offset(dx, dy),
                 radius_tiles: 4.0 + 24.0 * unit(h, 32).powi(2),
                 seed: index * 31 + 5,
+                ore: None,
             }
         })
         .collect()

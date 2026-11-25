@@ -53,6 +53,7 @@ mod screen;
 mod sky_hud;
 pub mod space;
 mod space_seat;
+mod space_systems_view;
 mod space_view;
 mod story;
 pub mod terrain;
@@ -414,6 +415,13 @@ impl GameRenderer {
             }
             if view.player.flight.away() {
                 self.live[seat].update(snapshot.space.seed, view.player.flight.pos);
+                // Wave 12 systems: the solid belt rocks round the rig, as they are now.
+                self.live[seat].refresh_rocks(
+                    snapshot.space.seed,
+                    view.player.flight.pos,
+                    space::live::MAX_ROCK_REACH_TILES,
+                    snapshot.space.systems,
+                );
                 let camera = space_seat::flight_camera(view, view.player.attitude.orientation, 1.0);
                 let live = &self.live[seat];
                 let picture = space_seat::flight_view(live, snapshot, view, camera, seconds);

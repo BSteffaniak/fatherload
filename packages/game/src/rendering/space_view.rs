@@ -218,6 +218,9 @@ pub(super) fn draw_space_world(
         draw_warp_tunnel(draw, &frame, &flight, snapshot, run.target, ticks, strength);
     }
     draw_own_rig(draw, terrain, facings, &frame, snapshot, view, ticks);
+    // Wave 12 systems: glare, fog, the hole's ring, the tunnel, the beam and the sparks.
+    let reading = super::space_systems_view::read(snapshot, view);
+    super::space_systems_view::draw_world(draw, &frame, snapshot, view, &reading, ticks);
     frame
 }
 
@@ -1251,6 +1254,11 @@ pub(super) fn draw_space_hud(
         );
         top = banner.y + banner.height + 4.0;
     }
+    // Wave 12 systems: holes, flares, dilation, fog, mining, comets, the hold.
+    let reading = super::space_systems_view::read(snapshot, view);
+    top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, rect, top);
+    let seen = super::space_systems_view::marker_alpha(&reading);
+    let faded = |colour: Color| with_alpha(colour, (f32::from(colour.a) * seen) as u8);
     let galaxy = snapshot.space.galaxy();
     let bodies = galaxy.bodies_near(flight.pos);
     draw_docking_guide(draw, rect, meters, view, &bodies);
@@ -1285,7 +1293,20 @@ pub(super) fn draw_space_hud(
                 flight.pos,
                 pos,
                 &name,
-                GOLD,
+                faded(GOLD),
+                ui_per_physical,
+            );
+        }
+        for (pos, name) in super::space_systems_view::wormhole_marks(snapshot, flight.pos) {
+            edge_marker(
+                draw,
+                rect,
+                lanes,
+                frame,
+                flight.pos,
+                pos,
+                &name,
+                faded(LAVENDER),
                 ui_per_physical,
             );
         }
@@ -1302,7 +1323,7 @@ pub(super) fn draw_space_hud(
                 flight.pos,
                 flyer.flight.pos,
                 &name,
-                MINT,
+                faded(MINT),
                 ui_per_physical,
             );
         }
