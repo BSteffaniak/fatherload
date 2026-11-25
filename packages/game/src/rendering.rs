@@ -60,6 +60,7 @@ pub mod space;
 mod space_seat;
 mod space_systems_view;
 mod space_view;
+mod station_hub;
 mod story;
 pub mod terrain;
 mod title;
@@ -759,7 +760,9 @@ impl GameRenderer {
             self.render_world(draw, shell, snapshot, view);
         }
         {
-            layout::set_modal_placement(if in_room {
+            // A docked station's hub is a room too (Wave 12): its panel sits beside the interior.
+            let in_station = seat.modal == Some(crate::shell::ModalScreen::Station);
+            layout::set_modal_placement(if in_room || in_station {
                 layout::ModalPlacement::Counter
             } else {
                 layout::ModalPlacement::Centred

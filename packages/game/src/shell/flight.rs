@@ -11,14 +11,12 @@
 //!   scanning) and the bodies of the system the rig is in; without one, only the way home.
 //!   Then the warp, sharing the waypoint with the crew, clearing it, the station's counter
 //!   while docked, and the emergency beacon.
-//! * **The station** (a stub Wave 12 fills): fuel and repairs for credits, flight gear, a save,
-//!   undocking.
+//! * **The station**'s hub is `shell/station.rs` (Wave 12).
 
 use fatherload_simulation::{
     Player, PlayerCommand, PlayerId, WorldState,
     flight::{
-        BodyKind, BodyRef, FlightCommand, FlightGearKind, FlightPlace, SpaceQuery, StationService,
-        SystemRef,
+        BodyKind, BodyRef, FlightCommand, FlightPlace, SpaceQuery, SystemRef,
         nav::NavTarget,
         space::{self, galaxy_sector_of},
     },
@@ -159,27 +157,6 @@ pub fn roman(index: u8) -> &'static str {
     NUMERALS.get(usize::from(index)).copied().unwrap_or("X+")
 }
 
-/// One row of a station's counter.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StationRow {
-    Refuel,
-    Repair,
-    Buy(FlightGearKind),
-    /// Save the game (quick save).
-    Save,
-    Undock,
-    Close,
-}
-
-/// The station's rows.
-#[must_use]
-pub fn station_rows() -> Vec<StationRow> {
-    let mut rows = vec![StationRow::Refuel, StationRow::Repair];
-    rows.extend(FlightGearKind::ALL.into_iter().map(StationRow::Buy));
-    rows.extend([StationRow::Save, StationRow::Undock, StationRow::Close]);
-    rows
-}
-
 impl SeatUi {
     /// The nav chart.
     pub(super) fn handle_nav_chart(
@@ -214,6 +191,7 @@ impl SeatUi {
             Some(NavRow::Clear) => FlightCommand::SetWaypoint(None),
             Some(NavRow::Station) => {
                 self.open_modal(ModalScreen::Station);
+                self.station = super::station::SeatStation::new();
                 cues.push(SoundCue::Ui);
                 return;
             }
@@ -233,54 +211,6 @@ impl SeatUi {
             command: PlayerCommand::Flight(command),
         });
     }
-
-    /// A docked station's counter.
-    pub(super) fn handle_station(
-        &mut self,
-        input: PlayerInput,
-        ctx: SeatContext<'_>,
-        cues: &mut Vec<SoundCue>,
-        requests: &mut Vec<ShellRequest>,
-    ) {
-        let docked = ctx
-            .player
-            .and_then(|player| ctx.world.rig_flight(player))
-            .is_some_and(|flight| matches!(flight.place, FlightPlace::Docked(_)));
-        if input.backs_out() || !docked {
-            self.modal = None;
-            cues.push(SoundCue::UiBack);
-            return;
-        }
-        let rows = station_rows();
-        self.move_selection(input, rows.len().saturating_sub(1));
-        if !input.confirm {
-            return;
-        }
-        let command = match rows.get(self.selected_menu_item) {
-            Some(StationRow::Refuel) => FlightCommand::Station(StationService::Refuel),
-            Some(StationRow::Repair) => FlightCommand::Station(StationService::Repair),
-            Some(StationRow::Buy(kind)) => FlightCommand::Station(StationService::Buy(*kind)),
-            Some(StationRow::Save) => {
-                requests.push(ShellRequest::QuickSave);
-                cues.push(SoundCue::Ui);
-                return;
-            }
-            Some(StationRow::Undock) => {
-                self.modal = None;
-                FlightCommand::Use
-            }
-            Some(StationRow::Close) | None => {
-                self.modal = None;
-                cues.push(SoundCue::UiBack);
-                return;
-            }
-        };
-        cues.push(SoundCue::Ui);
-        requests.push(ShellRequest::Action {
-            seat: ctx.seat,
-            command: PlayerCommand::Flight(command),
-        });
-    }
 }
 
 #[cfg(test)]
@@ -288,12 +218,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_station_lists_its_services_then_leaving() {
-        let rows = station_rows();
-        assert_eq!(rows.first(), Some(&StationRow::Refuel));
-        assert!(rows.contains(&StationRow::Buy(FlightGearKind::NavSuite)));
-        assert!(rows.contains(&StationRow::Save));
-        assert_eq!(rows.last(), Some(&StationRow::Close));
+    fn worlds_are_numbered_in_roman() {
         assert_eq!(roman(3), "III");
     }
 }

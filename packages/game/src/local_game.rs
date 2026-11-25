@@ -1809,6 +1809,7 @@ impl LocalGame {
             if what == FlightEvent::Docked && ui.modal.is_none() {
                 ui.modal = Some(crate::shell::ModalScreen::Station);
                 ui.selected_menu_item = 0;
+                ui.station = crate::shell::station::SeatStation::new();
             }
         }
     }

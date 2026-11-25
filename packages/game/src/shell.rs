@@ -44,6 +44,7 @@ mod pointer;
 mod quests;
 pub mod rewards;
 pub mod star_charts;
+pub mod station;
 mod story;
 mod test_mode;
 pub mod tombs;
@@ -1376,6 +1377,8 @@ pub struct SeatUi {
     pub story_ending_pending: bool,
     /// A friendly alien's talk panel's page (Wave 12).
     pub alien: aliens::SeatAlien,
+    /// The docked station's hub page (Wave 12).
+    pub station: station::SeatStation,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1429,6 +1432,7 @@ impl SeatUi {
             remembered: None,
             story_ending_pending: false,
             alien: aliens::SeatAlien::new(),
+            station: station::SeatStation::new(),
         }
     }
 

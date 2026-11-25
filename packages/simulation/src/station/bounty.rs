@@ -366,3 +366,49 @@ fn deliver_offer(context: &BoardContext, roll: u64, starter: bool) -> Option<Mis
 pub const fn faction_offers(_seed: u64, _context: &BoardContext) -> Vec<Mission> {
     Vec::new()
 }
+
+/// A body's name (`Kessa III`, `Kessa IIb`).
+#[must_use]
+pub fn body_name(space: &Space, body: SpaceBodyId) -> String {
+    space
+        .system(SystemRef {
+            sector: body.sector,
+            system: body.system,
+        })
+        .map_or_else(
+            || "an unknown world".to_owned(),
+            |system| system.body_name(body.body),
+        )
+}
+
+/// A station's name.
+#[must_use]
+pub fn station_name(space: &Space, station: StationId) -> String {
+    space
+        .system(SystemRef {
+            sector: station.sector,
+            system: station.system,
+        })
+        .and_then(|system| {
+            let found = *system.stations.get(usize::from(station.index))?;
+            Some(profile_of(space.seed(), &system, &found).name)
+        })
+        .unwrap_or_else(|| "a station".to_owned())
+}
+
+/// A mission's title for the board, the log and the HUD (`Scan Kessa III`, `Mine 12 ore on
+/// Kessa IIb`, `Deliver 4 Med Kits to Tycho Exchange`).
+#[must_use]
+pub fn describe(space: &Space, kind: MissionKind) -> String {
+    match kind {
+        MissionKind::Scan { body } => format!("Scan {}", body_name(space, body)),
+        MissionKind::Mine { body, units } => {
+            format!("Mine {units} ore on {}", body_name(space, body))
+        }
+        MissionKind::Deliver { good, units, to } => format!(
+            "Deliver {units} {} to {}",
+            good.name(),
+            station_name(space, to)
+        ),
+    }
+}

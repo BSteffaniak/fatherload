@@ -24,7 +24,7 @@ use super::{
     station_hash,
 };
 use crate::{
-    people::{Appearance, Culture, character::CharacterId, generate_character},
+    people::{Character, Culture, character::CharacterId, generate_character},
     space::{Space, SpaceBodyId, SystemRef},
 };
 
@@ -51,8 +51,8 @@ pub struct Patron {
     pub trade: &'static str,
     /// One of the station's alien kin.
     pub alien: bool,
-    /// A human patron's look (the people engine's), for the portrait.
-    pub appearance: Option<Appearance>,
+    /// A human patron (the people engine's character: name, look, voice), for the portrait.
+    pub character: Option<Character>,
     /// A seed for an alien patron's portrait.
     pub look: u64,
     /// What they say on the first word.
@@ -164,7 +164,7 @@ fn patron(
     let roll = station_hash(seed, station.id, SALT_PATRON ^ (u64::from(index) << 32));
     let alien = matches!(station.owner, StationOwner::Alien(_)) && index < 2;
     let pick = |n: usize, shift: u32| ((roll >> shift) % n as u64) as usize;
-    let (name, trade, appearance, line) = if alien {
+    let (name, trade, character, line) = if alien {
         (
             ALIEN_NAMES[pick(ALIEN_NAMES.len(), 3)].to_owned(),
             ALIEN_TRADES[pick(ALIEN_TRADES.len(), 9)],
@@ -186,7 +186,7 @@ fn patron(
         (
             character.name.full(),
             TRADES[pick(TRADES.len(), 9)],
-            Some(character.appearance),
+            Some(character),
             LINES[pick(LINES.len(), 15)].to_owned(),
         )
     };
@@ -202,7 +202,7 @@ fn patron(
         name,
         trade,
         alien,
-        appearance,
+        character,
         look: roll,
         line,
         rumour,

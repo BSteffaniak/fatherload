@@ -58,7 +58,7 @@ use crate::{
     render_snapshot::{Flyer, PlayerPresentation, RenderSnapshot, ViewSnapshot},
     shell::{
         ShellState,
-        flight::{NavRow, StationRow, nav_rows_for, station_rows, system_name, target_name},
+        flight::{NavRow, nav_rows_for, system_name, target_name},
     },
 };
 
@@ -1833,108 +1833,4 @@ fn action_entry(
         selected,
         disabled: false,
     }
-}
-
-/// A docked station's counter (the stub Wave 12 fills).
-pub(super) fn draw_station_counter(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
-    use fatherload_simulation::flight::{STATION_FUEL_PRICE, STATION_REPAIR_PRICE};
-    let player = ui.player;
-    let rows = station_rows();
-    let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
-    let mut services = Vec::new();
-    let mut gear = Vec::new();
-    let mut leave = Vec::new();
-    for (index, row) in rows.iter().enumerate() {
-        let picked = index == selected;
-        match row {
-            StationRow::Refuel => {
-                let missing = (player.fuel_capacity - player.fuel).max(0.0).ceil() as u32;
-                services.push(SectionItem::item(ItemEntry {
-                    icon: Some(&icons::FUEL),
-                    label: "Refuel".to_owned(),
-                    detail: format!("{missing} units"),
-                    value: (missing * STATION_FUEL_PRICE).to_string(),
-                    value_color: GOLD,
-                    coin: true,
-                    selected: picked,
-                    disabled: missing == 0,
-                }));
-            }
-            StationRow::Repair => {
-                let missing = (player.max_hull() - player.hull).max(0.0).ceil() as u32;
-                services.push(SectionItem::item(ItemEntry {
-                    icon: Some(&icons::HULL),
-                    label: "Repair".to_owned(),
-                    detail: format!("{missing} hull"),
-                    value: (missing * STATION_REPAIR_PRICE).to_string(),
-                    value_color: GOLD,
-                    coin: true,
-                    selected: picked,
-                    disabled: missing == 0,
-                }));
-            }
-            StationRow::Buy(kind) => {
-                let level = kind.level(&player.hazard_gear);
-                let maxed = level >= kind.max_level();
-                gear.push(SectionItem::item(ItemEntry {
-                    icon: Some(&menu_icons::GEAR),
-                    label: kind.name().to_owned(),
-                    detail: if kind.max_level() > 1 {
-                        format!("tier {level}/{}", kind.max_level())
-                    } else if maxed {
-                        "fitted (switch it on in Options)".to_owned()
-                    } else {
-                        "not fitted".to_owned()
-                    },
-                    value: if maxed {
-                        "MAX".to_owned()
-                    } else {
-                        kind.price(level).to_string()
-                    },
-                    value_color: GOLD,
-                    coin: !maxed,
-                    selected: picked,
-                    disabled: maxed || player.credits < kind.price(level),
-                }));
-            }
-            StationRow::Save => leave.push(SectionItem::item(action_entry(
-                &menu_icons::DISK,
-                "Save the game",
-                "",
-                picked,
-            ))),
-            StationRow::Undock => leave.push(SectionItem::item(action_entry(
-                &menu_icons::ROCKET,
-                "Undock",
-                "",
-                picked,
-            ))),
-            StationRow::Close => leave.push(SectionItem::item(action_entry(
-                &menu_icons::BACK,
-                "Close",
-                "",
-                picked,
-            ))),
-        }
-    }
-    let name = match player.flight.place {
-        FlightPlace::Docked(body) => target_name(ui.snapshot.space.charts, NavTarget::Body(body)),
-        _ => "Station".to_owned(),
-    };
-    UiLayout::screen(draw).modal_with_render_plan(
-        &name,
-        "Docked. The air is topped up.",
-        &ModalContent::new(vec![
-            Section::new("Services", SKY_LIGHT, services),
-            Section::new("Flight gear", GOLD, gear),
-            Section::new("", FOG, leave),
-        ])
-        .footer(Some(format!("Credits: {}", player.credits)))
-        .compact()
-        .prompts(&[
-            super::prompts::hint(Prompt::Navigate, "pick"),
-            super::prompts::hint(Prompt::Confirm, "buy"),
-            super::prompts::hint(Prompt::Back, "close"),
-        ]),
-    );
 }

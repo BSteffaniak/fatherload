@@ -196,7 +196,7 @@ fn bars_have_patrons_and_rumours_about_near_worlds() {
             .iter()
             .all(|p| !p.name.is_empty() && !p.line.is_empty())
     );
-    assert!(patrons.iter().all(|p| p.appearance.is_some() && !p.alien));
+    assert!(patrons.iter().all(|p| p.character.is_some() && !p.alien));
     assert!(patrons.iter().any(|p| p.rumour.is_some()));
     for rumour in patrons.iter().filter_map(|p| p.rumour.as_ref()) {
         assert!(context.bodies.iter().any(|b| b.id == rumour.body));

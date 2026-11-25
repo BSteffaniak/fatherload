@@ -1049,6 +1049,9 @@ pub struct SpaceSnapshot<'w> {
     /// What the crew did to space's things (Wave 12 systems): mined rocks, comet dust,
     /// wormholes flown.
     pub systems: &'w fatherload_simulation::flight::systems::SystemsShared,
+    /// The world (Wave 12: a docked station's hub reads its board, bar, prices and the crew's
+    /// station state).
+    pub world: &'w fatherload_simulation::WorldState,
 }
 
 impl SpaceSnapshot<'_> {
@@ -1256,6 +1259,7 @@ impl<'w> RenderSnapshot<'w> {
                     .collect(),
                 millis: world.millis_at(world.simulation_tick()),
                 systems: world.space_systems(),
+                world,
             },
             cable_rows: world.world_settings().generator.has_descents().then(|| {
                 let layout =

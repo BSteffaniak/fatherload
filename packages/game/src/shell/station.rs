@@ -1,0 +1,300 @@
+//! A docked station's hub (Wave 12): the hub page and its four counters (shipyard, market,
+//! bounty board, bar), plus refuel, repair, salvage, save and undocking.
+//!
+//! Every page is a list of rows, so it works by keys, pad, mouse and touch alike (a tap selects
+//! a row and confirms it). A counter's **Back** row (or the back button) returns to the hub; on
+//! the hub it closes. Every purchase, trade and mission goes to the simulation as a
+//! [`PlayerCommand::Flight`] for the seat's player, so it works the same in split screen (each
+//! seat on its own page, at its own station) and online. Abandoning a mission takes a second
+//! confirm on the same row.
+
+use fatherload_simulation::{
+    PlayerCommand, PlayerId, WorldState,
+    flight::{FlightCommand, FlightGearKind, FlightPlace, StationService},
+    station::{
+        Good, ShipUpgrade, StationAction, StationProfile, bar::PATRONS, bounty::BOARD_SLOTS,
+        market::goods_of,
+    },
+};
+
+use super::{SeatContext, SeatUi, ShellRequest, SoundCue};
+use crate::input::PlayerInput;
+
+/// A page of the hub.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum StationPage {
+    #[default]
+    Hub,
+    Shipyard,
+    Market,
+    Board,
+    Bar,
+}
+
+impl StationPage {
+    /// The page's title.
+    #[must_use]
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::Hub => "Concourse",
+            Self::Shipyard => "Shipyard",
+            Self::Market => "Market",
+            Self::Board => "Bounty Board",
+            Self::Bar => "The Bar",
+        }
+    }
+}
+
+/// One row of a hub page.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StationRow {
+    /// Go to a counter.
+    Open(StationPage),
+    Refuel,
+    Repair,
+    /// Wave 11's flight gear (the shipyard page).
+    Buy(FlightGearKind),
+    /// A ship line, planet gear or alien tech.
+    Fit(ShipUpgrade),
+    SellOre,
+    BuyGood(Good),
+    SellGood(Good),
+    /// A mission under way (a second confirm abandons it).
+    Mission(u8),
+    /// A board slot's mission.
+    Offer(u8),
+    /// Collect finished missions (and hand deliveries over here).
+    TurnIn,
+    /// A patron at the bar (confirm: buy a round for their rumour).
+    Patron(u8),
+    Salvage,
+    /// Save the game (quick save).
+    Save,
+    Undock,
+    /// Back to the hub.
+    Back,
+    Close,
+}
+
+/// The seat's hub state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SeatStation {
+    pub page: StationPage,
+    /// The mission row confirmed once (a second confirm abandons it).
+    pub abandon_armed: Option<u8>,
+}
+
+impl SeatStation {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            page: StationPage::Hub,
+            abandon_armed: None,
+        }
+    }
+}
+
+/// The station `player` is docked at.
+#[must_use]
+pub fn docked_profile(world: &WorldState, player: PlayerId) -> Option<StationProfile> {
+    world.docked_station(player)
+}
+
+/// The rows of `page` for `player` docked at `station`.
+#[must_use]
+pub fn station_rows(
+    world: &WorldState,
+    player: PlayerId,
+    station: &StationProfile,
+    page: StationPage,
+) -> Vec<StationRow> {
+    let mut rows = Vec::new();
+    let ledger = world.station_ledger();
+    match page {
+        StationPage::Hub => {
+            if station.yard_tier > 0
+                || station.gear_tier > 0
+                || station.alien_tech
+                || station.dock_services
+            {
+                rows.push(StationRow::Open(StationPage::Shipyard));
+            }
+            if station.market {
+                rows.push(StationRow::Open(StationPage::Market));
+            }
+            if station.bounties || !ledger.missions_of(player).is_empty() {
+                rows.push(StationRow::Open(StationPage::Board));
+            }
+            if station.bar {
+                rows.push(StationRow::Open(StationPage::Bar));
+            }
+            if station.salvage {
+                rows.push(StationRow::Salvage);
+            }
+            if station.dock_services {
+                rows.extend([StationRow::Refuel, StationRow::Repair]);
+            }
+            rows.extend([StationRow::Save, StationRow::Undock, StationRow::Close]);
+        }
+        StationPage::Shipyard => {
+            rows.extend(
+                ShipUpgrade::all()
+                    .into_iter()
+                    .filter(|upgrade| upgrade.sold_to(station) > 0)
+                    .map(StationRow::Fit),
+            );
+            if station.dock_services {
+                rows.extend(FlightGearKind::ALL.into_iter().map(StationRow::Buy));
+            }
+            rows.push(StationRow::Back);
+        }
+        StationPage::Market => {
+            rows.push(StationRow::SellOre);
+            let goods = goods_of(station, world.world_seed());
+            rows.extend(goods.iter().map(|(good, _)| StationRow::BuyGood(*good)));
+            if let Some(hold) = ledger.hold(player) {
+                rows.extend(
+                    goods
+                        .iter()
+                        .filter(|(good, _)| hold.count(*good) > 0)
+                        .map(|(good, _)| StationRow::SellGood(*good)),
+                );
+            }
+            rows.push(StationRow::Back);
+        }
+        StationPage::Board => {
+            if station.owner.crewed() && !ledger.missions_of(player).is_empty() {
+                rows.push(StationRow::TurnIn);
+            }
+            let active = u8::try_from(ledger.missions_of(player).len()).unwrap_or(u8::MAX);
+            rows.extend((0..active).map(StationRow::Mission));
+            if station.bounties {
+                let board = world.station_board(station.id);
+                rows.extend(
+                    (0..BOARD_SLOTS)
+                        .filter(|slot| board.get(usize::from(*slot)).is_some_and(Option::is_some))
+                        .map(StationRow::Offer),
+                );
+            }
+            rows.push(StationRow::Back);
+        }
+        StationPage::Bar => {
+            let patrons = u8::try_from(world.station_patrons(station.id).len()).unwrap_or(PATRONS);
+            rows.extend((0..patrons).map(StationRow::Patron));
+            rows.push(StationRow::Back);
+        }
+    }
+    rows
+}
+
+impl SeatUi {
+    /// The docked station's hub.
+    pub(super) fn handle_station(
+        &mut self,
+        input: PlayerInput,
+        ctx: SeatContext<'_>,
+        cues: &mut Vec<SoundCue>,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        let docked = ctx
+            .player
+            .and_then(|player| ctx.world.rig_flight(player))
+            .is_some_and(|flight| matches!(flight.place, FlightPlace::Docked(_)));
+        let profile = ctx
+            .player
+            .and_then(|player| docked_profile(ctx.world, player));
+        let (Some(player), Some(profile)) = (ctx.player, profile.filter(|_| docked)) else {
+            self.modal = None;
+            self.station = SeatStation::new();
+            cues.push(SoundCue::UiBack);
+            return;
+        };
+        if input.backs_out() {
+            self.station_back(cues);
+            return;
+        }
+        let rows = station_rows(ctx.world, player, &profile, self.station.page);
+        let before = self.selected_menu_item;
+        self.move_selection(input, rows.len().saturating_sub(1));
+        self.selected_menu_item = self.selected_menu_item.min(rows.len().saturating_sub(1));
+        if self.selected_menu_item != before {
+            self.station.abandon_armed = None;
+        }
+        if !input.confirm {
+            return;
+        }
+        let action = match rows.get(self.selected_menu_item).copied() {
+            Some(StationRow::Open(page)) => {
+                self.station.page = page;
+                self.station.abandon_armed = None;
+                self.selected_menu_item = 0;
+                cues.push(SoundCue::Ui);
+                return;
+            }
+            Some(StationRow::Back) => {
+                self.station_back(cues);
+                return;
+            }
+            Some(StationRow::Close) | None => {
+                self.modal = None;
+                self.station = SeatStation::new();
+                cues.push(SoundCue::UiBack);
+                return;
+            }
+            Some(StationRow::Save) => {
+                requests.push(ShellRequest::QuickSave);
+                cues.push(SoundCue::Ui);
+                return;
+            }
+            Some(StationRow::Undock) => {
+                self.modal = None;
+                self.station = SeatStation::new();
+                FlightCommand::Use
+            }
+            Some(StationRow::Refuel) => FlightCommand::Station(StationService::Refuel),
+            Some(StationRow::Repair) => FlightCommand::Station(StationService::Repair),
+            Some(StationRow::Buy(kind)) => FlightCommand::Station(StationService::Buy(kind)),
+            Some(StationRow::Fit(upgrade)) => hub(StationAction::Fit(upgrade)),
+            Some(StationRow::SellOre) => hub(StationAction::SellOre),
+            Some(StationRow::BuyGood(good)) => hub(StationAction::BuyGood(good, 1)),
+            Some(StationRow::SellGood(good)) => hub(StationAction::SellGood(good, 1)),
+            Some(StationRow::TurnIn) => hub(StationAction::TurnIn),
+            Some(StationRow::Offer(slot)) => hub(StationAction::Accept(slot)),
+            Some(StationRow::Patron(index)) => hub(StationAction::BuyRound(index)),
+            Some(StationRow::Salvage) => hub(StationAction::Salvage),
+            Some(StationRow::Mission(index)) => {
+                if self.station.abandon_armed == Some(index) {
+                    self.station.abandon_armed = None;
+                    hub(StationAction::Abandon(index))
+                } else {
+                    self.station.abandon_armed = Some(index);
+                    "Confirm again to abandon this mission.".clone_into(&mut self.message);
+                    cues.push(SoundCue::UiMove);
+                    return;
+                }
+            }
+        };
+        cues.push(SoundCue::Ui);
+        requests.push(ShellRequest::Action {
+            seat: ctx.seat,
+            command: PlayerCommand::Flight(action),
+        });
+    }
+
+    /// Back from a counter to the hub, or out of the hub.
+    fn station_back(&mut self, cues: &mut Vec<SoundCue>) {
+        if self.station.page == StationPage::Hub {
+            self.modal = None;
+            self.station = SeatStation::new();
+        } else {
+            self.station.page = StationPage::Hub;
+            self.selected_menu_item = 0;
+        }
+        self.station.abandon_armed = None;
+        cues.push(SoundCue::UiBack);
+    }
+}
+
+const fn hub(action: StationAction) -> FlightCommand {
+    FlightCommand::Station(StationService::Hub(action))
+}

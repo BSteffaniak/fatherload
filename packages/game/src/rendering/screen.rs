@@ -1488,7 +1488,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::AlienTalk => super::alien_hud::draw_alien_talk(draw, ui),
         ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
         ModalScreen::NavChart => super::space_view::draw_nav_chart(draw, ui),
-        ModalScreen::Station => super::space_view::draw_station_counter(draw, ui),
+        ModalScreen::Station => super::station_hub::draw_station_hub(draw, ui),
     }
 }
 
