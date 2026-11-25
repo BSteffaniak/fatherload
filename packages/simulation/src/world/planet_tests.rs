@@ -572,3 +572,36 @@ fn ground_gameplay_reuses_the_home_world_code() {
     );
     let _ = world.planet().expect("planet").gravity();
 }
+
+#[test]
+fn things_left_on_the_ground_are_still_there_a_lap_later() {
+    // A rig that drives once round the moon comes back to what it left behind: whole laps are
+    // the same place for every entity and every other rig, not only for tiles.
+    let mut world = moon(60);
+    let width = world.planet().expect("planet").strip_width();
+    let (x, y) = (rig(&world).x, rig(&world).y);
+    let dummy = world.spawn_target_dummy(TILE_SIZE.mul_add(3.0, x), y, 10.0, 0.0);
+    let step_px = 200.0 * TILE_SIZE;
+    let steps = width / 200;
+    let mut moved = 0.0_f64;
+    for _ in 0..steps {
+        world.players.get_mut(&PLAYER).expect("rig").x += step_px;
+        moved += f64::from(step_px);
+        world.recentre_frame();
+        world.tick_planet();
+    }
+    // The rest of the way to exactly one lap.
+    let rest = f64::from(width) * f64::from(TILE_SIZE) - moved;
+    #[allow(clippy::cast_possible_truncation, reason = "under one step")]
+    {
+        world.players.get_mut(&PLAYER).expect("rig").x += rest as f32;
+    }
+    world.recentre_frame();
+    world.tick_planet();
+    let body = world.entities().get(dummy).expect("dummy").body;
+    let gap = body.x - rig(&world).x;
+    assert!(
+        3.0_f32.mul_add(-TILE_SIZE, gap).abs() < 1.0,
+        "the dummy is a lap away: {gap}"
+    );
+}

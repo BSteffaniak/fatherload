@@ -124,10 +124,62 @@ impl WorldState {
         }
     }
 
-    /// The planet rules of one tick: the body's gravity stays in place.
+    /// The planet rules of one tick: the body's gravity stays in place, and everything with a
+    /// local position stays on the copy of the strip nearest the frame.
     pub(super) fn tick_planet(&mut self) {
         if self.planet().is_some() {
             self.keep_planet_gravity();
+            self.wrap_to_nearest_lap();
+        }
+    }
+
+    /// Moves every rig, entity and lost-cargo site that has drifted more than half a lap from
+    /// the frame's origin by whole laps back to the copy of the strip nearest it.
+    ///
+    /// The frame follows its anchor (the first player) and is relabelled by whole laps, so
+    /// without this a drop left on the ground, a creature or another player's rig would be a
+    /// lap away in local pixels after the anchor drove once round the body, invisible and out
+    /// of reach though the strip says it is the same place. A lap is a whole number of
+    /// sectors, so the move is exact; entities that move get a new revision, so replicas
+    /// receive them.
+    pub(super) fn wrap_to_nearest_lap(&mut self) {
+        use crate::position::Reframe;
+        let Some(planet) = self.planet() else {
+            return;
+        };
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "a lap is at most a few hundred sectors: exact in f32"
+        )]
+        let lap_px = planet.grid().lap_sectors() as f32 * crate::position::SECTOR_PX;
+        let half = lap_px * 0.5;
+        let shift_for = |x: f32| -> Option<crate::position::FrameShift> {
+            if !x.is_finite() || (-half..half).contains(&x) {
+                return None;
+            }
+            let laps = ((x + half) / lap_px).floor();
+            Some(crate::position::FrameShift {
+                dx: laps * lap_px,
+                dy: 0.0,
+            })
+        };
+        for player in self.players.values_mut() {
+            if let Some(shift) = shift_for(player.x) {
+                player.reframe(shift);
+            }
+        }
+        for site in self.lost_cargo_sites.values_mut() {
+            if let Some(shift) = shift_for(site.x) {
+                site.reframe(shift);
+            }
+        }
+        let far: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|entity| shift_for(entity.body.x).map(|shift| (entity.id, shift)))
+            .collect();
+        for (id, shift) in far {
+            self.entities.update(id, |entity| entity.reframe(shift));
         }
     }
 }

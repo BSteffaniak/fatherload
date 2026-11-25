@@ -405,10 +405,6 @@ const STREAMED_PROBE_CHUNKS: [ChunkPosition; 5] = [
     ChunkPosition { x: -4, y: 40 },
 ];
 
-/// A fingerprint of the generated tiles of a few fixed chunks. A streamed snapshot stores no
-/// generated tiles, so its digest folds this in: restoring it under a generator build that
-/// produces different terrain for the same settings fails instead of silently loading
-/// different terrain.
 /// The probe of a planet strip (Wave 11): a few chunks of its own generator, the surface, the
 /// middle and the core chamber.
 fn planet_generator_probe(planet: &crate::planet::PlanetGround) -> u64 {
@@ -437,6 +433,10 @@ fn terrain_probe(settings: &WorldSettings, planet: Option<&crate::planet::Planet
     )
 }
 
+/// A fingerprint of the generated tiles of a few fixed chunks. A streamed snapshot stores no
+/// generated tiles, so its digest folds this in: restoring it under a generator build that
+/// produces different terrain for the same settings fails instead of silently loading
+/// different terrain.
 fn streamed_generator_probe(settings: &WorldSettings) -> u64 {
     let mut hash: u64 = 0xCBF2_9CE4_8422_2325;
     for chunk in STREAMED_PROBE_CHUNKS {
