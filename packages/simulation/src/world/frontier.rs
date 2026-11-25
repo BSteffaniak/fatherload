@@ -104,16 +104,16 @@ impl WorldState {
                 .is_multiple_of(world.timing.ticks_for_millis(millis).max(1))
         };
         self.frontier_weather_events(&ground, style, before, now, output);
-        // A rig steering or drilling braces against the draughts and the wind.
-        let bracing: Vec<PlayerId> = inputs
+        // A rig drilling braces against the draughts and the wind; one steering braces against
+        // a tube's draught only (a sandstorm's wind is a head- or tailwind to it).
+        let bracing: Vec<(PlayerId, bool)> = inputs
             .players
             .iter()
-            .filter(|(_, input)| {
-                input.controls.is_some_and(|controls| {
-                    controls.drill_down || controls.horizontal().abs() > 0.1
-                })
+            .filter_map(|(id, input)| {
+                let controls = input.controls?;
+                let steering = controls.horizontal().abs() > 0.1;
+                (controls.drill_down || steering).then_some((*id, controls.drill_down))
             })
-            .map(|(id, _)| *id)
             .collect();
         self.frontier_exposure(&ground, style, now, &bracing, output);
         if every(self, LOOSE_MILLIS) {
@@ -503,7 +503,7 @@ impl WorldState {
         ground: &PlanetGround,
         style: FrontierStyle,
         now: u64,
-        bracing: &[PlayerId],
+        bracing: &[(PlayerId, bool)],
         output: &mut TickOutput,
     ) {
         let dt = self.timing.delta_seconds;
@@ -539,8 +539,11 @@ impl WorldState {
             let heavy = exposure.heavy
                 * unprotected_share(planet_gear_tier(&gear, PlanetHazard::HighGravity));
             let carry = self.frontier_carry(ground, style, zone, tile, weather);
-            let drilling =
-                self.active_drills.contains_key(&player_id) || bracing.contains(&player_id);
+            // Drilling braces against both; steering only against a tube's draught.
+            let braced = self.active_drills.contains_key(&player_id)
+                || bracing
+                    .iter()
+                    .any(|(id, drilling)| *id == player_id && (*drilling || zone != Zone::Surface));
             let terrain = &self.terrain;
             if let Some(rig) = self.players.get_mut(&player_id) {
                 if heavy > 0.0 {
@@ -550,8 +553,8 @@ impl WorldState {
                     );
                 }
                 // Carried along (never into rock): a conveyor the rig's own motion rides on. A
-                // rig drilling or steering braces against it.
-                if let Some(speed) = carry.filter(|_| !drilling) {
+                // rig drilling braces against it (steering, against a draught).
+                if let Some(speed) = carry.filter(|_| !braced) {
                     let x = quantize(speed.mul_add(dt, rig.x));
                     if !authoritative_player_collides(terrain, x, rig.y) {
                         rig.x = x;

@@ -52,8 +52,10 @@ const SPAWN_ROWS: i32 = 12;
 const SETTLEMENT_MARGIN: i32 = 16;
 /// Rows under a settlement site's ground its safety reaches.
 const SETTLEMENT_SAFE_ROWS: i32 = 12;
-/// Chance per mille each second that a creature appears round a rig (below its cap).
-const SPAWN_PER_MILLE: u16 = 400;
+/// Chance per mille each second that a creature appears round a rig (below its cap): about
+/// one every five seconds at Normal, so a cleared patch gets a breather (the classic
+/// director's roaming chance at its middle tiers).
+const SPAWN_PER_MILLE: u16 = 200;
 /// Tiles from a rig a creature appears (out of its view).
 const SPAWN_RING: (i32, i32) = (22, 30);
 /// Tiles round a rig counted against its cap.
@@ -334,7 +336,7 @@ impl WorldState {
             let (cx, cy) = self.frame().centre_of(tile.x, tile.y);
             let local = self.enemies_near(cx, cy, LOCAL_TILES * TILE_SIZE).len();
             let cap =
-                if zone == Zone::Surface { 3 } else { 4 } + self.enemies.difficulty.extra_cap();
+                if zone == Zone::Surface { 2 } else { 4 } + self.enemies.difficulty.extra_cap();
             if local >= cap {
                 continue;
             }
@@ -419,11 +421,14 @@ impl WorldState {
                 // Down from the sky to the first ground (the generated surface, or whatever
                 // has been dug or built there since).
                 let top = crate::planet::BodyGround::surface_row(ground, x) - 24;
-                let floor = (top..top + 60).find(|row| {
+                // No ground in reach of this column (a deep pit): try the next spot.
+                let Some(floor) = (top..top + 60).find(|row| {
                     self.terrain
                         .tile(TilePosition { x, y: *row })
                         .is_some_and(|t| !t.kind.is_open())
-                })?;
+                }) else {
+                    continue;
+                };
                 TilePosition {
                     x,
                     y: floor - if flying { 4 } else { 1 },

@@ -583,6 +583,22 @@ fn a_sandstorm_pushes_rigs_on_the_surface_with_the_wind() {
     let before = world.player(PLAYER).expect("rig").x;
     run_for(&mut world, 500);
     assert!((world.player(PLAYER).expect("rig").x - before).abs() < 1.0);
+    // Steering is no shelter: driving into the wind gains less ground than in calm air.
+    let into_wind = |millis: u64| {
+        let (mut world, _) = settled(FrontierStyle::Desert, 600);
+        set_time(&mut world, millis);
+        let before = world.player(PLAYER).expect("rig").x;
+        let ticks = world.timing().ticks_for_millis(500);
+        for _ in 0..ticks {
+            step(&mut world, ControlState::new(-wind, false, false));
+        }
+        (world.player(PLAYER).expect("rig").x - before) * -wind
+    };
+    let (headwind, still_air) = (into_wind(storm), into_wind(calm));
+    assert!(
+        headwind < still_air - 10.0,
+        "headwind {headwind} vs calm {still_air}"
+    );
 }
 
 #[test]

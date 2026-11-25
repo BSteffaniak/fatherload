@@ -9342,7 +9342,7 @@ unchanged), nor of home generation (V1-V10, `GOLDEN_V11_DIGEST` unchanged).
 | Landmark (every body) | the Sleeping Sentinel: a giant stone head half buried, glyph eyes, a vault of caches under it | the Caldera: the biggest cone, a lava lake in its crater, a magma heart in its throat | the Choir Spire: two tall prongs over a plinth, a geode under it |
 | Secret (crater rocks and moons, R <= 1,000) | a lost caravan's cache under a glyph obelisk | a sealed ember (a magma heart in obsidian) under an obsidian spike | a hidden geode under a prism-topped spire |
 | Settlement site | the caravan flat (48 flat columns) | a basalt plateau between cones | a cleared meadow |
-| Weather (pure schedule) | sandstorms: carry rigs and pilots in the open with the wind | ash falls: the surface's toxic air doubles | glitterfrost: the surface's cold bites four times as hard |
+| Weather (pure schedule) | sandstorms: carry rigs and pilots in the open with the wind (a head- or tailwind to a rig on the move; only drilling anchors it) | ash falls: the surface's toxic air doubles | glitterfrost: the surface's cold bites four times as hard |
 | Hazards (tagged) | heat | heat, toxic air | cold, high gravity |
 | Music and bed | a caravan's walk in D hijaz; wind over the dunes | a march in E phrygian; rumble, bubbling, crackle | a glass harmonica in E lydian; a crystalline hum |
 
@@ -9383,7 +9383,8 @@ first, so the radiator, heat shielding and HEAT warning work unchanged. The othe
 All of them move through the enemy body rules in the planet's local frame (down toward the
 core). The home world's director never runs on a body's ground pass, so the frontier worlds
 spawn their own (`advance_frontier_creatures`, every second, round each rig, from
-`frontier::roster(style, zone)`, out of every rig's view, at a spot that fits; underground the
+`frontier::roster(style, zone)`, a 20% chance a second at Normal under a local cap of 2 on
+the surface and 4 below, out of every rig's view, at a spot that fits; underground the
 spawner looks up and down a column for room). The classic band roster stays off frontier
 worlds (`Terrain::creature_roster` is empty there). A frontier world's surface is **no
 refuge** from its hunters: `enemy_safe_zone` asks `frontier_safe_zone`, safe only at the
