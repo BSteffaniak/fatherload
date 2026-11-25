@@ -9485,6 +9485,12 @@ are silent: the bed and the hull hit carry them) and messages seats on a body.
   on the round ground of the flight scenes' galaxy.
 - Creatures keep the generic enemy gravity (not the body's) like every other creature.
 - A light well's beam is drawn only on the round ground.
+- Gameplay events carry no store: a player-less frontier event (a storm rising, an eruption, a
+  beam lit, a vault opened, a drifter's chime) on one body also reaches split-screen seats on
+  another body (their message and cue). TODO-SEAM w12-integrator: tag events with their
+  store, or filter them by the seat's place.
+- The Sleeping Sentinel reads more as a carved brick mass with glowing lids than a face, and
+  the Choir Spire's crystal reads close to falling water: both want an artist's pass.
 
 ## Replication
 
