@@ -8865,6 +8865,23 @@ tick rate agree. No generation changed: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_
   the home world's, so a client's body map is its own prediction until the next keyframe.
 - Flares come every 5-120 minutes (the generator's periods); a crew rarely meets one by chance,
   so the HUD forecasts the next within two minutes.
+- Economy (for the integrator): until space items exist, iridium mines out as diamond and
+  voidglass as uranium, and a rock yields `radius² / 8 + 4` units (a 30-tile boulder about
+  110), so one lucky rare rock near home can fill a bay with deep-tier home ore in a quarter of
+  an hour. Map them to space items (or cap the rare ores' yields) when the seam is wired.
+- Body maps travel to every client in the body's keyframe (each player's map, not redacted
+  per player like the home map).
+
+### Review notes (Wave 12 systems review)
+
+- Real belt rocks are drawn round to their contact radius with more sides as they grow, a cast
+  of their ore in the stone, and ore flecks on a rock-anchored grid over the screen cells they
+  cover (`draw_ore_veins`): a boulder filling the view used to read as a flat ten-sided polygon
+  in a random tone (an ice rock drew rust-brown) with three tiny glints.
+- The systems readouts (`plate_x`) stay inside a split-screen seat's half view (they were cut
+  off at its right edge).
+- The mined-rock record drops its lowest-keyed rock past `MAX_MINED_RECORDS`, not the oldest
+  (the record keeps no ages; the docs said "oldest").
 
 ## Replication
 
