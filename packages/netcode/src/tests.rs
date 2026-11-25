@@ -8,3 +8,4 @@ mod units;
 mod world_e2e;
 mod world_far;
 mod world_keyframes;
+mod world_places;

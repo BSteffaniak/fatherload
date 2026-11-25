@@ -119,7 +119,17 @@ const SAVE_SLOTS: usize = 3;
 /// * Layer resources (`ItemKind::Layer(Stratum)`) in bays and drops.
 /// * The crew's felt rig systems and each player's haul Descent
 ///   (`logistics.felt_systems`, `logistics.haul_descent`).
-pub const SAVE_VERSION: u32 = 14;
+///
+/// 15 (expansion wave 11; the integrator collapses the wave's bumps into one); every new field
+/// has a serde default and every new enum variant is appended, so version 8 to 14 files load as
+/// is, into the home world:
+///
+/// * F11 many places at once: the world's `places` (every player away from the home world and
+///   where they are, and the ground of every space body someone has been to: its store key and
+///   seed, the generator's fingerprint and the terrain digest, both checked on load, its frame,
+///   its edited chunks packed like the home terrain's (`packed`, runs of equal tiles, base64),
+///   its entities and fluid schedule). A file without it is a world nobody has left.
+pub const SAVE_VERSION: u32 = 15;
 
 /// Persisted user settings.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -394,9 +404,9 @@ fn parse_save_file(json: &str) -> Result<WorldSave, SaveError> {
         check_generator(json)?;
     }
     match probe.version {
-        // Version 8 to 13 files have the current layout minus serde-defaulted wave 3 to 8
+        // Version 8 to 14 files have the current layout minus serde-defaulted wave 3 to 11
         // fields.
-        8..=13 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
+        8..=14 | SAVE_VERSION => serde_json::from_str::<SaveFile>(json)
             .map(|file| file.save)
             .map_err(SaveError::Serialize),
         7 => serde_json::from_str::<legacy::V7SaveFile>(json)
@@ -1680,7 +1690,7 @@ mod tests {
         ));
     }
 
-    /// Wave 6 QA: a file of every supported save format (1 to 14) loads, plays two minutes with
+    /// Wave 6 QA: a file of every supported save format (1 to 15) loads, plays two minutes with
     /// the mining bot, saves, reloads as it was saved, and its rigs are sane (the capacity curve
     /// catch-up applied, fuel and cargo within their capacities).
     #[test]
@@ -1741,6 +1751,12 @@ mod tests {
             ),
             play_seconds: 30.0,
         };
+        // F11 (format 15): a Deep Descent world where a second rig is out on a space body it
+        // dug into, with a drop lying there.
+        let elsewhere = WorldSave {
+            world: world_with_a_body(),
+            play_seconds: 30.0,
+        };
         // Format 13 (wave 7) added the frame, the column limit, the fluid schedule, the
         // logistics section and the field zones; older files have none of them.
         let with_wave7 = |older: &[&'static str]| -> Vec<&'static str> {
@@ -1783,21 +1799,28 @@ mod tests {
                     &["logistics.felt_systems", "logistics.haul_descent"],
                 ),
             ),
-            (14, as_version(&streamed, SAVE_VERSION, &[])),
+            (14, as_version(&streamed, 14, &["places"])),
+            (15, as_version(&streamed, SAVE_VERSION, &[])),
             // A Deep Descent world (generator V11, a floating frame, logistics sites) in format
-            // 13 and in the current format.
+            // 13, 14 and the current format, and one with a body in the current format.
             (
                 13,
                 as_version(
                     &deep,
                     13,
-                    &["logistics.felt_systems", "logistics.haul_descent"],
+                    &["logistics.felt_systems", "logistics.haul_descent", "places"],
                 ),
             ),
-            (14, as_version(&deep, SAVE_VERSION, &[])),
+            (14, as_version(&deep, 14, &["places"])),
+            (15, as_version(&deep, SAVE_VERSION, &[])),
+            (15, as_version(&elsewhere, SAVE_VERSION, &[])),
         ];
         for (version, json) in files {
             let mut save = parse_save(&json).unwrap_or_else(|error| panic!("v{version}: {error}"));
+            if version < 15 {
+                // An older world loads into the home world: nobody is anywhere else.
+                assert!(save.world.places().is_empty(), "v{version}: all at home");
+            }
             let world = &mut save.world;
             let player = world.player_ids().next().expect("a rig");
             let mut bot = MinerBot::new(player, Strategy::Prospector);
@@ -1842,6 +1865,65 @@ mod tests {
                 "v{version}: the bot played the loaded world"
             );
         }
+    }
+
+    /// A Deep Descent world whose second rig is out on a space body (F11), having dug into it,
+    /// with a drop lying there.
+    fn world_with_a_body() -> WorldState {
+        use fatherload_simulation::{
+            ControlState, TickInputs,
+            place::{BodyId, Place, SpaceBodyKey, StoreKey},
+            position::WorldPos,
+            worldgen::GeneratorVersion,
+        };
+        let mut world = WorldState::new_game_with_settings(
+            LEGACY_PLAYER_ID,
+            &WorldSettings {
+                generator: GeneratorVersion::V11,
+                ..WorldSettings::new(0x5A7E_0015)
+            },
+            SimulationParams::default(),
+        );
+        let away = PlayerId::new(LEGACY_PLAYER_ID.get() + 1);
+        world.add_player(away);
+        let body = SpaceBodyKey::new(2, -1, 0, 1);
+        world
+            .move_to_place(
+                away,
+                Place::OnBody(BodyId::Space(body)),
+                WorldPos::tile_center(4, -2),
+            )
+            .expect("lands");
+        let _ = world.with_store_ground(StoreKey::Body(body), |world| {
+            let (x, y) = world.local_pos(WorldPos::tile_center(9, -3));
+            world.spawn_item_drop(
+                x,
+                y,
+                (0.0, 0.0),
+                fatherload_simulation::item::ItemStack::new(
+                    fatherload_simulation::item::ItemKind::Mineral(
+                        fatherload_simulation::terrain::MineralKind::Copper,
+                    ),
+                    2,
+                ),
+                None,
+            )
+        });
+        for _ in 0..240 {
+            let mut inputs = TickInputs::default();
+            inputs.players.entry(away).or_default().controls =
+                Some(ControlState::new(0.0, false, true));
+            let tick = world.simulation_tick();
+            let _ = world.simulate_tick(tick, &inputs);
+        }
+        assert!(
+            world
+                .places()
+                .store(StoreKey::Body(body))
+                .is_some_and(|ground| ground.terrain().edited_chunk_count() > 0),
+            "the rig dug into the body"
+        );
+        world
     }
 
     /// F7: a format 12 file (no frame in its terrain) loads into the fixed frame at the origin

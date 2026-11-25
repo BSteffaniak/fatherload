@@ -50,4 +50,7 @@ pub enum TestModeAction {
     /// Carve a row of test pools, one per fluid kind, beside the submitting rig (Part III F9:
     /// water, acid, brine and liquid metal to swim, dive and react in).
     PourTestPools,
+    /// Move the submitting rig to another place (F11): over a space body's arrival point,
+    /// into free flight, onto the Moon or back to the spawn point at home.
+    WarpToPlace(crate::place::Place),
 }

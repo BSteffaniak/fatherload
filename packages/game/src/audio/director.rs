@@ -554,6 +554,32 @@ impl Director {
         &self.commands
     }
 
+    /// A seat's place away from the home store (F11): the low wind of a body's thin air, and
+    /// the suit's hum and breath in free flight (a stub the space-render track's place sound
+    /// replaces).
+    fn away_ambience(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        place: fatherload_simulation::place::Place,
+    ) {
+        let on_body = matches!(place, fatherload_simulation::place::Place::OnBody(_));
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Wind,
+            Patch::WindLoop,
+            (if on_body { 0.18 } else { 0.0 }, listener.pan, 0.8, 1_800.0),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Moon,
+            Patch::MoonLoop,
+            (if on_body { 0.0 } else { 0.22 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+    }
+
     /// Gain, pan and cutoff for a sound from `source`, or `None` when it is out of earshot.
     fn place(
         source: SoundSource,
@@ -703,7 +729,10 @@ impl Director {
         let seat_input = frame.seats.get(listener.seat).copied().unwrap_or_default();
         let dt = frame.delta_seconds.max(0.0);
         let pan = listener.pan;
-        let terrain = snapshot.terrain;
+        // A seat away from the home store (F11) hears its own place: its ground, in its frame.
+        let away = view.place_scene.as_ref();
+        let terrain = away.map_or(snapshot.terrain, |scene| scene.terrain);
+        let _frame = away.map(|scene| crate::view_frame::scoped(scene.frame));
         let presentation = snapshot
             .players
             .iter()
@@ -904,6 +933,19 @@ impl Director {
             } else {
                 state.hull_alarm = 0.0;
             }
+        }
+
+        if let Some(scene) = away {
+            // Away from home the home world's hazards, ambience and music are not this seat's:
+            // its place's own sound (TODO-SEAM w11-space-render: space and planet ambience and
+            // music) is the place sound below, the rest is the rig's.
+            self.away_ambience(live, listener, scene.place);
+            state.initialized = true;
+            state.velocity_x = velocity_x;
+            state.velocity_y = velocity_y;
+            state.airborne = airborne;
+            *self.seat_state(listener.seat) = state;
+            return;
         }
 
         // Lava nearby sizzles.
@@ -2401,11 +2443,18 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
                 y,
                 pan,
                 half_width: (view.visible_world_size().0 * 0.5).max(TILE_SIZE),
-                vacuum: fatherload_simulation::moon::vacuum_in(
-                    snapshot.terrain.settings(),
-                    crate::view_frame::frame(),
-                    x,
-                    y,
+                // Away from home (F11): free flight is vacuum; a body's air is the planet
+                // track's (TODO-SEAM w11-polar), thin but there for now.
+                vacuum: view.place_scene.as_ref().map_or_else(
+                    || {
+                        fatherload_simulation::moon::vacuum_in(
+                            snapshot.terrain.settings(),
+                            crate::view_frame::frame(),
+                            x,
+                            y,
+                        )
+                    },
+                    |scene| scene.place == fatherload_simulation::place::Place::Space,
                 ),
             }
         })

@@ -132,6 +132,11 @@ pub struct FrameReport {
     pub world_replaced: bool,
     /// Terrain tiles changed this frame.
     pub changed_tiles: Vec<fatherload_simulation::terrain::TilePosition>,
+    /// Tiles changed this frame in the ground of other places (F11: space bodies).
+    pub changed_store_tiles: Vec<(
+        fatherload_simulation::place::StoreKey,
+        fatherload_simulation::terrain::TilePosition,
+    )>,
     /// Sounds to play, with where they come from.
     pub sound_cues: Vec<PlacedCue>,
     /// Settings changed and should be persisted.
@@ -368,6 +373,7 @@ impl LocalGame {
             self.effects.reframe(shift);
         }
         report.changed_tiles.extend(frame.changed_tiles);
+        report.changed_store_tiles.extend(frame.changed_store_tiles);
         self.frame_events = self.events.present(frame.events);
         self.observe_events();
         self.save_at_shrines();

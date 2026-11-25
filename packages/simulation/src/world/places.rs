@@ -258,6 +258,9 @@ pub struct PlacePass {
     regions: bool,
     /// The world's seed (read from the home terrain at the start of the tick).
     home_seed: u64,
+    /// The home store's frame and settings (read at the start of the tick).
+    home_frame: Frame,
+    home_settings: Option<crate::worldgen::WorldSettings>,
 }
 
 /// Why [`WorldState::move_to_place`] refused.
@@ -686,6 +689,87 @@ impl WorldState {
             .unwrap_or(Place::HOME)
     }
 
+    /// The test-mode warp to `place` (F11): the place's arrival point (a body's generator's,
+    /// the Moon's top, the spawn point at home, the origin of free flight).
+    pub(super) fn warp_to_place(
+        &mut self,
+        player_id: PlayerId,
+        place: Place,
+    ) -> crate::summary::PlayerScopedCommandOutcome {
+        use crate::summary::PlayerScopedCommandOutcome;
+        let home_frame = if self.place_pass.store.is_home() {
+            self.frame()
+        } else {
+            self.place_pass.home_frame
+        };
+        let arrival = match place {
+            Place::OnBody(crate::place::BodyId::Home) => {
+                home_frame.world(self.player_template.x, self.player_template.y)
+            }
+            Place::OnBody(crate::place::BodyId::Moon) => {
+                let settings = if self.place_pass.store.is_home() {
+                    *self.terrain.settings()
+                } else {
+                    self.place_pass
+                        .home_settings
+                        .unwrap_or_else(|| *self.terrain.settings())
+                };
+                let Some(moon) = crate::worldgen::sky::moon(&settings) else {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                };
+                WorldPos::tile_center(i64::from(moon.center_x), i64::from(moon.top_row) - 4)
+            }
+            Place::OnBody(crate::place::BodyId::Space(_)) | Place::Space => {
+                let Some(source) = BodySource::for_store(place.store(), self.home_seed()) else {
+                    return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                };
+                let tile = source.generator().arrival_tile();
+                WorldPos::tile_center(i64::from(tile.x), i64::from(tile.y))
+            }
+        };
+        match self.move_to_place(player_id, place, arrival) {
+            Ok(()) => PlayerScopedCommandOutcome::Applied,
+            Err(PlaceError::UnknownPlayer) => PlayerScopedCommandOutcome::UnknownPlayer,
+            Err(PlaceError::OutsideGround) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+        }
+    }
+
+    /// Runs `edit` with `store`'s ground swapped into the world (outside the tick only): tools,
+    /// tests and generators that put things on a body (spawn helpers, tile writes and entity
+    /// queries then work on that body's ground in its frame). `None` inside the tick or for a
+    /// store nobody has been to.
+    #[doc(hidden)]
+    pub fn with_store_ground<R>(
+        &mut self,
+        store: StoreKey,
+        edit: impl FnOnce(&mut Self) -> R,
+    ) -> Option<R> {
+        if self.place_pass.running {
+            return None;
+        }
+        if store.is_home() {
+            return Some(edit(self));
+        }
+        let mut world = self.places.stores.remove(&store)?;
+        let (next_id, next_revision) = (self.entities.next_id(), self.entities.next_revision());
+        world.entities.set_counters(
+            next_id.max(world.entities.next_id()),
+            next_revision.max(world.entities.next_revision()),
+        );
+        self.place_pass.home_seed = self.terrain.seed();
+        self.place_pass.home_frame = self.terrain.frame();
+        self.place_pass.home_settings = Some(*self.terrain.settings());
+        self.swap_ground(&mut world);
+        self.place_pass.store = store;
+        let result = edit(self);
+        self.place_pass.store = StoreKey::Home;
+        let counters = (self.entities.next_id(), self.entities.next_revision());
+        self.swap_ground(&mut world);
+        self.entities.set_counters(counters.0, counters.1);
+        self.places.stores.insert(store, world);
+        Some(result)
+    }
+
     // --- The tick over every occupied store ----------------------------------------------------
 
     /// The tick of a world with more than one store, or with regions (see the module docs).
@@ -710,6 +794,8 @@ impl WorldState {
         self.place_pass.ground_only = false;
         self.place_pass.regions = self.terrain.settings().generator.has_descents();
         self.place_pass.home_seed = self.terrain.seed();
+        self.place_pass.home_frame = self.terrain.frame();
+        self.place_pass.home_settings = Some(*self.terrain.settings());
         self.place_pass.awake_cells = self.awake_cells_here();
         let mut output = self.simulate_pass(tick, &home_inputs);
         self.restore_players(stash);

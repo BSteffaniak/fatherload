@@ -56,6 +56,11 @@ pub struct OnlineClient {
     drawn_tiles: Vec<Tile>,
     /// Streamed worlds: the edits (tiles that differ from generation) last drawn.
     drawn_edits: std::collections::BTreeMap<TilePosition, Tile>,
+    /// Each other place's ground as last drawn (F11): its digest and edited tiles.
+    drawn_store_edits: std::collections::BTreeMap<
+        fatherload_simulation::place::StoreKey,
+        (u64, std::collections::BTreeSet<TilePosition>),
+    >,
     unsent: Vec<bridge::WorldClientMessage>,
     notices: Vec<String>,
 }
@@ -101,6 +106,7 @@ impl OnlineClient {
             drawn_key: None,
             drawn_tiles: Vec::new(),
             drawn_edits: std::collections::BTreeMap::new(),
+            drawn_store_edits: std::collections::BTreeMap::new(),
             unsent: Vec::new(),
             notices: Vec::new(),
         })
@@ -302,10 +308,12 @@ impl OnlineClient {
             })
             .collect();
         let (changed_tiles, world_replaced) = self.terrain_changes();
+        let changed_store_tiles = self.store_terrain_changes();
         RuntimeFrame {
             ticks_run,
             events,
             changed_tiles,
+            changed_store_tiles,
             world_replaced,
         }
     }
@@ -318,7 +326,10 @@ impl OnlineClient {
         // Poses carry their frame origin (F7): rebase each onto the rendered world's frame so a
         // frame move between ticks never shows as a jump.
         let origin = fatherload_netcode::world::frame_origin(self.world());
+        // A pose in another place (F11) is rebased onto that place's own frame.
         let px = |pose: &fatherload_netcode::Pose| {
+            let origin = fatherload_netcode::world::region_origin(self.world(), pose.region)
+                .unwrap_or(origin);
             let local = pose.rebased(origin);
             (local.x * TILE_SIZE, local.y * TILE_SIZE)
         };
@@ -406,6 +417,41 @@ impl OnlineClient {
 
     /// Tiles of the rendered (predicted) terrain that changed since the last call, and whether
     /// the whole terrain must be redrawn (first keyframe, new epoch, resized terrain).
+    /// Tiles of other places' ground (F11) whose edits changed since the last frame: every
+    /// edited tile of a store whose digest moved (stores hold few edits).
+    fn store_terrain_changes(
+        &mut self,
+    ) -> Vec<(fatherload_simulation::place::StoreKey, TilePosition)> {
+        let Some(world) = self
+            .session
+            .predicted()
+            .or_else(|| self.session.authority())
+        else {
+            return Vec::new();
+        };
+        let mut changed = Vec::new();
+        for (store, body) in world.places().stores() {
+            let digest = body.terrain().digest();
+            let previous = self.drawn_store_edits.get(&store);
+            if previous.is_some_and(|(drawn, _)| *drawn == digest) {
+                continue;
+            }
+            let edits: std::collections::BTreeSet<TilePosition> = body
+                .terrain()
+                .generation_diffs()
+                .into_iter()
+                .map(|change| change.position)
+                .collect();
+            if let Some((_, before)) = previous {
+                changed.extend(before.union(&edits).map(|tile| (store, *tile)));
+            } else {
+                changed.extend(edits.iter().map(|tile| (store, *tile)));
+            }
+            self.drawn_store_edits.insert(store, (digest, edits));
+        }
+        changed
+    }
+
     fn terrain_changes(&mut self) -> (Vec<TilePosition>, bool) {
         let Some(world) = self
             .session

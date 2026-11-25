@@ -547,6 +547,9 @@ impl SceneStage<'_> {
     fn absorb(&mut self, report: FrameReport) {
         self.report.world_replaced |= report.world_replaced;
         self.report.changed_tiles.extend(report.changed_tiles);
+        self.report
+            .changed_store_tiles
+            .extend(report.changed_store_tiles);
     }
 }
 

@@ -271,6 +271,36 @@ pub struct PilotPresentation {
 }
 
 impl PilotPresentation {
+    /// The pilots on foot in a store's `entities` (F11: a place away from home).
+    fn in_store(
+        world: &WorldState,
+        entities: &fatherload_simulation::entity::EntityStore,
+    ) -> Vec<Self> {
+        use fatherload_simulation::entity::{EntityKind, EntityState};
+        entities
+            .of_kind(EntityKind::Pilot)
+            .filter_map(|entity| match &entity.state {
+                EntityState::Pilot(state) => Some(Self {
+                    player_id: state.owner,
+                    x: entity.body.x,
+                    y: entity.body.y,
+                    state: *state,
+                    pose: state.pose(&entity.body),
+                    cosmetics: RigCosmetics::resolve(
+                        world
+                            .player(state.owner)
+                            .and_then(|player| player.cosmetics),
+                        state.owner,
+                    ),
+                    pick: None,
+                    low_gravity: false,
+                    downed: false,
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn of(world: &WorldState) -> Vec<Self> {
         world
             .pilots()
@@ -584,6 +614,57 @@ pub struct ViewSnapshot<'w> {
     /// The gravity well bending the seat's view (Wave 10): its point and horizon reach in
     /// world pixels and how hard it bends (`0..=1`), for the lensing pass.
     pub lens: Option<(f32, f32, f32, f32)>,
+    /// Where the seat is (F11): the home world, the Moon, a space body or free flight.
+    pub place: fatherload_simulation::place::Place,
+    /// A seat away from the home store sees its own store's ground (F11; `None` at home).
+    /// Its camera and rig are in that store's frame.
+    pub place_scene: Option<PlaceScene<'w>>,
+}
+
+/// What a seat away from the home store sees (F11): its store's ground, entities and the rigs
+/// there, all in the store's frame. Drawn by the place view hook (`rendering::place_view`,
+/// TODO-SEAM w11-space-render: space, planets and the polar ground replace its stub art).
+#[derive(Clone, Debug)]
+pub struct PlaceScene<'w> {
+    pub place: fatherload_simulation::place::Place,
+    pub store: fatherload_simulation::place::StoreKey,
+    pub terrain: &'w Terrain,
+    pub entities: &'w fatherload_simulation::entity::EntityStore,
+    pub frame: fatherload_simulation::position::Frame,
+    /// Every rig in the store (local and remote).
+    pub rigs: Vec<PlayerPresentation>,
+    /// Every pilot on foot in the store.
+    pub pilots: Vec<PilotPresentation>,
+}
+
+impl<'w> PlaceScene<'w> {
+    /// The scene of `player_id`'s place, if it is away from the home store.
+    #[must_use]
+    pub fn of(world: &'w WorldState, player_id: PlayerId) -> Option<Self> {
+        let store = world.store_of(player_id);
+        if store.is_home() {
+            return None;
+        }
+        let terrain = world.store_terrain(store)?;
+        let entities = world.store_entities(store)?;
+        let rigs = world
+            .players_in(store)
+            .filter_map(|id| {
+                world
+                    .player(id)
+                    .map(|player| PlayerPresentation::from_player(id, player, world))
+            })
+            .collect();
+        Some(Self {
+            place: world.place_of(player_id),
+            store,
+            terrain,
+            entities,
+            frame: terrain.frame(),
+            rigs,
+            pilots: PilotPresentation::in_store(world, entities),
+        })
+    }
 }
 
 impl ViewSnapshot<'_> {
@@ -913,6 +994,7 @@ impl<'w> RenderSnapshot<'w> {
             .enumerate()
             .filter_map(|(seat_index, (seat, viewport))| {
                 view_snapshot(world, seat_index, seat.player, viewport, world_scale)
+                    .map(|view| away_view(view, world, world_scale))
             })
             .collect();
         // The forts round the local seats (Wave 10).
@@ -942,9 +1024,12 @@ impl<'w> RenderSnapshot<'w> {
                 .collect(),
 
             relay_countdowns: relay_countdowns(world),
+            // The home world's rigs (F11: a rig away from the home store is drawn in its
+            // place's scene, in that store's frame).
             players: world
                 .players()
                 .iter()
+                .filter(|(id, _)| world.store_of(**id).is_home())
                 .map(|(id, player)| PlayerPresentation::from_player(*id, player, world))
                 .collect(),
             pilots: PilotPresentation::of(world),
@@ -1185,6 +1270,45 @@ fn camera_for(viewport: Viewport, world_scale: f32, x: f32, y: f32) -> CameraPos
     }
 }
 
+/// A seat away from the home store (F11): its camera on its actor in its store's frame, its
+/// place's scene, and none of the home world's readings (fields, wells, the Hollow World's
+/// and the Heart's views, doors and counters), which belong to places it is not in.
+fn away_view<'w>(
+    mut view: ViewSnapshot<'w>,
+    world: &'w WorldState,
+    world_scale: f32,
+) -> ViewSnapshot<'w> {
+    view.place = world.place_of(view.player_id);
+    let Some(scene) = PlaceScene::of(world, view.player_id) else {
+        return view;
+    };
+    let (x, y) = world
+        .store_actor_position(view.player_id)
+        .map_or((view.player.x, view.player.y), |(x, y, _)| (x, y));
+    view.world_scale = world_scale;
+    view.camera = camera_for(view.viewport, world_scale, x, y);
+    view.fields = fatherload_simulation::field::FieldSample::NEUTRAL;
+    view.hollow = None;
+    view.heart = None;
+    view.lens = None;
+    view.surface_zone = None;
+    view.village_door = None;
+    view.home_door = None;
+    view.plot_board = None;
+    view.talk_target = None;
+    view.quest_desk = Vec::new();
+    view.quest_markers = Vec::new();
+    view.buoy = None;
+    view.nearby_module = None;
+    view.in_colony = false;
+    view.logistics_stop = None;
+    view.tomb_door = None;
+    view.night_safe = None;
+    view.pilot_usable = None;
+    view.place_scene = Some(scene);
+    view
+}
+
 /// The person `player_id`'s rig can talk to, with their short name.
 fn talk_target(
     world: &WorldState,
@@ -1330,6 +1454,8 @@ fn view_snapshot(
         heart,
         ending: None,
         lens,
+        place: fatherload_simulation::place::Place::HOME,
+        place_scene: None,
         aim_preview: None,
         reticle: None,
         build_preview: None,

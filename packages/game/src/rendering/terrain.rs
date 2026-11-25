@@ -94,6 +94,14 @@ impl TerrainRenderer {
         }
     }
 
+    /// A cache for `terrain` (a place's ground, F11; no GPU work until it is synced).
+    pub(super) const fn new_for(terrain: &Terrain) -> Self {
+        Self {
+            chunks: BTreeMap::new(),
+            bounds: terrain_bounds(terrain),
+        }
+    }
+
     pub(super) fn mark_all_dirty(&mut self) {
         for chunk in self.chunks.values_mut() {
             chunk.work.full_paint = true;

@@ -61,6 +61,7 @@ mod lunar;
 mod night;
 mod old_deep;
 mod pilot;
+pub(super) mod place_view;
 mod quest_marks;
 mod rig;
 mod sky;

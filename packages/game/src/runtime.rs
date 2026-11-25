@@ -184,6 +184,8 @@ pub struct RuntimeFrame {
     pub events: Vec<RuntimeEvent>,
     /// Terrain tiles changed by those ticks, in order (may repeat).
     pub changed_tiles: Vec<TilePosition>,
+    /// Tiles changed in the ground of other places (F11), in order (may repeat).
+    pub changed_store_tiles: Vec<(fatherload_simulation::place::StoreKey, TilePosition)>,
     /// The rendered world was replaced wholesale (a client's first or new keyframe).
     pub world_replaced: bool,
 }
@@ -730,6 +732,14 @@ impl LocalHost {
                     // Other stores' ground is drawn by the place view (F11), not the home
                     // world's tile caches.
                     WorldOp::Discovery(_) | WorldOp::StoreTile(..) => None,
+                })
+                .collect(),
+            changed_store_tiles: output
+                .ops
+                .iter()
+                .filter_map(|(_, op)| match op {
+                    WorldOp::StoreTile(store, change) => Some((*store, change.position)),
+                    WorldOp::Tile(_) | WorldOp::Discovery(_) => None,
                 })
                 .collect(),
             world_replaced: false,

@@ -444,6 +444,23 @@ pub const fn frame_origin(world: &WorldState) -> [i64; 2] {
     [frame.origin_col(), frame.origin_row()]
 }
 
+/// The tile offset of the frame of the store a [`Pose::region`] names (F11; the home world's
+/// for region 0), if this world holds that store.
+#[must_use]
+pub fn region_origin(world: &WorldState, region: u64) -> Option<[i64; 2]> {
+    if region == 0 {
+        return Some(frame_origin(world));
+    }
+    world
+        .places()
+        .stores()
+        .find(|(store, _)| store.code() == region)
+        .map(|(_, body)| {
+            let frame = body.terrain().frame();
+            [frame.origin_col(), frame.origin_row()]
+        })
+}
+
 /// [`Pose::mode`] of a player on foot (drill modes are `(y << 16 ^ x) + 1`; this high bit
 /// pattern is never one of theirs in practice).
 pub const ON_FOOT_POSE_MODE: u32 = 0xF00F_0001;

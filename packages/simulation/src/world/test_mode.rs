@@ -86,6 +86,7 @@ impl WorldState {
             TestModeAction::SetInvulnerable(on) => state.invulnerable = on,
             TestModeAction::SetInfiniteFuel(on) => state.infinite_fuel = on,
             TestModeAction::WarpToBand(band) => return self.warp_to_band(player_id, band),
+            TestModeAction::WarpToPlace(place) => return self.warp_to_place(player_id, place),
             TestModeAction::PlaceFieldZone(preset) => {
                 return self.place_dev_field_zone(player_id, preset);
             }

@@ -117,6 +117,8 @@ fn view_camera_2d(
 
 pub struct GameRenderer {
     terrain: TerrainRenderer,
+    /// The ground of the places seats are in away from the home store (F11).
+    places: world::place_view::PlaceRenderers,
     /// Sky gradient, hills and clouds, rasterized at startup.
     sky: SkyArt,
     /// Which way each rig last faced.
@@ -239,6 +241,7 @@ impl GameRenderer {
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread, terrain: &Terrain) -> Self {
         Self {
             terrain: TerrainRenderer::new(raylib, thread, terrain),
+            places: world::place_view::PlaceRenderers::default(),
             sky: SkyArt::load(raylib, thread),
             rig_facings: RigFacings::default(),
             atlas: sprite::load_atlas(raylib, thread),
@@ -326,6 +329,8 @@ impl GameRenderer {
             .collect();
         self.terrain
             .sync(raylib, thread, snapshot.terrain, explored, &views);
+        self.places
+            .sync(raylib, thread, snapshot, &report.changed_store_tiles);
     }
 
     /// Applies menu input to the dialog UI states before the frame is drawn: scrolling (see
@@ -711,6 +716,33 @@ impl GameRenderer {
         view: &ViewSnapshot<'_>,
     ) {
         let viewport = view.viewport;
+        // A seat away from the home store (F11) sees its place (the space-render track's
+        // hook), with its usual HUD over it.
+        if let Some(scene) = &view.place_scene {
+            let density = render_scale_for_draw(draw);
+            let camera = view_camera_2d(
+                viewport,
+                Vector2::new(view.camera.x, view.camera.y),
+                view.world_scale,
+                density,
+            );
+            let home = crate::view_frame::frame();
+            let _ = crate::view_frame::set(scene.frame);
+            {
+                let mut world_draw = draw.begin_mode2D(camera);
+                self.places.draw(
+                    &mut world_draw,
+                    view,
+                    scene,
+                    &self.rig_facings,
+                    shell.update_ticks,
+                );
+            }
+            let _ = crate::view_frame::set(home);
+            let _canvas = UiCanvasScope::begin(draw);
+            draw_view_hud(draw, shell, snapshot, view);
+            return;
+        }
         let mut camera = Vector2::new(view.camera.x, view.camera.y);
         // Local, distance-scaled blast shake; HUD placement is never moved.
         let mut shake = 0.0_f32;

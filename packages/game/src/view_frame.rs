@@ -38,6 +38,24 @@ pub fn set(frame: Frame) -> fatherload_simulation::position::FrameShift {
     }
 }
 
+/// Presentation in `frame` until the guard drops, then back in the frame before (F11: a seat
+/// away from the home store draws and listens in its place's frame).
+#[must_use]
+pub fn scoped(frame: Frame) -> Scoped {
+    let previous = self::frame();
+    let _ = set(frame);
+    Scoped(previous)
+}
+
+/// Restores the previous presentation frame when dropped (see [`scoped`]).
+pub struct Scoped(Frame);
+
+impl Drop for Scoped {
+    fn drop(&mut self) {
+        let _ = set(self.0);
+    }
+}
+
 /// The origin of a parallax layer that moves `1 - parallax` as fast as the camera at local `x`:
 /// `x * (1 - parallax)` in world terms. The parallax term reads the camera's absolute place, so
 /// the layer never jumps when the frame moves (and is the old expression in the origin frame).
