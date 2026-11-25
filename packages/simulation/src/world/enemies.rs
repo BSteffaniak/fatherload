@@ -1697,6 +1697,16 @@ impl WorldState {
             body.velocity_y = quantize(body.velocity_y * 0.3);
         }
         output.push_event(enemy_event(id, state.kind, body, EventShape::Windup));
+        // The dune wyrm's telegraph (Wave 12 planets-b): the sand ripples and hisses over it.
+        if state.kind == EnemyKind::DuneWyrm {
+            let tile = self.frame().tile_at(body.x, body.y);
+            output.push_event(GameplayEventKind::Frontier {
+                what: crate::frontier::FrontierEvent::WyrmRipple,
+                player_id: None,
+                x: tile.x,
+                y: tile.y,
+            });
+        }
     }
 
     /// A point circling `center` at `radius` (deterministic from the tick and the enemy's

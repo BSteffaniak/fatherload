@@ -756,6 +756,23 @@ fn the_dune_wyrm_hears_drilling_three_times_as_far_in_the_galleries() {
 }
 
 #[test]
+fn a_hunting_dune_wyrm_ripples_the_sand_before_it_strikes() {
+    let depth = stratum_depth(1_000, 2);
+    let (mut world, rig) = underground(FrontierStyle::Desert, 1_000, depth);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    let (x, y) = world.frame().centre_of(rig.x + 6, rig.y);
+    let _wyrm = world.spawn_enemy(EnemyKind::DuneWyrm, x, y);
+    let mut events = Vec::new();
+    for _ in 0..world.timing().ticks_for_millis(6_000) {
+        events.extend(step(&mut world, ControlState::new(0.0, false, true)));
+    }
+    assert!(
+        frontier_events(&events).contains(&FrontierEvent::WyrmRipple),
+        "the wyrm's telegraph is heard"
+    );
+}
+
+#[test]
 fn a_struck_chime_drifter_rings_the_crystal_round_it_to_pieces() {
     let (mut world, rig) = settled(FrontierStyle::Crystal, 1_000);
     world.set_enemy_difficulty(EnemyDifficulty::Normal);
