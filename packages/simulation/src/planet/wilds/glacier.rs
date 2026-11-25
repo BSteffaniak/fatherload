@@ -224,10 +224,14 @@ fn spire_in(ground: &PlanetGround, cell: i64) -> Option<(i64, i32)> {
 /// The Frozen Titan's tile at `(dx, depth)` from its centre column and the surface there.
 fn titan_tile(dx: i64, depth: i32) -> Option<Tile> {
     let bone = || Some(wild(WildTile::TitanBone));
-    // Its tusk curls up out of the ice.
+    // Its tusk curls up out of the ice: two tiles thick, each step overlapping the last so it
+    // reads as one curved horn, not loose blocks.
     if depth < 0 {
         return match (dx, depth) {
-            (-19, -1 | -2) | (-18, -3 | -4) | (-17, -5) => bone(),
+            (-20 | -19, -1 | -2) | (-19 | -18, -3 | -4) | (-18 | -17, -5) | (-17 | -16, -6) => {
+                bone()
+            }
+            (-16, -7) => bone(),
             _ => None,
         };
     }

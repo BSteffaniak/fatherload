@@ -134,6 +134,19 @@ fn spot_tile(planet: &PlanetGround, spot: Spot) -> (i32, i32) {
     }
 }
 
+/// The nearest spot under a canopy round `(column, floor)`: `(dx, dy)` of an open tile with
+/// solid ground right over it and open air under it.
+fn hanging_spot(planet: &PlanetGround, column: i32, floor: i32) -> Option<(i32, i32)> {
+    let open = |x: i32, y: i32| planet.generated_tile(x, y).kind.is_open();
+    (0..14)
+        .flat_map(|distance| [distance, -distance])
+        .flat_map(|dx| (4..34).map(move |up| (dx, -up)))
+        .find(|&(dx, dy)| {
+            let (x, y) = (column + dx, floor + dy);
+            open(x, y) && !open(x, y - 1) && (1..=3).all(|below| open(x, y + below))
+        })
+}
+
 /// Lands on the nearest `theme` world at `spot`; `creatures` are spawned round the rig.
 fn on_wild_world(
     stage: &mut SceneStage<'_>,
@@ -171,6 +184,12 @@ fn on_wild_world(
         let store = StoreKey::Body(ground.id);
         let _ = world.with_store_ground(store, |world| {
             for (kind, dx, dy) in creatures {
+                // A vinestalker hangs under the nearest canopy (its habitat), not in open sky.
+                let (dx, dy) = if *kind == EnemyKind::Vinestalker {
+                    hanging_spot(&planet, column, floor).unwrap_or((*dx, *dy))
+                } else {
+                    (*dx, *dy)
+                };
                 let (x, y) = world.frame().centre_of(column + dx, floor + dy);
                 let _ = world.spawn_enemy(*kind, x, y);
             }
