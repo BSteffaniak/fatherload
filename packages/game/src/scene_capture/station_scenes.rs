@@ -243,6 +243,37 @@ fn docked(
     stage.settle(2);
 }
 
+/// Undocked and flying off from Halcyon Dock with missions under way: the bounties panel.
+fn bounties_in_flight(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        space_world(world);
+        let body = body_of(world, HALCYON);
+        let port = body.port().expect("port");
+        let (dx, dy) = body.centre.delta(port);
+        let length = dx.hypot(dy).max(1.0);
+        let reach = space::tiles(30.0);
+        let pos = port.offset(dx / length * reach, dy / length * reach);
+        launch(
+            world,
+            seats[0].player,
+            pos,
+            body.dock_orientation() + std::f32::consts::PI,
+        );
+        let board = world.station_board(HALCYON);
+        let mut ledger = world.station_ledger().clone();
+        let mut missions: Vec<_> = board.iter().flatten().copied().collect();
+        if let Some(first) = missions.first_mut() {
+            first.progress = first.kind.goal();
+        }
+        if let Some(second) = missions.get_mut(1) {
+            second.progress = 5;
+        }
+        ledger.missions.insert(seats[0].player, missions);
+        world.set_station_ledger(ledger);
+    });
+    stage.settle(8);
+}
+
 /// Two seats docked at two stations: one in Halcyon's shipyard, one at an alien bar.
 fn split(stage: &mut SceneStage<'_>) {
     stage.play(2, |world, seats| {
@@ -330,6 +361,11 @@ pub const STATION_SCENES: &[Scene] = &[
         name: "station_derelict_salvage",
         summary: "Docked at a derelict: dark, scorched plating, one dimming lamp; strip the wreck",
         setup: |stage| docked(stage, derelict, StationPage::Hub, 0),
+    },
+    Scene {
+        name: "station_bounties_in_flight",
+        summary: "Leaving Halcyon Dock with three missions under way: the BOUNTIES panel (a scan done, a quota part dug, a delivery aboard)",
+        setup: bounties_in_flight,
     },
     Scene {
         name: "station_split",

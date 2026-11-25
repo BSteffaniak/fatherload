@@ -117,13 +117,34 @@ impl WorldState {
     /// The patrons at `station`'s bar.
     #[must_use]
     pub fn station_patrons(&self, station: StationId) -> Vec<Patron> {
+        type Cache = Mutex<BTreeMap<(u64, StationId), Arc<Vec<Patron>>>>;
+        static CACHE: OnceLock<Cache> = OnceLock::new();
         let Some(context) = cached_context(self, station) else {
             return Vec::new();
         };
         let Some(profile) = context.station.as_ref() else {
             return Vec::new();
         };
-        patrons(self.space().space(), profile, &context)
+        // The bar is drawn every frame: its patrons are memoised (pure data).
+        let key = (self.world_seed(), station);
+        let cache = CACHE.get_or_init(Mutex::default);
+        let found = cache
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+            .map(Arc::clone);
+        if let Some(found) = found {
+            return found.as_ref().clone();
+        }
+        let made = Arc::new(patrons(self.space().space(), profile, &context));
+        {
+            let mut cache = cache.lock().unwrap_or_else(PoisonError::into_inner);
+            if cache.len() >= 64 {
+                cache.clear();
+            }
+            cache.insert(key, Arc::clone(&made));
+        }
+        made.as_ref().clone()
     }
 
     /// `good`'s quote at `station` now.

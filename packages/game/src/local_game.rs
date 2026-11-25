@@ -2838,6 +2838,7 @@ mod tests {
     mod quest_tests;
     mod space_seat_tests;
     mod split_seat_tests;
+    mod station_hub_tests;
     mod test_mode_tests;
     mod tomb_tests;
     mod village_tests;

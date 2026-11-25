@@ -1398,7 +1398,9 @@ pub(super) fn draw_space_hud(
     let touch = view.seat_index == 0 && super::touch_controls::active();
     let narrow = rect.width < 420.0;
     // The meters, top left.
-    let capacity = fatherload_simulation::flight::air_capacity(player.hazard_gear.life_support);
+    // The ship's life support line adds to the tank (Wave 12).
+    let capacity = fatherload_simulation::flight::air_capacity(player.hazard_gear.life_support)
+        + player.hazard_gear.ship.extra_air();
     let meters = Rectangle::new(rect.x + 4.0, rect.y + 4.0, 150.0, 60.0);
     ui_kit::panel(draw, meters, PanelStyle::Standard);
     let (x, mut y) = (meters.x as i32 + 5, meters.y as i32 + 5);
@@ -1545,6 +1547,7 @@ pub(super) fn draw_space_hud(
     let galaxy = snapshot.space.galaxy();
     let bodies = galaxy.bodies_near(flight.pos);
     draw_docking_guide(draw, rect, meters, view, &bodies);
+    draw_bounties(draw, rect, snapshot, view, touch);
     let nav = player.hazard_gear.flight.nav_suite > 0;
     let waypoint = snapshot
         .space
@@ -1658,6 +1661,75 @@ pub(super) fn draw_space_hud(
 
 /// The docking guide near a station's port: range, speed and alignment, each ticked off
 /// (under the meters).
+/// The missions under way, bottom left (Wave 12): what each asks and how far along it is.
+fn draw_bounties(
+    draw: &mut RaylibDrawHandle<'_>,
+    rect: Rectangle,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    touch: bool,
+) {
+    let world = snapshot.space.world;
+    let missions = world.station_ledger().missions_of(view.player_id);
+    if missions.is_empty() || touch || rect.height < 200.0 {
+        return;
+    }
+    let galaxy = world.space();
+    let width = (rect.width * 0.36).clamp(150.0, 230.0);
+    let height = 14.0 + missions.len() as f32 * 10.0;
+    let panel = Rectangle::new(
+        rect.x + 4.0,
+        rect.y + rect.height - height - 22.0,
+        width,
+        height,
+    );
+    ui_kit::panel(draw, panel, PanelStyle::Standard);
+    ui_kit::text(
+        draw,
+        "BOUNTIES",
+        panel.x as i32 + 6,
+        panel.y as i32 + 3,
+        TextStyle::Bold,
+        GOLD,
+    );
+    let chars = ((width - 50.0) / 5.0) as usize;
+    for (index, mission) in missions.iter().enumerate() {
+        let y = panel.y as i32 + 13 + index as i32 * 10;
+        let mut title =
+            fatherload_simulation::station::bounty::describe(galaxy.space(), mission.kind);
+        if title.chars().count() > chars {
+            title = title
+                .chars()
+                .take(chars.saturating_sub(2))
+                .collect::<String>()
+                + "..";
+        }
+        let (status, colour) = if mission.ready() {
+            ("DONE".to_owned(), LIME)
+        } else if matches!(
+            mission.kind,
+            fatherload_simulation::station::MissionKind::Deliver { .. }
+        ) {
+            ("ABOARD".to_owned(), GOLD)
+        } else {
+            (
+                format!("{}/{}", mission.progress, mission.kind.goal()),
+                SKY_LIGHT,
+            )
+        };
+        ui_kit::text(draw, &title, panel.x as i32 + 6, y, TextStyle::Body, CREAM);
+        let status_width = ui_kit::text_width(&status, TextStyle::Body);
+        ui_kit::text(
+            draw,
+            &status,
+            (panel.x + panel.width) as i32 - status_width - 6,
+            y,
+            TextStyle::Body,
+            colour,
+        );
+    }
+}
+
 fn draw_docking_guide(
     draw: &mut RaylibDrawHandle<'_>,
     rect: Rectangle,
