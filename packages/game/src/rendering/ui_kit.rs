@@ -565,8 +565,8 @@ pub fn truncate(text: &str, width: i32, style: TextStyle) -> String {
     String::new()
 }
 
-/// Draws wrapped `text` inside `width` from `(x, y)`; returns the height used.
-#[cfg(any(test, not(target_os = "emscripten")))]
+/// Draws wrapped `text` inside `width` from `(x, y)`; returns the height used (the ending's
+/// credits use it in the browser too).
 pub fn paragraph(
     draw: &mut impl RaylibDraw,
     value: &str,
