@@ -200,7 +200,8 @@ fn machines(stage: &mut SceneStage<'_>) {
             return;
         };
         let mut hostiles = world.hostiles().clone();
-        let lead = rig.offset(120.0, -640.0);
+        // Near enough that the whole V (two ranks behind the lancer) is in view.
+        let lead = rig.offset(60.0, -360.0);
         let (dx, dy) = lead.delta(rig);
         let face = bearing(dx, dy);
         for ship in &mut hostiles.ships {

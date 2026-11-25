@@ -1027,6 +1027,9 @@ pub struct RenderSnapshot<'w> {
     pub space: SpaceSnapshot<'w>,
 }
 
+/// Attackers this near (px, with their size) are framed whole by the fight's view.
+pub const FIGHT_FRAME_REACH: f32 = 1_000.0;
+
 /// A seat's fight in space (Wave 12 hostiles).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SpaceCombatView {
@@ -1034,10 +1037,13 @@ pub struct SpaceCombatView {
     pub engaged: bool,
     /// Pirates demand this many credits of it.
     pub demand: Option<u32>,
-    /// The nearest hostile ship (px), if any is near.
+    /// The nearest hostile ship, or wreck the seat may salvage (px).
     pub nearest: Option<f32>,
-    /// A boss near the rig: its distance plus its size (px), so the view can frame it.
-    pub boss_reach: Option<f32>,
+    /// How far the view must reach to frame the fight (px): a boss near the rig (its distance
+    /// plus its size), or the seat's own attackers holding off within
+    /// [`FIGHT_FRAME_REACH`] (a machine formation sits 600-730 px out, past the plain combat
+    /// zoom's edge).
+    pub frame_reach: Option<f32>,
 }
 
 impl SpaceCombatView {
@@ -1048,10 +1054,20 @@ impl SpaceCombatView {
         let Some(flight) = world.rig_flight(player_id).filter(|flight| flight.away()) else {
             return Self::default();
         };
+        // Wrecks this seat may salvage keep the fight's close view too: out in open space the
+        // calm view is zoomed so far out that a wreck a few hundred px off would be a speck
+        // under the rig, and flying through it would be guesswork.
         let nearest = hostiles
             .ships
             .iter()
             .map(|ship| flight.pos.distance(ship.pos))
+            .chain(
+                hostiles
+                    .wrecks
+                    .iter()
+                    .filter(|wreck| wreck.owner.is_none_or(|owner| owner == player_id))
+                    .map(|wreck| flight.pos.distance(wreck.pos)),
+            )
             .fold(None, |best: Option<f32>, distance| {
                 Some(best.map_or(distance, |best| best.min(distance)))
             });
@@ -1059,11 +1075,25 @@ impl SpaceCombatView {
             .boss()
             .map(|boss| flight.pos.distance(boss.pos) + boss.class.reach())
             .filter(|reach| *reach < 3_500.0);
+        let own = hostiles.engaged(player_id).map(|encounter| encounter.id);
+        let attackers = hostiles
+            .ships
+            .iter()
+            .filter(|ship| Some(ship.encounter) == own)
+            .map(|ship| flight.pos.distance(ship.pos) + ship.class.reach())
+            .filter(|reach| *reach < FIGHT_FRAME_REACH)
+            .fold(None, |best: Option<f32>, reach| {
+                Some(best.map_or(reach, |best| best.max(reach)))
+            });
+        let frame_reach = match (boss_reach, attackers) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
         Self {
             engaged: hostiles.engaged(player_id).is_some(),
             demand: hostiles.demand_for(player_id),
             nearest,
-            boss_reach,
+            frame_reach,
         }
     }
 }

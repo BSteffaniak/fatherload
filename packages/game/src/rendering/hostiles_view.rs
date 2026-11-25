@@ -696,13 +696,22 @@ pub(super) fn draw_hostile_hud(
             .distance(player.flight.pos)
             .total_cmp(&b.pos.distance(player.flight.pos))
     });
+    // One arrow a direction: ships bunched off one edge (a formation, a flock) share the
+    // nearest's arrow instead of stacking their labels on top of each other.
+    let mut marked: Vec<f32> = Vec::new();
     for ship in ships.into_iter().take(6) {
         let at = frame.project(ship.pos);
         let inside = at.x > frame.rect.x
             && at.x < frame.rect.x + frame.rect.width
             && at.y > frame.rect.y
             && at.y < frame.rect.y + frame.rect.height;
-        if !inside {
+        let direction = (at.y - frame.centre.y).atan2(at.x - frame.centre.x);
+        let crowded = marked.iter().any(|other| {
+            let apart = (direction - other).rem_euclid(std::f32::consts::TAU);
+            apart.min(std::f32::consts::TAU - apart) < 0.3
+        });
+        if !inside && !crowded {
+            marked.push(direction);
             super::space_view::edge_marker(
                 draw,
                 rect,

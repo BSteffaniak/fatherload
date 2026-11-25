@@ -189,13 +189,15 @@ pub(super) fn space_frame(
     // In a fight (Wave 12 hostiles) the view closes in on it, easing in as hostiles near; the
     // rig is then drawn at the view's own scale, like the ships round it.
     let in_fight = super::hostiles_view::combat_share(view.space_combat.nearest);
-    // A boss is framed whole (its far end inside the view's short half).
+    // A boss, and attackers holding off nearby, are framed whole (their far end inside the
+    // view's short half).
     let short = view.viewport.width.min(view.viewport.height) as f32 / view.world_scale.max(0.01);
     let fit = view
         .space_combat
-        .boss_reach
+        .frame_reach
         .map_or(super::hostiles_view::COMBAT_ZOOM, |reach| {
-            (short * 0.5 * 0.9 / reach.max(1.0)).clamp(0.3, super::hostiles_view::COMBAT_ZOOM)
+            // Three quarters of the half: clear of the location plate and the banners.
+            (short * 0.5 * 0.75 / reach.max(1.0)).clamp(0.3, super::hostiles_view::COMBAT_ZOOM)
         });
     let combat = zoom.max(fit);
     let zoom = (combat.ln() - zoom.ln()).mul_add(in_fight, zoom.ln()).exp();
