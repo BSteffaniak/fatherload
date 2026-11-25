@@ -9310,6 +9310,175 @@ rig leave. Swimmers never leave the water (`wilds_after_move`).
 - `wild_world_tour` (ignored): a ten-minute bot tour of each theme that prints the strata,
   encounters, events and tick cost.
 
+## Wave 12 planets-b: the dune, volcanic and crystal worlds (`src/frontier.rs`, `src/frontier/{desert,volcanic,crystal,generate,rules}.rs`, `src/world/frontier.rs`, `src/world/enemies/frontier.rs`)
+
+The planets-b track of Wave 12 (space content I, expansion plan §16 WP-SPACE "planet themes"):
+three planet themes, each a world like the home ground level. Every body the space generator
+tags `Theme::DesertDunes`, `Theme::Volcanic` or `Theme::Crystal` lands on one of them
+(`place::planet_theme_of`); nothing of space generation moved (`GOLDEN_SPACE_DIGEST`
+unchanged), nor of home generation (V1-V10, `GOLDEN_V11_DIGEST` unchanged).
+
+### Registration (`crate::frontier`)
+
+- Three themes appended to `planet::theme::PLANET_THEMES` (ids 3, 4, 5: `DUNE_WORLD`,
+  `VOLCANIC_WORLD`, `CRYSTAL_WORLD`; `frontier::style_of` maps an id to its
+  `FrontierStyle`). Their data lives in `frontier/{desert,volcanic,crystal}.rs`
+  (`THEME`, `STRATA`, `RULES`).
+- The polar track's `PlanetGround` calls three hooks for a frontier theme: `hill()` asks
+  `generate::surface_height`, `generated_with` asks `generate::feature_tile` first, and
+  `stratum_end` divides `strata_depth()` (the authored depth) instead of the depth to the core.
+  Every other theme generates exactly as before.
+- New tile family `TileKind::Frontier(FrontierTile)` (36 tiles; kind codes
+  `0x2400 + code`: desert `0x24xx`, volcanic `0x25xx`, crystal `0x26xx`, inside the planets-b
+  range `0x2400..=0x27FF`). The light wells' lens, receptors and seals are indestructible (only
+  the light opens a seal); the prizes (`RuinCache`, `MagmaHeart`, `GeodeCore`) yield the
+  existing buried idol, mantle heart and crystal prism artifacts.
+
+### Each world
+
+| | Dune World | Volcanic World | Crystal World |
+|---|---|---|---|
+| Surface | dunes every 64 columns: a long windward rise, a steep slip face; oasis bowls of water ringed by palms | basalt islands in lava seas (their surface at the datum), a cone every 512 columns, craters with sulphur lips | gentle quartz hills bristling with ice-blue crystal spires |
+| Landmark (every body) | the Sleeping Sentinel: a giant stone head half buried, glyph eyes, a vault of caches under it | the Caldera: the biggest cone, a lava lake in its crater, a magma heart in its throat | the Choir Spire: two tall prongs over a plinth, a geode under it |
+| Secret (crater rocks and moons, R <= 1,000) | a lost caravan's cache under a glyph obelisk | a sealed ember (a magma heart in obsidian) under an obsidian spike | a hidden geode under a prism-topped spire |
+| Settlement site | the caravan flat (48 flat columns) | a basalt plateau between cones | a cleared meadow |
+| Weather (pure schedule) | sandstorms: carry rigs and pilots in the open with the wind | ash falls: the surface's toxic air doubles | glitterfrost: the surface's cold bites four times as hard |
+| Hazards (tagged) | heat | heat, toxic air | cold, high gravity |
+| Music and bed | a caravan's walk in D hijaz; wind over the dunes | a march in E phrygian; rumble, bubbling, crackle | a glass harmonica in E lydian; a crystalline hum |
+
+**Strata.** Four each, concentric rings. The first three share the authored depth
+`frontier::strata_rows(radius)` (800 rows at R = 1,500 rising to 2,500 at R = 10,000; a moon
+or crater rock scales down from 800 in proportion: 213 rows at R = 400); the fourth runs on
+below it to the core chamber. Each stratum has its rock, an accent in its own pattern (wavy
+layers, rounded blobs or thin veins), its ores and **one signature rule**
+(`frontier::StratumRule`, its `hint()` the HUD's line):
+
+| World | Stratum | Materials and features | Rule |
+|---|---|---|---|
+| Dune | Shifting Dunes | packed sand, loose dune sand | `LooseSand`: loose sand drops into open space under it (tunnels in sand fill in; never into a rig or pilot) |
+| Dune | Buried City | banded sandstone; ruins (brick walls, pillared halls, cracked floors over vaults of caches) | `CrumblingFloors`: a cracked floor under a resting rig or pilot loses a point every 250 ms and gives way with its run |
+| Dune | Worm Galleries | wormstone; meandering galleries | `EchoingGalleries`: a dune wyrm hears a drill three times as far here |
+| Dune | Glass Deep | salt beds veined with desert glass | `BrittleGlass`: mining glass shatters the glass joined to it within three tiles; each shard nicks the hull |
+| Volcanic | Ash Fields | pumice, loose ash, gas pockets | `ToxicAsh`: toxic air eats the hull through the gas scrubber's share |
+| Volcanic | Basalt Flows | columnar basalt, scoria, lava tubes (one direction per 40-row band) | `TubeDraughts`: a tube's draught carries an idle rig or pilot along it at 150 px/s (steering or drilling braces against it) |
+| Volcanic | Obsidian Mantle | basalt, obsidian veins | `Splinters`: mining obsidian splinters the hull unless the boulder deflector turns it |
+| Volcanic | Magma Chambers | magma rock, lava pooled on the chambers' floors, magma hearts | `SearingHeat`: 54 heat units, past the best classic cooling (47): the planet gear's job |
+| Crystal | Shard Meadows | shard stone, resonant crystal clusters | `Resonance`: mining crystal shatters the crystal joined to it within three tiles |
+| Crystal | Prism Beds | prismatic stone; light wells (a shaft of sunlight to a lens, a prism, a dark receptor, a sealed geode vault) | `LightBeams`: dig the light its path; a lit receptor opens its vault |
+| Crystal | Growing Geodes | shard stone, geodes lined with crystal | `Regrowth`: open air touching two crystals near a rig grows crystal (two tiles every 2 s; never into a body) |
+| Crystal | Heavy Lattice | dense lattice, crystal veins | `HeavyLattice`: half again the body's pull, through the planet gear's share |
+
+**Heat** is the classic heat model's: `crust::heat_units` asks `frontier::rules::heat_units`
+first, so the radiator, heat shielding and HEAT warning work unchanged. The other hazards
+(`frontier::rules::exposure_at`) bite through `frontier::planet_gear_tier`.
+
+### Creatures (twelve appended `EnemyKind`s, `world/enemies/frontier.rs`)
+
+| World | Neutral fauna | Hunters |
+|---|---|---|
+| Dune | dune skipper (bolts from a rig), mirage moth (circles its oasis) | dune wyrm (swims the sand, hears drilling and driving, ripples then erupts), glass scorpion (armoured, tail sting) |
+| Volcanic | basalt tortoise (shells up near a rig), ember strider (walks the lava shores) | cinder bat (packs), magma slug (slow, burning) |
+| Crystal | glint moth (circles a rig's lamps), chime drifter (struck, rings the crystal round it to pieces) | shard crab (armoured claws), geode mimic (dormant lump until a rig comes close) |
+
+All of them move through the enemy body rules in the planet's local frame (down toward the
+core). The home world's director never runs on a body's ground pass, so the frontier worlds
+spawn their own (`advance_frontier_creatures`, every second, round each rig, from
+`frontier::roster(style, zone)`, out of every rig's view, at a spot that fits; underground the
+spawner looks up and down a column for room). The classic band roster stays off frontier
+worlds (`Terrain::creature_roster` is empty there). A frontier world's surface is **no
+refuge** from its hunters: `enemy_safe_zone` asks `frontier_safe_zone`, safe only at the
+settlement site, bases and placed infrastructure.
+
+### The pass (`world/frontier.rs`)
+
+`advance_frontier(next_tick, inputs, output)` runs last before the fluids in both the world
+pass (a world that is a planet) and a body store's ground pass. It keeps no state: the
+weather (`rules::weather_at`) and the eruptions (`rules::eruption_at`, `bombs_landing`,
+`bombs_in_flight`) are pure functions of the planet's seed and world milliseconds, and every
+cadenced rule steps on fixed millisecond periods, so every tick rate plays alike and nothing
+saves. Mining hooks into the tick's `MineResult::Mined` match (`frontier_mined`). Eruptions:
+a cone rumbles for 6 s (the telegraph, an event and a HUD line), then throws a bomb every
+450 ms for 9 s; each bomb's shadow grows and reddens on the ground for its 1.6 s flight
+before it lands (14 hull to what is under it, a cinder left on the ground).
+
+### Events (netcode 920-939)
+
+`GameplayEventKind::Frontier { what: FrontierEvent, player_id, x, y }`: sand slid, floor
+crumbled, glass shattered, crystal rang, splintered, beam lit, vault opened, eruption rumble
+and start, lava bomb landed, storm rising, started and ended, crystal regrew, drifter chimed,
+wyrm ripple, hazard bite. The game plays a `pb_` patch for each (storm ended and hazard bite
+are silent: the bed and the hull hit carry them) and messages seats on a body.
+
+### Formats
+
+- `PROTOCOL_VERSION` **20** (the frontier tiles, themes, creatures and events; no world field
+  or section). No save format bump: no new saved field; old saves load unchanged.
+- Golden digests: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` unchanged. The theme
+  digests (`frontier::tests::THEME_DIGESTS`, each world at R = 600) pin the generation.
+
+### Game side
+
+- Tile art (`rendering/terrain/tile_art/frontier_art.rs`): every frontier tile painted in
+  palette ramps (rippled dune sand, banded sandstone, weathered brick, green glass facets,
+  salt cubes, basalt columns, glowing magma cracks, obsidian sheen, amethyst facets, spires,
+  rainbow prismatic bands, prisms, lens, receptors, the teal seal, agate geodes, the lattice),
+  each world's back walls, ore in its stratum's rock, no grass on frontier worlds or lava.
+- Sprites (`rendering/pixel_art/sprites/frontier.rs`, names `pb_enemy_*`): twelve animated
+  creatures, contact boxes within the drawn bodies (the art test holds them).
+- The round ground (`rendering/space/{live,polar,view}.rs`): a body's creatures are drawn
+  now (every enemy of the store, its frame and facing), with `FrontierMark`s: lava bombs in
+  the air and their shadows, light wells' beams, a wyrm's ripple.
+- `rendering/frontier_hud.rs`: the storm's veil and particles over a seat in the open (scaled
+  by the screen effects setting; "off" keeps only a faint tint; glitter fades slowly, nothing
+  flashes), and a line at the foot of the view: world and stratum, the rule, a storm coming,
+  a cone rumbling, the hazards biting without the gear.
+- Audio (`audio/patch/frontier.rs`, appended at the end of `patches!`): three music beds,
+  three ambience beds, fifteen one-shots; the director plays a seat's world's music and bed
+  on its body (the storm swells the bed, depth fades it).
+- Scenes (`scene_capture/frontier_scenes.rs`, twenty): `frontier_{dunes,volcanic,crystal}_*`
+  from space, surface, landmark, storm or eruption, strata, light well, creatures.
+- `--space-report` lists each tag's ground and its strata ("planet grounds").
+
+### Tests
+
+- `frontier::tests` (13): theme digests and purity, registration and real space bodies of
+  each tag grounding as their world, seamless wrap, strata scaling and reaching the core,
+  each stratum's rock, accent and ores, each surface's shape and landmark, settlement sites
+  flat and dry, one secret on small bodies only, light wells opening once dug a path, the
+  weather telegraphing every storm, cones rumbling before they erupt and bombs landing near
+  them after their shadows, hazards tagged, rosters, the space report.
+- `world::frontier_tests` (19): **a digging bot reaches every stratum and the core chamber of
+  an R = 600 body and every stratum of an R = 5,000 planet of each theme**; loose sand,
+  crumbling floors, shattering glass and crystal, splinters, a light well's vault, regrowth,
+  toxic air and cold with and without gear, the heavy lattice, tube draughts, sandstorms, a
+  lava bomb and its cinder; the spawner's native creatures; fauna never hunting; the wyrm's
+  hearing in and out of the galleries; the chime drifter; the geode mimic; a minute of play
+  on each world replaying bit for bit at 30 and 60 Hz.
+
+### Seams (TODO-SEAM, for the integrator and the other Wave 12 tracks)
+
+- **w12-integrator**: the theme ids 3-5 are appended after the Wave 11 three; planets-a
+  appends too, so renumber one track's (only `frontier::{DUNE,VOLCANIC,CRYSTAL}_WORLD` and
+  `style_of` name them). `PlanetParams` does not carry the space generator's
+  `SpaceBody::strata_rows`; `frontier::strata_rows` derives the depth from the radius.
+  Collapse `PROTOCOL_VERSION` 20 with the other tracks'.
+- **w12-bodylife**: the weather is `frontier::rules::weather_at`, a pure schedule of seed and
+  world time; when the per-body weather and clock land, feed them in (the effects read only
+  the `Weather` value). The day/night cycle of these worlds is bodylife's.
+- **w12-aliens**: build the town on `frontier::settlement_site(ground)`; its safety is
+  `frontier_safe_zone` (the site plus 16 columns and 12 rows).
+- **w12-stations**: `frontier::planet_gear_tier(gear, hazard)` reads the closest existing
+  counters (heat shield, de-icer, gas scrubber, nothing for high gravity) until the planet-gear
+  line lands; heat past the classic cooling (the Magma Chambers' 54 units, the Glass Deep's
+  24) waits for the planet heat gear to add cooling.
+
+### Known limits
+
+- The creature lineup scenes use the flat planet world (the ordinary renderer); the rest are
+  on the round ground of the flight scenes' galaxy.
+- Creatures keep the generic enemy gravity (not the body's) like every other creature.
+- A light well's beam is drawn only on the round ground.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
