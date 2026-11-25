@@ -210,15 +210,15 @@ impl WorldState {
         } else {
             1_000
         };
-        let dark_units = if mass == 1_000 {
-            0
-        } else {
-            self.players.get(&player_id).map_or(0, |player| {
-                player.cargo_bay.count(crate::item::ItemKind::Layer(
-                    crate::descent::Stratum::DarkMatterVeins,
-                ))
-            })
-        };
+        // The bay slots dark matter takes (none while layer resources are slot-free): they do
+        // not load the drive.
+        let dark_slots = self.players.get(&player_id).map_or(0, |player| {
+            let lump = crate::item::ItemKind::Layer(crate::descent::Stratum::DarkMatterVeins);
+            player
+                .cargo_bay
+                .count(lump)
+                .saturating_mul(lump.slot_cost())
+        });
         let star_boost = self
             .players
             .get(&player_id)
@@ -342,7 +342,7 @@ impl WorldState {
             reason = "bounded cargo counts intentionally become a movement load ratio"
         )]
         // Dark matter weighs nothing on the drive (it lightens the rig instead, above).
-        let cargo_ratio = player.cargo_used().saturating_sub(dark_units) as f32
+        let cargo_ratio = player.cargo_used().saturating_sub(dark_slots) as f32
             / effective_cargo_capacity.max(1) as f32;
         let cargo_pressure = if parts.contains(&RigPartKind::HaulerEngine) {
             0.08

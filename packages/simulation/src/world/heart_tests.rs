@@ -161,6 +161,15 @@ fn dark_matter_makes_a_rig_lighter_until_it_falls_up_and_ore_brings_it_down() {
     // Ordinary ore weighs it back down: plan the load.
     let (planned, _) = drift(30, WEIGHTLESS_LUMPS + 4, 60, 1);
     assert!(planned > 0.0, "with ore aboard it falls again ({planned})");
+    // Every unit of ore counts in full (dark matter takes no bay slot, so none come off): 20
+    // ore make up for 4 extra lumps exactly.
+    let mut world = world_at(30);
+    bay(&mut world, WEIGHTLESS_LUMPS + 4, 20);
+    assert_eq!(
+        world.cargo_mass_of(PLAYER),
+        crate::heart::cargo_mass_permille(WEIGHTLESS_LUMPS + 4, 20)
+    );
+    assert_eq!(world.cargo_mass_of(PLAYER), 0);
     // The same at every tick rate.
     let (up_60, _) = drift(60, WEIGHTLESS_LUMPS + 4, 0, 1);
     assert!(

@@ -144,13 +144,16 @@ impl WorldState {
         let Some(player) = self.players.get(&player_id) else {
             return 1_000;
         };
-        let dark = player
-            .cargo_bay
-            .count(ItemKind::Layer(Stratum::DarkMatterVeins));
+        let lump = ItemKind::Layer(Stratum::DarkMatterVeins);
+        let dark = player.cargo_bay.count(lump);
         if dark == 0 {
             return 1_000;
         }
-        let other = player.cargo_used().saturating_sub(dark);
+        // The bay's slots hold the ordinary cargo; dark matter (a layer resource) may take
+        // none, so only the slots it does take come off.
+        let other = player
+            .cargo_used()
+            .saturating_sub(dark.saturating_mul(lump.slot_cost()));
         cargo_mass_permille(dark, other)
     }
 
