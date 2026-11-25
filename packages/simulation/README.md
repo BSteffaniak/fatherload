@@ -7002,6 +7002,11 @@ halls, story rooms kept off).
   written to agree with them.
 - Wave 11 reads `space_access`; "the stars are open" is a message and the Star Drive a boost
   until space flight exists.
+- Review fix: dark matter is a layer resource and takes no bay slot, so the weight
+  (`WorldState::cargo_mass_of`) and the drive's cargo load count every slot of ordinary cargo
+  (they used to subtract the lumps from the slots, so ore weighed less than the rule says);
+  `dark_matter_makes_a_rig_lighter_until_it_falls_up_and_ore_brings_it_down` pins the world's
+  weight to `cargo_mass_permille`.
 
 ### The probe (Wave 10 heart)
 
