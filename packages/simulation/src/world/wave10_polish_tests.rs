@@ -827,3 +827,37 @@ fn the_glaciers_cold_slows_a_pilots_walk_but_not_with_the_cryo_hull() {
         "the cold pilot walked {cold} px, the warm one {warm} px"
     );
 }
+
+/// Review fix: a walker's hit ellipse rises over its feet as the game draws it, so a shot
+/// through its upper body lands and a shot through the rock under its feet misses (the shot's
+/// offset from the body's centre, not the other way round).
+#[test]
+fn a_walkers_hit_area_rises_over_its_feet_as_it_is_drawn() {
+    let mut checked = 0;
+    for kind in EnemyKind::ALL {
+        let area = kind.hit_area();
+        let (half_w, half_h) = area.half;
+        // Walkers whose drawn body clearly rises over the centre.
+        if area.centre_dy > -0.2 * half_h || half_h <= 0.0 {
+            continue;
+        }
+        let centre = (0.0_f32, 0.0_f32);
+        let across = |y: f32| {
+            super::weapons::segment_hits_area(centre, &area, (-half_w * 3.0, y), (half_w * 3.0, y))
+        };
+        // Through the upper drawn body.
+        let upper = half_h.mul_add(-0.8, area.centre_dy);
+        assert!(across(upper), "{kind:?}: a shot at {upper} misses its head");
+        // The mirror of it, under the feet (past the terrain circle too).
+        let under = -upper;
+        if under > area.radius {
+            assert!(
+                !across(under),
+                "{kind:?}: a shot at {under} hits under its feet"
+            );
+        }
+        assert!(area.contains(0.0, upper), "{kind:?}");
+        checked += 1;
+    }
+    assert!(checked >= 5, "only {checked} tall walkers");
+}

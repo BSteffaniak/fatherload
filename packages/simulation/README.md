@@ -6332,9 +6332,9 @@ for a tight fight (the bot kept under 40 %), one learning try, one more per armo
 | Boss | Bot win (30 Hz) | Hull kept | Probe fight (ready rig) |
 |---|---|---|---|
 | Star Core | 95 s | 100 % | 12 min + a try |
-| Mycelial Mind | 122 s | 35 % | 17 min + a try |
+| Mycelial Mind | 118 s | 64 % | 14 min + a try |
 | Leviathan | 64 s | 67 % | 10 min + a try |
-| Sun Serpent | 469 s | 69 % | 37 min + a try |
+| Sun Serpent | 298 s | 76 % | 26 min + a try |
 | The Glitch | 96 s | 43 % | 12 min + a try |
 
 The Sinkhole (an escape, not a fight) and Descents VII-VIII's bosses keep modelled minutes

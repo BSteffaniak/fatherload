@@ -280,8 +280,9 @@ pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
             hull_left: 1.0,
         }),
         DescentBoss::MycelialMind => Some(BotFight {
-            seconds: 122.0,
-            hull_left: 0.35,
+            // Re-measured once shots hit a walker's drawn body over its feet (Wave 10 review).
+            seconds: 118.0,
+            hull_left: 0.64,
         }),
         DescentBoss::Leviathan => Some(BotFight {
             seconds: 64.0,
@@ -289,8 +290,8 @@ pub const fn bot_fight(boss: DescentBoss) -> Option<BotFight> {
         }),
         // The serpent's orbit is long: most of the fight is waiting for the scales' passes.
         DescentBoss::SunSerpent => Some(BotFight {
-            seconds: 469.0,
-            hull_left: 0.69,
+            seconds: 298.0,
+            hull_left: 0.76,
         }),
         DescentBoss::TheGlitch => Some(BotFight {
             seconds: 96.0,

@@ -97,24 +97,27 @@ fn point_blank_samples(origin: (f32, f32), muzzle: (f32, f32)) -> impl Iterator<
     })
 }
 
-/// Whether the segment `from`-`to` passes through `area` centred on `centre` (judged at the
-/// segment's closest point to the centre).
+/// Whether the segment `from`-`to` passes through `area` of the body centred on `centre`
+/// (judged at the segment's closest point to the drawn body's centre, which a walker carries
+/// over its feet: [`crate::combat::HitArea::centre_dy`]).
 pub(super) fn segment_hits_area(
     centre: (f32, f32),
     area: &crate::combat::HitArea,
     from: (f32, f32),
     to: (f32, f32),
 ) -> bool {
+    let drawn = (centre.0, centre.1 + area.centre_dy);
     let (sx, sy) = (to.0 - from.0, to.1 - from.1);
     let length_sq = sx.mul_add(sx, sy * sy);
     let t = if length_sq > 0.0 {
-        ((centre.0 - from.0).mul_add(sx, (centre.1 - from.1) * sy) / length_sq).clamp(0.0, 1.0)
+        ((drawn.0 - from.0).mul_add(sx, (drawn.1 - from.1) * sy) / length_sq).clamp(0.0, 1.0)
     } else {
         0.0
     };
+    // `contains` takes the point's offset from the body's centre.
     area.contains(
-        centre.0 - sx.mul_add(t, from.0),
-        centre.1 - sy.mul_add(t, from.1),
+        sx.mul_add(t, from.0) - centre.0,
+        sy.mul_add(t, from.1) - centre.1,
     )
 }
 
@@ -639,7 +642,8 @@ impl WorldState {
                 state_with_health if state_with_health.health().is_some() => {
                     let inside = state_with_health
                         .hit_area()
-                        .is_some_and(|area| area.contains(dx, dy));
+                        // `contains` takes the shot's offset from the body's centre.
+                        .is_some_and(|area| area.contains(-dx, -dy));
                     if !inside || state.last_hit == Some(*other) {
                         continue;
                     }
@@ -900,7 +904,7 @@ impl WorldState {
                 let (dx, dy) = (x - point.0, y - point.1);
                 if !hit.contains(id)
                     && ray.hits.len() <= usize::from(spec.pierce)
-                    && area.contains(dx, dy)
+                    && area.contains(-dx, -dy)
                 {
                     hit.insert(*id);
                     ray.hits.push(RayHit::Target(*id, point.0, point.1));
@@ -951,7 +955,7 @@ impl WorldState {
                     continue;
                 }
                 let (dx, dy) = (x - point.0, y - point.1);
-                if area.contains(dx, dy) {
+                if area.contains(-dx, -dy) {
                     hit.insert(*id);
                     ray.hits.push(RayHit::Target(*id, point.0, point.1));
                     if ray.hits.len() > usize::from(spec.pierce) {
