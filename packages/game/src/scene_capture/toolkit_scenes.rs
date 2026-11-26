@@ -36,7 +36,10 @@ fn stocked(stage: &mut SceneStage<'_>) {
 /// The toolkit open on `row`.
 fn toolkit_on(stage: &mut SceneStage<'_>, row: ToolkitRow) {
     stocked(stage);
+    // The road's first word from the archivist (space opens with the stock) is not the subject.
+    stage.seat(0).message.clear();
     let shell = stage.shell();
+    shell.message.clear();
     shell.run_mode = RunMode::Paused;
     shell.modal = Some(ModalScreen::TestToolkit);
     shell.selected_menu_item = ToolkitRow::rows(true)
@@ -91,6 +94,8 @@ pub(super) const TOOLKIT_SCENES: &[Scene] = &[
                 }
             });
             stage.settle(10);
+            stage.shell().message.clear();
+            stage.seat(0).message.clear();
         },
     },
     Scene {
@@ -98,7 +103,13 @@ pub(super) const TOOLKIT_SCENES: &[Scene] = &[
         summary: "A fully stocked test rig's inventory: every charge, ammo, kit and supply",
         setup: |stage| {
             stocked(stage);
-            stage.seat(0).modal = Some(ModalScreen::Inventory);
+            stage.shell().message.clear();
+            let seat = stage.seat(0);
+            seat.message.clear();
+            seat.modal = Some(ModalScreen::Inventory);
+            // The last row (depth logistics): the list scrolls down to everything below it, the
+            // consumables and field kits.
+            seat.selected_menu_item = 2;
         },
     },
 ];
