@@ -145,6 +145,44 @@ pub enum Milestone {
     WholeTrail,
     /// Wake the Heart and light the cable to the Moon. (Wave 10 story).
     LookUp,
+    /// Mine a space material from a belt rock. (Wave 13 endgame).
+    SpaceMiner,
+    /// Gather comet dust from a comet's tail. (Wave 13 endgame).
+    CometChaser,
+    /// Land on a world beyond the Moon. (Wave 13 endgame).
+    FirstWorld,
+    /// Land on ten different worlds. (Wave 13 endgame).
+    TenWorlds,
+    /// Land on every kind of world: all twelve. (Wave 13 endgame).
+    EveryTheme,
+    /// Meet one of the friendly species. (Wave 13 endgame).
+    FirstContactMade,
+    /// Speak a species' tongue fluently. (Wave 13 endgame).
+    FluentTongue,
+    /// Speak every species' tongue fluently. (Wave 13 endgame).
+    EveryTongue,
+    /// Beat the Gilded Maw, king of the Rustwake Corsairs. (Wave 13 endgame).
+    PirateKingBeaten,
+    /// Beat the Swarm Queen of the Bloom. (Wave 13 endgame).
+    SwarmQueenBeaten,
+    /// Beat the Arbiter, the Concord's capital ship. (Wave 13 endgame).
+    ArbiterBeaten,
+    /// Beat every boss on the hunt list. (Wave 13 endgame).
+    HuntComplete,
+    /// Fit a ship line at tier 5. (Wave 13 endgame).
+    TopShipLine,
+    /// Fit the Starwright Hull and Engine: the endgame ship. (Wave 13 endgame).
+    StarwrightShip,
+    /// Fit the Heartline Drive. (Wave 13 endgame).
+    HeartlineDrive,
+    /// Finish the Halcyon Gate with your crew. (Wave 13 endgame).
+    GateBuilt,
+    /// Own a finished home on an alien world. (Wave 13 endgame).
+    AlienHome,
+    /// Raise every wing of an estate on an alien world. (Wave 13 endgame).
+    FullEstate,
+    /// See and do everything: 100% completion. (Wave 13 endgame).
+    Completionist,
 }
 
 /// A milestone's medal on the trophy shelf.
@@ -176,10 +214,18 @@ pub enum MilestoneGroup {
     Depths,
     Discoveries,
     Sky,
+    /// The galaxy (Wave 13 endgame).
+    Space,
 }
 
 impl MilestoneGroup {
-    pub const ALL: [Self; 4] = [Self::Upgrades, Self::Depths, Self::Discoveries, Self::Sky];
+    pub const ALL: [Self; 5] = [
+        Self::Upgrades,
+        Self::Depths,
+        Self::Discoveries,
+        Self::Sky,
+        Self::Space,
+    ];
 
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -188,6 +234,7 @@ impl MilestoneGroup {
             Self::Depths => "Depths",
             Self::Discoveries => "Discoveries",
             Self::Sky => "Sky",
+            Self::Space => "Space",
         }
     }
 }
@@ -377,6 +424,43 @@ pub struct MilestoneFacts {
     pub bosses: u16,
     /// The Heart woke and the cable lit (the ending).
     pub cable_lit: bool,
+    /// The player's travels in space (Wave 13 endgame; default off a world without space).
+    pub space: SpaceFacts,
+}
+
+/// What the world knows of a player's travels in space (Wave 13 endgame achievements,
+/// gathered by `WorldState::space_facts`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "one fact per achievement, read by its own arm"
+)]
+pub struct SpaceFacts {
+    /// Space material units mined, and of those comet dust.
+    pub mined: u32,
+    pub comet_dust: u32,
+    /// Worlds landed on, and the kinds of world among them.
+    pub worlds: u16,
+    pub themes: u8,
+    /// Species met, species whose tongue the player speaks fluently, and species in all.
+    pub species_met: u8,
+    pub tongues: u8,
+    pub species_total: u8,
+    /// Faction bosses beaten by the crew (bit per [`crate::hostiles::Faction::code`]).
+    pub faction_bosses: u8,
+    /// Every boss on the hunt list beaten.
+    pub hunt_done: bool,
+    /// A ship line at tier 5; the Starwright ship; the Heartline Drive.
+    pub line_maxed: bool,
+    pub starwright: bool,
+    pub heartline: bool,
+    /// The crew's Halcyon Gate finished.
+    pub gate_open: bool,
+    /// A finished home on an alien world, and an estate with every wing.
+    pub alien_home: bool,
+    pub estate_full: bool,
+    /// Everything else done (the completion screen's 100 %).
+    pub complete: bool,
 }
 
 /// Whether a crew with `facts` has read every expedition log of `descent`'s chapter.
@@ -400,7 +484,7 @@ pub const CORE_LINES: [UpgradeKind; 6] = [
 
 impl Milestone {
     /// Every milestone, in progression-screen order.
-    pub const ALL: [Self; 47] = [
+    pub const ALL: [Self; 66] = [
         Self::FirstUpgrade,
         Self::DrillTier5,
         Self::EngineTier5,
@@ -448,6 +532,25 @@ impl Milestone {
         Self::StarDriveChapter,
         Self::WholeTrail,
         Self::LookUp,
+        Self::SpaceMiner,
+        Self::CometChaser,
+        Self::FirstWorld,
+        Self::TenWorlds,
+        Self::EveryTheme,
+        Self::FirstContactMade,
+        Self::FluentTongue,
+        Self::EveryTongue,
+        Self::PirateKingBeaten,
+        Self::SwarmQueenBeaten,
+        Self::ArbiterBeaten,
+        Self::HuntComplete,
+        Self::TopShipLine,
+        Self::StarwrightShip,
+        Self::HeartlineDrive,
+        Self::GateBuilt,
+        Self::AlienHome,
+        Self::FullEstate,
+        Self::Completionist,
     ];
 
     /// Display name.
@@ -501,6 +604,25 @@ impl Milestone {
             Self::StarDriveChapter => "The Star Drive",
             Self::WholeTrail => "The Whole Trail",
             Self::LookUp => "Look Up",
+            Self::SpaceMiner => "Star Miner",
+            Self::CometChaser => "Comet Chaser",
+            Self::FirstWorld => "Planetfall",
+            Self::TenWorlds => "Wanderer",
+            Self::EveryTheme => "Atlas of Worlds",
+            Self::FirstContactMade => "Hello, Neighbour",
+            Self::FluentTongue => "Fluent",
+            Self::EveryTongue => "Many Tongues",
+            Self::PirateKingBeaten => "Crown Breaker",
+            Self::SwarmQueenBeaten => "Queenfall",
+            Self::ArbiterBeaten => "Overruled",
+            Self::HuntComplete => "The Hunt Is Over",
+            Self::TopShipLine => "Shipwright",
+            Self::StarwrightShip => "Starwright",
+            Self::HeartlineDrive => "Heartline",
+            Self::GateBuilt => "Gatebuilder",
+            Self::AlienHome => "Home Away From Home",
+            Self::FullEstate => "Lord of the Manor",
+            Self::Completionist => "Fatherload",
         }
     }
 
@@ -557,6 +679,25 @@ impl Milestone {
             Self::StarDriveChapter => "Read every expedition log in the Heart.",
             Self::WholeTrail => "Read all eighty logs of the Fathers' expedition.",
             Self::LookUp => "Wake the Heart and light the cable to the Moon.",
+            Self::SpaceMiner => "Mine a space material from a belt rock.",
+            Self::CometChaser => "Gather comet dust from a comet's tail.",
+            Self::FirstWorld => "Land on a world beyond the Moon.",
+            Self::TenWorlds => "Land on ten different worlds.",
+            Self::EveryTheme => "Land on every kind of world: all twelve.",
+            Self::FirstContactMade => "Meet one of the friendly species.",
+            Self::FluentTongue => "Speak a species' tongue fluently.",
+            Self::EveryTongue => "Speak every species' tongue fluently.",
+            Self::PirateKingBeaten => "Beat the Gilded Maw, king of the Rustwake Corsairs.",
+            Self::SwarmQueenBeaten => "Beat the Swarm Queen of the Bloom.",
+            Self::ArbiterBeaten => "Beat the Arbiter, the Concord's capital ship.",
+            Self::HuntComplete => "Beat every boss on the hunt list.",
+            Self::TopShipLine => "Fit a ship line at tier 5.",
+            Self::StarwrightShip => "Fit the Starwright Hull and Engine: the endgame ship.",
+            Self::HeartlineDrive => "Fit the Heartline Drive.",
+            Self::GateBuilt => "Finish the Halcyon Gate with your crew.",
+            Self::AlienHome => "Own a finished home on an alien world.",
+            Self::FullEstate => "Raise every wing of an estate on an alien world.",
+            Self::Completionist => "See and do everything: 100% completion.",
         }
     }
 
@@ -608,6 +749,25 @@ impl Milestone {
             | Self::StarDriveChapter
             | Self::WholeTrail => MilestoneGroup::Discoveries,
             Self::HighFlyer | Self::IslandCapableTank | Self::ActTwoUnlocked => MilestoneGroup::Sky,
+            Self::SpaceMiner
+            | Self::CometChaser
+            | Self::FirstWorld
+            | Self::TenWorlds
+            | Self::EveryTheme
+            | Self::FirstContactMade
+            | Self::FluentTongue
+            | Self::EveryTongue
+            | Self::PirateKingBeaten
+            | Self::SwarmQueenBeaten
+            | Self::ArbiterBeaten
+            | Self::HuntComplete
+            | Self::TopShipLine
+            | Self::StarwrightShip
+            | Self::HeartlineDrive
+            | Self::GateBuilt
+            | Self::AlienHome
+            | Self::FullEstate
+            | Self::Completionist => MilestoneGroup::Space,
         }
     }
 
@@ -623,7 +783,10 @@ impl Milestone {
             | Self::FirstClaim
             | Self::HighFlyer
             | Self::TrailFound
-            | Self::FirstAnomaly => Medal::Bronze,
+            | Self::FirstAnomaly
+            | Self::SpaceMiner
+            | Self::FirstWorld
+            | Self::FirstContactMade => Medal::Bronze,
             Self::DrillTier5
             | Self::EngineTier5
             | Self::FirstDeepLayer
@@ -633,7 +796,12 @@ impl Milestone {
             | Self::ReachedOldDeep
             | Self::ReachedLivingDark
             | Self::ReachedDrowned
-            | Self::BeatSinkhole => Medal::Silver,
+            | Self::BeatSinkhole
+            | Self::CometChaser
+            | Self::TenWorlds
+            | Self::FluentTongue
+            | Self::TopShipLine
+            | Self::AlienHome => Medal::Silver,
             Self::DrillTier10
             | Self::EngineTier10
             | Self::MaxedLine
@@ -655,12 +823,23 @@ impl Milestone {
             | Self::HollowWorldRead
             | Self::WearsThin
             | Self::BuildersCity
-            | Self::StarDriveChapter => Medal::Gold,
+            | Self::StarDriveChapter
+            | Self::EveryTheme
+            | Self::EveryTongue
+            | Self::PirateKingBeaten
+            | Self::SwarmQueenBeaten
+            | Self::ArbiterBeaten
+            | Self::StarwrightShip
+            | Self::GateBuilt
+            | Self::FullEstate => Medal::Gold,
             Self::FullyLoaded
             | Self::ActTwoUnlocked
             | Self::BeatColossus
             | Self::WholeTrail
-            | Self::LookUp => Medal::Platinum,
+            | Self::LookUp
+            | Self::HuntComplete
+            | Self::HeartlineDrive
+            | Self::Completionist => Medal::Platinum,
         }
     }
 
@@ -715,6 +894,25 @@ impl Milestone {
             Self::StarDriveChapter => &[CosmeticItem::Paint(PaintColor::DriveWhite)],
             Self::WholeTrail => &[CosmeticItem::Paint(PaintColor::FathersLoad)],
             Self::LookUp => &[CosmeticItem::Paint(PaintColor::Starward)],
+            Self::SpaceMiner => &[CosmeticItem::Paint(PaintColor::Meteorite)],
+            Self::CometChaser => &[CosmeticItem::Flame(FlameColor::Comet)],
+            Self::FirstWorld => &[CosmeticItem::Decal(Decal::Planet)],
+            Self::TenWorlds => &[CosmeticItem::Paint(PaintColor::Nebula)],
+            Self::EveryTheme => &[CosmeticItem::Paint(PaintColor::Atlas)],
+            Self::FirstContactMade => &[CosmeticItem::Decal(Decal::Glyph)],
+            Self::FluentTongue => &[CosmeticItem::Paint(PaintColor::Xeno)],
+            Self::EveryTongue => &[CosmeticItem::Paint(PaintColor::Babel)],
+            Self::PirateKingBeaten => &[CosmeticItem::Paint(PaintColor::GildedMaw)],
+            Self::SwarmQueenBeaten => &[CosmeticItem::Paint(PaintColor::Chitin)],
+            Self::ArbiterBeaten => &[CosmeticItem::Paint(PaintColor::Concord)],
+            Self::HuntComplete => &[CosmeticItem::Paint(PaintColor::Huntsman)],
+            Self::TopShipLine => &[CosmeticItem::Paint(PaintColor::Shipwright)],
+            Self::StarwrightShip => &[CosmeticItem::Paint(PaintColor::Starwright)],
+            Self::HeartlineDrive => &[CosmeticItem::Flame(FlameColor::Heartline)],
+            Self::GateBuilt => &[CosmeticItem::Paint(PaintColor::Gatestone)],
+            Self::AlienHome => &[CosmeticItem::Paint(PaintColor::Hearthstone)],
+            Self::FullEstate => &[CosmeticItem::Paint(PaintColor::Manor)],
+            Self::Completionist => &[CosmeticItem::Pattern(HullPattern::Constellation)],
         }
     }
 
@@ -879,6 +1077,29 @@ impl Milestone {
             Self::StarDriveChapter => chapter_done(facts, crate::descent::Descent::Heart),
             Self::WholeTrail => usize::from(facts.expedition_logs) >= crate::expedition::LOGS.len(),
             Self::LookUp => facts.cable_lit,
+            Self::SpaceMiner => facts.space.mined > 0,
+            Self::CometChaser => facts.space.comet_dust > 0,
+            Self::FirstWorld => facts.space.worlds >= 1,
+            Self::TenWorlds => facts.space.worlds >= 10,
+            Self::EveryTheme => {
+                usize::from(facts.space.themes) >= crate::space::Theme::PLANET.len()
+            }
+            Self::FirstContactMade => facts.space.species_met >= 1,
+            Self::FluentTongue => facts.space.tongues >= 1,
+            Self::EveryTongue => {
+                facts.space.species_total > 0 && facts.space.tongues >= facts.space.species_total
+            }
+            Self::PirateKingBeaten => facts.space.faction_bosses & 1 != 0,
+            Self::SwarmQueenBeaten => facts.space.faction_bosses & 2 != 0,
+            Self::ArbiterBeaten => facts.space.faction_bosses & 4 != 0,
+            Self::HuntComplete => facts.space.hunt_done,
+            Self::TopShipLine => facts.space.line_maxed,
+            Self::StarwrightShip => facts.space.starwright,
+            Self::HeartlineDrive => facts.space.heartline,
+            Self::GateBuilt => facts.space.gate_open,
+            Self::AlienHome => facts.space.alien_home,
+            Self::FullEstate => facts.space.estate_full,
+            Self::Completionist => facts.space.complete,
         }
     }
 

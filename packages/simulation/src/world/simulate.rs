@@ -349,6 +349,8 @@ impl WorldState {
             // with every rig back (free flight lives in its own store, Wave 12 integration).
             if !self.place_pass_running() {
                 self.advance_hostiles(inputs, next_tick, &mut output);
+                // The endgame (Wave 13): here on a world of one store.
+                self.advance_endgame(&mut output);
             }
             let recovery_player_ids = self.players.keys().copied().collect::<Vec<_>>();
             for player_id in recovery_player_ids {

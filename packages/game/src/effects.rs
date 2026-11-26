@@ -1222,7 +1222,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Outlands { player_id, .. }
         | GameplayEventKind::Frontier { player_id, .. }
         | GameplayEventKind::Exotic { player_id, .. }
-        | GameplayEventKind::Hostile { player_id, .. } => player_id,
+        | GameplayEventKind::Hostile { player_id, .. }
+        | GameplayEventKind::Endgame { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

@@ -83,6 +83,8 @@ pub enum StationAction {
     BuyRound(u8),
     /// Strip a derelict station (once per world).
     Salvage,
+    /// An order at the Works counter (Wave 13 endgame, [`crate::endgame::WorkOrder`]).
+    Works(crate::endgame::WorkOrder),
 }
 
 /// Why a hub action was refused (an event's detail).
@@ -103,10 +105,12 @@ pub enum StationRefusal {
     TooManyMissions,
     /// Already salvaged.
     Stripped,
+    /// The tier's bill of space materials is not in the cargo bay (Wave 13 endgame).
+    Materials,
 }
 
 impl StationRefusal {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::NotDocked,
         Self::NotHere,
         Self::Credits,
@@ -115,6 +119,7 @@ impl StationRefusal {
         Self::Maxed,
         Self::TooManyMissions,
         Self::Stripped,
+        Self::Materials,
     ];
 
     #[must_use]
@@ -139,6 +144,7 @@ impl StationRefusal {
             Self::Maxed => "nothing higher fitted here",
             Self::TooManyMissions => "three missions under way already",
             Self::Stripped => "already stripped bare",
+            Self::Materials => "the tier's materials aren't in the bay",
         }
     }
 }

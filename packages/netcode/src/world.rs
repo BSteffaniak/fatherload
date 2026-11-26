@@ -478,6 +478,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Exotic {
             what, player_id, ..
         } => (1020 + what.code() as u32, player_id),
+        // The endgame (wave 13 endgame): 1060-1079.
+        GameplayEventKind::Endgame {
+            what, player_id, ..
+        } => (1060 + what.code() as u32, player_id),
     }
 }
 

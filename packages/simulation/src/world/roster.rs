@@ -154,6 +154,8 @@ impl WorldState {
             // A leaving player's hold and missions go with them (Wave 12).
             stations,
             hostiles,
+            // A player's endgame record stays with their id, like their alien tongues (Wave 13).
+            endgame: _,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).

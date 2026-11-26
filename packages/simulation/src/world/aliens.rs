@@ -218,7 +218,10 @@ impl WorldState {
     }
 
     /// `player`'s actor tile in its own store (the pilot on foot, else the rig).
-    fn actor_tile_anywhere(&self, player: PlayerId) -> Option<crate::terrain::TilePosition> {
+    pub(super) fn actor_tile_anywhere(
+        &self,
+        player: PlayerId,
+    ) -> Option<crate::terrain::TilePosition> {
         let (x, y, _) = self.store_actor_position(player)?;
         let frame = self.store_frame(self.store_of(player))?;
         Some(frame.tile_at(x, y))
@@ -440,6 +443,13 @@ impl WorldState {
             }
             AlienCommand::RestAtHome { town: id, plot } => {
                 self.rest_at_home(player, id, plot, events)
+            }
+            // Wave 13 endgame: estates and neighbours (`world/endgame.rs`).
+            AlienCommand::ExpandHome { town: id, plot } => {
+                self.expand_estate(player, id, plot, events)
+            }
+            AlienCommand::CallNeighbours { town: id, plot } => {
+                self.call_neighbours(player, id, plot, events)
             }
             AlienCommand::Sell {
                 npc,

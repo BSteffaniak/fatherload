@@ -104,6 +104,8 @@ impl WorldState {
             };
             let owns_claim = !player.milestones.has(Milestone::FirstClaim)
                 && self.bases.claims().any(|claim| claim.owner == player_id);
+            // Wave 13 endgame: the player's travels in space.
+            let space = self.space_facts(player_id);
             let Some(player) = self.players.get_mut(&player_id) else {
                 continue;
             };
@@ -124,6 +126,7 @@ impl WorldState {
                 descents: self.expedition.descents,
                 bosses: self.expedition.bosses,
                 cable_lit: self.expedition.cable_lit,
+                space,
             };
             let silent = !player.milestones.primed;
             player.milestones.primed = true;

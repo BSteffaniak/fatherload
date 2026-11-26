@@ -238,6 +238,7 @@ impl WorldState {
             aliens: crate::alien::AlienState::default(),
             stations: crate::station::StationLedger::default(),
             hostiles: crate::hostiles::HostileSpace::default(),
+            endgame: crate::endgame::EndgameState::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

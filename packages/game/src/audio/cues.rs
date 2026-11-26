@@ -978,6 +978,23 @@ pub const fn station_cue(what: fatherload_simulation::station::StationEvent) -> 
     }
 }
 
+/// The cue of an endgame event (Wave 13 endgame; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn endgame_cue(what: fatherload_simulation::endgame::EndgameEvent) -> SoundCue {
+    use fatherload_simulation::endgame::EndgameEvent as E;
+    match what {
+        E::MaterialsBought => SoundCue::StorageStow,
+        E::MarkRaised | E::StarwrightFitted | E::EstateExpanded => SoundCue::UpgradeFanfare,
+        E::HeartlineFitted | E::GateFinished | E::QuarryDown => SoundCue::MilestoneFanfare,
+        E::GatePartDelivered => SoundCue::Upgrade,
+        E::GateJumped => SoundCue::UplinkWarp,
+        E::CosmeticBought => SoundCue::Sell,
+        E::NeighboursCalled => SoundCue::HomeFanfare,
+        E::WorldLanded => SoundCue::MoonLanding,
+        E::Refused => SoundCue::UiError,
+    }
+}
+
 /// The cue of a space combat event (Wave 12 hostiles; exhaustive: a new event needs a sound).
 /// `detail` tells a missile from the guns.
 #[must_use]
@@ -1563,6 +1580,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Station { what, .. } => Some(station_cue(*what)),
         // Space combat (Wave 12).
         GameplayEventKind::Hostile { what, detail, .. } => hostile_cue(*what, *detail),
+        // The endgame (Wave 13).
+        GameplayEventKind::Endgame { what, .. } => Some(endgame_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1923,7 +1942,8 @@ mod tests {
             | GameplayEventKind::Exotic { .. }
             | GameplayEventKind::Alien { .. }
             | GameplayEventKind::Station { .. }
-            | GameplayEventKind::Hostile { .. } => {}
+            | GameplayEventKind::Hostile { .. }
+            | GameplayEventKind::Endgame { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2423,6 +2443,13 @@ mod tests {
         }
         for what in fatherload_simulation::hostiles::HostileEvent::ALL {
             events.push(GameplayEventKind::Hostile {
+                what,
+                player_id: Some(player_id),
+                detail: 0,
+            });
+        }
+        for what in fatherload_simulation::endgame::EndgameEvent::ALL {
+            events.push(GameplayEventKind::Endgame {
                 what,
                 player_id: Some(player_id),
                 detail: 0,

@@ -279,6 +279,8 @@ pub enum SectionKey {
     /// Hostile factions and space combat (Wave 12 hostiles): ships, shots, wrecks,
     /// encounters, each rig's guns and deflector, bosses, bounties and ground raids.
     Hostiles,
+    /// The endgame (Wave 13): careers, the Halcyon Gate, theme bosses beaten and estates.
+    Endgame,
 }
 
 impl SectionKey {
@@ -298,7 +300,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 36] = [
+    pub const SHARED: [Self; 37] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -345,6 +347,8 @@ impl SectionKey {
         Self::Stations,
         // Hostile factions and space combat (Wave 12 hostiles).
         Self::Hostiles,
+        // The endgame (Wave 13 endgame).
+        Self::Endgame,
     ];
 }
 
@@ -389,6 +393,7 @@ pub enum SectionPayload {
     Aliens(Box<crate::alien::AlienState>),
     Stations(Box<crate::station::StationLedger>),
     Hostiles(Box<crate::hostiles::HostileSpace>),
+    Endgame(Box<crate::endgame::EndgameState>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -623,6 +628,7 @@ impl WorldState {
             aliens,
             stations,
             hostiles,
+            endgame,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -739,6 +745,7 @@ impl WorldState {
             SectionKey::Aliens => SectionPayload::Aliens(Box::new(aliens.clone())),
             SectionKey::Stations => SectionPayload::Stations(Box::new(stations.clone())),
             SectionKey::Hostiles => SectionPayload::Hostiles(Box::new(hostiles.clone())),
+            SectionKey::Endgame => SectionPayload::Endgame(Box::new(endgame.clone())),
         })
     }
 
@@ -948,6 +955,9 @@ impl WorldState {
             }
             (SectionKey::Hostiles, SectionPayload::Hostiles(hostiles)) => {
                 self.hostiles = *hostiles;
+            }
+            (SectionKey::Endgame, SectionPayload::Endgame(endgame)) => {
+                self.endgame = *endgame;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

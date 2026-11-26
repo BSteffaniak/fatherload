@@ -327,6 +327,7 @@ fn paint_pattern(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose) {
                 }
             }
         }
+        HullPattern::Constellation => paint_constellation(canvas, primary, trim, pose),
         HullPattern::Starfield => {
             // A night-sky band with twinkling stars.
             for y in 6..=8 {
@@ -346,6 +347,39 @@ fn paint_pattern(canvas: &mut RigCanvas, look: &RigLook, pose: &RigPose) {
                     canvas.set(x, y, if bright { BONE } else { trim.light });
                 }
             }
+        }
+    }
+}
+
+/// Stars joined into a figure on a night band (Wave 13 endgame: everything done).
+fn paint_constellation(
+    canvas: &mut RigCanvas,
+    primary: super::paint::Ramp,
+    trim: super::paint::Ramp,
+    pose: &RigPose,
+) {
+    for y in 6..=8 {
+        for x in 1..15 {
+            if is_primary(canvas.get(x, y), primary) {
+                canvas.set(x, y, primary.deep);
+            }
+        }
+    }
+    let twinkle = (pose.ticks / 18) as i32;
+    let stars = [(2, 8), (4, 6), (7, 7), (10, 6), (13, 8)];
+    for pair in stars.windows(2) {
+        let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
+        for x in x0..=x1 {
+            let y = y0 + (y1 - y0) * (x - x0) / (x1 - x0).max(1);
+            if canvas.get(x, y) == Some(primary.deep) {
+                canvas.set(x, y, trim.shade);
+            }
+        }
+    }
+    for (index, (x, y)) in stars.into_iter().enumerate() {
+        if matches!(canvas.get(x, y), Some(color) if color == primary.deep || color == trim.shade) {
+            let bright = (index as i32 + twinkle).rem_euclid(4) == 0;
+            canvas.set(x, y, if bright { BONE } else { trim.light });
         }
     }
 }
@@ -372,6 +406,9 @@ const fn decal_glyph(decal: Decal) -> &'static [&'static str] {
         Decal::Flag => &["xww..", "xwwww", "xww..", "x....", "x...."],
         Decal::Wings => &["w...w", "xx.xx", "xxxxx", ".x.x."],
         Decal::Moon => &[".xxw", "xx..", "x...", "xx..", ".xxw"],
+        // Wave 13 endgame.
+        Decal::Planet => &["...ww", ".xxw.", "xxwxx", ".wxx.", "ww..."],
+        Decal::Glyph => &["x.x.x", ".xwx.", "xx.xx", ".x.x.", "x...x"],
     }
 }
 
@@ -397,6 +434,8 @@ fn paint_decal(canvas: &mut RigCanvas, look: &RigLook) {
         Decal::Flames => (trim.body, trim.light),
         Decal::Gem => (SKY_LIGHT, ICE),
         Decal::Moon => (CREAM, BONE),
+        Decal::Planet => (SKY_LIGHT, CREAM),
+        Decal::Glyph => (MINT, BONE),
         Decal::Flag => (STEEL_LIGHT, trim.light),
         Decal::Fang => (BONE, MIST),
         _ => (trim.light, BONE),

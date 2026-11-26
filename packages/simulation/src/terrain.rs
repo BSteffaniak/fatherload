@@ -32,7 +32,7 @@ use persistence::{GeneratedBase, generated_base};
 /// World-space pixels per terrain tile.
 pub const TILE_SIZE: f32 = 32.0;
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub enum MineralKind {
     Copper,
     Iron,

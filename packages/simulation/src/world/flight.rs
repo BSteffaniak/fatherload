@@ -20,8 +20,7 @@ use crate::{
         nav::{self, NavTarget, ScanPing},
         physics::{
             self, FlightInput, FlightRig, WARP_ABORT_ANGLE, WARP_ALIGN, WARP_ARRIVAL,
-            WARP_CLEARANCE, WARP_SPOOL_MILLIS, axes, cruise_limit, warp_duration_millis, warp_fuel,
-            warp_position,
+            WARP_CLEARANCE, axes, cruise_limit, warp_duration_millis, warp_fuel, warp_position,
         },
         space::{self, FlightBody, nearest_surface},
     },
@@ -196,14 +195,11 @@ impl WorldState {
         let heat_before = flight.heat;
         let infinite_fuel = self.test_mode.is_some_and(|state| state.infinite_fuel);
         let mut fuel = player.fuel;
-        // The ship's drive range and graviton spool (Wave 12 stations).
-        let ship = player.hazard_gear.ship;
-        let range = ship.drive_range_scale();
-        let spool_millis = if ship.has(crate::station::AlienTech::GravitonSpool) {
-            WARP_SPOOL_MILLIS / 2
-        } else {
-            WARP_SPOOL_MILLIS
-        };
+        // The ship's drive range and graviton spool (Wave 12 stations), with the endgame's
+        // marks and the Heartline Drive (Wave 13).
+        let effects = self.ship_effects(player_id);
+        let range = effects.range_scale;
+        let spool_millis = effects.spool_millis;
         let mut events: Vec<(FlightEvent, u32)> = Vec::new();
         // The warp's spool and jump (a pure function of time).
         match flight.drive {
@@ -320,15 +316,11 @@ impl WorldState {
         let rig = FlightRig {
             engine_power: engine_power(player.engine_level)
                 * cargo_ratio.mul_add(-0.18, 1.0)
-                * gear.ship.engine_scale(),
+                * effects.engine_scale,
             cargo_ratio,
-            // The phase lattice shields as two tiers more (Wave 12 alien tech).
-            shield: gear.flight.reentry_shield
-                + if gear.ship.has(crate::station::AlienTech::PhaseLattice) {
-                    2
-                } else {
-                    0
-                },
+            // The phase lattice shields as two tiers more (Wave 12 alien tech; more with its
+            // marks, Wave 13).
+            shield: gear.flight.reentry_shield + effects.lattice_tiers,
             auto_land: gear.flight.auto_land > 0,
             fuel: if infinite_fuel { f32::MAX } else { fuel },
             now_millis: now,
@@ -357,7 +349,7 @@ impl WorldState {
             output.push_event(flight_event(what, player_id, detail));
         }
         // The ship's hull line takes a share off (Wave 12 stations).
-        let hull_damage = outcome.hull_damage * gear.ship.damage_scale();
+        let hull_damage = outcome.hull_damage * effects.damage_scale;
         if hull_damage > 0.0 && self.damage_player(player_id, hull_damage) {
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
         }
@@ -738,8 +730,9 @@ impl WorldState {
         };
         let flight = player.flight;
         let attitude = player.attitude;
-        // The ship's drive range (Wave 12 stations): a warp costs its fuel over it.
-        let fuel = player.fuel * player.hazard_gear.ship.drive_range_scale();
+        // The ship's drive range (Wave 12 stations): a warp costs its fuel over it (with the
+        // Heartline Drive, Wave 13).
+        let fuel = player.fuel * self.ship_effects(player_id).range_scale;
         let infinite_fuel = self.test_mode.is_some_and(|state| state.infinite_fuel);
         match command {
             FlightCommand::SetWaypoint(target) => {
@@ -991,14 +984,12 @@ impl WorldState {
         let tier = player.hazard_gear.flight.nav_suite;
         let space = self.space();
         let fogged = nav::in_nebula(&space, centre);
-        let lens = player
-            .hazard_gear
-            .ship
-            .has(crate::station::AlienTech::XenoLens);
+        // The xeno lens and its marks (Wave 12 stations, Wave 13 endgame).
+        let lens = self.ship_effects(player_id).lens;
         // Wave 12 systems: the fog where the rig is cuts the reach further, by its thickness.
         let range = nav::ping_range(tier, fogged)
             * crate::flight::systems::fog_range_share(space.fog_at(centre))
-            * if lens { 2.0 } else { 1.0 };
+            * lens;
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_precision_loss,

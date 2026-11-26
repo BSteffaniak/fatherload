@@ -48,6 +48,12 @@ pub enum AlienCommand {
     BuyHome { npc: EntityId, plot: u8 },
     /// Rest at your own home in town `town` (plot `plot`): air topped up, hull patched.
     RestAtHome { town: VillageId, plot: u8 },
+    /// Raise the next wing of your home in town `town` (plot `plot`): the estate grows
+    /// (Wave 13 endgame, [`crate::endgame::works::ESTATE_WINGS`]).
+    ExpandHome { town: VillageId, plot: u8 },
+    /// Have the neighbours over at your home in town `town` (plot `plot`): once a day, a gift,
+    /// words of their tongue and goodwill (Wave 13 endgame).
+    CallNeighbours { town: VillageId, plot: u8 },
 }
 
 /// What happened with the species (netcode `940 + code`).

@@ -294,6 +294,10 @@ impl WorldState {
         }
         // Absent until something hostile happens in space (Wave 12), so older worlds keep
         // their hashes.
+        // Absent until the endgame began (Wave 13), so older worlds keep their hashes.
+        if !self.endgame.is_empty() {
+            hash.write_serialized(&self.endgame);
+        }
         if !self.hostiles.is_empty() {
             hash.write_serialized(&self.hostiles);
         }

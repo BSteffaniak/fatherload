@@ -169,6 +169,44 @@ cosmetic_enum! {
         FathersLoad => ("Fathers' Load", false),
         /// Milestone reward (wake the Heart: the ending; Wave 10 story).
         Starward => ("Starward", false),
+        // Wave 13 endgame: the space achievements' rewards.
+        /// Milestone reward (mine a space material): pitted meteorite rust.
+        Meteorite => ("Meteorite", false),
+        /// Milestone reward (land on ten worlds): nebula magenta and blue.
+        Nebula => ("Nebula", false),
+        /// Milestone reward (land on every kind of world): chart-paper blues.
+        Atlas => ("Atlas", false),
+        /// Milestone reward (speak a tongue fluently): xeno teal.
+        Xeno => ("Xeno Teal", false),
+        /// Milestone reward (speak every tongue): many-tongued violet.
+        Babel => ("Babel", false),
+        /// Milestone reward (beat the Gilded Maw): the Pirate King's gilt.
+        GildedMaw => ("Gilded Maw", false),
+        /// Milestone reward (beat the Swarm Queen): her chitin green.
+        Chitin => ("Queen's Chitin", false),
+        /// Milestone reward (beat the Arbiter): Concord white and red.
+        Concord => ("Concord", false),
+        /// Milestone reward (every boss on the hunt list): hunter's ochre.
+        Huntsman => ("Huntsman", false),
+        /// Milestone reward (a ship line at tier 5): yard steel blue.
+        Shipwright => ("Shipwright", false),
+        /// Milestone reward (the Starwright ship): starwright white gold.
+        Starwright => ("Starwright", false),
+        /// Milestone reward (the Halcyon Gate finished): gatestone grey-gold.
+        Gatestone => ("Gatestone", false),
+        /// Milestone reward (a home on an alien world): hearth red.
+        Hearthstone => ("Hearthstone", false),
+        /// Milestone reward (an estate with every wing): manor green.
+        Manor => ("Manor Green", false),
+        // Wave 13 endgame: the outfitters' stock (space stations only, never village vendors).
+        /// Outfitter stock: aurora green and violet.
+        Aurora => ("Aurora", false),
+        /// Outfitter stock: a sunlit yellow-white.
+        Solar => ("Solar", false),
+        /// Outfitter stock: corsair red over black.
+        Corsair => ("Corsair", false),
+        /// Outfitter stock: voidglass black with a violet sheen.
+        Voidblack => ("Voidblack", false),
     }
 }
 
@@ -191,6 +229,12 @@ cosmetic_enum! {
         Plasma => ("Plasma", false),
         /// Milestone reward (an island-capable tank): a pale sky-blue aether flame.
         Aether => ("Aether", false),
+        /// Milestone reward (gather comet dust; Wave 13 endgame): a comet's icy blue-green.
+        Comet => ("Comet Tail", false),
+        /// Milestone reward (the Heartline Drive; Wave 13 endgame): the Heart's red-gold.
+        Heartline => ("Heartline", false),
+        /// Outfitter stock (Wave 13 endgame): a cold ion blue.
+        Ion => ("Ion Blue", false),
     }
 }
 
@@ -224,6 +268,8 @@ cosmetic_enum! {
         Tiger => ("Tiger Stripes", false),
         /// Milestone reward (every core line maxed): a field of stars.
         Starfield => ("Starfield", false),
+        /// Milestone reward (everything done; Wave 13 endgame): stars joined into figures.
+        Constellation => ("Constellation", false),
     }
 }
 
@@ -250,6 +296,10 @@ cosmetic_enum! {
         Wings => ("Wings", false),
         /// Milestone reward (the Act II unlock): a crescent moon.
         Moon => ("Crescent Moon", false),
+        /// Milestone reward (land on a world beyond the Moon; Wave 13 endgame): a ringed planet.
+        Planet => ("Ringed Planet", false),
+        /// Milestone reward (meet an alien species; Wave 13 endgame): an alien glyph.
+        Glyph => ("Alien Glyph", false),
     }
 }
 
@@ -399,7 +449,10 @@ impl CosmeticItem {
     /// village offers are unchanged by later cosmetics).
     #[must_use]
     pub fn is_vendor_stock(self) -> bool {
-        !self.is_starter() && crate::milestone::Milestone::reward_for(self).is_none()
+        !self.is_starter()
+            && crate::milestone::Milestone::reward_for(self).is_none()
+            // Space's outfitters keep their own stock (Wave 13 endgame).
+            && !crate::endgame::works::is_outfitter_stock(self)
     }
 
     /// Display name.
@@ -493,9 +546,10 @@ mod tests {
     fn the_starter_set_is_generous_but_leaves_unlocks() {
         let all = CosmeticItem::all();
         let starter = all.iter().filter(|item| item.is_starter()).count();
-        // At least half are starters (Wave 10's finale milestones brought the earned paints to
-        // about as many as the starter set).
-        assert!(starter * 2 >= all.len(), "half the items are starters");
+        // At least a third are starters (Wave 10's finale milestones brought the earned paints
+        // to about as many as the starter set; Wave 13's space achievements and outfitters
+        // added more to earn).
+        assert!(starter * 3 >= all.len(), "a third of the items are starters");
         assert!(starter < all.len(), "some items are left to unlock");
     }
 
@@ -534,8 +588,8 @@ mod tests {
     #[test]
     fn options_cycle_both_ways() {
         assert_eq!(PaintColor::Gold.cycled(1), PaintColor::Tangerine);
-        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Starward);
-        assert_eq!(PaintColor::Starward.cycled(1), PaintColor::Gold);
+        assert_eq!(PaintColor::Gold.cycled(-1), PaintColor::Voidblack);
+        assert_eq!(PaintColor::Voidblack.cycled(1), PaintColor::Gold);
         assert_eq!(PaintColor::Stealth.cycled(1), PaintColor::Jade);
         assert_eq!(RearAttachment::None.cycled(-1), RearAttachment::Lantern);
     }

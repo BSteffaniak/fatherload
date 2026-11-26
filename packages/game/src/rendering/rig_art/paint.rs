@@ -85,12 +85,36 @@ pub const fn paint_ramp(paint: PaintColor) -> Ramp {
         PaintColor::DriveWhite => ramp(BONE, MIST, ICE, SKY),
         PaintColor::FathersLoad => ramp(CREAM, RED, MAROON, SOIL_DARK),
         PaintColor::Starward => ramp(BONE, LAVENDER, DEEP_BLUE, INK),
+        // The space achievements' rewards (Wave 13 endgame).
+        PaintColor::Meteorite => ramp(STONE_LIGHT, RUST, STONE_DARK, NIGHT),
+        PaintColor::Nebula => ramp(PINK, VIOLET, DEEP_BLUE, NIGHT),
+        PaintColor::Atlas => ramp(SKY_LIGHT, SKY, STEEL, SLATE_DARK),
+        PaintColor::Xeno => ramp(MINT, TEAL, PLUM, NIGHT),
+        PaintColor::Babel => ramp(GOLD, VIOLET, TEAL_DARK, NIGHT),
+        PaintColor::GildedMaw => ramp(CREAM, GOLD, MAROON, INK),
+        PaintColor::Chitin => ramp(LIME, MOSS, TEAL_DARK, INK),
+        PaintColor::Concord => ramp(BONE, MIST, RED, SLATE_DARK),
+        PaintColor::Huntsman => ramp(SAND, AMBER, LOAM, SOIL_DARK),
+        PaintColor::Shipwright => ramp(STEEL_LIGHT, SKY, STEEL_DARK, NIGHT),
+        PaintColor::Starwright => ramp(BONE, CREAM, GOLD, STEEL),
+        PaintColor::Gatestone => ramp(FOG, STEEL, GOLD, SLATE_DARK),
+        PaintColor::Hearthstone => ramp(ORANGE, RED, SOIL, SOIL_DARK),
+        PaintColor::Manor => ramp(LIME, PINE, SOIL_DARK, INK),
+        // The outfitters' stock (Wave 13 endgame).
+        PaintColor::Aurora => ramp(MINT, LEAF, VIOLET, NIGHT),
+        PaintColor::Solar => ramp(BONE, GOLD, ORANGE, RUST),
+        PaintColor::Corsair => ramp(ROSE, RED, NIGHT, INK),
+        PaintColor::Voidblack => ramp(LAVENDER, PLUM, NIGHT, INK),
     }
 }
 
 /// A paint's bright identity colour: name tags, the split-screen HUD title, minimap markers and
 /// garage swatches. Always readable on the dark UI panels.
 #[must_use]
+#[allow(
+    clippy::match_same_arms,
+    reason = "each wave's paints keep their own arms (Wave 13's below)"
+)]
 pub const fn paint_accent(paint: PaintColor) -> Color {
     match paint {
         PaintColor::Gold
@@ -126,6 +150,22 @@ pub const fn paint_accent(paint: PaintColor) -> Color {
         PaintColor::Graphite | PaintColor::Rubble => FOG,
         PaintColor::Stealth => SLATE_LIGHT,
         PaintColor::Heartlight => CREAM,
+        // Wave 13 endgame.
+        PaintColor::Meteorite => COPPER,
+        PaintColor::Nebula => PINK,
+        PaintColor::Atlas => SKY_LIGHT,
+        PaintColor::Xeno | PaintColor::Aurora => MINT,
+        PaintColor::Babel | PaintColor::Voidblack => LAVENDER,
+        PaintColor::GildedMaw | PaintColor::Solar => GOLD,
+        PaintColor::Chitin => LIME,
+        PaintColor::Concord => BONE,
+        PaintColor::Huntsman => AMBER,
+        PaintColor::Shipwright => STEEL_LIGHT,
+        PaintColor::Starwright => CREAM,
+        PaintColor::Gatestone => FOG,
+        PaintColor::Hearthstone => ORANGE,
+        PaintColor::Manor => LEAF,
+        PaintColor::Corsair => RED,
     }
 }
 
@@ -173,6 +213,10 @@ pub const fn flame_ramp(color: FlameColor, step: usize) -> FlameRamp {
         FlameColor::Ember => flame(MAROON, RED, ORANGE, AMBER),
         FlameColor::Plasma => flame(VIOLET, LAVENDER, ICE, BONE),
         FlameColor::Aether => flame(OCEAN, MINT, ICE, BONE),
+        // Wave 13 endgame.
+        FlameColor::Comet => flame(TEAL_DARK, MINT, SKY_LIGHT, BONE),
+        FlameColor::Heartline => flame(MAROON, RED, GOLD, BONE),
+        FlameColor::Ion => flame(DEEP_BLUE, OCEAN, SKY_LIGHT, BONE),
     }
 }
 

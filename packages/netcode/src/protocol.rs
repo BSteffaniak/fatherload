@@ -345,6 +345,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   (`GameplayEventKind::Exotic` with `exotic::ExoticEvent`). No world field or section: the
 ///   rules are pure schedules of the planet's seed and world time, a boss's fight lives in its
 ///   entity and its win in the terrain (its seal turned trophy).
+/// * Endgame (w13-endgame): the appended space materials (`MineralKind`), the scaled station
+///   prices, `StationAction::Works(WorkOrder)`, `StationRefusal::Materials`, the appended
+///   `AlienCommand::{ExpandHome, CallNeighbours}`, the `Endgame` world field and
+///   `SectionKey::Endgame` section (careers, the Halcyon Gate, theme bosses, estates), the
+///   appended milestones and cosmetics, and the endgame events 1060-1079
+///   (`GameplayEventKind::Endgame`).
 pub const PROTOCOL_VERSION: u8 = 21;
 
 /// One client input frame: the controls and actions for exactly one tick.

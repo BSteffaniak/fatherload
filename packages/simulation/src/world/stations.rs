@@ -16,14 +16,13 @@ use crate::{
     position::WorldPos,
     space::{SpaceBodyId, SpaceTile},
     station::{
-        AlienTech, Mission, MissionKind, ShipGear, ShipUpgrade, StationAction, StationEvent,
-        StationId, StationLedger, StationProfile, StationRefusal,
+        Mission, MissionKind, ShipGear, ShipUpgrade, StationAction, StationEvent, StationId,
+        StationLedger, StationProfile, StationRefusal,
         bar::{ALIEN_ROUND_PRICE, Patron, ROUND_PRICE, patrons},
         bounty::{BOARD_SLOTS, BoardContext, MAX_ACTIVE, board_context, offer},
         hazard::{drain, hazards_of},
         market::{Good, Quote, ore_price, price, trade_lot},
         profile::{StationOwner, profile_at, station_at},
-        shipyard::{WEAVE_HULL_PER_SECOND, WEAVE_HULL_SHARE},
         station_hash,
     },
     summary::PlayerScopedCommandOutcome,
@@ -252,6 +251,10 @@ impl WorldState {
             StationAction::TurnIn => self.hub_turn_in(player_id, &profile, output),
             StationAction::BuyRound(patron) => self.hub_round(player_id, &profile, patron, output),
             StationAction::Salvage => self.hub_salvage(player_id, &profile, output),
+            // Wave 13 endgame: the Works counter refuses with its own events.
+            StationAction::Works(order) => {
+                return self.station_works(player_id, &profile, order, output);
+            }
         };
         match result {
             Ok(()) => PlayerScopedCommandOutcome::Applied,
@@ -282,6 +285,18 @@ impl WorldState {
         if player.credits < price {
             return Err(StationRefusal::Credits);
         }
+        // Wave 13 endgame: tiers 3-5 of a line ask for space materials too.
+        let bill = crate::endgame::works::Bill {
+            credits: price,
+            materials: match upgrade {
+                ShipUpgrade::Line(line) => crate::endgame::works::line_bill(line, level + 1),
+                ShipUpgrade::Gear(_) | ShipUpgrade::Alien(_) => &[],
+            },
+        };
+        if !bill.materials_in(&player.cargo_bay) {
+            return Err(StationRefusal::Materials);
+        }
+        bill.take_from(&mut player.cargo_bay);
         player.credits -= price;
         player.hazard_gear.ship.fit(upgrade);
         let what = match upgrade {
@@ -725,12 +740,14 @@ impl WorldState {
         centre: WorldPos,
         output: &mut TickOutput,
     ) {
-        let lens = self.ship_gear(player_id).has(AlienTech::XenoLens);
-        let reach = if lens {
-            SCAN_BODY_TILES * 2
-        } else {
-            SCAN_BODY_TILES
-        };
+        // The xeno lens and its marks (Wave 13 endgame).
+        let lens = self.ship_effects(player_id).lens;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_precision_loss,
+            reason = "a reach of some thousands of tiles"
+        )]
+        let reach = (SCAN_BODY_TILES as f32 * lens) as i64;
         let hits = self
             .space()
             .space()
@@ -901,18 +918,20 @@ impl WorldState {
     /// The ship's gear for one tick away in space (not on a body): the symbiont weave knits
     /// the hull.
     pub(super) fn ship_upkeep(&mut self, player_id: PlayerId, seconds: f32) {
+        // The weave and its marks (Wave 13 endgame: faster and further).
+        let effects = self.ship_effects(player_id);
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
-        if !player.hazard_gear.ship.has(AlienTech::SymbiontWeave)
+        if effects.weave_rate <= 0.0
             || matches!(player.flight.place, FlightPlace::Landed(_))
             || player.hull <= 0.0
         {
             return;
         }
-        let cap = player.max_hull() * WEAVE_HULL_SHARE;
+        let cap = player.max_hull() * effects.weave_share;
         if player.hull < cap {
-            player.hull = WEAVE_HULL_PER_SECOND.mul_add(seconds, player.hull).min(cap);
+            player.hull = effects.weave_rate.mul_add(seconds, player.hull).min(cap);
         }
     }
 }

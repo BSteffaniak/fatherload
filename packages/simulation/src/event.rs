@@ -1432,6 +1432,15 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The endgame (Wave 13 endgame; netcode codes 1060-1079).
+    /// Something happened in the endgame: a Works order, an estate, the gate, a world landed
+    /// on, a quarry down; `player_id` is whose (if anyone's), `detail` the event's number (see
+    /// [`crate::endgame::EndgameEvent`]).
+    Endgame {
+        what: crate::endgame::EndgameEvent,
+        player_id: Option<PlayerId>,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.

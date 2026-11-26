@@ -890,6 +890,7 @@ const fn group_icon(group: MilestoneGroup) -> &'static SpriteDef {
         MilestoneGroup::Depths => &icons::DEPTH,
         MilestoneGroup::Discoveries => &icons::SCANNER,
         MilestoneGroup::Sky => &icons::ALTITUDE,
+        MilestoneGroup::Space => &icons::MOON,
     }
 }
 
@@ -1039,6 +1040,7 @@ const fn group_color(group: MilestoneGroup) -> Color {
         MilestoneGroup::Depths => ORANGE,
         MilestoneGroup::Discoveries => MINT,
         MilestoneGroup::Sky => SKY_LIGHT,
+        MilestoneGroup::Space => LAVENDER,
     }
 }
 

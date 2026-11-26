@@ -209,6 +209,8 @@ impl WorldState {
             // Ships, shots and wrecks fly in space coordinates; raids name stores and entity
             // ids (Wave 12).
             hostiles: _,
+            // The endgame names bodies, towns and systems, never home positions (Wave 13).
+            endgame: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

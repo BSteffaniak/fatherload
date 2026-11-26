@@ -147,6 +147,9 @@ mod bodylife_tests;
 #[cfg(test)]
 mod galaxy_tour_tests;
 pub use bodylife::{BodyLifeEvent, body_life_of};
+mod endgame;
+#[cfg(test)]
+mod endgame_tests;
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;
@@ -662,6 +665,11 @@ pub struct WorldState {
     /// ground raids.
     #[serde(default)]
     hostiles: crate::hostiles::HostileSpace,
+    /// The endgame (Wave 13, see [`crate::endgame`]): each player's career (worlds landed,
+    /// materials catalogued, alien tech marks, the Starwright ship, the Heartline Drive), the
+    /// crew's Halcyon Gate, theme bosses beaten and estates on alien worlds.
+    #[serde(default)]
+    endgame: crate::endgame::EndgameState,
 }
 
 impl WorldState {

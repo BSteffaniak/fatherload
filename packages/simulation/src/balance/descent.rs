@@ -2348,29 +2348,3 @@ mod tests {
         println!("{}", report.to_markdown());
     }
 }
-
-#[cfg(test)]
-mod purse_probe {
-    #[test]
-    #[ignore = "probe"]
-    fn print_purse() {
-        use super::*;
-        let config = DescentConfig {
-            strata_limit: None,
-            calibrate: false,
-            tick_rate_hz: 60,
-        };
-        let run = run_descent(&RegistryStrata::default_world(), &config);
-        for s in &run.strata {
-            eprintln!(
-                "{} d{} h{:.1} purse {:.0} trip {:.0} in {:.1} min",
-                s.stratum.name,
-                s.stratum.descent,
-                s.end_hours,
-                s.purse,
-                s.trip_credits,
-                s.trip_minutes
-            );
-        }
-    }
-}
