@@ -548,6 +548,8 @@ fn camera_at(x: f64, y: f64, px_per_tile: f32) -> SpaceCamera {
         centre: at(x, y),
         roll: 0.0,
         px_per_tile,
+        drop: 0.0,
+        zoom: 1.0,
     }
 }
 
@@ -657,6 +659,8 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
         centre: at(x, y),
         roll,
         px_per_tile,
+        drop: 0.0,
+        zoom: 1.0,
     };
     let mut fixture = SpaceFixture::empty(camera(-140_000.0, 160_000.0, 0.0, 1.0));
     match name {

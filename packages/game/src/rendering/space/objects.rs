@@ -1189,8 +1189,9 @@ pub fn draw_craft(
         pose.thrust = rig_art::Thrust::Climb;
     }
     let canvas = rig_art::paint_rig(&look, &pose);
-    // Two points per art pixel, as on the ground: the craft stays readable at any zoom.
-    let scale = 2.0;
+    // Two points per art pixel, as on the ground: the craft stays readable at any zoom
+    // (and shrinks only with the ground framing's own zoom out, so it keeps the tiles' size).
+    let scale = 2.0 * projection.craft_zoom;
     let (width, height) = (
         rig_art::BODY_WIDTH as f32 * scale,
         rig_art::BODY_HEIGHT as f32 * scale,

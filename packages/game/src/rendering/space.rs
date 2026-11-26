@@ -58,6 +58,8 @@ pub struct Projection {
     /// Points per world pixel.
     pub scale: f32,
     pub px_per_tile: f32,
+    /// The ground framing's zoom (the craft's art scales with it).
+    pub craft_zoom: f32,
     /// The view (points).
     pub bounds: Rectangle,
 }
@@ -70,13 +72,14 @@ impl Projection {
             camera: camera.centre,
             pivot: (
                 bounds.x + bounds.width * 0.5,
-                bounds.y + bounds.height * 0.5,
+                bounds.y + bounds.height * 0.5 * (1.0 + camera.drop.clamp(0.0, 0.6)),
             ),
             roll: camera.roll,
             sin,
             cos,
             scale: camera.scale(),
             px_per_tile: camera.px_per_tile,
+            craft_zoom: camera.zoom.clamp(0.5, 1.0),
             bounds,
         }
     }
@@ -119,7 +122,8 @@ impl Projection {
     /// Half the view's diagonal (points): the reach of the view round the pivot at any turn.
     #[must_use]
     pub fn reach(&self) -> f32 {
-        self.bounds.width.hypot(self.bounds.height) * 0.5
+        let below = (self.pivot.1 - self.bounds.y - self.bounds.height * 0.5).abs();
+        (self.bounds.width * 0.5).hypot(self.bounds.height * 0.5 + below)
     }
 
     /// Whether a circle at `point` of `radius` points can touch the view.
@@ -281,7 +285,10 @@ impl SpaceRenderer {
         seat: usize,
     ) {
         if let Some(ground) = &view.ground {
-            let reach = (size.0 as f32).hypot(size.1 as f32) * 0.5;
+            // From the craft to the view's farthest corner (the craft sits lower when the
+            // ground framing drops it).
+            let drop = view.camera.drop.clamp(0.0, 0.6);
+            let reach = (size.0 as f32 * 0.5).hypot(size.1 as f32 * 0.5 * (1.0 + drop));
             let force_quads = self.polar.force_quads;
             let polar = if seat == 0 {
                 &mut self.polar
@@ -534,6 +541,8 @@ mod tests {
             centre: WorldPos::new(1_000_000_000_000, -7, 100.0, 100.0),
             roll: std::f32::consts::FRAC_PI_2,
             px_per_tile: 32.0,
+            drop: 0.0,
+            zoom: 1.0,
         };
         let projection = Projection::new(&camera, Rectangle::new(0.0, 0.0, 1280.0, 720.0));
         assert_eq!(projection.project(camera.centre), (640.0, 360.0));

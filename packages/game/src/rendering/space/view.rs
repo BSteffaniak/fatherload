@@ -37,6 +37,13 @@ pub struct SpaceCamera {
     pub roll: f32,
     /// Zoom: screen points per tile.
     pub px_per_tile: f32,
+    /// How far below the view's middle the craft sits, as a share of the view's half height
+    /// (Wave 13 art-audio: 0 centred; standing under tall ground, a giant tree's canopy or a
+    /// spire, the craft drops so the view shows what towers over it).
+    pub drop: f32,
+    /// The ground framing's zoom out (1: none): where even a dropped craft leaves the tall
+    /// ground cut off, the view widens a little and the craft shrinks with the tiles.
+    pub zoom: f32,
 }
 
 impl SpaceCamera {

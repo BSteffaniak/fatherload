@@ -287,6 +287,18 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 }
             }
         }
+        if space.is_none() {
+            // A seat on round ground paints its tile art over a few frames (Wave 13: a framed
+            // jungle shows more of it); a still shows it all.
+            for _ in 0..400 {
+                let screen = crate::window::DesktopWindow::screen(&raylib);
+                let snapshot = game.snapshot(screen);
+                renderer.sync(&mut raylib, &thread, &snapshot, &FrameReport::default());
+                if renderer.space_ground_settled() {
+                    break;
+                }
+            }
+        }
         for frame in 0..RENDER_FRAMES {
             let screen = crate::window::DesktopWindow::screen(&raylib);
             let snapshot = game.snapshot(screen);

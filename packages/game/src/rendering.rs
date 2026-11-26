@@ -458,6 +458,12 @@ impl GameRenderer {
             let centre = space_seat::body_camera_centre(view, scene, body);
             self.live[seat].update(scene.seed, centre);
             self.live[seat].turn_bodies(snapshot.space.millis);
+            // Tall ground round the seat lifts the picture (Wave 13 art-audio).
+            let (actor, _) = space_seat::strip_actor(view, scene);
+            let half_rows = view.viewport.height as f32 * density * 0.5
+                / space_seat::ground_px_per_tile(view, density);
+            let framing = space_seat::headroom_drop(scene, actor, half_rows);
+            self.live[seat].ease_framing(framing);
             let things =
                 space_seat::body_things(snapshot, view, scene, Self::space_seconds(snapshot));
             let px_per_tile = space_seat::ground_px_per_tile(view, density);

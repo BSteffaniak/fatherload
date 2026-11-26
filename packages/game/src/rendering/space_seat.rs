@@ -67,6 +67,8 @@ pub const fn flight_camera(view: &ViewSnapshot<'_>, roll: f32, px_per_tile: f32)
         centre: view.player.flight.pos,
         roll,
         px_per_tile,
+        drop: 0.0,
+        zoom: 1.0,
     }
 }
 
@@ -150,7 +152,9 @@ pub fn body_view_of<'a>(
     let camera = SpaceCamera {
         centre: grid.to_world(body.ground.centre, u, v),
         roll: roll + local.angle as f32,
-        px_per_tile,
+        px_per_tile: px_per_tile * live.framing_zoom(),
+        drop: live.drop,
+        zoom: live.framing_zoom(),
     };
     let id = fatherload_simulation::place::SpaceBodyKey::mix(body.ground.id);
     // The body's own day (Wave 12 bodylife): the star where its clock puts it, its night as
@@ -178,6 +182,61 @@ pub fn body_view_of<'a>(
         snapshot.effects,
         true,
     )
+}
+
+/// Columns either side of a seat that its framing looks at for tall ground.
+const HEADROOM_COLUMNS: i32 = 12;
+/// Rows over the surface its framing looks up through.
+const HEADROOM_ROWS: i32 = 72;
+/// The most the craft drops below the view's middle (a share of the half height).
+pub const MAX_DROP: f32 = 0.5;
+/// The farthest the framing zooms out (tall ground past what a dropped craft shows).
+pub const MIN_FRAMING_ZOOM: f32 = 0.6;
+
+/// How far below the view's middle a seat on round ground should sit, and how far its view
+/// zooms out, so the tall ground
+/// round it (a jungle's giant trees and canopy, a crystal spire, a volcano's cone) shows
+/// whole (Wave 13 art-audio): `(0, 1)` underground, in open country or when it already fits.
+/// `half_rows` is how many rows the view shows above its middle.
+#[must_use]
+pub fn headroom_drop(scene: &PlaceScene<'_>, (u, v): (f64, f64), half_rows: f32) -> (f32, f32) {
+    use fatherload_simulation::{planet::BodyGround, terrain::TileKind};
+    let Some(planet) = scene.terrain.planet_ground() else {
+        return (0.0, 1.0);
+    };
+    let width = i64::from(planet.strip_columns().max(1));
+    let column = u.floor() as i64;
+    let row = v.floor() as i32;
+    let surface = planet.surface_row(column.rem_euclid(width) as i32);
+    // Only on or over the open surface (underground the rock above is no sky to frame).
+    if row > surface + 1 {
+        return (0.0, 1.0);
+    }
+    let mut top = row;
+    for dx in -HEADROOM_COLUMNS..=HEADROOM_COLUMNS {
+        let x = (column + i64::from(dx)).rem_euclid(width) as i32;
+        let ground = planet.surface_row(x).min(row);
+        for y in (ground - HEADROOM_ROWS)..ground {
+            let filled = scene
+                .terrain
+                .tile(fatherload_simulation::terrain::TilePosition { x, y })
+                .is_some_and(|tile| tile.kind != TileKind::Air);
+            if filled {
+                top = top.min(y);
+                break;
+            }
+        }
+    }
+    let tall = (row - top) as f32 + 2.0;
+    let short = tall - half_rows;
+    if short <= 0.0 {
+        return (0.0, 1.0);
+    }
+    let drop = (short / half_rows.max(1.0)).clamp(0.0, MAX_DROP);
+    // Still short with the craft dropped: widen the view (to two thirds at the most).
+    let shown = half_rows * (1.0 + drop);
+    let zoom = (shown / tall).clamp(MIN_FRAMING_ZOOM, 1.0);
+    (drop, zoom)
 }
 
 /// The physical rectangle of a seat's viewport.

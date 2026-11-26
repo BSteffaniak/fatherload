@@ -217,6 +217,39 @@ pub struct LiveSpace {
     /// Each body's clock (Wave 12 bodylife), by index into `bodies`: where its star stands
     /// ([`Self::turn_bodies`]). `None` for the home world and the Moon.
     days: Vec<Option<fatherload_simulation::bodylife::BodyClock>>,
+    /// How far below the view's middle a seat standing on round ground sits (Wave 13
+    /// art-audio, [`super::view::SpaceCamera::drop`]), eased toward what the tall ground round
+    /// it asks for.
+    pub drop: f32,
+    /// Its zoom out ([`super::view::SpaceCamera::zoom`]), eased the same way.
+    pub zoom: f32,
+}
+
+impl LiveSpace {
+    /// Eases the seat's framing toward `target` (a share of the view's half height) by one
+    /// frame's step: a canopy coming into view lifts the picture over about half a second.
+    pub fn ease_framing(&mut self, (drop, zoom): (f32, f32)) {
+        // The first framing on the ground takes its place at once (a landing or a load).
+        if self.zoom <= 0.0 {
+            self.drop = drop;
+            self.zoom = zoom;
+            return;
+        }
+        let ease = |now: &mut f32, target: f32| {
+            *now += (target - *now) * 0.08;
+            if (target - *now).abs() < 0.001 {
+                *now = target;
+            }
+        };
+        ease(&mut self.drop, drop);
+        ease(&mut self.zoom, zoom);
+    }
+
+    /// The framing's zoom (1 until the seat stands on round ground).
+    #[must_use]
+    pub fn framing_zoom(&self) -> f32 {
+        if self.zoom <= 0.0 { 1.0 } else { self.zoom }
+    }
 }
 
 /// Where a body's star stands as its clock says (radians clockwise from up) at body time
