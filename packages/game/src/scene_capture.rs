@@ -536,6 +536,8 @@ mod toolkit_scenes;
 mod travel_scenes;
 // Wave 14 W14-C: the Atlas.
 mod atlas_scenes;
+// Wave 14 console: the command palette and the debug views.
+mod console_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -714,6 +716,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(toolkit_scenes::TOOLKIT_SCENES)
         .chain(travel_scenes::TRAVEL_SCENES)
         .chain(atlas_scenes::ATLAS_SCENES)
+        .chain(console_scenes::CONSOLE_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

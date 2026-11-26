@@ -12481,6 +12481,134 @@ after another, from wherever the last trip left the rig:
 `flush_atlas_trip` are all stand-ins: delete them when `index::travel_command` becomes
 `TravelTo` (which crosses places and lands exactly).
 
+## Wave 14 console: the command palette, launch flags, debug views and time scale (`src/test_mode/{travel,stock}.rs`, `src/world/travel.rs`, game `console/`, `debug_views.rs`, `shell/console.rs`, `rendering/console_view.rs`)
+
+Expansion plan §19 W14-D. Everything is test-mode only: the palette opens only in a test-mode
+world, and the actions it sends are `TestModeAction`s, which the world refuses
+(`IgnoredUnavailable`) outside test mode, so an online client typing at a normal world's host
+changes nothing.
+
+### Simulation: the travel and stock actions (stubs of the index and stock seams)
+
+* `TestModeAction::TravelTo(test_mode::travel::Destination)` and
+  `TestModeAction::Stock(test_mode::stock::StockRequest)` (appended). Every travel the palette,
+  `--start-at`, the scenes and the bots make is one `TravelTo`; every stocking or progress
+  switch is one `Stock`.
+* `Destination`: a Descent, a depth in rows (1 row = 1 m) under the ground at the rig's
+  column, a stratum, a gate boss (the floor of the Descent it guards), home, the Moon, a planet
+  by theme with a `Pick` (`Nth(i)` outward from the rig's sector, wrapping both ways, or
+  `Random(seed)`: the seed rides in the action, so every peer picks the same planet), a
+  station, another player's rig, or an exact tile of a place (`Spot`: the palette's back-stack
+  and bookmarks).
+* `WorldState::resolve_destination(player, destination) -> Option<Arrival>` is pure (the
+  palette's `tp … ?` preview and the travel both read it): a name, one line of facts and an
+  `ArrivalTarget` (`HomeRow`, `Place`, `Spot`). Home rows land in a carved pocket (the existing
+  warp pocket: air inside, the stratum's rock for a floor, hazards in the margin made safe)
+  near the rig's column; places land at the place warp's arrival (`warp_to_place`, whose tail is
+  now `arrive_at`, shared with `Spot`). Planets are memoized per seed and sector (pure
+  generation). Arrival never counts toward depth records (test mode's own rule) and touches
+  no generation: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are unchanged.
+* `StockRequest`: `GiveAll`, `Give { item, count }`, `GiveSupply`, `GateAll`, `Gate(boss)`,
+  `EndingDone`, `Spawn(kind)`, `ClearEnemies`, `FreezeAi`, `SetTime`, `SetWeather`. The stub
+  applies the loadout again (`GiveAll`), cargo (`Give`), the Star Drive's debug grant
+  (`EndingDone`) and a creature beside the rig (`Spawn`); the rest are refused until w14-stock.
+* `PROTOCOL_VERSION` **22** (the two appended actions); no save change (actions are never
+  saved). Tests: `world::travel_tests` (refused in normal worlds, every Descent/stratum/boss
+  resolves and lands in its rows, depth lands that many metres down, planets by theme cycle
+  and random picks agree, a planet and back by a spot, stock stubs, determinism).
+
+### Game: the palette (`console/`)
+
+* **Opening it:** the backtick key (`PlayerInput::console`) or the touch screen's **CMD**
+  button (`TouchControl::Console`, in the top row of a test-mode world; while the palette is
+  open the touch screen is in menu mode, so the browser's page text field brings up the
+  phone's keyboard through `ShellState::text_entry`). It acts for the seat that opened it
+  (seat 1's keyboard or the touch screen); that seat's rig and hotkeys rest while it is open
+  and the world keeps running. Esc, Back or the backtick closes it; the pause menu closes it.
+* **Language** (`console/parse.rs`): `tp planet next|prev|nearest|random [theme]`,
+  `tp descent N|numeral|name`, `tp depth 4200m|4200|1.5km`, `tp stratum <name>`,
+  `tp boss <name>` (also `tp leviathan`), `tp station nearest|next|prev|random`, `tp player N`,
+  `tp bookmark <name>`, `tp home|moon|back`; `tp … ?` previews (a card of name, facts and where
+  it lands) and `go` (or Enter on an empty line) travels; `bookmark <name>`; `give all`,
+  `give <item> N` (explosives, ammo, weapons, minerals and the deep supplies; `dynamite` is the
+  mining charge), `gate all|<boss>`, `ending done`, `spawn <creature>`, `clear`,
+  `freeze [on|off]`, `time HH:MM`, `weather auto|clear|storm`, `difficulty [peaceful|normal|hard]`,
+  `view hitboxes|fields|grid|reveal|freecam|fps [on|off]`, `view off`,
+  `speed pause|0.5|1|2|4`, `pause`, `help [command]`, `close`. Names are typed as words
+  (lower case, `_` for spaces, no "the"); a unique prefix or a unique part ("colossus") is
+  enough, and ambiguous names list what they could be.
+* **Completion** (`console/complete.rs`) offers what the parser accepts, from the same
+  registry lists (`names.rs` walks `Theme::PLANET`, `Descent::ALL`, `Stratum::ALL`,
+  `DescentBoss::ALL`, `EnemyKind::ALL`, the explosive, ammo, weapon, mineral and supply lists),
+  so anything added later completes with no change. Tab extends to the common prefix, then
+  cycles the candidates; Up/Down walk the history.
+* **Dispatch** (`console/dispatch.rs`) turns a command into `Effect`s: `Act(PlayerCommand)` for
+  the seat (the same `TestModeAction`s the Atlas and bots send), debug-view switches and the
+  time scale. A home-depth travel from a planet or free flight sends `TravelTo(Home)` now and
+  the depth travel once the world shows the rig home (`Console::take_ready`). `next`/`prev`
+  cursors, the back-stack (every travel pushes where the rig was), bookmarks and the last
+  preview are per seat (`SeatTravel`).
+* **Launch flags** (`console/start_at.rs`): `--god` starts a new test-mode world (seed
+  0x00C0FFEE or `--seed <n>`, the new-world generator) straight from the command line;
+  `--start-at "descent:5"`, `"planet:random:ice"`, `"boss:colossus"`, `"station:nearest"`,
+  `"depth:4200m"`, `"stratum:<name>"`, `"moon"`, `"home"` (implies `--god`) travels there on
+  the first tick through `start_actions` (a space target opens space first, as the ending
+  would). `LocalGame::start_test_world(seed, target)` is the one entry; the console scenes
+  start through it, and bots can call `start_actions`. Desktop only (the browser build has no
+  command line).
+
+### Game: debug views and the time scale (`debug_views.rs`, `rendering/console_view.rs`)
+
+* `DebugViews` (all off by default): hit and contact boxes (rigs' collision box and circle,
+  every damageable entity's hit circle and contact box, small boxes for drops, critters and
+  people), field zones (outline, feather and preset name), the chunk grid (16-tile chunks,
+  labelled) and region cells (512-tile sectors, gold), map reveal (the world drawn with no fog),
+  the free camera (the seat's stick pans it, Page Up/Down zoom out and in, up to 1/16 scale;
+  the rig gets no movement meanwhile) and the FPS and tick-time overlay. `effective(test_mode)`
+  answers "off" for every view outside a test-mode world, so a normal world never draws one.
+  Presentation only: nothing reaches the simulation. The world-space views draw on the home
+  world's ground (and its post-process path); a seat on a round body or in free flight sees the
+  FPS overlay only.
+* `TimeScale` (`pause`, x0.5, x1, x2, x4): the local host scales the frame's real time before
+  the session's accumulator turns it into fixed ticks, so the scale changes how many ticks run,
+  never their `dt`; a run at x2 for N frames is the same run, tick for tick and hash for hash,
+  as x1 for 2N frames (`local_game::tests::console_tests`). Online sessions keep real time (the
+  palette says so); a normal world ignores the setting. Paused, the palette's own actions wait
+  for `speed 1`.
+
+### Tests and screenshots
+
+* `console::tests`: the parser (every command, the depth/time forms, errors naming what was
+  wrong), completion (offers parse; names unique enough to type), every command dispatches its
+  action, a preview then `go`, bookmarks and `tp back`, online keeps real time, the home-depth
+  travel from a planet goes home first, typing/Tab/history/closing, `--start-at` targets and
+  launch flags. `debug_views::tests`: off by default, none outside test mode, the free camera
+  resets, the time scale scales real time. `local_game::tests::console_tests`: the palette opens
+  only in a test-mode world (and stills its seat's rig), typed travel moves the rig and `tp back`
+  returns, debug views switch from the palette and the free camera pans without moving the rig,
+  the time scale's determinism, and `start_test_world` lands at its target.
+* Scenes (`--screenshot-scenes <dir> --only ...`): `console_palette` (typing with completions,
+  a preview card and help), `console_travel`, `console_touch` (the CMD button),
+  `debug_hitboxes`, `debug_fields`, `debug_grid`, `debug_reveal`, `debug_freecam`, `debug_fps`.
+
+### Seams (TODO-SEAM) for the integrator
+
+* **w14-index:** `test_mode::travel` and `world/travel.rs` are this track's stand-in for the
+  destination index. Map `Destination` onto the index's destination kinds and selectors (the
+  palette builds them in `console/dispatch.rs::destination`; `Pick::Nth` is the palette's
+  next/prev cursor, `Pick::Random` its roll), point `WorldState::resolve_destination` at the
+  index's resolver (or switch the palette's preview to its preview metadata) and send the
+  index's own travel action from `console/dispatch.rs::travel` and
+  `console/start_at.rs::start_actions`. Then drop the palette's session-only back-stack and
+  bookmarks (`SeatTravel::back`, `bookmarks`) for the index's saved and replicated ones, drop the
+  "home first" two-step (`Effect::ActWhenHome`) once the index lands from anywhere, and let
+  stations resolve (the stub answers none). The Atlas should open on `tp … ?` previews.
+* **w14-stock:** `test_mode::stock::StockRequest` and `apply_stock_request` are the stand-in for
+  w14-stock's actions: route each request to its action in `console/dispatch.rs::stock` (one
+  line each) and delete the stub; `dispatch::stock_stub_applies` marks which the stub already
+  does. `give` lists (`console/names.rs::giveables`) can then take stock's registry walk.
+* **Event codes:** none used (1180-1199 stay free); the palette reports in its own lines.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

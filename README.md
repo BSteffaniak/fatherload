@@ -238,6 +238,23 @@ distance), and Go, Prev/Next (the same kind), Random, Bookmark, Back (to where y
 Map (a depth map of all eight Descents, then the galaxy round you; the cursor moves the
 preview, Go travels to the spot). Travel always asks first: choosing previews, only Go goes.
 
+**The command palette (test mode, Wave 14).** In a test-mode world the backtick key (or the
+touch screen's **CMD** button, which brings up the phone's keyboard in the browser) opens a
+command line with Tab completion and Up/Down history; Esc or the backtick closes it. `help`
+lists everything: `tp planet next|prev|nearest|random [theme]`, `tp descent 5`,
+`tp depth 4200m`, `tp stratum <name>`, `tp boss leviathan`, `tp station nearest`, `tp player 2`,
+`tp home|moon`, `bookmark <name>` / `tp bookmark <name>`, `tp back` (add `?` to preview first;
+`go` or Enter then travels), `give all`, `give dynamite 99`, `gate all`, `ending done`,
+`spawn hollow_matriarch`, `clear`, `freeze`, `time 22:00`, `weather storm`, `difficulty hard`,
+the debug views `view hitboxes|fields|grid|reveal|freecam|fps [on|off]` (all off by default;
+the free camera pans with the stick and zooms with Page Up/Down) and the local time scale
+`speed pause|0.5|1|2|4` (`pause` alone; online play keeps real time). Launch straight into a
+test world with `fatherload --god`, optionally in place with `--start-at "descent:5"`,
+`"planet:random:ice"`, `"boss:colossus"`, `"depth:4200m"` or `"stratum:crystal_faults"`
+(and `--seed <n>`). Commands act on the rig of the seat that opened the palette and go
+through the same test-mode actions as everything else, so they work online (the host's world
+decides) and are refused in normal worlds.
+
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
 basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can
 start a dozen rows higher or lower than in another world), waves the layer boundaries, shapes

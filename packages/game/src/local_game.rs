@@ -3294,6 +3294,7 @@ mod tests {
     // Wave 14 W14-C: the Atlas.
     mod atlas_tests;
     mod base_tests;
+    mod console_tests;
     mod crew_tests;
     mod expedition_tests;
     mod garage_tests;
