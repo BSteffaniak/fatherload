@@ -292,6 +292,11 @@ pub use enemies::{
     GuardianMove, JOLT_MILLIS, MAX_BATS, MAX_RAISED, NEST_GUARD_TILES, SKY_CITY_SAFE_TILES,
     SLAM_REACH, TURRET_MOUNTS, guardian_move, is_tomb_guardian,
 };
+// The exotic worlds' bosses (Wave 13 planets-d): what the renderer and HUD show of a fight.
+pub use enemies::exotic::{
+    BossView, STEP_EXPOSED as BOSS_STEP_EXPOSED, STEP_REST as BOSS_STEP_REST,
+    STEP_STRIKE as BOSS_STEP_STRIKE, STEP_TELL as BOSS_STEP_TELL,
+};
 // The Hollow World's creatures (Wave 9): how a coil's sun scale and a clinging mite show.
 pub use enemies::hollow::{
     CLINGING_PHASE as LODE_MITE_CLINGING_PHASE, CRACKED_PHASE as SERPENT_CRACKED_PHASE,

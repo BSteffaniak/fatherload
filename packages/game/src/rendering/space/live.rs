@@ -611,6 +611,215 @@ pub fn ground_things(
     }
     things.extend(frontier_things(scene, millis));
     things.extend(outland_things(scene, millis));
+    things.extend(exotic_things(scene, millis));
+    things
+}
+
+/// An exotic world's tells round the seat (Wave 13 planets-d): the Storm Belt's flickering
+/// columns and bolts, falling hail and meteors with their shadows, the geysers' plumes, and an
+/// awake boss's marks.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::too_many_lines,
+    reason = "marks over a few hundred tiles of a body's strip"
+)]
+fn exotic_things(scene: &crate::render_snapshot::PlaceScene<'_>, millis: u64) -> Vec<GroundThing> {
+    use super::view::{ExoticMark, GroundThingKind};
+    use fatherload_simulation::{
+        exotic::{ExoticStyle, boss, locked, rules, style_of_ground},
+        terrain::TilePosition,
+    };
+    let mut things = Vec::new();
+    let Some(ground) = scene.terrain.planet_ground() else {
+        return things;
+    };
+    let Some(style) = style_of_ground(ground) else {
+        return things;
+    };
+    let Some(anchor) = scene
+        .rigs
+        .first()
+        .map(|rig| scene.frame.tile_at(rig.x, rig.y))
+    else {
+        return things;
+    };
+    let push = |things: &mut Vec<GroundThing>, column: i32, row: i32, mark: ExoticMark| {
+        things.push(GroundThing {
+            column: f64::from(column) + 0.5,
+            row: row as f32,
+            kind: GroundThingKind::Exotic(mark),
+        });
+    };
+    let storm = rules::storm_strength(style, ground.params().seed, millis);
+    if style == ExoticStyle::GasGiant {
+        for bolt in rules::bolts_near(ground, anchor, 2, millis, millis, storm) {
+            let rows = u16::try_from(bolt.bottom - bolt.top + 1).unwrap_or(60);
+            if bolt.telling(millis) {
+                push(
+                    &mut things,
+                    bolt.column,
+                    bolt.bottom + 1,
+                    ExoticMark::BoltTell { rows },
+                );
+            } else if bolt.striking(millis) {
+                push(
+                    &mut things,
+                    bolt.column,
+                    bolt.bottom + 1,
+                    ExoticMark::Bolt { rows },
+                );
+            }
+        }
+    }
+    if matches!(style, ExoticStyle::GasGiant | ExoticStyle::Ring) {
+        let meteor = style == ExoticStyle::Ring;
+        for faller in rules::fallers_near(
+            ground,
+            style,
+            anchor,
+            2,
+            millis,
+            millis + rules::FALL_TELL_MILLIS,
+            storm,
+        ) {
+            let Some(floor) = (faller.from_row..=faller.to_row).find(|row| {
+                scene
+                    .terrain
+                    .tile(TilePosition {
+                        x: faller.column,
+                        y: *row,
+                    })
+                    .is_some_and(|tile| !tile.kind.is_open())
+            }) else {
+                continue;
+            };
+            let left = faller.land_millis.saturating_sub(millis) as f32;
+            let progress = (1.0 - left / rules::FALL_TELL_MILLIS as f32).clamp(0.0, 1.0);
+            push(
+                &mut things,
+                faller.column,
+                floor,
+                ExoticMark::FallShadow {
+                    progress: (progress * 1_000.0) as u16,
+                    meteor,
+                },
+            );
+            let from = faller.from_row.max(floor - 40) as f32;
+            things.push(GroundThing {
+                column: f64::from(faller.column) + 0.5,
+                row: from + (floor as f32 - from) * progress,
+                kind: GroundThingKind::Exotic(ExoticMark::Falling { meteor }),
+            });
+        }
+    }
+    if style == ExoticStyle::Locked {
+        for vent in rules::vents_near(ground, anchor, 30) {
+            let alive = scene.terrain.tile(vent).is_some_and(|tile| {
+                tile.kind
+                    == fatherload_simulation::terrain::TileKind::Exotic(
+                        fatherload_simulation::exotic::ExoticTile::GeyserVent,
+                    )
+            });
+            if !alive {
+                continue;
+            }
+            let phase = rules::geyser_phase(ground, vent, millis);
+            if phase == rules::GeyserPhase::Quiet {
+                continue;
+            }
+            let rows = (1..=rules::GEYSER_REACH_ROWS)
+                .find(|up| {
+                    scene
+                        .terrain
+                        .tile(TilePosition {
+                            x: vent.x,
+                            y: vent.y - up,
+                        })
+                        .is_none_or(|tile| !tile.kind.is_open())
+                })
+                .map_or(rules::GEYSER_REACH_ROWS, |up| up - 1);
+            push(
+                &mut things,
+                vent.x,
+                vent.y,
+                ExoticMark::Plume {
+                    rows: u16::try_from(rows).unwrap_or(0),
+                    blowing: phase == rules::GeyserPhase::Blowing,
+                    night: locked::side_of(ground, i64::from(vent.x)) == locked::Side::Night,
+                },
+            );
+        }
+    }
+    // An awake boss's told attack.
+    let Some(arena) = boss::arena(ground) else {
+        return things;
+    };
+    let Some((state, body)) = scene
+        .entities
+        .iter()
+        .find_map(|entity| match &entity.state {
+            fatherload_simulation::entity::EntityState::Enemy(state)
+                if state.kind == style.boss() =>
+            {
+                Some((*state, entity.body))
+            }
+            _ => None,
+        })
+    else {
+        return things;
+    };
+    let told = matches!(
+        state.volley,
+        fatherload_simulation::world::BOSS_STEP_TELL
+            | fatherload_simulation::world::BOSS_STEP_STRIKE
+    );
+    let Some((x, y)) = state.waypoint.filter(|_| told) else {
+        return things;
+    };
+    let strike = state.volley == fatherload_simulation::world::BOSS_STEP_STRIKE;
+    let pattern = boss::pattern(style);
+    let attack = pattern[usize::from(state.pattern) % pattern.len()];
+    for mark in boss::marks(&arena, attack, TilePosition { x, y }, state.phase >= 2) {
+        match mark {
+            boss::BossMark::Column {
+                column,
+                top,
+                bottom,
+            } => push(
+                &mut things,
+                column,
+                bottom,
+                ExoticMark::BossColumn {
+                    rows: u16::try_from(bottom - top).unwrap_or(0),
+                    strike,
+                },
+            ),
+            boss::BossMark::Row { row, left, right } => push(
+                &mut things,
+                left,
+                row + 1,
+                ExoticMark::BossRow {
+                    columns: u16::try_from(right - left).unwrap_or(0),
+                    strike,
+                },
+            ),
+            boss::BossMark::Floor { floor, left, right } => push(
+                &mut things,
+                left,
+                floor,
+                ExoticMark::BossFloor {
+                    columns: u16::try_from(right - left).unwrap_or(0),
+                    strike,
+                },
+            ),
+            boss::BossMark::Gale { .. } => {
+                let tile = scene.frame.tile_at(body.x, body.y);
+                push(&mut things, tile.x, tile.y, ExoticMark::Gale);
+            }
+        }
+    }
     things
 }
 

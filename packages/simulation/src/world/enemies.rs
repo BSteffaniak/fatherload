@@ -70,7 +70,7 @@ mod ancient_city;
 mod crypt;
 mod distortion;
 mod drowned;
-mod exotic;
+pub(super) mod exotic;
 mod far_strange;
 mod frontier;
 mod garrison;

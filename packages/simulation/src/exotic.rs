@@ -507,13 +507,14 @@ pub fn secret(ground: &PlanetGround) -> Option<Secret> {
 /// Rows from the surface to the top of a secret's chamber.
 pub const SECRET_DEPTH: i32 = 16;
 
-/// The secret's column on a small body (a quarter lap from the settlement).
+/// The secret's column on a small body (three eighths of a lap from the settlement: clear of
+/// the sky cities, the landmark and the outposts).
 #[must_use]
 pub fn secret_column(ground: &PlanetGround) -> i64 {
     let settlement = style_of_ground(ground)
         .and_then(|style| style.world().settlement_site(ground))
         .map_or(0, |site| i64::from(site.centre()));
-    lap_column(ground, settlement, 250)
+    lap_column(ground, settlement, 375)
 }
 
 /// The secret's tile at `(first, row)` (`surface` the ground there), if part of it: a marker

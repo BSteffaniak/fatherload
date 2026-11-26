@@ -563,10 +563,21 @@ impl WorldState {
             ExoticStyle::GasGiant => ExoticTile::DiamondHail,
             _ => ExoticTile::Meteorite,
         };
-        let clear = struck.is_empty()
+        // A ring tile of a deep band spans several strip cells (the stone fills them all).
+        let span = self
+            .terrain
+            .planet_ground()
+            .map_or(1, |ground| ground.grid().span_at(at.y));
+        let reach_x = TILE_SIZE * (span as f32 + 1.5);
+        let away = |x: f32, y: f32| (x - cx).abs() > reach_x || (y - cy).abs() > TILE_SIZE * 1.5;
+        let clear = self
+            .players
+            .iter()
+            .filter(|(id, _)| !self.in_space(**id))
+            .all(|(_, rig)| away(rig.x, rig.y))
             && self.pilots().all(|(_, body, pilot)| {
                 let (px, py) = pilot.middle(body);
-                (px - cx).abs() > TILE_SIZE || (py - cy).abs() > TILE_SIZE * 1.5
+                away(px, py)
             });
         if clear
             && self
@@ -846,19 +857,23 @@ impl WorldState {
                 if (next.x - start.x).abs() > 80 || seen.contains(&next) {
                     continue;
                 }
-                let live = self.terrain.tile(next).is_some_and(|tile| {
-                    matches!(
-                        tile.kind,
-                        TileKind::Exotic(ExoticTile::ConduitLive | ExoticTile::ConduitJunction)
-                    )
-                });
-                if live
-                    && self
-                        .terrain
-                        .set_kind(next, TileKind::Exotic(ExoticTile::ConduitDead))
-                {
-                    darkened += 1;
-                    queue.push(next);
+                let kind = self.terrain.tile(next).map(|tile| tile.kind);
+                match kind {
+                    Some(TileKind::Exotic(
+                        ExoticTile::ConduitLive | ExoticTile::ConduitJunction,
+                    )) => {
+                        if self
+                            .terrain
+                            .set_kind(next, TileKind::Exotic(ExoticTile::ConduitDead))
+                        {
+                            darkened += 1;
+                            queue.push(next);
+                        }
+                    }
+                    // A ring tile of a deep band spans strip cells: its other cell went dark
+                    // with it, and the run goes on through it.
+                    Some(TileKind::Exotic(ExoticTile::ConduitDead)) => queue.push(next),
+                    _ => {}
                 }
             }
         }

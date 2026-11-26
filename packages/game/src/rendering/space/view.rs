@@ -486,6 +486,8 @@ pub enum GroundThingKind {
     Frontier(FrontierMark),
     /// An outland world's mark (Wave 13 planets-c).
     Outland(OutlandMark),
+    /// An exotic world's mark (Wave 13 planets-d).
+    Exotic(ExoticMark),
     /// An alien town's resident (Wave 12): the character, the way they face, whether they
     /// walk (`stride`: art pixels walked) and talk.
     AlienFolk {
@@ -539,6 +541,37 @@ pub enum OutlandMark {
     VentBlast(u16),
     /// A turning gear throwing sparks.
     GearSpin,
+}
+
+/// What an exotic world shows on its round ground (Wave 13 planets-d): the tells of what will
+/// strike (a pure function of the world's seed and time, or of the boss's told attack), so
+/// every seat and client draws the same. Columns are drawn up from the thing (its foot);
+/// rows and floors rightward from it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExoticMark {
+    /// A charged column flickering before its bolt (`rows` tall).
+    BoltTell { rows: u16 },
+    /// A bolt striking down its column.
+    Bolt { rows: u16 },
+    /// A falling stone's shadow where it will land, growing (per mille of its tell): diamond
+    /// hail or a meteorite.
+    FallShadow { progress: u16, meteor: bool },
+    /// The stone in the air.
+    Falling { meteor: bool },
+    /// A geyser's plume (`rows` tall): wisps while it hisses, a jet while it blows.
+    Plume {
+        rows: u16,
+        blowing: bool,
+        night: bool,
+    },
+    /// A boss's told column (`rows` tall), glowing, then striking.
+    BossColumn { rows: u16, strike: bool },
+    /// A boss's told row (`columns` wide).
+    BossRow { columns: u16, strike: bool },
+    /// A boss's floor shockwave (`columns` wide).
+    BossFloor { columns: u16, strike: bool },
+    /// A boss's gale round it.
+    Gale,
 }
 
 /// The seat's view of a body's ground.

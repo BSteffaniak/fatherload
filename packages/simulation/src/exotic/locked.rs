@@ -244,9 +244,11 @@ fn pool_in(ground: &PlanetGround, cell: i64) -> Option<(i64, i64)> {
     let centre = cell * 80 + 20 + i64::try_from((hash >> 8) % 40).unwrap_or(0);
     let half = 4 + i64::try_from((hash >> 16) % 5).unwrap_or(0);
     let mild = |column: i64| (200..=824).contains(&warmth(ground, column));
-    let settlement =
-        wrap_delta(centre, settlement_centre(ground), width).abs() <= settlement_half(ground) + 20;
-    (mild(centre - half) && mild(centre + half) && !settlement).then_some((centre, half))
+    let near = |site: i64, reach: i64| wrap_delta(centre, site, width).abs() <= reach + 20;
+    let clear = !near(settlement_centre(ground), settlement_half(ground))
+        && !near(gate_column(ground), GATE_HALF)
+        && !near(observatory_column(ground), OBSERVATORY_HALF);
+    (mild(centre - half) && mild(centre + half) && clear).then_some((centre, half))
 }
 
 /// An ice spike of the 24-column cell `cell`: `(column, height)`.

@@ -347,7 +347,10 @@ fn body(tile: ExoticTile, x: i32, y: i32, px: i32, py: i32) -> PaletteIndex {
         ExoticTile::AmmoniaPocket => bubble(AMMONIA, CLOUD, px, py, x, y),
         ExoticTile::StormPocket => {
             // A violet bubble with a crackle across it.
-            if (px - py).abs() <= 0 && (3..13).contains(&px) && !hash(px, py, 3041).is_multiple_of(3) {
+            if (px - py).abs() <= 0
+                && (3..13).contains(&px)
+                && !hash(px, py, 3041).is_multiple_of(3)
+            {
                 index_of(BONE)
             } else {
                 bubble(CHARGED, STORM, px, py, x, y)

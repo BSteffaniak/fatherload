@@ -984,6 +984,200 @@ fn draw_outland_mark(
     }
 }
 
+/// An exotic world's mark (Wave 13 planets-d) at the origin (its foot; up is -y). Tells glow
+/// steadily and pulse slowly (well under 3 Hz, never a strobe); a strike is one brief bright
+/// line; a shadow darkens and closes in as its stone falls.
+#[allow(
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    reason = "one block per mark, drawn in local pixels"
+)]
+fn draw_exotic_mark(
+    draw: &mut impl RaylibDraw,
+    mark: super::view::ExoticMark,
+    art: f32,
+    seconds: f32,
+) {
+    use super::view::ExoticMark;
+    let tile = 16.0 * art;
+    let pulse = 0.5 + 0.5 * (seconds * std::f32::consts::TAU * 1.2).sin();
+    match mark {
+        ExoticMark::BoltTell { rows } => {
+            let height = f32::from(rows) * tile;
+            // A faint charged column with sparks crawling up it.
+            draw.draw_rectangle_rec(
+                Rectangle::new(-tile * 1.5, -height, tile * 3.0, height),
+                fade(palette::LAVENDER, 0.08 + 0.1 * pulse),
+            );
+            for spark in 0..6_u16 {
+                let t = ((seconds * 0.7 + f32::from(spark) / 6.0).fract()) * height;
+                let wobble = ((f32::from(spark) * 1.7 + seconds * 2.0).sin()) * tile * 0.6;
+                draw.draw_circle_v(
+                    Vector2::new(wobble, -t),
+                    art * 1.5,
+                    fade(palette::ICE, 0.5 + 0.3 * pulse),
+                );
+            }
+        }
+        ExoticMark::Bolt { rows } => {
+            let height = f32::from(rows) * tile;
+            let steps = (rows / 3).max(2);
+            let mut previous = Vector2::new(0.0, 0.0);
+            for step in 1..=steps {
+                let y = -height * f32::from(step) / f32::from(steps);
+                let x = if step == steps {
+                    0.0
+                } else if step % 2 == 0 {
+                    tile * 0.6
+                } else {
+                    -tile * 0.6
+                };
+                let next = Vector2::new(x, y);
+                draw.draw_line_ex(previous, next, art * 5.0, fade(palette::LAVENDER, 0.5));
+                draw.draw_line_ex(previous, next, art * 2.0, palette::BONE);
+                previous = next;
+            }
+        }
+        ExoticMark::FallShadow { progress, meteor } => {
+            let t = f32::from(progress) / 1_000.0;
+            let radius = (1.0 + 2.2 * (1.0 - t)) * 8.0 * art;
+            let rim = if meteor {
+                palette::ORANGE
+            } else {
+                palette::SKY_LIGHT
+            };
+            draw.draw_ellipse(
+                0,
+                (-art) as i32,
+                radius,
+                radius * 0.35,
+                fade(palette::INK, 0.25 + 0.4 * t),
+            );
+            draw.draw_ellipse_lines(
+                0,
+                (-art) as i32,
+                radius * 1.1,
+                radius * 0.4,
+                fade(rim, 0.4 + 0.5 * t),
+            );
+        }
+        ExoticMark::Falling { meteor } => {
+            let r = 3.0 * art;
+            if meteor {
+                draw.draw_line_ex(
+                    Vector2::new(0.0, -r),
+                    Vector2::new(r * 2.0, -r * 7.0),
+                    r,
+                    fade(palette::AMBER, 0.4),
+                );
+                draw.draw_circle_v(Vector2::new(0.0, -r), r, palette::STEEL);
+                draw.draw_circle_v(Vector2::new(-r * 0.3, -r * 1.3), r * 0.4, palette::GOLD);
+            } else {
+                draw.draw_poly(Vector2::new(0.0, -r), 4, r * 1.2, 45.0, palette::ICE);
+                draw.draw_poly_lines(Vector2::new(0.0, -r), 4, r * 1.2, 45.0, palette::SKY);
+            }
+        }
+        ExoticMark::Plume {
+            rows,
+            blowing,
+            night,
+        } => {
+            let colour = if night { palette::ICE } else { palette::BONE };
+            if blowing {
+                let height = f32::from(rows) * tile;
+                for puff in 0..8_u16 {
+                    let t = ((seconds * 1.4 + f32::from(puff) / 8.0).fract()) * height;
+                    let spread = tile * (0.6 + 0.9 * t / height.max(1.0));
+                    draw.draw_circle_v(
+                        Vector2::new(((f32::from(puff) * 2.3).sin()) * spread * 0.4, -t),
+                        spread * 0.6,
+                        fade(colour, 0.55 * (1.0 - t / height.max(1.0)) + 0.1),
+                    );
+                }
+            } else {
+                for wisp in 0..3_u16 {
+                    let t = (seconds * 0.9 + f32::from(wisp) / 3.0).fract();
+                    draw.draw_circle_v(
+                        Vector2::new(
+                            (t * 6.0 + f32::from(wisp)).sin() * art * 3.0,
+                            -t * tile * 1.5,
+                        ),
+                        art * 2.5,
+                        fade(colour, 0.5 * (1.0 - t)),
+                    );
+                }
+            }
+        }
+        ExoticMark::BossColumn { rows, strike } => {
+            let height = f32::from(rows) * tile;
+            let (body, edge) = if strike {
+                (fade(palette::BONE, 0.7), palette::GOLD)
+            } else {
+                (
+                    fade(palette::GOLD, 0.12 + 0.12 * pulse),
+                    fade(palette::GOLD, 0.6),
+                )
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(-tile * 1.5, -height, tile * 3.0, height),
+                body,
+            );
+            draw.draw_rectangle_lines_ex(
+                Rectangle::new(-tile * 1.5, -height, tile * 3.0, height),
+                art,
+                edge,
+            );
+        }
+        ExoticMark::BossRow { columns, strike } => {
+            let width = f32::from(columns) * tile;
+            let (body, edge) = if strike {
+                (fade(palette::MINT, 0.75), palette::BONE)
+            } else {
+                (
+                    fade(palette::MINT, 0.12 + 0.12 * pulse),
+                    fade(palette::MINT, 0.6),
+                )
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(-tile * 0.5, -tile * 2.0, width, tile * 3.0),
+                body,
+            );
+            draw.draw_rectangle_lines_ex(
+                Rectangle::new(-tile * 0.5, -tile * 2.0, width, tile * 3.0),
+                art,
+                edge,
+            );
+        }
+        ExoticMark::BossFloor { columns, strike } => {
+            let width = f32::from(columns) * tile;
+            let (body, edge) = if strike {
+                (fade(palette::ORANGE, 0.75), palette::GOLD)
+            } else {
+                (
+                    fade(palette::ORANGE, 0.12 + 0.12 * pulse),
+                    fade(palette::ORANGE, 0.6),
+                )
+            };
+            draw.draw_rectangle_rec(
+                Rectangle::new(-tile * 0.5, -tile * 2.0, width, tile * 2.0),
+                body,
+            );
+            draw.draw_rectangle_lines_ex(
+                Rectangle::new(-tile * 0.5, -tile * 2.0, width, tile * 2.0),
+                art,
+                edge,
+            );
+        }
+        ExoticMark::Gale => {
+            for ring in 0..3_u8 {
+                let phase = (seconds * 0.8 + f32::from(ring) / 3.0).fract();
+                let radius = (3.0 + 12.0 * phase) * tile * 0.5;
+                draw.draw_circle_lines(0, (-tile) as i32, radius, fade(palette::MIST, 1.0 - phase));
+            }
+        }
+    }
+}
+
 /// `colour` at opacity `alpha` (0-1).
 fn fade(colour: Color, alpha: f32) -> Color {
     #[allow(clippy::cast_sign_loss, reason = "clamped to 0..=255")]
@@ -1074,6 +1268,7 @@ fn draw_thing(
         }
         GroundThingKind::Frontier(mark) => draw_frontier_mark(draw, mark, art, seconds),
         GroundThingKind::Outland(mark) => draw_outland_mark(draw, mark, art, seconds),
+        GroundThingKind::Exotic(mark) => draw_exotic_mark(draw, mark, art, seconds),
         GroundThingKind::AlienFolk {
             character,
             facing,

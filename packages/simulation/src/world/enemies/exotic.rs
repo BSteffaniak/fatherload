@@ -290,7 +290,7 @@ impl WorldState {
         }
         let _ = self
             .terrain
-            .set_kind(arena.seal, TileKind::Exotic(boss::trophy(style)));
+            .set_kind_by_rule(arena.seal, TileKind::Exotic(boss::trophy(style)));
         output.push_event(super::super::exotic::exotic_event(
             ExoticEvent::BossDefeated,
             by,

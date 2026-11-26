@@ -28,6 +28,7 @@ mod crypt_map;
 mod descent_hud;
 pub mod drowned_hud;
 mod ending;
+pub mod exotic_hud;
 mod expedition_card;
 mod expedition_hud;
 pub mod far_strange_hud;

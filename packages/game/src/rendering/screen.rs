@@ -125,6 +125,8 @@ pub(super) fn draw_view_hud(
     let split = snapshot.views.len() > 1;
     // A frontier world's storm (under the panels), place, rule and hazards (Wave 12).
     super::frontier_hud::draw_frontier_hud(draw, snapshot, view, rect);
+    // An exotic world's place, rule, hazards, pressure gauge and boss (Wave 13 planets-d).
+    super::exotic_hud::draw_exotic_hud(draw, snapshot, view, rect);
     // The ending (Wave 10): the seat's own sequence over its view; the cutaway, the credits
     // and the epilogue cover it (and its HUD), the awakening plays over the world.
     if view.ending.is_some_and(|ending| ending.phase.playing()) {
