@@ -649,6 +649,60 @@ mod tests {
         WorldState::new_game_with_settings(PlayerId::new(1), &settings, SimulationParams::default())
     }
 
+    /// A system's leads are told in one line by its first lead (Wave 14 finish: a toast per
+    /// lead stacked up on every arrival).
+    #[test]
+    fn a_systems_leads_are_told_in_one_line() {
+        use fatherload_simulation::{
+            galaxy_story::{LeadRecord, discovery::leads_cached},
+            space::{HOME_SECTOR, SpaceSector},
+        };
+        let mut world = world();
+        let seed = world.world_seed();
+        // A system near home with two leads or more.
+        let leads = (1..6)
+            .flat_map(|x| (0..3_u8).map(move |system| (x, system)))
+            .map(|(x, system)| {
+                leads_cached(
+                    seed,
+                    fatherload_simulation::space::SystemRef {
+                        sector: SpaceSector::new(HOME_SECTOR.x + x, HOME_SECTOR.y),
+                        system,
+                    },
+                )
+            })
+            .find(|leads| leads.len() >= 2)
+            .expect("a system with two leads");
+        let records: Vec<LeadRecord> = leads
+            .iter()
+            .map(|lead| LeadRecord {
+                system: lead.system,
+                index: lead.index,
+                ..LeadRecord::default()
+            })
+            .collect();
+        world.set_galaxy_story(GalaxyStory {
+            begun: true,
+            leads: records.clone(),
+            ..GalaxyStory::default()
+        });
+        let first = event_words(&world, GalaxyEvent::LeadFound, 0)
+            .message
+            .expect("the first lead tells them all");
+        assert!(
+            first.starts_with(&format!("{} new leads here", records.len())),
+            "{first}"
+        );
+        for index in 1..records.len() {
+            let detail = u32::try_from(index).unwrap_or(u32::MAX);
+            assert!(
+                event_words(&world, GalaxyEvent::LeadFound, detail)
+                    .message
+                    .is_none()
+            );
+        }
+    }
+
     #[test]
     fn the_page_waits_for_the_road_then_lists_it() {
         let mut world = world();
