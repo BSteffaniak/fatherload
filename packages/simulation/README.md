@@ -1407,8 +1407,8 @@ simulation change to play is the fighters' size (below).
   stay 1. `hit_circles()` scales the authored tables, `reach()` and `stats().size` grew with
   them, and `combat::hits_ship` tests in the authored frame. The lancer's lance leaves its new
   nose; the flock's separation (70) and the formation's slots (90 back, 100 aside) grew with
-  the hulls. The fight's zoom is 0.65 (was 0.55); a boss is framed in three fifths of the
-  half view so it does not hide under the plate's banners.
+  the hulls. The fight's zoom is 0.65 (was 0.55). The fight's banners sit above where a
+  message toast rises (room for a boss's bar and its warning only when a boss is near).
 * Each ship has a soft aura in its faction's colour and a dark rim round its silhouette; shots
   have a glow and a bright core and never draw thinner than a couple of pixels; a hull hit
   lights the hull additively and fades over an eighth of a second (re-lit by the next hit,
@@ -1470,11 +1470,13 @@ simulation change to play is the fighters' size (below).
 Every space scene (142: space, systems, stations, hostiles, flight, places, planets, the wild,
 frontier and alien worlds, bodylife) was captured and looked at. Fixed: the nav HUD's
 overlaps, the docking guide over the deflector, a narrow seat's badge over its stats, the
-bounties under a toast and the fight's banners under it, a boss hidden under the plate's
-banners, a moon's near-black night side on approach, a frontier warning in red on lava, the
-jungle's canopy above the view. Known: on a phone the touch layout's rotate pair can sit over
-the deflector panel and the stick under an edge marker's label (the touch layout's own
-places), and the home world's "THE STARS ARE OPEN" card covers the HUD while it shows.
+bounties under a toast and the fight's banners under it, the boss scenes staged nearer, a
+moon's near-black night side on approach, a frontier warning in red on lava, the jungle's
+canopy above the view. Known: a boss dead ahead of the craft still passes under the plate's
+banners at the top of the view (the camera is locked to the craft; turning brings it round);
+on a phone the touch layout's rotate pair can sit over the deflector panel and the stick under
+an edge marker's label (the touch layout's own places); the home world's "THE STARS ARE OPEN"
+card covers the HUD while it shows.
 
 ## Replication of entities
 

@@ -120,11 +120,11 @@ pub fn inside(inner: Rectangle, outer: Rectangle) -> bool {
 }
 
 /// Where a message toast rises in a seat's view (`screen::draw_toast`: centred, at most 300
-/// points wide, resting 28 points above the bottom, up to three lines).
+/// points wide, resting 28 points above the bottom, two lines).
 #[must_use]
 pub fn toast_band(rect: Rectangle) -> Rectangle {
     let width = (rect.width - 24.0).min(300.0);
-    let height = 40.0;
+    let height = 32.0;
     Rectangle::new(
         rect.x + (rect.width - width) * 0.5,
         bottom(rect) - 28.0 - height,

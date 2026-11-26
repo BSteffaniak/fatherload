@@ -200,9 +200,8 @@ pub(super) fn space_frame(
         .space_combat
         .frame_reach
         .map_or(super::hostiles_view::COMBAT_ZOOM, |reach| {
-            // Three fifths of the half: clear of the location plate and the banners above (Wave
-            // 13: three quarters left a boss ahead under them).
-            (short * 0.5 * 0.6 / reach.max(1.0)).clamp(0.25, super::hostiles_view::COMBAT_ZOOM)
+            // Three quarters of the half: clear of the location plate and the banners.
+            (short * 0.5 * 0.75 / reach.max(1.0)).clamp(0.3, super::hostiles_view::COMBAT_ZOOM)
         });
     let combat = zoom.max(fit);
     let zoom = (combat.ln() - zoom.ln()).mul_add(in_fight, zoom.ln()).exp();

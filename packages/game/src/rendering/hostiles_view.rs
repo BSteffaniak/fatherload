@@ -593,9 +593,14 @@ pub(super) fn draw_hostile_hud(
     // The fight's banners stack below the rig (the view's lower third), clear of the ships
     // ahead of it; the arrows keep the lanes under the flight HUD's top panels.
     let lanes_top = top;
-    // (Above where a message toast rises, Wave 13: room for a boss's bar and a warning.)
+    // (Above where a message toast rises, Wave 13: room for a boss's bar and its warning, or
+    // the encounter's one banner.)
+    let boss_near = hostiles
+        .boss()
+        .is_some_and(|boss| boss.pos.distance(player.flight.pos) < 6_000.0);
+    let room = if boss_near { 44.0 } else { 18.0 };
     let mut top = (rect.y + rect.height * 0.7)
-        .min(super::space_hud_layout::toast_band(rect).y - super::space_hud_layout::GAP - 44.0);
+        .min(super::space_hud_layout::toast_band(rect).y - super::space_hud_layout::GAP - room);
     // The deflector and the missile rack, under the meters.
     let capacity = fatherload_simulation::hostiles::shield_capacity(gear);
     let rack = fatherload_simulation::hostiles::missile_capacity(
