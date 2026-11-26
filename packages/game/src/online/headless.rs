@@ -116,6 +116,11 @@ pub fn parse_args(args: &[String]) -> Result<Option<HeadlessMode>, String> {
             }
             "--lan" => lan = true,
             "--until-empty" => until_empty = true,
+            // The window's own flags (the touch aid, Wave 14's test-world launch).
+            "--touch" | "--god" => {}
+            "--start-at" | "--seed" | "--space-view" => {
+                iter.next();
+            }
             other => return Err(format!("unknown argument {other}\n{}", usage())),
         }
     }
@@ -470,6 +475,18 @@ mod tests {
     #[test]
     fn no_headless_flags_runs_the_window() {
         assert_eq!(parse_args(&[]), Ok(None));
+        // The window's own flags pass through (Wave 14's test-world launch).
+        assert_eq!(
+            parse_args(&args(&[
+                "--god",
+                "--start-at",
+                "descent:5",
+                "--seed",
+                "7",
+                "--touch"
+            ])),
+            Ok(None)
+        );
     }
 
     #[test]
