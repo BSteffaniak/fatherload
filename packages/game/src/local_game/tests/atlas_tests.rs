@@ -430,3 +430,156 @@ fn go_reaches_every_kind_of_destination_one_after_another() {
     }
     assert!(trips >= 25, "one trip per kind: {trips} ({seen:?})");
 }
+
+/// The god-mode toolkit end to end through the game loop (Wave 14 integration, §19): the
+/// Atlas shows a preview of every kind of destination it lists and each one carries the
+/// index's travel; the palette drives the same index and toolkit actions (stock, a theme
+/// boss's lair, a flagship, a village, a station, back); two split-screen seats use their own
+/// Atlases to go to two different places.
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "the Atlas, the palette and split-screen in turn"
+)]
+fn the_toolkit_end_to_end_atlas_previews_palette_and_split_screen() {
+    use crate::{atlas::AtlasTarget, rendering::atlas::preview::has_preview};
+    use fatherload_simulation::place::{BodyId, Place};
+
+    // 1. The Atlas: every kind it lists has a preview and travels by the index.
+    let mut game = atlas_game(1, "toolkit-atlas");
+    press_seat(&mut game, 0, f2());
+    let mut kinds = std::collections::BTreeSet::new();
+    for category in [
+        AtlasCategory::Depth,
+        AtlasCategory::Places,
+        AtlasCategory::Bosses,
+        AtlasCategory::Settlements,
+        AtlasCategory::Space,
+    ] {
+        press_seat(&mut game, 0, pick(AtlasHit::Category(category.index())));
+        let shown = game.shell.seat(0).atlas.shown.clone();
+        for (row, destination) in shown.iter().enumerate() {
+            if !kinds.insert(destination.kind) {
+                continue;
+            }
+            press_seat(&mut game, 0, pick(AtlasHit::Row(row)));
+            let current = game.shell.seat(0).atlas.current().cloned().expect("chosen");
+            assert_eq!(current.kind, destination.kind);
+            assert!(
+                has_preview(game.world(), &current.target),
+                "{:?} {} has a preview",
+                current.kind,
+                current.name
+            );
+            assert!(
+                current.request.is_some() || current.target == AtlasTarget::Story,
+                "{:?} travels by the index",
+                current.kind
+            );
+        }
+    }
+    for wanted in [
+        IndexKind::Descent,
+        IndexKind::Stratum,
+        IndexKind::BossArena,
+        IndexKind::ThemeBossLair,
+        IndexKind::FactionBossLair,
+        IndexKind::Village,
+        IndexKind::Settlement,
+        IndexKind::AlienTown,
+        IndexKind::Planet,
+        IndexKind::Station,
+    ] {
+        assert!(
+            kinds.contains(&DestinationKind::Index(wanted)),
+            "the Atlas lists a {wanted:?}"
+        );
+    }
+    press_seat(&mut game, 0, f2());
+
+    // 2. The palette: the same index and toolkit actions.
+    let backtick = PlayerInput {
+        console: true,
+        ..PlayerInput::default()
+    };
+    let line = |game: &mut LocalGame, text: &str| {
+        for character in text.chars() {
+            press_seat(game, 0, typed(character));
+        }
+        press_seat(game, 0, confirm_input());
+        idle(game, 6);
+    };
+    press_seat(&mut game, 0, backtick);
+    assert!(game.shell.console.open);
+    line(&mut game, "give all");
+    assert!(game.world().test_stock_gaps(PLAYER).is_empty());
+    line(&mut game, "tp boss sporemother");
+    assert!(
+        matches!(
+            game.world().place_of(PLAYER),
+            Place::OnBody(BodyId::Space(_))
+        ),
+        "at the Sporemother's lair: {:?}",
+        game.world().place_of(PLAYER)
+    );
+    line(&mut game, "tp boss pirates");
+    assert_eq!(
+        game.world().place_of(PLAYER),
+        Place::Space,
+        "at the flagship"
+    );
+    line(&mut game, "tp village");
+    assert!(
+        game.world().place_of(PLAYER).is_home_store(),
+        "at a village"
+    );
+    line(&mut game, "tp station");
+    assert_eq!(game.world().place_of(PLAYER), Place::Space, "by a station");
+    line(&mut game, "tp back");
+    assert!(
+        game.world().place_of(PLAYER).is_home_store(),
+        "back at the village"
+    );
+    press_seat(&mut game, 0, backtick);
+
+    // 3. Split-screen: each seat's own Atlas takes its own rig somewhere else.
+    let mut game = atlas_game(2, "toolkit-split");
+    let second = game.seats()[1].player;
+    let _ = step_seats(&mut game, &[f2(), f2()]);
+    idle(&mut game, 1);
+    press_seat(
+        &mut game,
+        1,
+        pick(AtlasHit::Category(AtlasCategory::Space.index())),
+    );
+    let planet = game
+        .shell
+        .seat(1)
+        .atlas
+        .shown
+        .iter()
+        .position(|destination| destination.kind == DestinationKind::Index(IndexKind::Planet))
+        .expect("a planet");
+    press_seat(&mut game, 1, pick(AtlasHit::Row(planet)));
+    press_seat(&mut game, 1, pick(AtlasHit::Button(AtlasButton::Go)));
+    let descent = game
+        .shell
+        .seat(0)
+        .atlas
+        .shown
+        .iter()
+        .position(|destination| destination.name.starts_with("Descent IV:"))
+        .expect("Descent IV");
+    press_seat(&mut game, 0, pick(AtlasHit::Row(descent)));
+    press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Go)));
+    idle(&mut game, 6);
+    assert!(
+        matches!(
+            game.world().place_of(second),
+            Place::OnBody(BodyId::Space(_))
+        ),
+        "seat 2 on a planet"
+    );
+    assert_eq!(game.world().place_of(PLAYER), Place::HOME, "seat 1 at home");
+    assert!(depth_of(&game, PLAYER) > 3_000, "seat 1 down in Descent IV");
+}

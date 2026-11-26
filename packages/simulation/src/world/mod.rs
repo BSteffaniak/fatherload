@@ -223,6 +223,8 @@ mod galaxy_story;
 pub use destinations::TravelOrder;
 #[cfg(test)]
 mod destination_tests;
+#[cfg(test)]
+mod toolkit_journey_tests;
 pub use galaxy_story::SiteBearing;
 #[cfg(test)]
 mod galaxy_story_tests;

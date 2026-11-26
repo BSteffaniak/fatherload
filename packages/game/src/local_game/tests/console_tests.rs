@@ -236,3 +236,29 @@ fn start_at_reaches_a_random_ice_planet_and_a_gate_boss() {
     let (top, bottom) = layout.descent_rows(descent);
     assert!((top..=bottom).contains(&row(&game)), "row {}", row(&game));
 }
+
+/// `--start-at` reaches the index's every family of place (Wave 14 integration): a station,
+/// a theme boss's lair, a faction's flagship and a village, each through the same `TravelTo`.
+#[test]
+fn start_at_reaches_a_station_a_lair_a_flagship_and_a_village() {
+    use fatherload_simulation::place::{BodyId, Place};
+
+    for (target, wanted) in [
+        ("station:nearest", "space"),
+        ("boss:sporemother", "body"),
+        ("boss:pirates", "space"),
+        ("village", "home"),
+    ] {
+        let mut game = title_game("console-start-at-families");
+        let parsed = crate::console::parse::parse_start_at(target).expect("parses");
+        let _ = game.start_test_world(DEFAULT_TEST_SEED, Some(&parsed));
+        idle(&mut game, 5);
+        let place = game.world().place_of(PLAYER);
+        let ok = match wanted {
+            "space" => place == Place::Space,
+            "body" => matches!(place, Place::OnBody(BodyId::Space(_))),
+            _ => place.is_home_store(),
+        };
+        assert!(ok, "--start-at {target}: {place:?}");
+    }
+}

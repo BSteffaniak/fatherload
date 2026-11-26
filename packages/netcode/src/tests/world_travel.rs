@@ -202,3 +202,64 @@ fn a_normal_world_refuses_travel_online() {
     );
     assert!(trio.host.world().travel_log().is_empty());
 }
+
+/// The god-mode toolkit end to end online (Wave 14 integration): the client stocks its rig and
+/// travels to a theme boss's lair on its world while the host's seats go to a station and a
+/// faction's flagship; each player moves only their own rig, the host decides, the client's
+/// view keeps matching.
+#[test]
+fn a_stocked_client_and_the_hosts_seats_travel_to_three_different_places() {
+    let mut trio = Trio::new(world(true), SessionParams::new(30));
+    trio.run(30);
+    assert_eq!(trio.client.phase(), ClientPhase::InGame);
+    let me = to_sim_player(trio.me());
+    let seat0 = fatherload_simulation::PlayerId::new(0);
+    let seat1 = trio
+        .host
+        .world()
+        .player_ids()
+        .find(|id| *id != seat0 && *id != me)
+        .expect("seat 1");
+
+    trio.step(vec![PlayerCommand::TestMode(TestModeAction::StockAll)]);
+    trio.run(4);
+    assert!(
+        trio.host.world().test_stock_gaps(me).is_empty(),
+        "the client's rig is stocked"
+    );
+    let lair = trio
+        .host
+        .world()
+        .destinations(me, DestinationKind::ThemeBossLair, DestinationFilter::Any)
+        .into_iter()
+        .next()
+        .expect("a theme boss's lair");
+    let Place::OnBody(lair_body) = lair.id.place else {
+        panic!("a lair is on a body: {lair:?}");
+    };
+    trio.step(travel(TravelRequest::exact(lair.id)));
+    trio.seat(
+        0,
+        TestModeAction::TravelTo(TravelRequest::nearest(DestinationKind::Station)),
+    );
+    trio.seat(
+        1,
+        TestModeAction::TravelTo(TravelRequest::nearest(DestinationKind::FactionBossLair)),
+    );
+    trio.run(40);
+    let host = trio.host.world();
+    assert_eq!(
+        host.place_of(me),
+        Place::OnBody(lair_body),
+        "the client at the lair"
+    );
+    assert_eq!(host.place_of(seat0), Place::Space, "seat 0 by a station");
+    assert_eq!(host.place_of(seat1), Place::Space, "seat 1 at a flagship");
+    assert_ne!(
+        host.travel_here(seat0).map(|id| (id.x, id.y)),
+        host.travel_here(seat1).map(|id| (id.x, id.y)),
+        "two different places in space"
+    );
+    assert_eq!(trio.authority().place_of(me), Place::OnBody(lair_body));
+    assert!(trio.hashes_agree(), "the client's view matches the host's");
+}

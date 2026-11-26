@@ -390,6 +390,16 @@ impl AtlasPreviews {
     }
 }
 
+/// Whether the Atlas draws a preview of `target`: a tile picture of its ground, the space
+/// renderer's view of it, or (the story's goal) its words.
+#[cfg(test)]
+#[must_use]
+pub fn has_preview(world: &WorldState, target: &AtlasTarget) -> bool {
+    tile_view(world, target).is_some()
+        || space_focus(world, target).is_some()
+        || *target == AtlasTarget::Story
+}
+
 /// Where the space preview of `target` looks and how many tiles round it it shows, when the
 /// target is seen from space.
 #[must_use]
@@ -683,7 +693,10 @@ mod tests {
     /// the world (home or a planet's ground, its art filled in), or the space renderer's view
     /// of it, or (the story's goal) its words.
     #[test]
-    #[allow(clippy::too_many_lines, reason = "every kind, then one picture of each painted")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "every kind, then one picture of each painted"
+    )]
     fn a_preview_is_made_for_every_kind_of_destination() {
         let world = world();
         let me = Some(PlayerId::new(1));
