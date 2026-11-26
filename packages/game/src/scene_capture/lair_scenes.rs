@@ -99,7 +99,7 @@ fn in_lair(stage: &mut SceneStage<'_>, theme: PlanetThemeId, spot: Spot, boss: O
         let width = i64::from(planet.strip_width());
         let (column, floor) = match spot {
             Spot::Hall => (
-                i32::try_from((lair.centre - 14).rem_euclid(width)).unwrap_or(0),
+                i32::try_from((lair.centre - 5).rem_euclid(width)).unwrap_or(0),
                 lair.floor,
             ),
             Spot::Well => (
@@ -130,7 +130,9 @@ fn in_lair(stage: &mut SceneStage<'_>, theme: PlanetThemeId, spot: Spot, boss: O
         );
         if let Some(kind) = boss {
             let _ = world.with_store_ground(store, |world| {
-                let (x, y) = world.frame().centre_of(column + 13, lair.floor - 2);
+                // Close enough to stay clear of the body panel in a 960-point view, just past
+                // the seal (review: at 13 tiles the panel hid its head).
+                let (x, y) = world.frame().centre_of(column + 7, lair.floor - 2);
                 let _ = world.spawn_enemy(kind, x, y);
             });
         }
