@@ -153,9 +153,30 @@ pub fn sites(ground: &PlanetGround) -> [Option<TownSite>; 3] {
             centre,
             half_width: base_half,
             ground_row,
-            stones: stones_under(roll, centre, base_half, ground_row),
+            stones: stones_under(roll, centre, base_half, ground_row, width),
         });
-        if ground.hooks().world().is_some() {
+        // A wild world shapes every one of its towns' sites itself (Wave 13 QA: several
+        // towns, spread round the lap on its own level ground).
+        if let Some(world) = ground.hooks().world() {
+            for (index, site) in world
+                .settlement_sites(ground)
+                .into_iter()
+                .enumerate()
+                .take(usize::try_from(count).unwrap_or(1))
+                .skip(1)
+            {
+                let roll = mix(params.seed ^ 0x544F_574E_5300_0010 ^ (index as u64) << 32);
+                let centre = site.centre().rem_euclid(width);
+                let ground_row = ground.raw_surface_row(i64::from(centre));
+                out[index] = Some(TownSite {
+                    index: u8::try_from(index).unwrap_or(0),
+                    species,
+                    centre,
+                    half_width: base_half,
+                    ground_row,
+                    stones: stones_under(roll, centre, base_half, ground_row, width),
+                });
+            }
             return out;
         }
         for index in 1..count {
@@ -172,7 +193,7 @@ pub fn sites(ground: &PlanetGround) -> [Option<TownSite>; 3] {
                 centre: other,
                 half_width: half,
                 ground_row,
-                stones: stones_under(roll, other, half, ground_row),
+                stones: stones_under(roll, other, half, ground_row, width),
             });
         }
         return out;
@@ -192,7 +213,7 @@ pub fn sites(ground: &PlanetGround) -> [Option<TownSite>; 3] {
             centre,
             half_width: half,
             ground_row,
-            stones: stones_under(roll, centre, half, ground_row),
+            stones: stones_under(roll, centre, half, ground_row, width),
         });
     }
     out
@@ -205,11 +226,18 @@ fn stones_under(
     centre: i32,
     half: i32,
     ground_row: i32,
+    width: i32,
 ) -> [(i32, i32); LEXICON_STONES] {
     let mut stones = [(0, 0); LEXICON_STONES];
     for (stone, slot_stone) in (0_i32..).zip(stones.iter_mut()) {
         let stone_roll = mix(roll ^ (stone as u64 + 1));
         let column = centre + (stone - 1) * half * 2 / 3 + (stone_roll % 9) as i32 - 4;
+        // Round the seam: a town on a theme's own site may straddle it (Wave 13 QA).
+        let column = if width > 0 {
+            column.rem_euclid(width)
+        } else {
+            column
+        };
         let row = ground_row + 7 + ((stone_roll >> 8) % 20) as i32;
         *slot_stone = (column, row);
     }

@@ -20,8 +20,7 @@
 
 use super::{
     Cell, SurfaceSite, WildTile, air, chunk_with, core_floor_row, ease, is_small_body,
-    landmark_column, roll, secret_tile, settlement_column, site_weight, tile, water, wild,
-    wrap_delta,
+    landmark_column, roll, secret_tile, site_weight, tile, water, wild, wrap_delta,
 };
 use crate::{
     planet::{
@@ -120,7 +119,7 @@ pub fn elevation(ground: &PlanetGround, column: i64) -> i64 {
     let fine = ground.periodic_noise(71, column, 32);
     let mut value = (broad * 3 + fine) / 4;
     let half = i64::from(super::settlement_width(ground) / 2);
-    let delta = wrap_delta(column, settlement_column(ground) + half, width).abs();
+    let delta = wrap_delta(column, super::nearest_settlement(ground, column), width).abs();
     if delta < half + 50 {
         value = value.max(700 - (delta - half).max(0) * 6);
     }
@@ -163,7 +162,7 @@ fn natural(ground: &PlanetGround, column: i64) -> i32 {
 pub fn surface(ground: &PlanetGround, column: i64) -> i32 {
     let width = i64::from(ground.strip_width());
     let half = i64::from(super::settlement_width(ground) / 2);
-    let settlement = settlement_column(ground) + half;
+    let settlement = super::nearest_settlement(ground, column);
     if let Some(weight) = site_weight(column, settlement, half, width) {
         return ease(natural(ground, column), natural(ground, settlement), weight);
     }
@@ -189,7 +188,7 @@ pub fn crevasse_in(ground: &PlanetGround, cell: i64) -> Option<Crevasse> {
     let column = cell * 64 + 8 + i64::try_from((hash >> 8) % 48).unwrap_or(0);
     let crack = 2 + i64::try_from((hash >> 16) % 2).unwrap_or(0);
     let half = i64::from(super::settlement_width(ground) / 2);
-    let settlement = settlement_column(ground) + half;
+    let settlement = super::nearest_settlement(ground, column);
     if wrap_delta(column, settlement, width).abs() <= half + 16
         || wrap_delta(column, landmark_column(ground), width).abs() <= TITAN_PLATEAU + 14
     {
@@ -212,7 +211,7 @@ fn spire_in(ground: &PlanetGround, cell: i64) -> Option<(i64, i32)> {
     }
     let column = cell * 96 + 10 + i64::try_from((hash >> 8) % 76).unwrap_or(0);
     let half = i64::from(super::settlement_width(ground) / 2);
-    if wrap_delta(column, settlement_column(ground) + half, width).abs() <= half + 14
+    if wrap_delta(column, super::nearest_settlement(ground, column), width).abs() <= half + 14
         || wrap_delta(column, landmark_column(ground), width).abs() <= TITAN_PLATEAU + 6
         || frozen_sea_at(ground, column)
     {
@@ -479,6 +478,10 @@ impl ThemeWorld for GlacierWorld {
         Some(super::settlement_site_of(ground, |column| {
             surface(ground, column)
         }))
+    }
+
+    fn settlement_sites(&self, ground: &PlanetGround) -> Vec<SurfaceSite> {
+        super::settlement_sites_of(ground, |column| surface(ground, column))
     }
 
     fn landmark_site(&self, ground: &PlanetGround) -> Option<SurfaceSite> {

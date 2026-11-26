@@ -56,6 +56,12 @@ pub trait ThemeWorld: Sync {
     /// Where a friendly settlement stands: level, dry and clear (the aliens track builds on it).
     fn settlement_site(&self, ground: &PlanetGround) -> Option<SurfaceSite>;
 
+    /// Every settlement site, [`Self::settlement_site`] first (Wave 13 QA: a settled world
+    /// holds several alien towns, each on its own level site round the lap).
+    fn settlement_sites(&self, ground: &PlanetGround) -> Vec<SurfaceSite> {
+        self.settlement_site(ground).into_iter().collect()
+    }
+
     /// The theme's landmark (its centre site).
     fn landmark_site(&self, ground: &PlanetGround) -> Option<SurfaceSite>;
 }

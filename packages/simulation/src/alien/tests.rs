@@ -265,3 +265,93 @@ fn each_species_buys_its_ores_and_sells_its_goods_better_to_good_speakers() {
         .is_some()
     );
 }
+
+/// A settled wild world holds several towns (Wave 13 QA): a planet two or three, spread round
+/// the lap on its own level, paved ground (the jungle's clearings, the archipelago's islands,
+/// the glacier's shelves), clear of the landmark half a lap away; a moon still one. The
+/// unsettled worlds' ground (the golden digests) does not move.
+#[test]
+fn a_settled_wild_planet_holds_several_level_towns_spread_round_the_lap() {
+    use crate::planet::wilds::{landmark_column, settlement_centres, wrap_delta};
+    let mut seen_three = false;
+    for theme in [
+        PlanetThemeId::JUNGLE,
+        PlanetThemeId::OCEAN,
+        PlanetThemeId::GLACIER,
+    ] {
+        for (salt, species) in AlienSpecies::ALL.into_iter().enumerate() {
+            for radius in [1_600_u32, 2_400, 4_000] {
+                let params = PlanetParams {
+                    folk: species.folk(),
+                    ..PlanetParams::new(
+                        0x7A11_1300 + u64::from(radius) * 8 + salt as u64,
+                        radius,
+                        theme,
+                    )
+                };
+                let ground = PlanetGround::new(params);
+                let width = i64::from(ground.strip_width());
+                let towns = towns_of(&params);
+                let count = usize::from(town::town_count(&params));
+                assert!(count >= 2, "a planet holds two towns or more");
+                assert_eq!(
+                    towns.len(),
+                    count,
+                    "{theme:?} R {radius}: every town stands"
+                );
+                seen_three |= count == 3;
+                assert_eq!(settlement_centres(&ground).len(), count);
+                let landmark = landmark_column(&ground);
+                for (index, found) in towns.iter().enumerate() {
+                    assert_eq!(usize::from(found.site.index), index);
+                    // Level, paved, open sky over it.
+                    for column in found.first_column()..=found.last_column() {
+                        assert_eq!(
+                            ground.surface_row(column),
+                            found.ground_row(),
+                            "{theme:?} R {radius} town {index} is level at column {column}"
+                        );
+                        let tile = ground.generated_tile(column, found.ground_row());
+                        assert_eq!(tile.kind, TileKind::Alien(AlienTile::paving(species)));
+                        let above = ground.generated_tile(column, found.ground_row() - 1);
+                        assert!(above.kind.is_open(), "open sky over the town");
+                    }
+                    // On the ocean, an island over the sea.
+                    if theme == PlanetThemeId::OCEAN {
+                        assert!(found.ground_row() < crate::planet::wilds::ocean::SEA_LEVEL);
+                    }
+                    // Clear of the landmark.
+                    let off = wrap_delta(i64::from(found.site.centre), landmark, width).abs();
+                    assert!(off > width / 16, "town {index} keeps off the landmark");
+                    // Its lexicon stones under it.
+                    for (column, row) in found.site.stones {
+                        assert_eq!(
+                            ground.generated_tile(column, row).kind,
+                            TileKind::Alien(AlienTile::LexiconStone(species)),
+                            "{theme:?} R {radius} town {index} stone at {column},{row}"
+                        );
+                    }
+                }
+                // Spread round the lap.
+                for (a, first) in towns.iter().enumerate() {
+                    for second in towns.iter().skip(a + 1) {
+                        let apart = wrap_delta(
+                            i64::from(first.site.centre),
+                            i64::from(second.site.centre),
+                            width,
+                        )
+                        .abs();
+                        assert!(apart >= width / 8, "towns spread round the lap");
+                    }
+                }
+            }
+        }
+        // A settled wild moon keeps its one town.
+        let moon = PlanetParams {
+            folk: AlienSpecies::ALL[0].folk(),
+            ..PlanetParams::new(0x7A11_1399, 700, theme)
+        };
+        assert_eq!(towns_of(&moon).len(), 1);
+    }
+    assert!(seen_three, "some planet holds three towns");
+}

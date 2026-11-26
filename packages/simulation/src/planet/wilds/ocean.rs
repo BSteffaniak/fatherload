@@ -21,7 +21,7 @@
 
 use super::{
     Cell, SurfaceSite, WildTile, air, chunk_with, core_floor_row, ease, is_small_body,
-    landmark_column, roll, secret_tile, settlement_column, site_weight, water, wild, wrap_delta,
+    landmark_column, roll, secret_tile, site_weight, water, wild, wrap_delta,
 };
 use crate::{
     planet::{
@@ -118,7 +118,7 @@ pub fn elevation(ground: &PlanetGround, column: i64) -> i64 {
     let fine = ground.periodic_noise(61, column, 32);
     let mut value = (broad * 3 + fine) / 4;
     let half = i64::from(super::settlement_width(ground) / 2);
-    let island = settlement_column(ground) + half;
+    let island = super::nearest_settlement(ground, column);
     let delta = wrap_delta(column, island, width).abs();
     if delta < half + 60 {
         value = value.max(900 - (delta - half).max(0) * 5);
@@ -150,7 +150,7 @@ pub fn surface(ground: &PlanetGround, column: i64) -> i32 {
         i32::try_from(rows).unwrap_or(0)
     };
     let half = i64::from(super::settlement_width(ground) / 2);
-    let island = settlement_column(ground) + half;
+    let island = super::nearest_settlement(ground, column);
     if let Some(weight) = site_weight(column, island, half, width) {
         return ease(natural(column), natural(island).min(-2), weight);
     }
@@ -441,6 +441,10 @@ impl ThemeWorld for OceanWorld {
         Some(super::settlement_site_of(ground, |column| {
             surface(ground, column)
         }))
+    }
+
+    fn settlement_sites(&self, ground: &PlanetGround) -> Vec<SurfaceSite> {
+        super::settlement_sites_of(ground, |column| surface(ground, column))
     }
 
     fn landmark_site(&self, ground: &PlanetGround) -> Option<SurfaceSite> {

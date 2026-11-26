@@ -20,8 +20,7 @@
 
 use super::{
     Cell, SurfaceSite, WildTile, air, chunk_with, core_floor_row, ease, is_small_body,
-    landmark_column, roll, secret_tile, settlement_column, settlement_site_of, site_weight, wild,
-    wrap_delta,
+    landmark_column, roll, secret_tile, settlement_site_of, site_weight, wild, wrap_delta,
 };
 use crate::{
     planet::{
@@ -138,7 +137,7 @@ pub fn tree_in_cell(ground: &PlanetGround, cell: i64) -> Option<Tree> {
         wrap_delta(column, centre, width).abs() <= half + 14
             || wrap_delta(column + trunk, centre, width).abs() <= half + 14
     };
-    let settlement = settlement_column(ground) + i64::from(super::settlement_width(ground) / 2);
+    let settlement = super::nearest_settlement(ground, column);
     if clear(settlement, i64::from(super::settlement_width(ground) / 2))
         || clear(landmark_column(ground), ELDER_RISE)
     {
@@ -165,7 +164,7 @@ pub fn surface(ground: &PlanetGround, column: i64) -> i32 {
     let width = i64::from(ground.strip_width());
     let natural = -ground.hill(column);
     let half = i64::from(super::settlement_width(ground) / 2);
-    let settlement = settlement_column(ground) + half;
+    let settlement = super::nearest_settlement(ground, column);
     if let Some(weight) = site_weight(column, settlement, half, width) {
         return ease(natural, -ground.hill(settlement), weight);
     }
@@ -443,6 +442,10 @@ impl ThemeWorld for JungleWorld {
 
     fn settlement_site(&self, ground: &PlanetGround) -> Option<SurfaceSite> {
         Some(settlement_site_of(ground, |column| surface(ground, column)))
+    }
+
+    fn settlement_sites(&self, ground: &PlanetGround) -> Vec<SurfaceSite> {
+        super::settlement_sites_of(ground, |column| surface(ground, column))
     }
 
     fn landmark_site(&self, ground: &PlanetGround) -> Option<SurfaceSite> {

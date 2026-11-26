@@ -161,14 +161,18 @@ impl WorldState {
     #[must_use]
     pub fn wilds_safe_zone(&self, tile: TilePosition) -> Option<bool> {
         let (planet, _) = self.wild_world()?;
-        let site = crate::planet::world_of(planet.params().theme)?.settlement_site(planet)?;
+        let sites = crate::planet::world_of(planet.params().theme)?.settlement_sites(planet);
         let width = i64::from(planet.strip_width());
-        let delta =
-            crate::planet::wilds::wrap_delta(i64::from(tile.x), i64::from(site.centre()), width);
-        Some(
+        // Every town's site is safe (Wave 13 QA: several towns on a settled world).
+        Some(sites.iter().any(|site| {
+            let delta = crate::planet::wilds::wrap_delta(
+                i64::from(tile.x),
+                i64::from(site.centre()),
+                width,
+            );
             delta.abs() <= i64::from(site.width / 2 + WILD_SITE_MARGIN)
-                && (site.floor - 30..site.floor + 6).contains(&tile.y),
-        )
+                && (site.floor - 30..site.floor + 6).contains(&tile.y)
+        }))
     }
 
     /// Whether `player_id`'s planet gear counters `hazard`: the stations' planet gear line

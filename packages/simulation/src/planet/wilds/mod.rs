@@ -133,6 +133,63 @@ pub fn settlement_column(ground: &PlanetGround) -> i64 {
     (roll(ground, 1, 0, 0) % width.cast_unsigned()).cast_signed()
 }
 
+/// Where a settled wild world's other towns stand (Wave 13 QA: several alien towns), in
+/// eighths of a lap on from the theme's own settlement: three quarters on (a quarter back),
+/// then three eighths on. Clear of the landmark half a lap on and of a small body's secret a
+/// quarter on.
+const OTHER_SITE_EIGHTHS: [i64; 2] = [6, 3];
+
+/// The centre columns of every settlement site of a wild world, the theme's own first.
+///
+/// A pure function of the body. A body the aliens settled holds as many sites as it has towns
+/// ([`crate::alien::town::town_count`]: two or three on a planet, one on a moon), spread round
+/// the lap; each is levelled, dry and clear like the first.
+#[must_use]
+pub fn settlement_centres(ground: &PlanetGround) -> Vec<i64> {
+    let width = i64::from(ground.strip_width());
+    let first =
+        (settlement_column(ground) + i64::from(settlement_width(ground) / 2)).rem_euclid(width);
+    let towns = usize::from(crate::alien::town::town_count(ground.params())).max(1);
+    let mut centres = vec![first];
+    for eighths in OTHER_SITE_EIGHTHS.iter().take(towns - 1) {
+        centres.push((first + width * eighths / 8).rem_euclid(width));
+    }
+    centres
+}
+
+/// The settlement site's centre nearest `column` round the lap (each site shapes the ground
+/// round it).
+#[must_use]
+pub fn nearest_settlement(ground: &PlanetGround, column: i64) -> i64 {
+    let width = i64::from(ground.strip_width());
+    let centres = settlement_centres(ground);
+    let mut best = centres[0];
+    for centre in centres.into_iter().skip(1) {
+        if wrap_delta(column, centre, width).abs() < wrap_delta(column, best, width).abs() {
+            best = centre;
+        }
+    }
+    best
+}
+
+/// Every settlement site of a wild world whose surface is `surface` (see
+/// [`settlement_centres`]).
+#[must_use]
+pub fn settlement_sites_of(
+    ground: &PlanetGround,
+    surface: impl Fn(i64) -> i32,
+) -> Vec<SurfaceSite> {
+    let width = settlement_width(ground);
+    settlement_centres(ground)
+        .into_iter()
+        .map(|centre| SurfaceSite {
+            first: i32::try_from(centre - i64::from(width / 2)).unwrap_or(0),
+            width,
+            floor: surface(centre),
+        })
+        .collect()
+}
+
 /// The landmark's centre column: half a lap from the settlement.
 #[must_use]
 pub fn landmark_column(ground: &PlanetGround) -> i64 {
