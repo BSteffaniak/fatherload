@@ -451,6 +451,7 @@ mod descent_scenes;
 mod distortion_scenes;
 mod drop_scenes;
 mod drowned_scenes;
+mod exotic_scenes;
 mod expedition_scenes;
 mod explosive_scenes;
 mod far_strange_scenes;
@@ -653,6 +654,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(wilds_scenes::WILDS_SCENES)
         .chain(outlands_scenes::OUTLANDS_SCENES)
         .chain(frontier_scenes::FRONTIER_SCENES)
+        .chain(exotic_scenes::EXOTIC_SCENES)
         .chain(alien_scenes::ALIEN_SCENES)
         .chain(station_scenes::STATION_SCENES)
 }

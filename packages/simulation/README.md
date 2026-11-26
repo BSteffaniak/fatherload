@@ -10734,6 +10734,220 @@ nobody, and then it is told to every local seat, the Wave 12 limit below).
 - Deep down every rig also feels the bodylife climate's heat (a machine world's reactor core
   runs 140 °C hotter): heat gear matters on all three worlds' deep strata.
 
+## Wave 13 planets-d: the gas giant, the tidally locked world and the ring world (`src/exotic.rs`, `src/exotic/{tile,gas_giant,locked,ring,rules,boss,hooks}.rs`, `src/world/exotic.rs`, `src/world/enemies/exotic.rs`)
+
+Planet themes IV of Part III (expansion plan §16 WP-SPACE "planet themes", §15 F12): three
+more planet themes, each a world like the home ground level. Every body the space generator
+tags `Theme::GasGiant`, `Theme::TidallyLocked` or `Theme::RingWorld` now lands on its own
+world (`place::planet_theme_of`) instead of the rocky placeholder. Nothing of space generation
+moved (`GOLDEN_SPACE_DIGEST` unchanged), nor of home generation (V1-V10, `GOLDEN_V11_DIGEST`
+unchanged).
+
+### Registration (`crate::exotic`, `exotic::hooks`)
+
+- **Theme ids 12-14** (`exotic::{GAS_GIANT, LOCKED_WORLD, RING_WORLD}`), appended to
+  `planet::theme::PLANET_THEMES` after three **reserved** slots 9-11 (the rocky ground under
+  their own ids, named "Reserved") that hold planets-c's place. TODO-SEAM w13-integrator:
+  stacking planets-c replaces the reserved slots with its themes (only the three `reserved(..)`
+  lines in `theme.rs`).
+- Each theme is a **theme world** (`planet::ThemeWorld`: `GasGiantWorld`, `LockedWorld`,
+  `RingWorldGen`) reached through its hooks (`ExoticHooks` in `THEME_HOOKS`): its own surface,
+  its features over the generic strata (`planet::wilds::chunk_with`), its strata depth (the
+  wild worlds' `core_floor_row`: 800-2,500 rows on a planet scaled with the radius, a small
+  body strata to its true core), its settlement and landmark sites. The hooks carry the weather
+  table, the climate (core bias), the hazard tags, the creature spawn table, the music bed and
+  the theme's own secret (the framework's default vault stays out).
+- **Tiles**: `TileKind::Exotic(ExoticTile)` (50 tiles, kind codes `0x3200 + code`: gas giant
+  `0x32xx`, locked `0x33xx`, ring `0x34xx`, shared `0x35xx`; append only), with hardness,
+  durability, chip time (clouds give at a touch: 0.04 s), item, glow. The Tether's plate,
+  builder beacons and boss seals are indestructible.
+- **Weather** (`exotic::hooks::EXOTIC_WEATHER`, ids 320-323 of the planets-d range
+  `320..=351`): the gas giant's **superstorm** (rain particles, gloom), the locked world's
+  **nitrogen snow** (night-only: it falls only on the night side, -20 °C) and **terminator
+  gale** (dust), the ring world's **ring shower**. The rules read the body's own forecast
+  (`rules::storm_strength`), so the badge and the play agree.
+- **Hazard tags** for the stations' planet gear: gas giant high gravity (severe) and cold;
+  locked world heat and cold (both severe); ring world high gravity. `rules_own_hazards` is set:
+  the theme bites zone by zone through `frontier::planet_gear_tier` (a station tier is three
+  of its tiers; the top tier stops the hazard), so the stations' flat drain stands back.
+
+### The three worlds
+
+| | Gas giant | Tidally locked world | Ring world |
+|---|---|---|---|
+| Surface | none: billowing cloud tops (`cloud_top`) over a cloud deck with holes; **three sky cities** (`cities`): a plated deck at row -40 on an upturned keel of hull and glowing lift bladders, dock pylons at both ends, towers with lit windows and lanterns; the first is the settlement (its middle kept clear for the Siphra's town), the others a quarter lap either way | column 0 faces the star (the body clock's convention): **day side** of cracked hardpan, salt pans of crust, flat-topped mesas of banded stone; **twilight ring** (3 % of the lap either side of each terminator) of rolling lichen hills, glowmoss and meltwater pools; **night side** of nitrogen ice, sawtooth pressure ridges and ice spikes | ringfall plains of ring dust, craters with impact-glass rims, fallen ring monoliths leaning out of the ground; in the low sky (rows -132..-64) **the Skyring**, a band of floating debris islands of ring ice and ringstone studded with meteorite and cloud silver |
+| Strata (signature rule) | **Cloud Tops** (jet streams), **Storm Belt** (lightning), **Pressure Deep** (crushing pressure), **Diamond Rain** (diamond hail) - bands of open gas you fly through, cloud banks (soft) and glowing gas pockets you harvest (skystone, cloud silver, platinum, diamond) | **Divided Crust** (sun and shadow), **Geyser Fields** (geysers), **Stress Fractures** (tidal quakes), **Lodestone Core** (lodestone drift) - every stratum's rock, accent and ores differ by side (`locked::Side`): hot metals by day (copper, gold, uranium, ruby), cold stones by night (silver, emerald, platinum, diamond) | **Ringfall Plains** (meteor showers), **Impact Breccia** (venting ice), **Tether Roots** (live conduits), **Dense Core** (heavy pull) |
+| Everywhere | **buoyancy**: the thick gas holds an airborne rig up (30 % of its pull over the cloud tops, 45 % in the Cloud Tops, 55 % below) and caps its fall at 260 px/s | the two halves play apart from the surface down (materials, ores, hazards, creatures) | the Skyring's **microgravity** (two thirds of the pull held up) and its eastward drift |
+| Landmark (boss arena) | **the Eye**, half a lap from the settlement: a churning storm wall round a calm well, a cloud platform in it with the Thunderhead's seal and a relic | **the Gloam Gate** on the morning terminator: an arch with one pillar of sun glass and mesa stone and one of nitrogen ice over a levelled arena, the seal at its foot, a relic in its keystone | **the Tether**, half a lap from the settlement: an indestructible builder column from a levelled plaza up to an anchor platform in the Skyring (a relic on it), the Ring Warden's seal on the plaza |
+| Builder outpost (`builder_outpost`) | the Builders' Aerostat: a builder room on a platform held up by bladders, an eighth of a lap out | the Dark Observatory, out on the night side | the Tether Station, off the plaza |
+| Secret (small bodies) | a weather buoy's lantern over a cache in a cloud pocket | a spike over a cache frozen in mesa stone | a monolith over a cache in ringstone |
+| Settlement | the first city's clear deck (40 columns and up, wide enough for a town) | a levelled twilight meadow on the evening terminator | a levelled stretch of plain |
+| Music and bed | D mixolydian mallets drifting over a breathing pad, the gasbags' far calls; a deep howl through the bands, far thunder | a drone on A whose third turns from major (day) to minor (night), plucks, a clock that never moves on; a thin wind, ice ticking | C lydian FM bells wheeling round a pulsing bass, a shimmer; resonant beating tones, a turning sweep, debris pings |
+
+The secret stands three eighths of a lap from the settlement on every small body (crater
+rocks and moons up to radius 1,000; the space generator tags none of these themes small, so
+it shows on test and future bodies). The settlement, landmark and outposts are levelled
+through `planet::wilds::{site_weight, ease}`.
+
+### Signature rules (`world/exotic.rs`, schedules in `exotic::rules`)
+
+| Rule | What it does | Counter |
+|---|---|---|
+| jet streams (Cloud Tops) | lanes 24 rows deep blow east and west by turns at 110 px/s (twice in a superstorm) and carry rigs and pilots | ride them, or drill (braces) |
+| lightning (Storm Belt) | per 48 x 60 cell and 5 s period, a column flickers for 1.5 s, then a bolt burns 0.3 s down it: rigs within a column of it take 16 x the tier's scale | move out of the flicker |
+| crushing pressure (Pressure Deep, Diamond Rain) | warned (event, HUD gauge, message) from 60 rows above the band; then 1.5 to 9 hull a second (x tier) growing through the band | gravity struts (planet gear); top tier stops it |
+| diamond rain (Diamond Rain) | per 24 x 40 cell and 3 s, a hailstone's shadow grows for 1.8 s, then it lands: a blow within 1.8 tiles and a `DiamondHail` tile left on top | move off the shadow; mine the diamond |
+| sun and shadow (surface, Divided Crust) | heat on the day side, cold on the night side, growing from the terminator to noon and midnight (2.4 a second x tier at full), half under rock, none in the twilight | heat shielding, cold insulation, or shade |
+| geysers (Geyser Fields) | each vent (40 x 30 cells) hisses for 2 s, then blows 2.5 s every 10 s: a plume up its open chimney (16 rows) throws rigs and pilots up at 380 px/s and bites (steam or nitrogen) | ride it as a lift; gear |
+| tidal quakes (Stress Fractures) | every 40 s a 5 s rumble, then the fault rubble over each rig there (open ground under it) falls as boulders with a short warning | stand under solid rock |
+| lodestone drift (Lodestone Core) | drags rigs toward the sunward meridian at 55 px/s | drill to brace |
+| meteor showers (plains) | per 48 columns and 7 s (three times as often in a ring shower), a meteor whistles in with a growing shadow and lands: a blow and a `Meteorite` left | move; the Skyring's islands shelter |
+| venting ice (Impact Breccia) | drilling a buried ring-ice lens kicks the rig back at 340 px/s | brace for it |
+| live conduits (Tether Roots) | a live conduit shocks a rig touching it (6 a second x tier); drilling its junction darkens the run (flood fill, 160 tiles; deep ring tiles mirrored) | cut the junction |
+| dense core | half again the pull | gravity struts |
+
+Everything is a pure function of the ground, the terrain and world time (hashed per cell and
+period), so nothing is saved and every tick rate plays alike; the renderer draws the tells
+from the same functions. Hail and meteorites never fill a ring tile a rig or pilot stands in
+(a deep band's ring tile spans several strip cells). A rig touching down on a city deck or
+the Tether's anchor hears the docking chime (`CityDocked`, read off the tick's touchdown).
+
+### Creatures (`world/enemies/exotic.rs`; twelve appended `EnemyKind`s)
+
+| World | Neutral fauna | Hunters |
+|---|---|---|
+| Gas giant | drift ray (glides in wide loops, veers from rigs; flocks), gasbag (megafauna; drifts about its patch, rises away once struck) | storm eel (Storm Belt and below; crackles, then lunges), vapour stinger (cloud-top swarm) |
+| Locked world | dusk grazer (twilight herds), sunbasker (day side; bolts from rigs) | scorch mite (day-side swarm), frost stalker (night side; **hunts by motion**: a rig standing still is lost to it) |
+| Ring world | ringhopper (plains and Skyring; bolts), shardback (armoured grazer) | tether drone (builder machine; ranged), void mite (breccia and Skyring swarm) |
+
+The spawner (`advance_exotic_creatures`, every second, 22 % a second at Normal under a local
+cap of 3 on the surface or Skyring and 4 below) picks from the zone's roster (on the locked
+world the side's), out of every rig's view, through `site_fits`; no hunter appears on safe
+ground, nothing in a boss's arena. Everything moves through the enemy body rules in the
+planet's local frame. The surface is no refuge (`exotic_safe_zone`: only the settlement,
+bases and placed infrastructure). Tiers follow the wild worlds (8 on the surface, one more per
+stratum to 11, one more two sectors from home; `exotic_tier`). Fauna are spared by auto-aim.
+
+### Theme bosses (`exotic::boss`, `world/enemies/exotic.rs`; three appended `EnemyKind`s)
+
+| World | Boss | Attacks (each told first: 1.5 s, 1.1 s once it rages below half health) | Weak point |
+|---|---|---|---|
+| Gas giant | **the Thunderhead**, a living storm cloud with slit eyes and a lightning heart (40 x 26 art px at 1.5x) | **bolt salvo** (three columns glow, five when it rages, then strike), **gale** (rigs blown away from it for 1.8 s), **dive** (a dash at the told spot) | after a salvo its heart lies open |
+| Locked world | **the Gloamwarden**, a colossus half frozen and half scorched (30 x 40 at 1.5x) | **sun slam** (its arm rises; a shockwave along the floor 16 tiles each way: be two rows up and it passes under), **frost shards** (columns frost over, then shards fall) | after a slam its chest cracks open |
+| Ring world | **the Ring Warden**, a builder ring round a teal core (36 x 34 at 1.5x) | **beam sweep** (a row across the arena glows, then burns: change height), **drone call** (two tether drones, at most three) | after a sweep its core vents |
+
+- A live rig stepping into the arena while the seal (`ExoticTile::BossSeal`) stands wakes it
+  (`BossAwoke`); every rig 30 tiles clear puts it back to sleep at full health (nothing is lost
+  by running; nothing counts down). Its step lives in `EnemyState::volley` (rest, tell, strike,
+  open), the told spot in `waypoint`, the rage in `phase`; the generic mode stays idle so no
+  generic timer turns a tell into a strike. Its marks are a pure function of the arena, the
+  attack and the told spot (`boss::marks`, `mark_hits`), drawn by the renderer as they strike.
+- It takes 2.5 times the damage while open (`exotic_damage_factor`). Beaten, its seal turns
+  into its trophy by rule (`StormTrophy`: a wind astrolabe, `GloamTrophy`: a star core,
+  `AnchorTrophy`: a machine sigil) and it drops a hoard (fourteen of the richer ore and up, ten
+  of the common, two core shards). The terrain keeps the win: it never wakes again
+  (`WorldState::exotic_boss_beaten`). On a Peaceful world the seal opens to a rig that reaches
+  it.
+- Contact boxes and hit areas are fitted to the drawn bodies (the game's art test holds them).
+
+### Events, formats
+
+- `GameplayEventKind::Exotic { what: ExoticEvent, player_id, x, y }`, netcode codes 1020-1039:
+  lightning tell and strike, pressure warning, diamond hail, geyser hiss and erupt, quake
+  rumble and shock, meteor incoming and impact, ice vented, conduit shock and cut, hazard bite,
+  storm rising, boss awoke, boss tell, boss defeated, relic found, city docked.
+- `PROTOCOL_VERSION` **21** (this track's one bump: the exotic tiles, themes, creatures and
+  events). No save format bump and no world field or section: the rules keep no state, a
+  boss's fight lives in its entity (saved with its store) and its win in the terrain.
+- Golden digests: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` unchanged. The exotic
+  worlds are pinned by `exotic::tests::THEME_DIGESTS` (each world at R = 600). Gas-giant,
+  locked and ring bodies of a Wave 12 save held the rocky ground; such a body now regenerates
+  as its new world (the Wave 12 "a body whose ground a newer build regenerated loads fresh"
+  rule).
+
+### Game side
+
+- Tile art (`rendering/terrain/tile_art/exotic_art.rs`): every tile in palette ramps (cream
+  puffs, ochre swirls, blue haze streaks, soot with glints, glowing gas bubbles, cut diamond,
+  liquid silver, riveted deck plates, hull seams, veined bladders, lilac towers with lit
+  windows, lanterns, the churning eye wall; cracked hardpan, salt, sun-glass facets, banded
+  mesa, pale nitrogen ice with a pink blush, frost gravel, spikes, lichen, glowmoss, sulphur
+  vent rock, frost-veined cryo rock, vent mouths, fractures, rubble, lodestone field lines;
+  ring dust, breccia clasts, banded ring ice, ringstone, the meteorite's lattice, the Tether's
+  glowing seam, cables live and dead, junction boxes, the dense core, monoliths, impact
+  glass; builder plate, beacons, the seal's glyph ring, the trophies and relics). The gas
+  giant's open gas below the cloud tops is a haze of the band's colours that darkens band by
+  band; tunnels show the side's or stratum's back wall; no grass grows on an exotic world.
+- Sprites (`rendering/pixel_art/sprites/exotic.rs`, `pd_enemy_*`): fifteen creatures and
+  bosses, animated (wings, sacs, strides, the eel's crackle, the stalker's crouch, the drone's
+  lens, each boss's idle, tell and open frames, the Gloamwarden's sun arm and frost arm),
+  generated from shape sketches (ellipses, polygons, strokes; shaded and outlined) and kept as
+  rows.
+- Round ground (`rendering/space/{view,live,polar}.rs`, `ExoticMark`): the Storm Belt's
+  flickering columns (a slow pulse, never a strobe) and bolts, hail and meteors falling onto
+  their growing shadows, geyser plumes (wisps while hissing, a jet while blowing), and an awake
+  boss's told columns, rows, floor shockwaves and gale. From space a ring world's (and a ringed
+  gas giant's) great ring is drawn as a dense belt round the body.
+- HUD (`rendering/exotic_hud.rs`): the world and band or stratum (and the side), the rule,
+  the hazards biting without the gear, the pressure gauge on the way down, a quake's rumble;
+  an awake boss's name, health bar (gold while open) and what it winds up.
+- Audio (`audio/patch/exotic.rs`, appended at the end of `patches!`): three music beds, three
+  ambience beds, the bosses' fight loop and sixteen one-shots (`pd_*`); the director plays a
+  seat's world's music and bed (a gas giant's bed keeps up in the open bands; the boss's loop
+  replaces the music while it is awake near the seat); messages and cues for the events.
+- Scenes (`scene_capture/exotic_scenes.rs`, 21): `exotic_{gas_giant,locked,ring}_*` from
+  space, a sky city, the cloud tops, the Eye with the Thunderhead awake, the Storm Belt with a
+  column flickering, the Diamond Rain; the day side, the twilight settlement, the night side,
+  the Gloam Gate with the Gloamwarden, a geyser blowing, the Stress Fractures; the ringfall
+  plains with a meteor's shadow, the Skyring, the Tether with the Ring Warden, the conduits;
+  each world's creatures and boss lined up.
+
+### Tests
+
+- `exotic::tests` (15): registration and the space tags, the reserved ids, digests and purity,
+  seamless wrap, strata depth (800-2,500 rows on planets, the true core on small bodies),
+  every stratum's rule found, the gas giant's open bands, gas pockets, cities and level deck,
+  the locked world's three sides (surfaces, sun and shadow, the twilight settlement), the
+  Skyring and the Tether, landmarks, arenas, outposts and level sites (and the theme's site
+  finder is the aliens'), small-body secrets, hazard tags, tile codes, the schedules telling
+  before they strike, the boss marks (a gap to dodge into; the slam passes under a flyer), the
+  space report and real space bodies of each tag.
+- `world::exotic_tests` (24): **a digging bot reaches every stratum and the core chamber of an
+  R = 640 body and every stratum of an R = 5,000 planet of each theme**; buoyancy, jet streams
+  (and bracing), a bolt told then striking, the pressure warned then crushing then braced,
+  diamond hail, the three sides' bite and heat shielding, a geyser's lift, a quake's rubble,
+  the lodestone's pull, a meteor and its meteorite, venting ice, conduits and their cut, the
+  Skyring's lift and the dense core's pull; the spawner's natives; fauna never hunting; the
+  frost stalker's eye for motion; each boss waking, telling and striking, taking more while
+  open, its seal turning trophy, sleeping healed when the crew leaves, a Peaceful world opening
+  the seal, the slam's shockwave; the settlement's safety; a minute of play on each world
+  replaying bit for bit at 30 and 60 Hz.
+
+### Seams (TODO-SEAM)
+
+- **w13-integrator**: planets-c's themes replace the reserved ids 9-11 (`planet/theme.rs`);
+  collapse `PROTOCOL_VERSION` 21 with the other tracks'; the appended `EnemyKind`s, tiles,
+  patches, weather kinds, events and scenes stack by appending. Consider forcing the Siphra
+  (who live on gas giants) onto every gas giant so each sky city has its folk (the aliens'
+  atlas settles one liked planet in five today; the cities stand regardless).
+- **w13-endgame**: the hunt list reads `exotic::boss::THEME_BOSSES` (style, kind, name) and
+  `WorldState::exotic_boss_beaten` for each body it names.
+- **w13-story**: `exotic::builder_outpost(ground)` names each world's builder outpost (its
+  column, floor and beacon tile, an indestructible `BuilderBeacon`) for the galaxy story to
+  target; `ExoticStyle::outpost_name` names it.
+- **w13-artaudio**: the sprites are generated shape sketches and want an artist's pass, the
+  bosses most; the planets still draw as plain discs from orbit (the gas giant has the banded
+  disc; the locked world borrows the desert look, the ring world the machine look).
+
+### Known limits
+
+- The creature lineup scenes use the flat planet world (the ordinary renderer); the round
+  ground's tells (bolts, shadows, plumes, boss marks) are drawn only there.
+- Creatures keep the generic enemy gravity (not the body's), like every other creature.
+- Gameplay events carry no store (planets-b's note): a player-less tell (a bolt, a geyser, a
+  meteor's whistle) on one body can reach a split-screen seat on another body as a cue; the
+  messages are only for seats on a body and their own rig.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

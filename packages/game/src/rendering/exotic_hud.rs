@@ -202,9 +202,9 @@ fn draw_boss_bar(
         return;
     };
     let name = state.kind.name();
-    let width = (rect.width * 0.5).clamp(120.0, 320.0);
+    let width = (rect.width * 0.25).clamp(120.0, 200.0);
     let x = rect.x + (rect.width - width) * 0.5;
-    let y = rect.y + 18.0;
+    let y = rect.y + 70.0;
     draw.draw_rectangle_rec(
         Rectangle::new(x - 4.0, y - 14.0, width + 8.0, 30.0),
         fade(INK, 0.6),

@@ -670,6 +670,22 @@ pub const ALL: &[&SpriteDef] = &[
     &outlands::GRAVEWARDEN,
     &outlands::SHADE,
     &outlands::ASHEN_SOVEREIGN,
+    // The exotic worlds' creatures and bosses (Wave 13 planets-d).
+    &exotic::DRIFT_RAY,
+    &exotic::GASBAG,
+    &exotic::STORM_EEL,
+    &exotic::VAPOR_STINGER,
+    &exotic::THUNDERHEAD,
+    &exotic::DUSK_GRAZER,
+    &exotic::SUNBASKER,
+    &exotic::SCORCH_MITE,
+    &exotic::FROST_STALKER,
+    &exotic::GLOAMWARDEN,
+    &exotic::RINGHOPPER,
+    &exotic::SHARDBACK,
+    &exotic::TETHER_DRONE,
+    &exotic::VOID_MITE,
+    &exotic::RING_WARDEN,
 ];
 
 #[cfg(test)]

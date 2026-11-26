@@ -337,6 +337,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `planet::outlands::OutlandsEvent`). No world field or section: the outland rules keep no
 ///   state of their own (the gear works, vents, ghost lights and storms are pure functions of
 ///   the planet's seed and world time; a beaten boss's spent seal is a terrain edit).
+/// * Planets-d (the gas giant, tidally locked and ring worlds): `TileKind::Exotic(ExoticTile)`
+///   tiles (kind codes `0x3200..=0x35FF`) in terrain ops, store tile ops, chunk refreshes and
+///   keyframes; three appended planet themes (ids 12-14; 9-11 reserved for planets-c) in
+///   `PlanetParams`; fifteen appended `EnemyKind`s (`DriftRay` .. `RingWarden`, the theme
+///   bosses among them) in entity records; the exotic events 1020-1039
+///   (`GameplayEventKind::Exotic` with `exotic::ExoticEvent`). No world field or section: the
+///   rules are pure schedules of the planet's seed and world time, a boss's fight lives in its
+///   entity and its win in the terrain (its seal turned trophy).
 pub const PROTOCOL_VERSION: u8 = 21;
 
 /// One client input frame: the controls and actions for exactly one tick.

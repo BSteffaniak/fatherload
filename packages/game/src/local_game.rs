@@ -2216,6 +2216,37 @@ impl LocalGame {
                         }
                     }
                 }
+                // The exotic worlds (Wave 13 planets-d): what the sky, the ground or the boss did.
+                GameplayEventKind::Exotic {
+                    what, player_id, ..
+                } => {
+                    use fatherload_simulation::exotic::ExoticEvent as X;
+                    let text = match what {
+                        X::PressureWarning => {
+                            "PRESSURE RISING: the deep crushes bare hulls (gravity struts brace)."
+                        }
+                        X::GeyserErupt => "The geyser blows! Ride the plume or stand clear.",
+                        X::QuakeRumble => "A tidal quake rumbles: get out from under the rubble!",
+                        X::IceVented => "The ring ice vents: the blast throws you back.",
+                        X::ConduitShock => "ZAP! A live conduit: cut its junction to kill the run.",
+                        X::ConduitCut => "The junction is cut: the conduit goes dark.",
+                        X::StormRising => "The storm is rising.",
+                        X::BossAwoke => "Something vast wakes in the arena!",
+                        X::BossDefeated => "It falls! Its seal opens into a trophy: dig it out.",
+                        X::RelicFound => "A relic of this world!",
+                        X::CityDocked => "Docked. Welcome aboard the sky city.",
+                        _ => continue,
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        let here = matches!(
+                            self.runtime.world().place_of(*player),
+                            fatherload_simulation::place::Place::OnBody(_)
+                        );
+                        if here && player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
                 // Round bodies (Wave 11): a bad touchdown tells the pilot what happened.
                 GameplayEventKind::Planet {
                     what, player_id, ..

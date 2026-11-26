@@ -1027,3 +1027,31 @@ fn the_settlement_is_safe_and_the_wilds_are_not() {
             .is_some_and(|tier| tier >= rules::EXOTIC_BASE_TIER)
     );
 }
+
+#[test]
+fn creatures_set_down_by_hand_stay_where_they_are_put() {
+    for style in ExoticStyle::ALL {
+        let mut world = world_on(style, 1_200, 30);
+        world.set_enemy_difficulty(EnemyDifficulty::Normal);
+        let g = ground(&world);
+        let site = settlement_site(&g).expect("a site");
+        place(&mut world, site.first, site.floor, 1.0);
+        let ids: Vec<_> = style
+            .creatures()
+            .into_iter()
+            .enumerate()
+            .map(|(index, kind)| {
+                let column = site.first + 4 + i32::try_from(index).unwrap_or(0) * 4;
+                let (x, y) = world.frame().centre_of(column, site.floor - 3);
+                world.spawn_enemy(kind, x, y)
+            })
+            .collect();
+        run_for(&mut world, 200);
+        for id in ids {
+            assert!(
+                world.enemy_parts(id).is_some(),
+                "{style:?}: a creature vanished"
+            );
+        }
+    }
+}

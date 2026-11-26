@@ -219,6 +219,7 @@ impl LiveSpace {
 
     /// Everything round `at` (see the type docs).
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one block per kind of thing in a system")]
     pub fn gather(seed: u64, at: WorldPos) -> Self {
         let space = Space::shared(seed);
         let centre = SpaceTile::of_pos(at);
@@ -245,6 +246,17 @@ impl LiveSpace {
                     }
                     .mix();
                     live.bodies.push(body_view(body, id));
+                    // A ring world's great ring (and a ringed gas giant's): a dense belt of
+                    // ice and rock round the body (Wave 13 planets-d).
+                    if let Some(ring) = body.ring {
+                        live.belts.push(BeltView {
+                            centre: body.centre.pos(),
+                            radius_tiles: (ring.inner + ring.outer) as f32 * 0.5,
+                            width_tiles: ring.outer.saturating_sub(ring.inner) as f32,
+                            density: 3.0,
+                            seed: (id ^ 0x5249_4E47) as u32,
+                        });
+                    }
                     live.days.push((!body.is_home()).then(|| {
                         fatherload_simulation::bodylife::BodyClock::new(
                             body.day_seconds,
@@ -796,24 +808,33 @@ fn exotic_things(scene: &crate::render_snapshot::PlaceScene<'_>, millis: u64) ->
                     strike,
                 },
             ),
-            boss::BossMark::Row { row, left, right } => push(
-                &mut things,
-                left,
-                row + 1,
-                ExoticMark::BossRow {
-                    columns: u16::try_from(right - left).unwrap_or(0),
-                    strike,
-                },
-            ),
-            boss::BossMark::Floor { floor, left, right } => push(
-                &mut things,
-                left,
-                floor,
-                ExoticMark::BossFloor {
-                    columns: u16::try_from(right - left).unwrap_or(0),
-                    strike,
-                },
-            ),
+            // Rows and floors in short pieces (a thing off the view is not drawn).
+            boss::BossMark::Row { row, left, right } => {
+                for start in (left..right).step_by(6) {
+                    push(
+                        &mut things,
+                        start,
+                        row + 1,
+                        ExoticMark::BossRow {
+                            columns: u16::try_from((right - start).min(6)).unwrap_or(0),
+                            strike,
+                        },
+                    );
+                }
+            }
+            boss::BossMark::Floor { floor, left, right } => {
+                for start in (left..right).step_by(6) {
+                    push(
+                        &mut things,
+                        start,
+                        floor,
+                        ExoticMark::BossFloor {
+                            columns: u16::try_from((right - start).min(6)).unwrap_or(0),
+                            strike,
+                        },
+                    );
+                }
+            }
             boss::BossMark::Gale { .. } => {
                 let tile = scene.frame.tile_at(body.x, body.y);
                 push(&mut things, tile.x, tile.y, ExoticMark::Gale);

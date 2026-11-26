@@ -188,7 +188,7 @@ pub fn arena(ground: &PlanetGround) -> Option<Arena> {
                 },
                 home: TilePosition {
                     x: centre,
-                    y: gas_giant::EYE_FLOOR - 14,
+                    y: gas_giant::EYE_FLOOR - 8,
                 },
                 centre,
                 half_width: i32::try_from(gas_giant::EYE_HALF).unwrap_or(34) - 2,
@@ -226,7 +226,7 @@ pub fn arena(ground: &PlanetGround) -> Option<Arena> {
                 },
                 home: TilePosition {
                     x: centre - 14,
-                    y: floor - 14,
+                    y: floor - 7,
                 },
                 centre,
                 half_width: i32::try_from(ring::PLAZA_HALF).unwrap_or(40),
