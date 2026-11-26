@@ -441,4 +441,91 @@ fn diff_json(path: &str, host: &serde_json::Value, client: &serde_json::Value, d
     }
 }
 
+/// Co-op free flight split across the galaxy online (Wave 13 QA review): the host and two
+/// clients fly in the Space store, one client thousands of sectors from the others, so free
+/// flight ticks in two frames (the first group's and the far group's own). Every client still
+/// matches the host every frame, and each sees its own rig exactly where the host has it.
+#[test]
+fn world_free_flight_split_far_apart_converges_online() {
+    let mut harness = harness();
+    let host_player = seat_host(&mut harness, None);
+    let alex = harness.add_client_as(None, Some(ALEX), "Alex");
+    let sam = harness.add_client_as(None, Some(SAM), "Sam");
+    wait_in_game(&mut harness);
+    let alex_player = harness.clients[alex].session.player().expect("alex");
+    let sam_player = harness.clients[sam].session.player().expect("sam");
+    harness.host.submit_local_input(
+        host_player,
+        ControlState::default(),
+        vec![warp(Place::Space)],
+    );
+    harness.clients[alex]
+        .queued_actions
+        .push(warp(Place::Space));
+    harness.clients[sam].queued_actions.push(warp(Place::Space));
+    harness.run_for(Duration::from_secs(3));
+    let mut world = harness.world().clone();
+    for player in [host_player, alex_player, sam_player] {
+        assert_eq!(world.place_of(to_sim_player(player)), Place::Space);
+    }
+    // Sam is sent three thousand sectors east (millions of tiles).
+    let rig = world
+        .player_mut(to_sim_player(sam_player))
+        .expect("sam's rig");
+    rig.flight.pos.sector_x += 3_000;
+    harness.host.new_epoch(world);
+    let mut split = 0_u32;
+    for second in 0..20_u64 {
+        let controls = if second % 4 < 2 {
+            ControlState::new(0.6, true, false)
+        } else {
+            ControlState::new(-0.4, false, false)
+        };
+        harness
+            .host
+            .submit_local_input(host_player, controls, Vec::new());
+        harness.run_for(Duration::from_secs(1));
+        if harness.world().space_groups().len() > 1 {
+            split += 1;
+        }
+    }
+    assert!(split >= 10, "free flight ran split ({split} seconds)");
+    harness.settle(Duration::from_secs(2));
+    // The host's rigs tick by tick, to compare each client's authority at its own tick.
+    let mut history: std::collections::BTreeMap<
+        (u64, fatherload_simulation::PlayerId),
+        (Place, fatherload_simulation::position::WorldPos),
+    > = std::collections::BTreeMap::new();
+    for _ in 0..90 {
+        harness.step();
+        let host = harness.world();
+        for player in [host_player, alex_player, sam_player] {
+            let me = to_sim_player(player);
+            if let Some(at) = host.rig_world_pos(me) {
+                history.insert((host.simulation_tick().get(), me), at);
+            }
+        }
+    }
+    assert_converged(&harness);
+    assert_bounded(&harness);
+    let mut compared = 0;
+    for client in &harness.clients {
+        assert_eq!(client.hash_mismatches, 0);
+        let me = to_sim_player(client.session.player().expect("in game"));
+        let seen = client.session.authority().expect("in game");
+        let Some((host_place, host_pos)) = history.get(&(seen.simulation_tick().get(), me)) else {
+            continue;
+        };
+        let (place, pos) = seen.rig_world_pos(me).expect("its rig");
+        assert_eq!(place, *host_place);
+        let (dx, dy) = host_pos.delta_f64(pos);
+        assert!(
+            dx.abs() < 0.01 && dy.abs() < 0.01,
+            "{me:?} sees its rig where the host has it: off by ({dx}, {dy})"
+        );
+        compared += 1;
+    }
+    assert_eq!(compared, 2, "both clients compared at their own ticks");
+}
+
 use crate::simulation::NetSimulation as NetSimulationTick;
