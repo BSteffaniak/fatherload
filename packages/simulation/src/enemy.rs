@@ -6489,7 +6489,9 @@ mod tests {
             let giant = kind == EnemyKind::Leviathan
                 || kind == EnemyKind::GatekeeperColossus
                 || kind.is_colossus_part()
-                || kind == EnemyKind::StarHeart;
+                || kind == EnemyKind::StarHeart
+                // ... and the outland worlds' theme bosses (Wave 13), in their own lairs.
+                || kind.is_outland_boss();
             assert!(
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"
@@ -6500,6 +6502,8 @@ mod tests {
             assert!(
                 stats.contact_damage > 0.0
                     || kind.is_frontier_fauna()
+                    // ... nor the outland worlds' gentler fauna (Wave 13).
+                    || kind.is_outland_fauna()
                     || matches!(
                         kind,
                         EnemyKind::Crestback | EnemyKind::Glimmerfin | EnemyKind::Rimeskipper
