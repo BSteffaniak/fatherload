@@ -53,7 +53,8 @@ fn world_at(hz: u32) -> WorldState {
         rig.hazard_gear = crate::protection::HazardGear::MAXED;
         rig.hull = rig.max_hull();
         rig.fuel = rig.fuel_capacity;
-        rig.credits = 50_000;
+        // On the space credit scale (50,000 at Wave 13's scale of 20).
+        rig.credits = crate::endgame::economy::space_credits(2_500);
     }
     world
 }

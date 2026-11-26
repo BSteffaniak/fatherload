@@ -316,8 +316,10 @@ fn a_late_rig_buys_its_way_to_tier_two_but_tier_three_waits_for_belt_ore() {
     for line in ShipLine::ALL {
         assert_eq!(gear.line(line), 2, "{line:?}: credits alone stop at tier 2");
     }
+    // A head start (Wave 14 finish: space pays twice what it did near home, so the purse
+    // buys a little less of it; about two fifths are left).
     let left = world.player(PLAYER).expect("rig").credits;
-    assert!(left > purse / 2, "the purse is a head start ({left} left)");
+    assert!(left > purse / 3, "the purse is a head start ({left} left)");
     let events = fit(&mut world, ShipLine::Engine);
     assert!(station_refused(&events, StationRefusal::Materials));
     // With the bill's belt ore aboard, tier 3 fits and the ore is spent.

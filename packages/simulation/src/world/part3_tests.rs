@@ -90,7 +90,8 @@ fn every_planet_theme_is_a_real_world_with_its_look_music_and_settlements() {
 #[test]
 fn every_wave_13_theme_boss_is_on_the_hunt_list() {
     let list = hunt::hunt_list();
-    assert_eq!(list.len(), 3 + WAVE_13_THEMES.len());
+    // ... and the six Wave 12 worlds' (Wave 14 finish).
+    assert_eq!(list.len(), 3 + WAVE_13_THEMES.len() + 6);
     for theme in WAVE_13_THEMES {
         let quarry = hunt::Quarry::Theme(theme.0);
         assert!(list.contains(&quarry), "{theme:?}");
@@ -121,8 +122,9 @@ fn every_wave_13_theme_boss_is_on_the_hunt_list() {
                 .expect("landable");
             assert_eq!(params.theme.0, theme);
             let ground = PlanetGround::new(params);
-            let has_lair =
-                boss_lair(&ground).is_some() || crate::exotic::boss::arena(&ground).is_some();
+            let has_lair = boss_lair(&ground).is_some()
+                || crate::exotic::boss::arena(&ground).is_some()
+                || crate::planet::lairs::lair_of(&ground).is_some();
             assert!(has_lair, "{quarry:?}: its world has the boss's lair");
         }
     }
@@ -268,7 +270,7 @@ fn the_completion_screen_counts_the_galaxy_story() {
     let facts = world.completion_facts(PLAYER);
     assert_eq!(facts.story_total, CHAPTER_COUNT);
     assert_eq!(facts.story_done, 0);
-    assert_eq!(facts.theme_bosses_total, 6);
+    assert_eq!(facts.theme_bosses_total, 12);
     world.galaxy_story.chapter = 4;
     assert_eq!(world.completion_facts(PLAYER).story_done, 4);
     world.galaxy_story.chapter = CHAPTER_COUNT;
