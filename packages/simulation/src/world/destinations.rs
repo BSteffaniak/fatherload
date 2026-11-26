@@ -42,6 +42,8 @@ const CLEAR_ENEMY_TILES: f32 = 24.0;
 const BOSS_HEALTH: f32 = 1_500.0;
 /// Space tiles a player destination stops short of the player it names.
 const BESIDE_PLAYER_TILES: i64 = 40;
+/// Tiles a flagship's lair is arrived at from (well inside its reach, `LAIR_REACH_TILES`).
+const FLAGSHIP_STANDOFF_TILES: i64 = 3_000;
 
 /// A travel order queued in the tick (run after its last pass).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -239,6 +241,7 @@ impl WorldState {
                     Some(found)
                 })
                 .collect(),
+            DestinationKind::FactionBossLair => self.flagship_lairs(),
             _ if kind.in_space() => {
                 if !self.space_enabled() {
                     return Vec::new();
@@ -278,6 +281,38 @@ impl WorldState {
                 destination::home::candidates(&query, kind, filter)
             }
         }
+    }
+
+    /// The space factions' flagships in their lairs (Wave 14 integration): stopped a safe
+    /// distance off the lair's point, well inside its reach, so the boss comes.
+    fn flagship_lairs(&self) -> Vec<Destination> {
+        let kind = DestinationKind::FactionBossLair;
+        crate::hostiles::Faction::ALL
+            .into_iter()
+            .filter_map(|faction| {
+                let lair = self.boss_lair(faction)?;
+                let tile = SpaceTile::of_pos(lair.pos).offset(0, -FLAGSHIP_STANDOFF_TILES);
+                let name = format!("The {} flagship", faction.name());
+                let mut found =
+                    Destination::new(DestinationId::new(kind, Place::Space, tile.x, tile.y), name);
+                found.info.boss = Some(faction.boss().name().to_owned());
+                let space = crate::space::Space::shared(self.world_seed());
+                found.info.system = space
+                    .systems_near(
+                        SpaceTile::of_pos(lair.pos),
+                        crate::space::SPACE_SECTOR_TILES,
+                    )
+                    .first()
+                    .and_then(|(system, _)| space.system(*system))
+                    .map(|system| system.name);
+                found.info.place = found.info.system.as_ref().map_or_else(
+                    || "free space".to_owned(),
+                    |system| format!("{system} system"),
+                );
+                found.info.residents = vec![faction.name().to_owned()];
+                Some(found)
+            })
+            .collect()
     }
 
     /// The systems the Archive's charts lead to: every chart the crew holds, else the ones the

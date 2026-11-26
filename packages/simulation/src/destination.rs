@@ -124,6 +124,9 @@ pub enum DestinationKind {
     Bookmark,
     /// A recent place on the player's back-stack.
     Recent,
+    /// A space faction's flagship in its lair (the pirates', the swarm's, the machines'; Wave
+    /// 14 integration): arriving inside the lair's reach meets the boss.
+    FactionBossLair,
 }
 
 /// The Atlas's categories (W14-C's side bar).
@@ -141,7 +144,7 @@ pub enum DestinationCategory {
 
 impl DestinationKind {
     /// Every kind, in declaration order.
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 36] = [
         Self::Descent,
         Self::Stratum,
         Self::Depth,
@@ -177,6 +180,7 @@ impl DestinationKind {
         Self::Player,
         Self::Bookmark,
         Self::Recent,
+        Self::FactionBossLair,
     ];
 
     /// The kind's number (its index in [`Self::ALL`]; events carry it).
@@ -234,6 +238,7 @@ impl DestinationKind {
             Self::Player => "player",
             Self::Bookmark => "bookmark",
             Self::Recent => "recent",
+            Self::FactionBossLair => "flagship",
         }
     }
 
@@ -252,7 +257,9 @@ impl DestinationKind {
             | Self::StoryLog
             | Self::GateSetPiece
             | Self::Moon => DestinationCategory::Places,
-            Self::BossArena | Self::ThemeBossLair => DestinationCategory::Bosses,
+            Self::BossArena | Self::ThemeBossLair | Self::FactionBossLair => {
+                DestinationCategory::Bosses
+            }
             Self::Village
             | Self::Settlement
             | Self::Outpost
@@ -281,7 +288,10 @@ impl DestinationKind {
         matches!(self.category(), DestinationCategory::Space)
             || matches!(
                 self,
-                Self::ThemeBossLair | Self::AlienTown | Self::BuilderOutpost
+                Self::ThemeBossLair
+                    | Self::AlienTown
+                    | Self::BuilderOutpost
+                    | Self::FactionBossLair
             )
     }
 
@@ -326,6 +336,7 @@ impl DestinationKind {
             "player" | "players" => Self::Player,
             "bookmark" | "bookmarks" | "mark" => Self::Bookmark,
             "recent" | "back" | "history" => Self::Recent,
+            "flagship" | "flagships" | "faction" | "fleet" => Self::FactionBossLair,
             _ => return None,
         })
     }
