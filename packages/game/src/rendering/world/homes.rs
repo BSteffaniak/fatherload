@@ -165,7 +165,7 @@ fn draw_sale_board(draw: &mut impl RaylibDraw, site: &PlotSite) {
     let ground = crate::view_frame::frame().row_px(site.ground_row);
     let pen = Pen::at(crate::view_frame::frame().col_px(site.left + 1), ground);
     let title = "FOR SALE";
-    let price = format!("{} cr", site.price);
+    let price = format!("{} cr", crate::credits_text::grouped(site.price));
     let width = text_art_width(title).max(text_art_width(&price)) + 8;
     let height = 24;
     pen.rect(draw, 4, -height - 12, 2, height + 12, SOIL);

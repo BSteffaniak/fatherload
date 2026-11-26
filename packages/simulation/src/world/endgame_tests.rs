@@ -187,7 +187,7 @@ fn dock_at(world: &mut WorldState, station: StationId) {
 
 /// Every station within `reach` sectors of home on the world seeded `seed`.
 fn stations_near(seed: u64, reach: i32) -> Vec<StationProfile> {
-    let galaxy = GeneratedSpace::new(seed);
+    let galaxy = GeneratedSpace::new(crate::space::SpaceSeed::from(seed));
     let space = galaxy.space();
     let mut out = Vec::new();
     for y in -reach..=reach {
@@ -224,7 +224,7 @@ fn a_belt_rock_gives_its_space_material_and_the_career_counts_it() {
     let mut world = world_of(SEED);
     // A first tick primes the milestones (silently).
     run(&mut world, 1);
-    let generated = GeneratedSpace::new(SEED);
+    let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
     let empty = crate::flight::systems::SystemsShared::default();
     let mut rock: Option<FlightBody> = None;
     'search: for reach in 0..4_i32 {
@@ -384,6 +384,12 @@ fn the_starwright_ship_and_the_heartline_drive() {
     }
     let after = world.ship_effects(PLAYER);
     assert_eq!(after.damage_scale, STARWRIGHT_DAMAGE);
+    // The hull softens a fight too (Wave 14 finish).
+    assert!((before.combat_scale - 1.0).abs() < f32::EPSILON);
+    assert_eq!(
+        after.combat_scale,
+        crate::endgame::works::STARWRIGHT_COMBAT_DAMAGE
+    );
     assert_eq!(after.engine_scale, STARWRIGHT_ENGINE);
     assert!(after.damage_scale < before.damage_scale);
     assert!(after.engine_scale > before.engine_scale);
@@ -551,7 +557,8 @@ fn estates_grow_on_alien_worlds_and_the_neighbours_call_once_a_day() {
     let mut world = world_of(ALIEN_SEED);
     let species = AlienSpecies::Vessi;
     let id: SpaceBodyKey = first_home(ALIEN_SEED, species).expect("a first home");
-    let params = crate::place::planet_params_for(ALIEN_SEED, id).expect("landable");
+    let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(ALIEN_SEED), id)
+        .expect("landable");
     let found: Arc<town::AlienTown> = Arc::clone(&town::towns_of(&params)[0]);
     let plot = found
         .buildings
@@ -703,7 +710,9 @@ fn landing_on_worlds_counts_toward_completion_and_the_achievements() {
                 })
                 .collect::<Vec<_>>()
         })
-        .filter(|key| crate::place::planet_params_for(SEED, *key).is_some())
+        .filter(|key| {
+            crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), *key).is_some()
+        })
         .take(2)
         .collect();
     assert_eq!(worlds.len(), 2, "two worlds near home");

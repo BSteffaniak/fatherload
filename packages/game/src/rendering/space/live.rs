@@ -202,7 +202,7 @@ pub const fn ore_colour(ore: space::AsteroidOre) -> Color {
 /// space sector the camera is in; the generator's own cache makes it cheap).
 #[derive(Clone, Debug, Default)]
 pub struct LiveSpace {
-    seed: u64,
+    seed: fatherload_simulation::space::SpaceSeed,
     /// The sector the gathering was centred on.
     around: Option<space::SpaceSector>,
     pub stars: Vec<StarView>,
@@ -292,7 +292,7 @@ impl LiveSpace {
 
     /// Refreshes the gathering for a camera at `at` in the world seeded `seed` (only when the
     /// camera moved to another space sector).
-    pub fn update(&mut self, seed: u64, at: WorldPos) {
+    pub fn update(&mut self, seed: fatherload_simulation::space::SpaceSeed, at: WorldPos) {
         let sector = space::SpaceSector::of_pos(at);
         if self.around == Some(sector) && self.seed == seed {
             return;
@@ -306,7 +306,7 @@ impl LiveSpace {
         clippy::too_many_lines,
         reason = "one block per kind of thing in a system"
     )]
-    pub fn gather(seed: u64, at: WorldPos) -> Self {
+    pub fn gather(seed: fatherload_simulation::space::SpaceSeed, at: WorldPos) -> Self {
         let space = Space::shared(seed);
         let centre = SpaceTile::of_pos(at);
         let mut live = Self {
@@ -331,7 +331,7 @@ impl LiveSpace {
                         body: body.index,
                     }
                     .mix();
-                    let settled = settled(seed, sector.coords, system.index, body);
+                    let settled = settled(seed.seed, sector.coords, system.index, body);
                     live.bodies.push(body_view(body, id, settled));
                     // A ring world's great ring (and a ringed gas giant's): a dense belt of
                     // ice and rock round the body (Wave 13 planets-d).
@@ -426,7 +426,7 @@ impl LiveSpace {
     /// rocks are, with their ore's glint.
     pub fn refresh_rocks(
         &mut self,
-        seed: u64,
+        seed: fatherload_simulation::space::SpaceSeed,
         at: WorldPos,
         reach_tiles: i64,
         mined: &fatherload_simulation::flight::systems::SystemsShared,
@@ -465,7 +465,7 @@ impl LiveSpace {
     ) -> SpaceRenderView<'a> {
         SpaceRenderView {
             camera,
-            sky_seed: self.seed,
+            sky_seed: self.seed.seed,
             seconds,
             stars: &self.stars,
             bodies: &self.bodies,

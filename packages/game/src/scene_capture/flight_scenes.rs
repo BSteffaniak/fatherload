@@ -499,7 +499,9 @@ fn split_places(stage: &mut SceneStage<'_>) {
 fn near_black_hole(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         space_world(world);
-        let galaxy = fatherload_simulation::space::Space::shared(SCENE_SEED);
+        let galaxy = fatherload_simulation::space::Space::shared(
+            fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+        );
         let nearest = (1..=6).find_map(|ring: i32| {
             let mut found = None;
             for y in -ring..=ring {

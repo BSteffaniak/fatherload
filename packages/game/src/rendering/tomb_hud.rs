@@ -89,7 +89,11 @@ fn draw_run_banner(
     let member = run.member(view.player_id);
     let unbanked = member.map_or(0, |member| member.unbanked);
     let banked = member.map_or(0, |member| member.banked);
-    let loot = format!("UNBANKED {unbanked} cr   BANKED {banked} cr");
+    let loot = format!(
+        "UNBANKED {} cr   BANKED {} cr",
+        crate::credits_text::grouped(unbanked),
+        crate::credits_text::grouped(banked)
+    );
     let status = match run.phase {
         RunPhase::Picking => "PICKING RELICS".to_owned(),
         RunPhase::Exploring if run.on_last_floor() && !run.boss_defeated => {
@@ -179,7 +183,10 @@ fn draw_run_banner(
     if y > top + COMPACT_DROP {
         let full = lines.clone();
         lines[0].0 = format!("FLOOR {}/{}", run.floor + 1, site.floors());
-        lines[1].0 = format!("{unbanked} cr  ({banked} BANKED)");
+        lines[1].0 = format!(
+            "{} cr  ({banked} BANKED)",
+            crate::credits_text::grouped(unbanked)
+        );
         if !relics.is_empty() {
             lines[2].0 = format!("{} RELICS", relics.len());
         }
@@ -478,10 +485,14 @@ pub(super) fn draw_tomb_summary(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
             format!("{} of {}", summary.floors, summary.floors_total),
             BONE,
         ),
-        SectionItem::stat("Banked", format!("{} cr", summary.banked), GOLD),
+        SectionItem::stat(
+            "Banked",
+            format!("{} cr", crate::credits_text::grouped(summary.banked)),
+            GOLD,
+        ),
         SectionItem::stat(
             "Lost",
-            format!("{} cr", summary.lost),
+            format!("{} cr", crate::credits_text::grouped(summary.lost)),
             if summary.lost > 0 { RED } else { FOG },
         ),
         SectionItem::stat(
@@ -568,7 +579,11 @@ pub(super) fn draw_tomb_codex(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
         SectionItem::stat("Tombs cleared", cleared.to_string(), MINT),
         SectionItem::stat("Guardians felled", trophies.to_string(), GOLD),
         SectionItem::stat("Runs", format!("{runs} ({finished} finished)"), SKY_LIGHT),
-        SectionItem::stat("Best haul", format!("{best} cr"), GOLD),
+        SectionItem::stat(
+            "Best haul",
+            format!("{} cr", crate::credits_text::grouped(best)),
+            GOLD,
+        ),
     ];
     let lore: Vec<SectionItem> = LORE_PAGES
         .iter()

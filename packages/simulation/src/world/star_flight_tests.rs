@@ -117,7 +117,7 @@ fn deep_space() -> WorldPos {
     use std::sync::OnceLock;
     static DEEP: OnceLock<WorldPos> = OnceLock::new();
     *DEEP.get_or_init(|| {
-        let galaxy = space::GeneratedSpace::new(settings().seed);
+        let galaxy = space::GeneratedSpace::new(crate::space::SpaceSeed::from(settings().seed));
         let home = space::home_star();
         let neighbour = galaxy
             .systems_near(home, 1)

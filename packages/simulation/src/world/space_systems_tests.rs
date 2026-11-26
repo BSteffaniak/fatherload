@@ -114,7 +114,9 @@ fn flight(world: &WorldState) -> RigFlight {
 
 fn galaxy() -> &'static Space {
     static SPACE: OnceLock<GeneratedSpace> = OnceLock::new();
-    SPACE.get_or_init(|| GeneratedSpace::new(SEED)).space()
+    SPACE
+        .get_or_init(|| GeneratedSpace::new(crate::space::SpaceSeed::from(SEED)))
+        .space()
 }
 
 /// Every sector within `reach` of home, nearest rings first.
@@ -134,7 +136,7 @@ fn sectors(reach: i32) -> Vec<SpaceSector> {
 
 /// The flight body of the first `kind` found near home (the flight bodies of its sector).
 fn first_body(kind: BodyKind, reach: i32) -> space::FlightBody {
-    let generated = GeneratedSpace::new(SEED);
+    let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
     for sector in sectors(reach) {
         let centre = crate::space::SpaceTile {
             x: sector.origin().x + crate::space::SPACE_SECTOR_TILES / 2,
@@ -321,7 +323,7 @@ fn a_nebula_fogs_the_scanner_and_says_so() {
 fn belt_rock() -> space::FlightBody {
     static ROCK: OnceLock<space::FlightBody> = OnceLock::new();
     *ROCK.get_or_init(|| {
-        let generated = GeneratedSpace::new(SEED);
+        let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
         let empty = crate::flight::systems::SystemsShared::default();
         for sector in sectors(4) {
             for system in &galaxy().sector(sector).systems {
@@ -426,7 +428,7 @@ fn a_stars_radiance_and_flare_heat_the_hull_with_a_warning_first() {
     // its worlds' plane (the open side).
     let mut found = None;
     'search: for sector in sectors(6) {
-        let generated = GeneratedSpace::new(SEED);
+        let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
         for system in generated.systems_near(
             crate::space::SpaceTile {
                 x: sector.origin().x + 1,

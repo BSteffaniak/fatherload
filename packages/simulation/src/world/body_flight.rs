@@ -88,7 +88,7 @@ impl WorldState {
     pub fn body_ground(&self, body: BodyRef) -> Option<BodyGroundInfo> {
         let space = self.space();
         let id = space.space_body(body)?;
-        let params = crate::place::planet_params_for(self.home_seed(), id)?;
+        let params = crate::place::planet_params_for(self.world_seed(), id)?;
         let found = space.body(body)?;
         if found.kind != BodyKind::Planet {
             return None;

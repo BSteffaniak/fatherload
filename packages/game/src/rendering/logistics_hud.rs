@@ -105,7 +105,7 @@ pub(super) fn draw_logistics(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
         SectionItem::icon_stat(
             &icons::CREDITS,
             "Credits",
-            format!("{} cr", player.credits),
+            format!("{} cr", crate::credits_text::grouped(player.credits)),
             GOLD,
         ),
         SectionItem::meter("Fuel", player.fuel, player.fuel_capacity, AMBER, RED),

@@ -607,7 +607,7 @@ fn the_boss_marks_land_where_told() {
 #[test]
 fn real_space_bodies_of_each_tag_ground_as_their_world_and_the_report_lists_them() {
     use crate::space::{Space, Theme};
-    let space = Space::shared(0x00C0_FFEE);
+    let space = Space::shared(crate::space::SpaceSeed::from(0x00C0_FFEE));
     let mut found = Vec::new();
     for coords in crate::space::report::sectors_around_home(2) {
         let sector = space.sector(coords);

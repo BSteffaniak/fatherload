@@ -8,6 +8,7 @@ mod audio;
 mod balance_report;
 mod base_view;
 mod camera_lead;
+mod credits_text;
 mod effects;
 mod input;
 mod input_mapping;

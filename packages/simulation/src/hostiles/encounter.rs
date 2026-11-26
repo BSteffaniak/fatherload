@@ -275,12 +275,12 @@ fn lair_fits(faction: Faction, system: &crate::space::StarSystem) -> bool {
 /// machines: a machine world) on the rings from [`lair_ring`] outward, else the first system on
 /// that ring. Cached per seed.
 #[must_use]
-pub fn boss_lair(seed: u64, faction: Faction) -> Option<Lair> {
+pub fn boss_lair(seed: crate::space::SpaceSeed, faction: Faction) -> Option<Lair> {
     use std::{
         collections::BTreeMap,
         sync::{Mutex, OnceLock},
     };
-    type LairCache = Mutex<BTreeMap<(u64, Faction), Option<Lair>>>;
+    type LairCache = Mutex<BTreeMap<(crate::space::SpaceSeed, Faction), Option<Lair>>>;
     static CACHE: OnceLock<LairCache> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
     if let Some(found) = cache
@@ -300,7 +300,7 @@ pub fn boss_lair(seed: u64, faction: Faction) -> Option<Lair> {
     found
 }
 
-fn find_lair(seed: u64, faction: Faction) -> Option<Lair> {
+fn find_lair(seed: crate::space::SpaceSeed, faction: Faction) -> Option<Lair> {
     let space = GeneratedSpace::new(seed);
     let (hx, hy) = galaxy_sector_of(home_star());
     let first = lair_ring(faction);
@@ -455,7 +455,11 @@ const BOUNTY_NAMES: [&str; 16] = [
 /// Three a day, in the systems round it (never in the home sector). Pure: the stations track's
 /// board lists these and posts the one a player takes with [`crate::WorldState::post_bounty`].
 #[must_use]
-pub fn bounty_targets(seed: u64, system: SystemRef, day: u32) -> Vec<BountyTarget> {
+pub fn bounty_targets(
+    seed: crate::space::SpaceSeed,
+    system: SystemRef,
+    day: u32,
+) -> Vec<BountyTarget> {
     let space = GeneratedSpace::new(seed);
     let Some(home) = space.system(system) else {
         return Vec::new();
@@ -472,7 +476,7 @@ pub fn bounty_targets(seed: u64, system: SystemRef, day: u32) -> Vec<BountyTarge
     (0..3_u8)
         .map(|index| {
             let id = super::bounty_id(system, day, index);
-            let roll = hash64(seed, id, 0, 0);
+            let roll = hash64(seed.seed, id, 0, 0);
             let at = candidates[usize::try_from(roll % candidates.len() as u64).unwrap_or(0)];
             let faction = Faction::ALL[usize::try_from((roll >> 8) % 3).unwrap_or(0)];
             let class = match faction {

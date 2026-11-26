@@ -10,7 +10,7 @@
 //! |---|---|---|---|---|
 //! | Ship line tier 3-5 | any yard of that tier | the line's price | [`line_bill`] | (Wave 12) |
 //! | Alien tech Mk II / III | alien-run stations | 4x / 8x Mk I | [`mark_bill`] | stronger (see [`ShipEffects`]) |
-//! | Starwright Hull | human shipyards (tier 5) | 3,600,000 | 60 iridium, 80 star platinum, 8 voidglass | space damage x0.35 |
+//! | Starwright Hull | human shipyards (tier 5) | 3,600,000 | 60 iridium, 80 star platinum, 8 voidglass | flight hazards x0.35, combat x0.6 (Wave 14 finish) |
 //! | Starwright Engine | human shipyards (tier 5) | 4,000,000 | 200 volatile ice, 40 iridium, 20 comet dust | thrust +90 % |
 //! | Heartline Drive | human shipyards (tier 5) | 8,000,000 | 24 voidglass, 40 comet dust, 80 iridium | warp range x2, spool /2 |
 //! | Halcyon Gate (8 parts) | Halcyon Dock | 1.2-3.2 million a part | rings of common ore, the lens, the keystone | a gate to any known system |
@@ -161,7 +161,7 @@ impl StarwrightPart {
     #[must_use]
     pub const fn effect(self) -> &'static str {
         match self {
-            Self::Hull => "space damage x0.35 (tier 5: x0.5)",
+            Self::Hull => "flight hazards x0.35 (tier 5: x0.5), combat x0.6",
             Self::Engine => "thrust and impulse +90% (tier 5: +60%)",
         }
     }
@@ -300,6 +300,9 @@ pub fn builds_starwright(station: &StationProfile) -> bool {
 pub struct ShipEffects {
     /// Share of space and hazard damage the hull takes.
     pub damage_scale: f32,
+    /// Share of combat damage past the deflector the hull takes (the Starwright Hull's
+    /// plating; 1 otherwise).
+    pub combat_scale: f32,
     /// Thrust and impulse scale in space.
     pub engine_scale: f32,
     /// Warp range scale (a warp costs its fuel over this).
@@ -319,6 +322,11 @@ pub struct ShipEffects {
 
 /// Damage share of the Starwright Hull.
 pub const STARWRIGHT_DAMAGE: f32 = 0.35;
+/// The Starwright Hull's share of combat damage that gets past the deflector.
+///
+/// Hostile shots and rams (Wave 14 finish: the shop line's "space damage" now covers a fight
+/// too, gentler than hazards so a fight still costs hull).
+pub const STARWRIGHT_COMBAT_DAMAGE: f32 = 0.6;
 /// Engine scale of the Starwright Engine.
 pub const STARWRIGHT_ENGINE: f32 = 1.9;
 
@@ -362,6 +370,11 @@ pub fn ship_effects(gear: &ShipGear, career: Option<&Career>) -> ShipEffects {
         _ => (1.2, 1.0),
     };
     ShipEffects {
+        combat_scale: if career.has_starwright(StarwrightPart::Hull) {
+            STARWRIGHT_COMBAT_DAMAGE
+        } else {
+            1.0
+        },
         damage_scale: damage,
         engine_scale: engine,
         range_scale: range,

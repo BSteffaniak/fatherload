@@ -72,7 +72,11 @@ pub fn first_homes(seed: u64) -> [Option<SpaceBodyId>; 3] {
 /// The planets first homes are picked from: the home system's, then the systems within
 /// [`FIRST_HOME_REACH_SECTORS`] of home by distance from the home sun.
 fn candidates(seed: u64) -> Vec<(SpaceBodyId, SpaceBody)> {
-    let space = Space::shared(seed);
+    // Planets alone: every space generator agrees on them (Wave 14 finish).
+    let space = Space::shared(crate::space::SpaceSeed::new(
+        seed,
+        crate::space::SpaceGenerator::V1,
+    ));
     let home_sector = space.sector(HOME_SECTOR);
     let home_centre = home_sector
         .systems

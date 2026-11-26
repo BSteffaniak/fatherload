@@ -68,10 +68,10 @@ fn ids_are_unique_and_events_fit_their_code_range() {
 #[test]
 fn the_plan_is_a_pure_function_of_the_seed_and_anchor() {
     for seed in SEEDS {
-        let anchor = plan::anchor_of(seed, &[]);
+        let anchor = plan::anchor_of(crate::space::SpaceSeed::from(seed), &[]);
         assert_ne!(anchor.sector, HOME_SECTOR);
-        let a = plan::plan_for(seed, anchor);
-        let b = plan::compute_for_tests(seed, anchor);
+        let a = plan::plan_for(crate::space::SpaceSeed::from(seed), anchor);
+        let b = plan::compute_for_tests(crate::space::SpaceSeed::from(seed), anchor);
         assert_eq!(*a, b, "seed {seed:#x}");
         assert_eq!(a.stops.len(), usize::from(CHAPTER_COUNT));
     }
@@ -80,9 +80,9 @@ fn the_plan_is_a_pure_function_of_the_seed_and_anchor() {
 #[test]
 fn every_stop_has_what_its_goals_need() {
     for seed in SEEDS {
-        let anchor = plan::anchor_of(seed, &[]);
-        let road = plan::plan_for(seed, anchor);
-        let space = Space::shared(seed);
+        let anchor = plan::anchor_of(crate::space::SpaceSeed::from(seed), &[]);
+        let road = plan::plan_for(crate::space::SpaceSeed::from(seed), anchor);
+        let space = Space::shared(crate::space::SpaceSeed::from(seed));
         let mut worlds = BTreeSet::new();
         for (index, chapter) in CHAPTERS.iter().enumerate() {
             let stop = road.stop(u8::try_from(index).unwrap_or(0)).expect("stop");
@@ -92,7 +92,10 @@ fn every_stop_has_what_its_goals_need() {
             );
             if chapter.goals.iter().any(|goal| goal.goal.needs_world()) {
                 let body = stop.body.expect("a world");
-                assert!(crate::place::planet_params_for(seed, body).is_some());
+                assert!(
+                    crate::place::planet_params_for(crate::space::SpaceSeed::from(seed), body)
+                        .is_some()
+                );
                 assert_eq!(body.system_ref(), stop.system);
                 assert!(worlds.insert(body), "seed {seed:#x}: a world used twice");
                 let relic = stop.relic.expect("a relic");
@@ -137,9 +140,15 @@ fn the_road_starts_from_the_first_chart() {
     let seed = SEEDS[0];
     let chart =
         crate::star_chart::chart_at_site(seed, 120, 9_400, 200, crate::ids::SimulationTick::new(3));
-    let anchor = plan::anchor_of(seed, std::slice::from_ref(&chart));
-    assert_eq!(anchor, Space::shared(seed).chart_system(&chart));
-    let road = plan::plan_for(seed, anchor);
+    let anchor = plan::anchor_of(
+        crate::space::SpaceSeed::from(seed),
+        std::slice::from_ref(&chart),
+    );
+    assert_eq!(
+        anchor,
+        Space::shared(crate::space::SpaceSeed::from(seed)).chart_system(&chart)
+    );
+    let road = plan::plan_for(crate::space::SpaceSeed::from(seed), anchor);
     assert_eq!(
         road.stops[0].system,
         road.stops[0]
@@ -151,9 +160,12 @@ fn the_road_starts_from_the_first_chart() {
 #[test]
 fn words_name_the_stops() {
     let seed = SEEDS[0];
-    let road = plan::plan_for(seed, plan::anchor_of(seed, &[]));
+    let road = plan::plan_for(
+        crate::space::SpaceSeed::from(seed),
+        plan::anchor_of(crate::space::SpaceSeed::from(seed), &[]),
+    );
     for index in 0..CHAPTER_COUNT {
-        let words = stop_words(seed, &road, index);
+        let words = stop_words(crate::space::SpaceSeed::from(seed), &road, index);
         let chapter = &CHAPTERS[usize::from(index)];
         for text in std::iter::once(chapter.intro)
             .chain(std::iter::once(chapter.outro))
@@ -168,7 +180,7 @@ fn words_name_the_stops() {
 #[test]
 fn leads_are_deterministic_per_system_and_varied() {
     let seed = SEEDS[0];
-    let space = Space::shared(seed);
+    let space = Space::shared(crate::space::SpaceSeed::from(seed));
     let mut kinds = BTreeSet::new();
     let mut systems = 0;
     for y in -3..=3 {
@@ -179,8 +191,8 @@ fn leads_are_deterministic_per_system_and_varied() {
                     sector: coords,
                     system: system.index,
                 };
-                let a = leads_of(seed, reference);
-                let b = leads_of(seed, reference);
+                let a = leads_of(crate::space::SpaceSeed::from(seed), reference);
+                let b = leads_of(crate::space::SpaceSeed::from(seed), reference);
                 assert_eq!(a, b);
                 if system.home {
                     assert!(a.is_empty(), "home has no leads");
@@ -206,7 +218,7 @@ fn leads_are_deterministic_per_system_and_varied() {
                     }
                 }
                 // Another seed, other leads (at least sometimes).
-                let _ = leads_of(seed ^ 1, reference);
+                let _ = leads_of(crate::space::SpaceSeed::from(seed ^ 1), reference);
             }
         }
     }

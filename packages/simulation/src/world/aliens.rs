@@ -860,7 +860,7 @@ impl WorldState {
 
     /// Adds the generator's system `system` to the crew's found systems (the nav chart).
     fn chart_found_system(&mut self, system: crate::space::SystemRef) {
-        let space = crate::space::Space::shared(self.home_settings().seed);
+        let space = crate::space::Space::shared(self.world_seed());
         let Some(found) = space.system(system) else {
             return;
         };
@@ -875,7 +875,7 @@ impl WorldState {
     /// The nearest star system to `body` the crew has not charted.
     fn uncharted_system_near(&self, body: SpaceBodyKey) -> Option<crate::space::SystemRef> {
         let known = self.known_systems();
-        let space = crate::space::Space::shared(self.home_settings().seed);
+        let space = crate::space::Space::shared(self.world_seed());
         let origin = body.sector;
         for ring in 0..=4_i32 {
             for dy in -ring..=ring {
@@ -931,7 +931,7 @@ impl WorldState {
         });
         self.learn_tongue(player, species, QUEST_UNDERSTANDING, events);
         if def.goal == ChapterGoal::Trail {
-            let system = trail_system(self.home_settings().seed, species);
+            let system = trail_system(self.world_seed(), species);
             self.chart_found_system(system);
             let now = self.world_millis();
             self.aliens.trail_leads.push(TrailLead {
@@ -1172,10 +1172,13 @@ fn next_town(found: &AlienTown) -> Option<Arc<AlienTown>> {
 /// The system the builders' trail lead of `species` names in the world of `seed`: the first
 /// system of the sector its direction points at, a long warp out.
 #[must_use]
-pub fn trail_system(seed: u64, species: AlienSpecies) -> crate::space::SystemRef {
+pub fn trail_system(
+    seed: crate::space::SpaceSeed,
+    species: AlienSpecies,
+) -> crate::space::SystemRef {
     let (dx, dy) = quest::trail_offset(species);
     let jitter = |salt: u64| -> i32 {
-        let roll = crate::people::PeopleRng::new(seed, 0x5452_4149_4C00, salt, 0).next_u64();
+        let roll = crate::people::PeopleRng::new(seed.seed, 0x5452_4149_4C00, salt, 0).next_u64();
         i32::try_from(roll % 3).unwrap_or(0) - 1
     };
     let coords = crate::space::SpaceSector::new(

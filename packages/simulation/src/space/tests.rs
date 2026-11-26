@@ -15,12 +15,16 @@ use crate::{
 fn bytes(seed: u64, sectors: &[SpaceSector]) -> Vec<u8> {
     let generated: Vec<Sector> = sectors
         .iter()
-        .map(|coords| generate_sector(seed, *coords))
+        .map(|coords| generate_sector(crate::space::SpaceSeed::from(seed), *coords))
         .collect();
     postcard::to_allocvec(&generated).expect("encode")
 }
 
 fn digest(seed: u64) -> u64 {
+    digest_of(SpaceSeed::new(seed, SpaceGenerator::V1))
+}
+
+fn digest_of(seed: SpaceSeed) -> u64 {
     let mut hasher = StateHasher::new();
     for coords in sectors_around_home(2) {
         hasher.write_serialized(&generate_sector(seed, coords));
@@ -40,9 +44,12 @@ fn space_is_a_pure_function_of_the_seed() {
     assert_eq!(a, bytes(7, &sectors), "same seed, same bytes");
     assert_ne!(a, bytes(8, &sectors), "another seed, another sky");
     // The cache answers what the generator does.
-    let space = Space::new(7);
+    let space = Space::new(crate::space::SpaceSeed::from(7));
     for coords in &sectors {
-        assert_eq!(*space.sector(*coords), generate_sector(7, *coords));
+        assert_eq!(
+            *space.sector(*coords),
+            generate_sector(crate::space::SpaceSeed::from(7), *coords)
+        );
     }
 }
 
@@ -53,6 +60,123 @@ fn space_generation_is_pinned() {
     assert_eq!(
         value, GOLDEN_SPACE_DIGEST,
         "space generation changed: {value:#018x}"
+    );
+}
+
+/// Pins V2 (Wave 14 finish). Change [`GOLDEN_SPACE_V2_DIGEST`] only on purpose.
+#[test]
+fn space_generation_v2_is_pinned() {
+    let value = digest_of(SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V2));
+    assert_eq!(
+        value, GOLDEN_SPACE_V2_DIGEST,
+        "V2 space generation changed: {value:#018x}"
+    );
+    assert_ne!(value, GOLDEN_SPACE_DIGEST);
+    assert_eq!(SpaceGenerator::CURRENT, SpaceGenerator::V2);
+    assert_eq!(
+        SpaceGenerator::default(),
+        SpaceGenerator::V1,
+        "an old save's galaxy"
+    );
+}
+
+/// V2 moves nothing: every system, body, orbit, size, belt, station and comet is V1's; only a
+/// small body's theme (and its climate with it) may differ, and every planet is V1's.
+#[test]
+fn v2_only_rethemes_small_bodies() {
+    let mut changed = 0;
+    for coords in sectors_around_home(3) {
+        let v1 = generate_sector(
+            SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V1),
+            coords,
+        );
+        let v2 = generate_sector(
+            SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V2),
+            coords,
+        );
+        assert_eq!(v1.systems.len(), v2.systems.len());
+        assert_eq!(v1.black_holes, v2.black_holes);
+        assert_eq!(v1.wormholes, v2.wormholes);
+        for (a, b) in v1.systems.iter().zip(&v2.systems) {
+            assert_eq!(a.belts, b.belts);
+            assert_eq!(a.stations, b.stations);
+            assert_eq!(a.bodies.len(), b.bodies.len());
+            for (x, y) in a.bodies.iter().zip(&b.bodies) {
+                assert_eq!(
+                    (x.index, x.kind, x.parent, x.centre, x.radius, x.ground_seed),
+                    (y.index, y.kind, y.parent, y.centre, y.radius, y.ground_seed)
+                );
+                if !matches!(x.kind, BodyKind::Moon | BodyKind::CraterRock) {
+                    assert_eq!(x, y, "a planet changed");
+                } else if x.theme != y.theme {
+                    changed += 1;
+                }
+            }
+        }
+    }
+    assert!(changed > 20, "{changed} small bodies rethemed");
+}
+
+/// In a V2 galaxy every theme's small-body secret is found in play: within four rings of home
+/// there are small moons or crater rocks of all twelve themes, and moons share their planet's
+/// theme often.
+#[test]
+fn v2_small_bodies_carry_every_theme() {
+    let space = Space::new(SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V2));
+    let old = Space::new(SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V1));
+    let mut themes = BTreeSet::new();
+    let mut old_themes = BTreeSet::new();
+    let (mut moons, mut kin) = (0, 0);
+    for coords in sectors_around_home(4) {
+        for (system, old_system) in space
+            .sector(coords)
+            .systems
+            .iter()
+            .zip(&old.sector(coords).systems)
+        {
+            for (body, old_body) in system.bodies.iter().zip(&old_system.bodies) {
+                if !matches!(body.kind, BodyKind::Moon | BodyKind::CraterRock) {
+                    continue;
+                }
+                themes.insert(body.theme);
+                old_themes.insert(old_body.theme);
+                if body.kind == BodyKind::Moon {
+                    moons += 1;
+                    let parent = body
+                        .parent
+                        .and_then(|index| system.bodies.iter().find(|other| other.index == index));
+                    if parent.is_some_and(|parent| parent.theme == body.theme) {
+                        kin += 1;
+                    }
+                }
+                // Its climate fits its theme.
+                let id = SpaceBodyId {
+                    sector: coords,
+                    system: system.index,
+                    body: body.index,
+                };
+                if body.theme != Theme::Barren {
+                    let params = crate::place::planet_params_for(
+                        SpaceSeed::new(DEFAULT_WORLD_SEED, SpaceGenerator::V2),
+                        id,
+                    )
+                    .expect("landable");
+                    assert_eq!(params.theme, crate::place::planet_theme_of(body.theme));
+                }
+            }
+        }
+    }
+    for theme in Theme::PLANET {
+        assert!(
+            themes.contains(&theme),
+            "no small {theme:?} body in V2: {themes:?}"
+        );
+    }
+    // Before (V1) most themes never showed on a small body.
+    assert!(old_themes.len() <= 5, "{old_themes:?}");
+    assert!(
+        kin * 3 >= moons,
+        "{kin} of {moons} moons share their planet's theme"
     );
 }
 
@@ -138,10 +262,16 @@ fn check_system(sector: &Sector, system: &StarSystem) {
         assert_eq!(body.surface_columns % 32, 0);
         assert!(body.surface_columns > body.radius * 6);
         assert!(body.surface_columns < body.radius * 7);
-        assert_eq!(
-            body.theme == Theme::TidallyLocked,
-            body.kind != BodyKind::Moon && body.day_seconds == 0 && !body.is_home()
-        );
+        // A locked world has no day; a body with none is locked (or a moon locked to its
+        // planet: V2's locked moons are both, Wave 14 finish).
+        if body.theme == Theme::TidallyLocked {
+            assert_eq!(body.day_seconds, 0, "{label}");
+        } else {
+            assert!(
+                body.day_seconds != 0 || body.kind == BodyKind::Moon || body.is_home(),
+                "{label}"
+            );
+        }
     }
     // Moons around each planet: their own annuli, outside the planet and its ring, inside its
     // extent.
@@ -201,7 +331,7 @@ fn check_system(sector: &Sector, system: &StarSystem) {
 fn systems_are_well_formed_and_never_overlap() {
     for seed in [DEFAULT_WORLD_SEED, 1, 2, 99] {
         for coords in sectors_around_home(4) {
-            let sector = generate_sector(seed, coords);
+            let sector = generate_sector(crate::space::SpaceSeed::from(seed), coords);
             assert!(!sector.systems.is_empty());
             assert!(sector.systems.len() <= 3);
             assert!(
@@ -257,7 +387,7 @@ fn every_theme_appears_near_home() {
     for seed in [DEFAULT_WORLD_SEED, 1, 2, 3, 4, 5, 6, 7] {
         let mut seen = BTreeSet::new();
         for coords in sectors_around_home(3) {
-            for system in &generate_sector(seed, coords).systems {
+            for system in &generate_sector(crate::space::SpaceSeed::from(seed), coords).systems {
                 for body in &system.bodies {
                     seen.insert(body.theme);
                 }
@@ -274,7 +404,7 @@ fn every_theme_appears_near_home() {
 
 #[test]
 fn the_home_system_holds_home_and_the_moon() {
-    let space = Space::new(DEFAULT_WORLD_SEED);
+    let space = Space::new(crate::space::SpaceSeed::from(DEFAULT_WORLD_SEED));
     let home = space.home_system();
     assert!(home.home);
     assert_eq!(home.class, crate::star_chart::StarClass::Yellow);
@@ -297,7 +427,7 @@ fn the_home_system_holds_home_and_the_moon() {
     let near = space.bodies_near(space.home_departure(), 2_000);
     assert_eq!(near.first().map(|hit| hit.id), Some(MOON_BODY));
     // Every seed shares the home layout (only the sister planets differ).
-    let other = Space::new(5).home_system();
+    let other = Space::new(crate::space::SpaceSeed::from(5)).home_system();
     for (a, b) in other.bodies.iter().zip(&home.bodies).take(2) {
         assert_eq!((a.kind, a.centre, a.radius), (b.kind, b.centre, b.radius));
     }
@@ -309,7 +439,7 @@ fn the_home_system_holds_home_and_the_moon() {
 #[test]
 fn every_star_chart_resolves_to_a_real_system() {
     for seed in [DEFAULT_WORLD_SEED, 1, 42] {
-        let space = Space::new(seed);
+        let space = Space::new(crate::space::SpaceSeed::from(seed));
         for index in 0..120 {
             let depth = (index * 37 % 1_001) as u16;
             let chart = chart_at_site(
@@ -344,7 +474,7 @@ fn every_star_chart_resolves_to_a_real_system() {
 #[test]
 fn wormholes_pair_both_ways() {
     let seed = DEFAULT_WORLD_SEED;
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::from(seed));
     let mut found = 0;
     for coords in sectors_around_home(40) {
         let Some(mouth) = interstellar::wormhole_in(seed, coords) else {
@@ -376,7 +506,7 @@ fn wormholes_pair_both_ways() {
 #[test]
 fn asteroid_queries_find_exactly_the_rocks_in_reach() {
     let seed = 1;
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::from(seed));
     let mut checked = 0;
     for coords in sectors_around_home(2) {
         let sector = space.sector(coords);
@@ -423,7 +553,7 @@ fn asteroid_queries_find_exactly_the_rocks_in_reach() {
 
 #[test]
 fn gravity_pulls_toward_bodies_at_their_surface_strength() {
-    let space = Space::new(DEFAULT_WORLD_SEED);
+    let space = Space::new(crate::space::SpaceSeed::from(DEFAULT_WORLD_SEED));
     let home = space.body(HOME_WORLD_BODY).expect("home");
     // Standing on the home world's far side from the Moon, the home world's 1 g dominates.
     let on_surface = home.centre.offset(0, i64::from(home.radius)).pos();
@@ -449,7 +579,7 @@ fn gravity_pulls_toward_bodies_at_their_surface_strength() {
 
 #[test]
 fn queries_find_systems_stations_and_scan_contacts() {
-    let space = Space::new(DEFAULT_WORLD_SEED);
+    let space = Space::new(crate::space::SpaceSeed::from(DEFAULT_WORLD_SEED));
     let departure = space.home_departure();
     let systems = space.systems_near(departure, 10_000);
     assert_eq!(
@@ -494,7 +624,7 @@ fn queries_find_systems_stations_and_scan_contacts() {
 #[test]
 fn nebulae_fog_the_scanner_and_black_holes_slow_time() {
     let seed = DEFAULT_WORLD_SEED;
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::from(seed));
     let mut fogged = None;
     let mut hole = None;
     for coords in sectors_around_home(12) {
@@ -528,7 +658,7 @@ fn nebulae_fog_the_scanner_and_black_holes_slow_time() {
 
 #[test]
 fn the_cache_stays_bounded() {
-    let space = Space::new(3);
+    let space = Space::new(crate::space::SpaceSeed::from(3));
     for x in 0..(query::CACHE_SECTORS as i32 * 2) {
         let _ = space.sector(SpaceSector::new(x, 0));
     }
@@ -567,7 +697,7 @@ fn sectors_generate_quickly() {
 #[test]
 fn fog_shortens_what_the_scanner_sees() {
     let seed = DEFAULT_WORLD_SEED;
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::from(seed));
     let range = 400_000_i64;
     let mut checked = 0;
     let mut nebulae: Vec<Nebula> = Vec::new();

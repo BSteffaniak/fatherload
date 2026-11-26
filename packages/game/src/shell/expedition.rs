@@ -105,7 +105,9 @@ pub fn log_found_words(log: u8) -> Option<(StoryMomentKind, String, String, Stri
             || {
                 format!(
                     "+{} credits from the canister. The journal (map pages) keeps it.",
-                    fatherload_simulation::expedition::log_bounty(entry.descent())
+                    crate::credits_text::grouped(fatherload_simulation::expedition::log_bounty(
+                        entry.descent()
+                    ))
                 )
             },
             |chapter| {

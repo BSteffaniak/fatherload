@@ -310,7 +310,8 @@ fn earn_a_species_chapter(world: &mut WorldState) -> Vec<GameplayEventKind> {
         .stop(world.galaxy_story().chapter)
         .and_then(|stop| stop.body)
         .expect("home");
-    let params = crate::place::planet_params_for(SEED, id).expect("landable");
+    let params =
+        crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id).expect("landable");
     let species = AlienSpecies::from_folk(params.folk).expect("settled");
     let found = std::sync::Arc::clone(&towns_of(&params)[0]);
     let mut events = act(
@@ -480,7 +481,10 @@ fn a_bot_walks_the_whole_road_to_the_harbour_and_the_game_goes_on() {
     let story = world.galaxy_story().clone();
     assert_eq!(
         story.anchor,
-        Some(plan::anchor_of(SEED, world.star_charts()))
+        Some(plan::anchor_of(
+            crate::space::SpaceSeed::from(SEED),
+            world.star_charts()
+        ))
     );
     assert!(
         world.galaxy_waypoint().is_some(),
@@ -549,7 +553,9 @@ fn a_bot_walks_the_whole_road_to_the_harbour_and_the_game_goes_on() {
         "the road paid"
     );
     // The crew's stats count the road.
-    let stats = world.galaxy_story().stats_of_seed(SEED);
+    let stats = world
+        .galaxy_story()
+        .stats_of_seed(crate::space::SpaceSeed::from(SEED));
     assert_eq!(stats.chapters_done, CHAPTER_COUNT);
     assert!(
         stats.systems_visited >= 6 && stats.worlds_landed >= 5,
@@ -597,7 +603,7 @@ fn the_warden_is_beaten_fairly_by_a_bot() {
     };
     let mut story = GalaxyStory {
         begun: true,
-        anchor: Some(plan::anchor_of(SEED, &[])),
+        anchor: Some(plan::anchor_of(crate::space::SpaceSeed::from(SEED), &[])),
         chapter: CHAPTER_COUNT - 1,
         ..GalaxyStory::default()
     };
@@ -651,7 +657,7 @@ fn an_escape_from_the_warden_brings_it_back_later() {
     world.player_mut(PLAYER).expect("rig").hazard_gear.arms = crate::hostiles::ShipGear::MAXED;
     world.set_galaxy_story(GalaxyStory {
         begun: true,
-        anchor: Some(plan::anchor_of(SEED, &[])),
+        anchor: Some(plan::anchor_of(crate::space::SpaceSeed::from(SEED), &[])),
         chapter: CHAPTER_COUNT - 1,
         ..GalaxyStory::default()
     });
@@ -801,7 +807,7 @@ fn a_lead_is_picked_up_and_finished_in_its_system() {
     let mut world = world_with(&[PLAYER]);
     let _ = run(&mut world, 3);
     // A system near home with a lost ship (one step: fly to its transponder).
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let (system, lead) = (1..4)
         .flat_map(|ring: i32| (-ring..=ring).flat_map(move |y| (-ring..=ring).map(move |x| (x, y))))
         .flat_map(|(x, y)| {
@@ -817,7 +823,7 @@ fn a_lead_is_picked_up_and_finished_in_its_system() {
                 .collect::<Vec<_>>()
         })
         .find_map(|system| {
-            leads_of(SEED, system)
+            leads_of(crate::space::SpaceSeed::from(SEED), system)
                 .into_iter()
                 .find(|lead| matches!(lead.steps.as_slice(), [LeadStep::ReachPoint(_)]))
                 .map(|lead| (system, lead))
@@ -890,7 +896,7 @@ pub(super) fn launch(world: &mut WorldState, at: SpaceTile) {
 
 /// The first system near home (rings 1-3) with a lead whose steps match `shape`.
 fn lead_near_home(shape: impl Fn(&[LeadStep]) -> bool) -> (SystemRef, crate::galaxy_story::Lead) {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     (1..4)
         .flat_map(|ring: i32| (-ring..=ring).flat_map(move |y| (-ring..=ring).map(move |x| (x, y))))
         .flat_map(|(x, y)| {
@@ -906,7 +912,7 @@ fn lead_near_home(shape: impl Fn(&[LeadStep]) -> bool) -> (SystemRef, crate::gal
                 .collect::<Vec<_>>()
         })
         .find_map(|system| {
-            leads_of(SEED, system)
+            leads_of(crate::space::SpaceSeed::from(SEED), system)
                 .into_iter()
                 .find(|lead| shape(&lead.steps))
                 .map(|lead| (system, lead))
@@ -916,7 +922,7 @@ fn lead_near_home(shape: impl Fn(&[LeadStep]) -> bool) -> (SystemRef, crate::gal
 
 /// Into `system`'s reach in free flight (its leads picked up); the lead's discovery-log index.
 fn enter_for_lead(world: &mut WorldState, system: SystemRef, lead: u8) -> usize {
-    let star = crate::space::Space::shared(SEED)
+    let star = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED))
         .system(system)
         .expect("system")
         .centre;
@@ -1041,7 +1047,8 @@ fn a_ruin_lead_is_landed_on_and_dug_to() {
     };
     let index = enter_for_lead(&mut world, system, lead.index);
     // Set down a way off the mark: landed, and the compass points at it.
-    let params = crate::place::planet_params_for(SEED, body).expect("landable");
+    let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), body)
+        .expect("landable");
     let ground = crate::planet::PlanetGround::new(params);
     let column = i32::try_from(site.column).expect("column");
     let off = column + 30;
@@ -1088,7 +1095,7 @@ fn a_hold_lands_real_raiders_by_the_site_and_counts_only_while_someone_holds_it(
         .expect("a hold");
     world.set_galaxy_story(GalaxyStory {
         begun: true,
-        anchor: Some(plan::anchor_of(SEED, &[])),
+        anchor: Some(plan::anchor_of(crate::space::SpaceSeed::from(SEED), &[])),
         chapter,
         step: u8::try_from(step).expect("step"),
         ..GalaxyStory::default()

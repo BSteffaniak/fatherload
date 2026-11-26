@@ -133,12 +133,17 @@ impl StoryPlan {
 /// The system the road starts from: the crew's first chart's (resolved by the space
 /// generator), else the one the Archive's first plinth would chart.
 #[must_use]
-pub fn anchor_of(seed: u64, charts: &[StarChart]) -> SystemRef {
+pub fn anchor_of(seed: crate::space::SpaceSeed, charts: &[StarChart]) -> SystemRef {
     let space = Space::shared(seed);
     charts.first().map_or_else(
         || {
-            let chart =
-                crate::star_chart::chart_at_site(seed, 0, 0, 0, crate::ids::SimulationTick::new(0));
+            let chart = crate::star_chart::chart_at_site(
+                seed.seed,
+                0,
+                0,
+                0,
+                crate::ids::SimulationTick::new(0),
+            );
             space.chart_system(&chart)
         },
         |chart| space.chart_system(chart),
@@ -147,8 +152,8 @@ pub fn anchor_of(seed: u64, charts: &[StarChart]) -> SystemRef {
 
 /// The plan of the world seeded `seed` whose road starts at `anchor` (memoized).
 #[must_use]
-pub fn plan_for(seed: u64, anchor: SystemRef) -> Arc<StoryPlan> {
-    type PlanCache = Mutex<BTreeMap<(u64, SystemRef), Arc<StoryPlan>>>;
+pub fn plan_for(seed: crate::space::SpaceSeed, anchor: SystemRef) -> Arc<StoryPlan> {
+    type PlanCache = Mutex<BTreeMap<(crate::space::SpaceSeed, SystemRef), Arc<StoryPlan>>>;
     static CACHE: PlanCache = Mutex::new(BTreeMap::new());
     if let Some(found) = CACHE
         .lock()
@@ -210,14 +215,18 @@ fn ring_sectors(centre: SpaceSector, ring: i32) -> Vec<SpaceSector> {
 }
 
 /// Whether a body makes a stop: a landable planet with full strata (not home's).
-fn fits(seed: u64, id: SpaceBodyId, kind: BodyKind, radius: u32) -> bool {
+fn fits(seed: crate::space::SpaceSeed, id: SpaceBodyId, kind: BodyKind, radius: u32) -> bool {
     kind == BodyKind::Planet
         && radius >= PLANET_RADIUS.0
         && crate::place::planet_params_for(seed, id).is_some()
 }
 
 /// The biggest landable planet of `system` (the anchor's world).
-fn biggest_world(seed: u64, reference: SystemRef, system: &StarSystem) -> Option<SpaceBodyId> {
+fn biggest_world(
+    seed: crate::space::SpaceSeed,
+    reference: SystemRef,
+    system: &StarSystem,
+) -> Option<SpaceBodyId> {
     system
         .bodies
         .iter()
@@ -237,7 +246,7 @@ fn biggest_world(seed: u64, reference: SystemRef, system: &StarSystem) -> Option
 /// plus twice its theme's place in the list (a world of no listed theme counts as the list's
 /// length: any world does when no theme is near), the first found among equals.
 fn theme_world(
-    seed: u64,
+    seed: crate::space::SpaceSeed,
     space: &Space,
     centre: SpaceSector,
     themes: &[Theme],
@@ -281,9 +290,15 @@ fn theme_world(
 }
 
 /// The relic of chapter `chapter` on world `id` with `columns` surface columns.
-fn relic_at(seed: u64, id: SpaceBodyId, columns: u32, chapter: u8, rows: u16) -> RelicSite {
+fn relic_at(
+    seed: crate::space::SpaceSeed,
+    id: SpaceBodyId,
+    columns: u32,
+    chapter: u8,
+    rows: u16,
+) -> RelicSite {
     let roll = hash64(
-        seed,
+        seed.seed,
         SALT_RELIC ^ u64::from(chapter),
         i64::from(id.sector.x) * 64 + i64::from(id.system),
         i64::from(id.sector.y) * 64 + i64::from(id.body),
@@ -304,7 +319,11 @@ const OBELISK_SIDE_COLUMNS: i64 = 4;
 /// the gas giant's aerostat, the locked world's observatory and the ring world's station). A
 /// relic stands (or lies `rows` under) the obelisk's plinth beside it, or the outpost's floor at
 /// its beacon.
-pub(crate) fn outpost_relic(seed: u64, id: SpaceBodyId, rows: u16) -> Option<RelicSite> {
+pub(crate) fn outpost_relic(
+    seed: crate::space::SpaceSeed,
+    id: SpaceBodyId,
+    rows: u16,
+) -> Option<RelicSite> {
     let params = crate::place::planet_params_for(seed, id)?;
     let ground = crate::planet::PlanetGround::new(params);
     let width = i64::from(ground.strip_width().max(1));
@@ -342,7 +361,7 @@ fn space_ref(space: &Space, system: crate::flight::space::SystemRef) -> Option<S
         })
 }
 
-fn harbour_of(seed: u64, space: &Space, anchor: SystemRef) -> Harbour {
+fn harbour_of(seed: crate::space::SpaceSeed, space: &Space, anchor: SystemRef) -> Harbour {
     let way = heading(anchor);
     let anchor_distance = {
         let dx = i64::from(anchor.sector.x - HOME_SECTOR.x);
@@ -396,11 +415,11 @@ fn harbour_of(seed: u64, space: &Space, anchor: SystemRef) -> Harbour {
 
 /// The plan computed afresh (tests check the cache against it).
 #[cfg(test)]
-pub(super) fn compute_for_tests(seed: u64, anchor: SystemRef) -> StoryPlan {
+pub(super) fn compute_for_tests(seed: crate::space::SpaceSeed, anchor: SystemRef) -> StoryPlan {
     compute_plan(seed, anchor)
 }
 
-fn compute_plan(seed: u64, anchor: SystemRef) -> StoryPlan {
+fn compute_plan(seed: crate::space::SpaceSeed, anchor: SystemRef) -> StoryPlan {
     let space = Space::shared(seed);
     let way = heading(anchor);
     let anchor_distance = {
@@ -441,7 +460,7 @@ fn compute_plan(seed: u64, anchor: SystemRef) -> StoryPlan {
                 )
             }
             StopKind::Species => {
-                let home = crate::alien::atlas::first_homes(seed)
+                let home = crate::alien::atlas::first_homes(seed.seed)
                     .into_iter()
                     .flatten()
                     .next();
@@ -482,7 +501,7 @@ fn compute_plan(seed: u64, anchor: SystemRef) -> StoryPlan {
 }
 
 fn stop_with_world(
-    seed: u64,
+    seed: crate::space::SpaceSeed,
     space: &Space,
     system: SystemRef,
     body: Option<SpaceBodyId>,
@@ -502,7 +521,7 @@ fn stop_with_world(
     }
 }
 
-fn lair_stop(seed: u64, space: &Space, faction: Faction) -> Option<Stop> {
+fn lair_stop(seed: crate::space::SpaceSeed, space: &Space, faction: Faction) -> Option<Stop> {
     let lair = crate::hostiles::boss_lair(seed, faction)?;
     let system = space_ref(space, lair.system)?;
     Some(Stop {

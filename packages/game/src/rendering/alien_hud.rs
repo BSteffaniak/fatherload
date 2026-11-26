@@ -485,9 +485,10 @@ pub fn chapter_objective(
                 count,
                 credits,
             } => format!(
-                "Bring {count} {} ({}/{count}) and {credits} cr to the elder of {town}",
+                "Bring {count} {} ({}/{count}) and {} cr to the elder of {town}",
                 mineral.name(),
-                have(mineral).min(count)
+                have(mineral).min(count),
+                crate::credits_text::grouped(credits)
             ),
             ChapterGoal::Trail => format!("Listen to the elder of {town}"),
         }

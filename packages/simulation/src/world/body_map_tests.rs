@@ -28,7 +28,7 @@ fn world() -> WorldState {
 
 /// The first landable generated body of the home system.
 fn landable() -> SpaceBodyKey {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let home = space.home_system();
     home.bodies
         .iter()
@@ -39,7 +39,7 @@ fn landable() -> SpaceBodyKey {
                 system: home.index,
                 body: body.index,
             };
-            crate::place::planet_params_for(SEED, key).map(|_| key)
+            crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), key).map(|_| key)
         })
         .expect("a landable body at home")
 }

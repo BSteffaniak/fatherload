@@ -241,7 +241,7 @@ fn estate(stage: &mut SceneStage<'_>, wings: usize) {
         let player = seats[0].player;
         let seed = world.world_seed();
         let species = AlienSpecies::Siphra;
-        let Some(id) = first_home(seed, species) else {
+        let Some(id) = first_home(seed.seed, species) else {
             return;
         };
         let Some(params) = fatherload_simulation::place::planet_params_for(seed, id) else {

@@ -9,8 +9,8 @@ use std::{
 
 use super::{
     Asteroid, BodyKind, HOME_SECTOR, SPACE_SECTOR_TILES, Sector, SpaceBody, SpaceBodyId,
-    SpaceSector, SpaceTile, StarSystem, StationId, StationKind, SystemRef, Theme, WormholeId,
-    WormholeMouth,
+    SpaceSector, SpaceSeed, SpaceTile, StarSystem, StationId, StationKind, SystemRef, Theme,
+    WormholeId, WormholeMouth,
     asteroids::{MAX_ASTEROIDS_PER_QUERY, asteroids_in_segment, segments_near},
     generate::generate_sector,
     home::{HOME_WORLD_BODY, MOON_BODY, home_departure},
@@ -47,7 +47,7 @@ struct SectorCache {
 /// A world's space: its seed and a bounded cache of generated sectors. Cloning gives an empty
 /// cache (the cache is never state: every answer is a pure function of the seed).
 pub struct Space {
-    seed: u64,
+    seed: SpaceSeed,
     cache: Mutex<SectorCache>,
 }
 
@@ -211,7 +211,7 @@ impl Space {
     /// world, shared by flight, the body stores and the renderer). The cache is never state:
     /// every answer is a pure function of the seed, so sharing it changes nothing.
     #[must_use]
-    pub fn shared(seed: u64) -> Arc<Self> {
+    pub fn shared(seed: SpaceSeed) -> Arc<Self> {
         let mut shared = SHARED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(index) = shared.iter().position(|space| space.seed == seed) {
             let space = shared.remove(index);
@@ -228,7 +228,7 @@ impl Space {
 
     /// The space of a world seeded `seed`.
     #[must_use]
-    pub fn new(seed: u64) -> Self {
+    pub fn new(seed: SpaceSeed) -> Self {
         Self {
             seed,
             cache: Mutex::new(SectorCache::default()),
@@ -238,11 +238,18 @@ impl Space {
     /// The space of a world with `settings`, if its generator has space (V11+).
     #[must_use]
     pub fn for_world(settings: &WorldSettings) -> Option<Self> {
-        super::has_space(settings.generator).then(|| Self::new(settings.seed))
+        super::has_space(settings.generator).then(|| Self::new(SpaceSeed::current(settings.seed)))
     }
 
+    /// The world seed.
     #[must_use]
     pub const fn seed(&self) -> u64 {
+        self.seed.seed
+    }
+
+    /// The galaxy's key: its seed and generator (Wave 14 finish).
+    #[must_use]
+    pub const fn space_seed(&self) -> SpaceSeed {
         self.seed
     }
 
@@ -554,9 +561,13 @@ impl Space {
             for system in &sector.systems {
                 for belt in &system.belts {
                     for segment in segments_near(system, belt, at, radius) {
-                        for rock in
-                            asteroids_in_segment(self.seed, system, sector.coords, belt, segment)
-                        {
+                        for rock in asteroids_in_segment(
+                            self.seed.seed,
+                            system,
+                            sector.coords,
+                            belt,
+                            segment,
+                        ) {
                             if rock.centre.within(at, radius + i64::from(rock.radius)) {
                                 out.push(rock);
                                 if out.len() >= MAX_ASTEROIDS_PER_QUERY {
@@ -710,6 +721,6 @@ impl Space {
     /// The system a star chart leads to (see [`resolve_chart`]).
     #[must_use]
     pub fn chart_system(&self, chart: &StarChart) -> SystemRef {
-        resolve_chart(self.seed, chart)
+        resolve_chart(self.seed.seed, chart)
     }
 }

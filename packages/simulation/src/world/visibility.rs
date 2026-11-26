@@ -129,6 +129,7 @@ impl WorldState {
             hostiles: _,
             endgame: _,
             galaxy_story: _,
+            space_generator: _,
         } = self;
         if let Some(player) = players.get_mut(&player_id) {
             let (rig, build, _) = split_player(player);

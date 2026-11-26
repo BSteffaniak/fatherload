@@ -213,6 +213,8 @@ impl WorldState {
             endgame: _,
             // The galaxy story holds no positions in a frame (Wave 13).
             galaxy_story: _,
+            // The space generator is a version, not a position (Wave 14 finish).
+            space_generator: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

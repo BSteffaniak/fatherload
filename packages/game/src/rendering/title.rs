@@ -445,7 +445,7 @@ fn draw_menu(draw: &mut impl RaylibDraw, ui: &UiFrame<'_, '_>, width: i32, heigh
             "Last save: {}{}m deep | {} cr | {:.0} min played",
             if meta.test_mode { "TEST MODE | " } else { "" },
             meta.depth,
-            meta.credits,
+            crate::credits_text::grouped(meta.credits),
             (meta.play_seconds / 60.0).floor()
         );
         ui_kit::text_centred(draw, &line, width / 2, footer_y, TextStyle::Body, CREAM);

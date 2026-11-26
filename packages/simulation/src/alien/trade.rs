@@ -140,7 +140,11 @@ impl AlienGood {
 /// The bodylife market's price of `mineral` there in the world of `seed` (its common ores
 /// cheap, scarce ones dear, dearer far from home); goods (`None`) trade at the plain price.
 #[must_use]
-pub fn body_price_permille(seed: u64, body: SpaceBodyKey, mineral: Option<MineralKind>) -> u32 {
+pub fn body_price_permille(
+    seed: crate::space::SpaceSeed,
+    body: SpaceBodyKey,
+    mineral: Option<MineralKind>,
+) -> u32 {
     let Some(mineral) = mineral else {
         return 1_000;
     };

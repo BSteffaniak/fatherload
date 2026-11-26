@@ -149,7 +149,7 @@ fn world() -> WorldState {
 
 /// A landable body near home whose space theme is `theme`.
 fn body_of_theme(theme: Theme) -> SpaceBodyKey {
-    let space = Space::shared(SEED);
+    let space = Space::shared(fatherload_simulation::space::SpaceSeed::from(SEED));
     for ring in 0..=6_i32 {
         for y in -ring..=ring {
             for x in -ring..=ring {
@@ -165,7 +165,11 @@ fn body_of_theme(theme: Theme) -> SpaceBodyKey {
                             body: body.index,
                         };
                         if body.theme == theme
-                            && fatherload_simulation::place::planet_params_for(SEED, id).is_some()
+                            && fatherload_simulation::place::planet_params_for(
+                                fatherload_simulation::space::SpaceSeed::from(SEED),
+                                id,
+                            )
+                            .is_some()
                         {
                             return id;
                         }

@@ -27,7 +27,7 @@ fn find_body(
     world: &WorldState,
     wanted: fn(&BodyLife, Atmosphere) -> bool,
 ) -> Option<(FlightBody, Arc<BodyLife>)> {
-    let space = Space::shared(SCENE_SEED);
+    let space = Space::shared(fatherload_simulation::space::SpaceSeed::from(SCENE_SEED));
     let flight = world.space();
     for ring in 0..6_i32 {
         for y in -ring..=ring {
@@ -43,13 +43,14 @@ fn find_body(
                             system: system.index,
                             body: body.index,
                         };
-                        let Some(params) =
-                            fatherload_simulation::place::planet_params_for(SCENE_SEED, key)
-                        else {
+                        let Some(params) = fatherload_simulation::place::planet_params_for(
+                            fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+                            key,
+                        ) else {
                             continue;
                         };
                         let Some(life) = fatherload_simulation::world::body_life_of(
-                            SCENE_SEED,
+                            fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
                             Some(key),
                             params,
                         ) else {

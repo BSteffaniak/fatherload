@@ -151,7 +151,7 @@ pub fn zoom_for(gap: f32, visible: f32) -> f32 {
 }
 
 /// Distance from `at` to the nearest black hole's disc (space pixels), if one is near.
-fn black_hole_gap(seed: u64, at: WorldPos) -> Option<f32> {
+fn black_hole_gap(seed: fatherload_simulation::space::SpaceSeed, at: WorldPos) -> Option<f32> {
     let space = fatherload_simulation::space::Space::shared(seed);
     let tile = fatherload_simulation::space::SpaceTile::of_pos(at);
     space
@@ -172,7 +172,7 @@ pub(super) fn space_frame(
     view: &ViewSnapshot<'_>,
     bodies: &[FlightBody],
     density: f32,
-    seed: u64,
+    seed: fatherload_simulation::space::SpaceSeed,
 ) -> SpaceFrame {
     let flight = view.player.flight;
     let rect = Rectangle::new(
@@ -2378,7 +2378,10 @@ pub(super) fn draw_nav_chart(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '
                 action_entry(
                     &menu_icons::INSURANCE,
                     "Emergency beacon",
-                    &format!("Towed home for {fee} credits"),
+                    &format!(
+                        "Towed home for {} credits",
+                        crate::credits_text::grouped(fee)
+                    ),
                     picked,
                 )
             }

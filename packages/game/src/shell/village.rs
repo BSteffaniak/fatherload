@@ -830,7 +830,7 @@ impl SeatUi {
         } else {
             format!(
                 "A room is {} credits for the night.",
-                fatherload_simulation::clock::INN_ROOM_PRICE
+                crate::credits_text::grouped(fatherload_simulation::clock::INN_ROOM_PRICE)
             )
         })
     }
@@ -869,18 +869,27 @@ impl SeatUi {
             );
         Some(match deal {
             VillageDeal::SellCargo { .. } => (
-                format!("{keeper}: {earned} credits for the lot. Pleasure doing business."),
+                format!(
+                    "{keeper}: {} credits for the lot. Pleasure doing business.",
+                    crate::credits_text::grouped(earned)
+                ),
                 SoundCue::Sell,
             ),
             VillageDeal::SellNightGoods { .. } => (
-                format!("The night trader counts out {earned} credits by lantern light."),
+                format!(
+                    "The night trader counts out {} credits by lantern light.",
+                    crate::credits_text::grouped(earned)
+                ),
                 SoundCue::Sell,
             ),
             VillageDeal::Refuel { .. } => {
                 self.service_animation = Some(ServiceAnimation::Fuel);
                 self.service_animation_seconds = 1.4;
                 (
-                    format!("Tank filled for {spent} credits."),
+                    format!(
+                        "Tank filled for {} credits.",
+                        crate::credits_text::grouped(spent)
+                    ),
                     SoundCue::Upgrade,
                 )
             }
@@ -888,14 +897,18 @@ impl SeatUi {
                 self.service_animation = Some(ServiceAnimation::Repair);
                 self.service_animation_seconds = 1.4;
                 (
-                    format!("Hull mended for {spent} credits."),
+                    format!(
+                        "Hull mended for {} credits.",
+                        crate::credits_text::grouped(spent)
+                    ),
                     SoundCue::Upgrade,
                 )
             }
             VillageDeal::Part(part) => (
                 format!(
-                    "{} added to the parts locker ({spent} credits).",
-                    part.title()
+                    "{} added to the parts locker ({} credits).",
+                    part.title(),
+                    crate::credits_text::grouped(spent)
                 ),
                 SoundCue::Upgrade,
             ),
@@ -904,13 +917,18 @@ impl SeatUi {
                 SoundCue::Upgrade,
             ),
             VillageDeal::Explosives { kind, count } => (
-                format!("{count} {} stowed ({spent} credits).", kind.name()),
+                format!(
+                    "{count} {} stowed ({} credits).",
+                    kind.name(),
+                    crate::credits_text::grouped(spent)
+                ),
                 SoundCue::Upgrade,
             ),
             VillageDeal::PilotArms(purchase) => (
                 format!(
-                    "{keeper} hands over the {} ({spent} credits).",
-                    purchase.name().to_lowercase()
+                    "{keeper} hands over the {} ({} credits).",
+                    purchase.name().to_lowercase(),
+                    crate::credits_text::grouped(spent)
                 ),
                 SoundCue::Upgrade,
             ),
@@ -932,14 +950,18 @@ impl SeatUi {
                 SoundCue::Ui,
             ),
             VillageDeal::Room => (
-                format!("{keeper} hands you a key. Sleep well ({spent} credits)."),
+                format!(
+                    "{keeper} hands you a key. Sleep well ({} credits).",
+                    crate::credits_text::grouped(spent)
+                ),
                 SoundCue::BedDown,
             ),
             VillageDeal::SkyCraft { recipe, tier } => (
                 format!(
-                    "{keeper} fits your {} {} ({spent} credits and the sky ore).",
+                    "{keeper} fits your {} {} ({} credits and the sky ore).",
                     recipe.name(),
-                    village::services::tier_numeral(tier)
+                    village::services::tier_numeral(tier),
+                    crate::credits_text::grouped(spent)
                 ),
                 SoundCue::Upgrade,
             ),

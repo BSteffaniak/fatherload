@@ -341,7 +341,7 @@ struct HomeLayout {
 fn home_layout() -> &'static HomeLayout {
     static LAYOUT: OnceLock<HomeLayout> = OnceLock::new();
     LAYOUT.get_or_init(|| {
-        let space = Space::new(0);
+        let space = Space::new(crate::space::SpaceSeed::current(0));
         let system = space.home_system();
         let body = |index: u8| {
             system
@@ -414,7 +414,7 @@ const fn share(roll: u64) -> f32 {
 impl GeneratedSpace {
     /// The galaxy of the world seeded `seed` (the shared cache).
     #[must_use]
-    pub fn new(seed: u64) -> Self {
+    pub fn new(seed: crate::space::SpaceSeed) -> Self {
         Self {
             space: Space::shared(seed),
         }

@@ -67,7 +67,7 @@ pub const SHELTER_DEPTH_ROWS: i32 = 40;
 /// Most body lives memoized per process.
 const LIFE_CACHE: usize = 64;
 
-type LifeKey = (u64, Option<SpaceBodyKey>, PlanetParams);
+type LifeKey = (crate::space::SpaceSeed, Option<SpaceBodyKey>, PlanetParams);
 
 static LIVES: Mutex<BTreeMap<LifeKey, Arc<BodyLife>>> = Mutex::new(BTreeMap::new());
 
@@ -75,7 +75,7 @@ static LIVES: Mutex<BTreeMap<LifeKey, Arc<BodyLife>>> = Mutex::new(BTreeMap::new
 /// `None`), memoized: a pure function of its inputs.
 #[must_use]
 pub fn body_life_of(
-    seed: u64,
+    seed: crate::space::SpaceSeed,
     key: Option<SpaceBodyKey>,
     params: PlanetParams,
 ) -> Option<Arc<BodyLife>> {
@@ -113,14 +113,14 @@ impl WorldState {
     pub fn body_life(&self, store: StoreKey) -> Option<Arc<BodyLife>> {
         match store {
             StoreKey::Body(key) => {
-                let params = crate::place::planet_params_for(self.home_seed(), key)?;
-                body_life_of(self.home_seed(), Some(key), params)
+                let params = crate::place::planet_params_for(self.world_seed(), key)?;
+                body_life_of(self.world_seed(), Some(key), params)
             }
             StoreKey::Home => {
                 // A lone planet world: its terrain is the planet (outside any body pass).
                 let terrain = self.store_terrain(StoreKey::Home)?;
                 let params = *terrain.planet_ground()?.params();
-                body_life_of(self.home_seed(), None, params)
+                body_life_of(self.world_seed(), None, params)
             }
             StoreKey::Space => None,
         }
@@ -133,11 +133,11 @@ impl WorldState {
         match self.active_store() {
             StoreKey::Body(key) => {
                 let params = *self.terrain.planet_ground()?.params();
-                body_life_of(self.home_seed(), Some(key), params)
+                body_life_of(self.world_seed(), Some(key), params)
             }
             StoreKey::Home => {
                 let params = *self.terrain.planet_ground()?.params();
-                body_life_of(self.home_seed(), None, params)
+                body_life_of(self.world_seed(), None, params)
             }
             StoreKey::Space => None,
         }

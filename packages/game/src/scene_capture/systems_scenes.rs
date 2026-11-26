@@ -40,7 +40,7 @@ fn sectors(reach: i32) -> impl Iterator<Item = SpaceSector> {
 
 /// The first flight body near home `pick` accepts.
 fn find(pick: impl Fn(&FlightBody) -> bool) -> Option<FlightBody> {
-    let galaxy = GeneratedSpace::new(SCENE_SEED);
+    let galaxy = GeneratedSpace::new(fatherload_simulation::space::SpaceSeed::from(SCENE_SEED));
     sectors(16).find_map(|sector| {
         let middle = SpaceTile {
             x: sector.origin().x + SPACE_SECTOR_TILES / 2,
@@ -201,7 +201,7 @@ fn wormhole(stage: &mut SceneStage<'_>) {
 fn nebula(stage: &mut SceneStage<'_>) {
     stage.play(2, |world, seats| {
         space_world(world);
-        let galaxy = GeneratedSpace::new(SCENE_SEED);
+        let galaxy = GeneratedSpace::new(fatherload_simulation::space::SpaceSeed::from(SCENE_SEED));
         let found = sectors(14).find_map(|sector| {
             let found = galaxy.space().sector(sector);
             found
@@ -249,7 +249,7 @@ fn nebula(stage: &mut SceneStage<'_>) {
 
 /// The first big belt rock near home.
 fn belt_rock(world: &WorldState) -> Option<FlightBody> {
-    let galaxy = GeneratedSpace::new(SCENE_SEED);
+    let galaxy = GeneratedSpace::new(fatherload_simulation::space::SpaceSeed::from(SCENE_SEED));
     let record = world.space_systems().clone();
     sectors(4).find_map(|sector| {
         galaxy

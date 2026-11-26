@@ -37,7 +37,7 @@ pub fn sectors_around_home(radius: i32) -> Vec<SpaceSector> {
 pub fn space_report(seed: u64, radius: i32) -> String {
     let sectors: Vec<Sector> = sectors_around_home(radius)
         .into_iter()
-        .map(|coords| generate_sector(seed, coords))
+        .map(|coords| generate_sector(super::SpaceSeed::current(seed), coords))
         .collect();
     report_of(seed, radius, &sectors)
 }

@@ -1272,6 +1272,18 @@ impl Terrain {
         {
             return &[];
         }
+        // And a wild world's (Wave 12 planets-a; Wave 14 finish: home cave bats flocked into
+        // the jungle's, ocean's and glacier's boss lairs and caves).
+        if let Some(planet) = &self.planet
+            && matches!(
+                planet.params().theme,
+                crate::planet::PlanetThemeId::JUNGLE
+                    | crate::planet::PlanetThemeId::OCEAN
+                    | crate::planet::PlanetThemeId::GLACIER
+            )
+        {
+            return &[];
+        }
         if self.settings.generator.has_descents() {
             self.stratum_at(position).def().creatures
         } else {

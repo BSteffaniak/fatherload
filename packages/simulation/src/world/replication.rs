@@ -636,6 +636,8 @@ impl WorldState {
             hostiles,
             endgame,
             galaxy_story,
+            // A version, sent once in the keyframe (Wave 14 finish).
+            space_generator: _,
         } = self;
         let super::CanonicalProgressionState {
             contracts,

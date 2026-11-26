@@ -755,7 +755,7 @@ impl WorldState {
         if self.endgame.estate(town_id, plot).visited_day == Some(day) {
             return refuse(EndgameRefusal::AlreadyToday, events);
         }
-        let roll = mix(self.world_seed()
+        let roll = mix(self.world_seed().seed
             ^ SALT_NEIGHBOURS
             ^ (u64::from(town_id.0) << 20)
             ^ (u64::from(plot) << 12)

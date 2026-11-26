@@ -240,6 +240,8 @@ impl WorldState {
             hostiles: crate::hostiles::HostileSpace::default(),
             endgame: crate::endgame::EndgameState::default(),
             galaxy_story: crate::galaxy_story::GalaxyStory::default(),
+            // A new world takes the current space generator (Wave 14 finish).
+            space_generator: crate::space::SpaceGenerator::CURRENT,
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

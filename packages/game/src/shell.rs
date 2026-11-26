@@ -2451,7 +2451,10 @@ impl SeatUi {
                 if spent == 0 {
                     "Fuel already full or no credits available.".to_owned()
                 } else {
-                    format!("Fuel topped up for {spent} credits.")
+                    format!(
+                        "Fuel topped up for {} credits.",
+                        crate::credits_text::grouped(spent)
+                    )
                 }
             }
             SessionServiceRequest::Repair { .. } => {
@@ -2460,7 +2463,10 @@ impl SeatUi {
                 if spent == 0 {
                     "Hull already repaired or no credits available.".to_owned()
                 } else {
-                    format!("Hull repaired for {spent} credits.")
+                    format!(
+                        "Hull repaired for {} credits.",
+                        crate::credits_text::grouped(spent)
+                    )
                 }
             }
             SessionServiceRequest::SellBlocks => {
@@ -2468,7 +2474,10 @@ impl SeatUi {
                 if earned == 0 {
                     "No blocks to sell.".to_owned()
                 } else {
-                    let receipt = format!("Sold the block hopper for {earned} credits.");
+                    let receipt = format!(
+                        "Sold the block hopper for {} credits.",
+                        crate::credits_text::grouped(earned)
+                    );
                     self.push_receipt(receipt.clone());
                     receipt
                 }
@@ -2478,7 +2487,10 @@ impl SeatUi {
                 if earned == 0 {
                     "No cargo to sell.".to_owned()
                 } else {
-                    let receipt = format!("Sold cargo for {earned} credits.");
+                    let receipt = format!(
+                        "Sold cargo for {} credits.",
+                        crate::credits_text::grouped(earned)
+                    );
                     self.push_receipt(receipt.clone());
                     receipt
                 }
@@ -2570,12 +2582,14 @@ impl SeatUi {
                 cue = SoundCue::Sell;
                 if earned > 0 {
                     format!(
-                        "HQ finance issued a {earned} credit advance. Risk-adjusted payoff: {} credits.",
+                        "HQ finance issued a {} credit advance. Risk-adjusted payoff: {} credits.",
+                        crate::credits_text::grouped(earned),
                         player.loan_debt
                     )
                 } else {
                     format!(
-                        "Paid {spent} credits toward HQ debt. Remaining: {}.",
+                        "Paid {} credits toward HQ debt. Remaining: {}.",
+                        crate::credits_text::grouped(spent),
                         player.loan_debt
                     )
                 }
@@ -2601,15 +2615,24 @@ impl SeatUi {
             }
             SessionServiceRequest::SalvageClearCollapseZones => {
                 cue = SoundCue::Milestone;
-                format!("Collapse-zone warnings cleared for {earned} credits.")
+                format!(
+                    "Collapse-zone warnings cleared for {} credits.",
+                    crate::credits_text::grouped(earned)
+                )
             }
             SessionServiceRequest::SalvageSellScrapTip | SessionServiceRequest::SellScanData => {
                 cue = SoundCue::Sell;
-                format!("Sold data for {earned} credits.")
+                format!(
+                    "Sold data for {} credits.",
+                    crate::credits_text::grouped(earned)
+                )
             }
             SessionServiceRequest::CompleteDepotWork => {
                 cue = SoundCue::Sell;
-                let receipt = format!("Contract work complete: earned {earned} credits.");
+                let receipt = format!(
+                    "Contract work complete: earned {} credits.",
+                    crate::credits_text::grouped(earned)
+                );
                 self.push_receipt(receipt.clone());
                 receipt
             }
@@ -2646,7 +2669,10 @@ impl SeatUi {
                 self.service_animation = Some(ServiceAnimation::Fuel);
                 self.service_animation_seconds = 1.4;
                 cue = SoundCue::Ui;
-                format!("Buoy refill: the tank tops up for {spent} credits. One per buoy.")
+                format!(
+                    "Buoy refill: the tank tops up for {} credits. One per buoy.",
+                    crate::credits_text::grouped(spent)
+                )
             }
             SessionServiceRequest::CustomizeRig { cosmetics } => {
                 // The spray can plays from the world's `RigCustomized` event.

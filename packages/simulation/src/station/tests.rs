@@ -35,12 +35,12 @@ fn stations_near(space: &Space, reach: i32) -> Vec<StationProfile> {
 }
 
 fn halcyon_context(seed: u64) -> BoardContext {
-    board_context(&Space::new(seed), HALCYON).expect("Halcyon Dock")
+    board_context(&Space::new(crate::space::SpaceSeed::from(seed)), HALCYON).expect("Halcyon Dock")
 }
 
 #[test]
 fn halcyon_dock_is_a_human_hub_with_a_small_yard() {
-    let space = Space::new(7);
+    let space = Space::new(crate::space::SpaceSeed::from(7));
     let home = space.system(SystemRef {
         sector: HOME_SECTOR,
         system: 0,
@@ -58,7 +58,7 @@ fn halcyon_dock_is_a_human_hub_with_a_small_yard() {
 
 #[test]
 fn stations_come_in_every_owner_and_are_seeded() {
-    let space = Space::new(0x00C0_FFEE);
+    let space = Space::new(crate::space::SpaceSeed::from(0x00C0_FFEE));
     let stations = stations_near(&space, 4);
     assert!(stations.len() > 20, "{} stations", stations.len());
     let human = stations
@@ -90,7 +90,10 @@ fn stations_come_in_every_owner_and_are_seeded() {
         assert!(!station.name.is_empty());
     }
     // A pure function of the seed.
-    assert_eq!(stations, stations_near(&Space::new(0x00C0_FFEE), 4));
+    assert_eq!(
+        stations,
+        stations_near(&Space::new(crate::space::SpaceSeed::from(0x00C0_FFEE)), 4)
+    );
     // Shipyards to the top tier exist among them.
     assert!(stations.iter().any(|s| s.yard_tier == LINE_MAX));
 }
@@ -199,7 +202,9 @@ fn a_lot_pays_its_own_price_impact_so_selling_and_buying_back_always_loses() {
 fn halcyons_first_board_is_a_scan_a_quota_and_a_delivery() {
     for seed in [1_u64, 7, 0x00C0_FFEE, 0x5EED_0011] {
         let context = halcyon_context(seed);
-        let board: Vec<_> = (0..3).map(|slot| offer(seed, &context, slot, 0)).collect();
+        let board: Vec<_> = (0..3)
+            .map(|slot| offer(crate::space::SpaceSeed::from(seed), &context, slot, 0))
+            .collect();
         assert!(matches!(
             board[0].map(|m| m.kind),
             Some(MissionKind::Scan { .. })
@@ -219,15 +224,23 @@ fn halcyons_first_board_is_a_scan_a_quota_and_a_delivery() {
             assert!(!mission.ready());
         }
         // Later serials roll fresh missions, the same on every peer.
-        let next = offer(seed, &context, 0, 1);
-        assert_eq!(next, offer(seed, &halcyon_context(seed), 0, 1));
+        let next = offer(crate::space::SpaceSeed::from(seed), &context, 0, 1);
+        assert_eq!(
+            next,
+            offer(
+                crate::space::SpaceSeed::from(seed),
+                &halcyon_context(seed),
+                0,
+                1
+            )
+        );
     }
 }
 
 #[test]
 fn bars_have_patrons_and_rumours_about_near_worlds() {
     let seed = 0x00C0_FFEE;
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::from(seed));
     let context = halcyon_context(seed);
     let profile = context.station.clone().expect("profile");
     let patrons = bar::patrons(&space, &profile, &context);

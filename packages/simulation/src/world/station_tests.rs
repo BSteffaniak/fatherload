@@ -563,7 +563,8 @@ fn world_with(world: &WorldState, hazard: PlanetHazard) -> Option<(SpaceBodyId, 
                     else {
                         continue;
                     };
-                    if crate::place::planet_params_for(SEED, id).is_some()
+                    if crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id)
+                        .is_some()
                         && galaxy.body_ref(id).is_some()
                     {
                         return Some((id, severity));

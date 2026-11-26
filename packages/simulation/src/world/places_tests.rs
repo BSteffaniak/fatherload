@@ -668,7 +668,7 @@ fn a_rig_parked_on_a_body_stays_put_through_frame_moves() {
 
 /// A real landable planet of `seed`'s space near home.
 fn a_planet_near_home(seed: u64) -> SpaceBodyKey {
-    let space = crate::space::Space::shared(seed);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(seed));
     crate::space::report::sectors_around_home(3)
         .into_iter()
         .find_map(|coords| {
@@ -680,7 +680,8 @@ fn a_planet_near_home(seed: u64) -> SpaceBodyKey {
                         system: system.index,
                         body: body.index,
                     };
-                    crate::place::planet_params_for(seed, id).map(|_| id)
+                    crate::place::planet_params_for(crate::space::SpaceSeed::from(seed), id)
+                        .map(|_| id)
                 })
             })
         })

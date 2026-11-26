@@ -240,6 +240,15 @@ fn pause_entry(
     }
 }
 
+/// The pause menu's credits figure, grouped in thousands.
+fn credits_stat(credits: u32) -> String {
+    crate::credits_text::grouped(credits)
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the pause page's sections in order (grouped credits widened a few lines)"
+)]
 pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let test_mode = ui.shell.shown_test_mode(ui.snapshot.test_mode);
     let entries = PauseOption::for_session(ui.shell.online.role, test_mode.is_some())
@@ -278,7 +287,12 @@ pub(super) fn draw_pause(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
     );
     let mut rig = vec![
         height,
-        SectionItem::icon_stat(&icons::CREDITS, "Credits", player.credits.to_string(), GOLD),
+        SectionItem::icon_stat(
+            &icons::CREDITS,
+            "Credits",
+            credits_stat(player.credits),
+            GOLD,
+        ),
         SectionItem::icon_stat(
             &icons::HULL,
             "Hull",
@@ -463,7 +477,7 @@ pub(super) fn draw_slots(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, 
                         "{}{}m deep | {} cr | {} contracts | {:.0} min",
                         if meta.test_mode { "TEST MODE | " } else { "" },
                         meta.depth,
-                        meta.credits,
+                        crate::credits_text::grouped(meta.credits),
                         meta.contracts_completed,
                         (meta.play_seconds / 60.0).floor()
                     ));

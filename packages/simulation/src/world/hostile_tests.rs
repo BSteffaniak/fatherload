@@ -313,6 +313,47 @@ fn pirates_turn_hostile_when_shot() {
     assert_eq!(encounter.state, EncounterState::Fighting);
 }
 
+/// The Starwright Hull softens combat (Wave 14 finish): the same raiders firing on the same
+/// idle rig for the same time take a good share less hull off a Starwright hull, the deflector
+/// soaking first either way.
+#[test]
+fn the_starwright_hull_softens_a_fight() {
+    let lost = |starwright: bool| {
+        let mut world = world_at(30);
+        if starwright {
+            let mut endgame = world.endgame.clone();
+            let career = endgame.careers.entry(PLAYER).or_default();
+            career.starwright |= crate::endgame::StarwrightPart::Hull.bit();
+            world.endgame = endgame;
+        }
+        launch_to(&mut world, open_space(2), 0.0);
+        spawn(
+            &mut world,
+            Faction::Swarm,
+            EncounterKind::Roaming,
+            &[ShipClass::Stinger, ShipClass::Stinger, ShipClass::Stinger],
+        );
+        let start = world.player(PLAYER).expect("rig").hull;
+        let mut lost = 0.0;
+        for _ in 0..seconds(&world, 30.0) {
+            let _ = tick_with(&mut world, ControlState::default());
+            let rig = world.player_mut(PLAYER).expect("rig");
+            rig.fuel = rig.fuel_capacity;
+            // Keep the rig whole (the same fight either way): count what it lost, mend it.
+            lost += start - rig.hull;
+            rig.hull = start;
+        }
+        lost
+    };
+    let plain = lost(false);
+    let plated = lost(true);
+    assert!(plain > 1.0, "the raiders hurt the plain hull ({plain})");
+    assert!(
+        plated < plain * 0.8,
+        "the Starwright hull took {plated} against {plain}"
+    );
+}
+
 /// Controls that turn the rig toward the nearest ship and fire once lined up (the player's
 /// controls only: rotation thrusters and the trigger).
 fn aim_at_nearest(world: &WorldState) -> ControlState {
@@ -982,7 +1023,7 @@ fn a_raid_lands_troopers_on_a_body_by_the_rig() {
     let mut world = world_at(30);
     world.enable_test_mode();
     // A landable world of a system two sectors out.
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let (hx, hy) = galaxy_sector_of(home_star());
     let sector = space.sector(crate::space::SpaceSector::new(hx as i32 + 2, hy as i32));
     let system = sector.systems.first().expect("a system");

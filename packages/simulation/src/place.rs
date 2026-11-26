@@ -491,7 +491,10 @@ impl BodyGenerator for EmptySpaceGenerator {
 /// its seed, radius, gravity and theme. `None` when `key` names no landable body of this
 /// world's space (or names the home world or the Moon, whose ground is the home store's).
 #[must_use]
-pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::PlanetParams> {
+pub fn planet_params_for(
+    seed: crate::space::SpaceSeed,
+    key: SpaceBodyKey,
+) -> Option<crate::planet::PlanetParams> {
     let body = crate::space::Space::shared(seed).body(key)?;
     if body.is_home() || body.radius < crate::polar::MIN_LANDABLE_RADIUS {
         return None;
@@ -502,7 +505,7 @@ pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::
         gravity_milli: body.gravity_milli_g,
         theme: planet_theme_of(body.theme),
         // Wave 12 aliens: who lives there (their towns' ground is part of the planet's).
-        folk: crate::alien::folk_of_body(seed, key, &body),
+        folk: crate::alien::folk_of_body(seed.seed, key, &body),
     })
 }
 

@@ -967,7 +967,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 let detail = format!("{} tiles {way}, {} wide", distance.abs(), site.width());
                 let mut row = HomeRow::new(
                     label,
-                    format!("{} cr", site.price),
+                    format!("{} cr", crate::credits_text::grouped(site.price)),
                     HomeAction::Command(HomeCommand::BuyPlot {
                         site: site.key,
                         size: site.size,
@@ -1012,14 +1012,18 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
         }
         HomeScreen::Catalogue => {
             "Furniture Catalogue".clone_into(&mut view.title);
-            format!("{credits} credits to spend").clone_into(&mut view.subtitle);
+            format!("{} credits to spend", crate::credits_text::grouped(credits))
+                .clone_into(&mut view.subtitle);
             "Delivered to your stock".clone_into(&mut view.rows_title);
             for furniture in world.land_office_catalogue(player) {
                 let owned = world.homes().furniture_count(player, furniture);
                 view.rows.push(
                     HomeRow::new(
                         furniture.name(),
-                        format!("{} cr", furniture.catalogue_price()),
+                        format!(
+                            "{} cr",
+                            crate::credits_text::grouped(furniture.catalogue_price())
+                        ),
                         HomeAction::Command(HomeCommand::BuyFurniture { furniture }),
                     )
                     .detail(if owned > 0 {
@@ -1044,7 +1048,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 let row = match survey {
                     Ok(site) => HomeRow::new(
                         format!("{}, {}", size.name(), site.setting.name().to_lowercase()),
-                        format!("{} cr", site.price),
+                        format!("{} cr", crate::credits_text::grouped(site.price)),
                         HomeAction::Command(command),
                     )
                     .detail(format!("{} tiles wide", size.width()))
@@ -1106,7 +1110,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 let mut sign = HomeRow::new("Sign the contract", "", HomeAction::Sign);
                 match quote {
                     Ok((hire, _)) => {
-                        sign.value = format!("{} cr", hire.price);
+                        sign.value = format!("{} cr", crate::credits_text::grouped(hire.price));
                         let mut lines = vec![format!(
                             "{} for {}",
                             offer.name,
@@ -1115,11 +1119,15 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                         if hire.supply_discount > 0 {
                             lines.push(format!(
                                 "{} blocks supplied: -{} cr",
-                                hire.supplied_blocks, hire.supply_discount
+                                hire.supplied_blocks,
+                                crate::credits_text::grouped(hire.supply_discount)
                             ));
                         }
                         if hire.repeat_discount > 0 {
-                            lines.push(format!("returning client: -{} cr", hire.repeat_discount));
+                            lines.push(format!(
+                                "returning client: -{} cr",
+                                crate::credits_text::grouped(hire.repeat_discount)
+                            ));
                         }
                         sign.detail = lines.join(", ");
                         if credits < hire.price {
@@ -1147,7 +1155,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 let quote = world.hire_quote(player, plot.id, job, offer.character, false);
                 let (value, detail) = match &quote {
                     Ok((hire, _)) => (
-                        format!("{} cr", hire.price),
+                        format!("{} cr", crate::credits_text::grouped(hire.price)),
                         format!(
                             "{} - {}, {}, quality {}{}",
                             offer.from,
@@ -1309,7 +1317,12 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 view.rows.push(
                     HomeRow::new(
                         format!("{label}: {current}"),
-                        format!("{} cr", fatherload_simulation::home::decor::RESTYLE_PRICE),
+                        format!(
+                            "{} cr",
+                            crate::credits_text::grouped(
+                                fatherload_simulation::home::decor::RESTYLE_PRICE
+                            )
+                        ),
                         HomeAction::Command(command),
                     )
                     .detail(format!("Change to {next}"))
@@ -1488,7 +1501,10 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 view.rows.push(
                     HomeRow::new(
                         furniture.name(),
-                        format!("{blocks} blocks + {price} cr"),
+                        format!(
+                            "{blocks} blocks + {} cr",
+                            crate::credits_text::grouped(price)
+                        ),
                         HomeAction::Command(command),
                     )
                     .refused(check(command)),
@@ -1600,7 +1616,7 @@ fn build_site(
                     view.rows.push(
                         HomeRow::new(
                             "Pay for the stock",
-                            format!("{} cr", count * 12),
+                            format!("{} cr", crate::credits_text::grouped(count * 12)),
                             HomeAction::Command(pay),
                         )
                         .refused(check(pay)),
@@ -1645,7 +1661,10 @@ fn build_site(
         view.rows.push(
             HomeRow::new(
                 "Pay to rush the work",
-                rush_price.map_or_else(|| "-".to_owned(), |price| format!("{price} cr")),
+                rush_price.map_or_else(
+                    || "-".to_owned(),
+                    |price| format!("{} cr", crate::credits_text::grouped(price)),
+                ),
                 HomeAction::Command(rush),
             )
             .detail("Double shifts: half the work left is done at once")
@@ -1694,7 +1713,7 @@ fn build_site(
                 view.rows.push(
                     HomeRow::new(
                         expansion.name(),
-                        format!("~{price} cr"),
+                        format!("~{} cr", crate::credits_text::grouped(price)),
                         HomeAction::Open(HomeScreen::Contract(job)),
                     )
                     .detail(expansion_blurb(expansion))
@@ -1728,7 +1747,7 @@ fn build_site(
                 view.rows.push(
                     HomeRow::new(
                         blueprint.name(),
-                        format!("~{} cr", plan.price),
+                        format!("~{} cr", crate::credits_text::grouped(plan.price)),
                         HomeAction::Open(HomeScreen::Contract(job)),
                     )
                     .detail(format!(

@@ -261,7 +261,7 @@ fn lair_rumour(
     faction: crate::hostiles::Faction,
     worlds: &[SpaceBodyId],
 ) -> Option<Rumour> {
-    let lair = crate::hostiles::boss_lair(space.seed(), faction)?;
+    let lair = crate::hostiles::boss_lair(space.space_seed(), faction)?;
     let body = *worlds.first()?;
     let boss = faction.boss().name();
     Some(Rumour {

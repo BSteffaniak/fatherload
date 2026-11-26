@@ -115,8 +115,10 @@ fn every_wave_13_theme_boss_is_on_the_hunt_list() {
                 .iter()
                 .find(|boss| boss.theme == theme)
                 .expect("registered");
-            let id = hunt::nearest_theme_world(SEED, boss.world).expect("a world");
-            let params = crate::place::planet_params_for(SEED, id).expect("landable");
+            let id = hunt::nearest_theme_world(crate::space::SpaceSeed::from(SEED), boss.world)
+                .expect("a world");
+            let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id)
+                .expect("landable");
             assert_eq!(params.theme.0, theme);
             let ground = PlanetGround::new(params);
             let has_lair =
@@ -128,7 +130,7 @@ fn every_wave_13_theme_boss_is_on_the_hunt_list() {
 
 /// A space body tagged `tag` near home (rings 0-6), a full planet if one is near.
 fn body_of(tag: Theme) -> SpaceBodyKey {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let mut best: Option<(u32, SpaceBodyKey)> = None;
     for ring in 0..=6_i32 {
         for y in -ring..=ring {
@@ -145,7 +147,11 @@ fn body_of(tag: Theme) -> SpaceBodyKey {
                             body: body.index,
                         };
                         if body.theme == tag
-                            && crate::place::planet_params_for(SEED, key).is_some()
+                            && crate::place::planet_params_for(
+                                crate::space::SpaceSeed::from(SEED),
+                                key,
+                            )
+                            .is_some()
                             && best.is_none_or(|(radius, _)| body.radius > radius)
                         {
                             best = Some((body.radius, key));
@@ -174,9 +180,14 @@ fn the_story_relics_stand_at_the_new_worlds_builders_outposts() {
     ] {
         let id = body_of(tag);
         for rows in [0_u16, 15] {
-            let site = crate::galaxy_story::plan::outpost_relic(SEED, id, rows)
-                .unwrap_or_else(|| panic!("{tag:?}: an outpost"));
-            let params = crate::place::planet_params_for(SEED, id).expect("landable");
+            let site = crate::galaxy_story::plan::outpost_relic(
+                crate::space::SpaceSeed::from(SEED),
+                id,
+                rows,
+            )
+            .unwrap_or_else(|| panic!("{tag:?}: an outpost"));
+            let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id)
+                .expect("landable");
             let ground = PlanetGround::new(params);
             let width = ground.strip_width();
             let (column, floor) = outlands::builder_outposts(&ground).first().map_or_else(
@@ -205,7 +216,14 @@ fn the_story_relics_stand_at_the_new_worlds_builders_outposts() {
         }
     }
     // A Wave 12 world keeps its hashed column.
-    assert!(crate::galaxy_story::plan::outpost_relic(SEED, body_of(Theme::Jungle), 0).is_none());
+    assert!(
+        crate::galaxy_story::plan::outpost_relic(
+            crate::space::SpaceSeed::from(SEED),
+            body_of(Theme::Jungle),
+            0
+        )
+        .is_none()
+    );
 }
 
 #[test]
@@ -361,7 +379,7 @@ fn beat_the_sporemother(world: &mut WorldState) -> Vec<GameplayEventKind> {
 
 /// A home bought from the builder of an alien town on a Wave 13 world.
 fn buy_a_home_on_a_new_world(world: &mut WorldState) -> Vec<GameplayEventKind> {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let (id, species, found) = (0..=8_i32)
         .flat_map(|ring| {
             (-ring..=ring).flat_map(move |y| {
@@ -389,7 +407,7 @@ fn buy_a_home_on_a_new_world(world: &mut WorldState) -> Vec<GameplayEventKind> {
                 .collect::<Vec<_>>()
         })
         .find_map(|key| {
-            let params = crate::place::planet_params_for(SEED, key)?;
+            let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), key)?;
             if !WAVE_13_THEMES.contains(&params.theme) {
                 return None;
             }
@@ -443,7 +461,7 @@ fn buy_a_home_on_a_new_world(world: &mut WorldState) -> Vec<GameplayEventKind> {
 
 /// A lost ship's lead in a system the road never visited, flown to and paid.
 fn a_lead_in_a_fresh_system(world: &mut WorldState) -> Vec<GameplayEventKind> {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let visited = world.galaxy_story().visited.clone();
     let (system, lead) = (1..6_i32)
         .flat_map(|ring| {
@@ -466,7 +484,7 @@ fn a_lead_in_a_fresh_system(world: &mut WorldState) -> Vec<GameplayEventKind> {
         })
         .filter(|system| !visited.contains(system))
         .find_map(|system| {
-            leads_of(SEED, system)
+            leads_of(crate::space::SpaceSeed::from(SEED), system)
                 .into_iter()
                 .find(|lead| matches!(lead.steps.as_slice(), [LeadStep::ReachPoint(_)]))
                 .map(|lead| (system, lead))

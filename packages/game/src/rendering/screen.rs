@@ -701,7 +701,9 @@ fn draw_view_prompt(
                 Prompt::Use,
                 format!(
                     "Buoy refill: +{adds} fuel for {} cr",
-                    fatherload_simulation::worldgen::sky::isles::BUOY_PRICE
+                    crate::credits_text::grouped(
+                        fatherload_simulation::worldgen::sky::isles::BUOY_PRICE
+                    )
                 ),
                 true,
             )
@@ -1609,7 +1611,7 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
             SectionItem::icon_stat(
                 &icons::CREDITS,
                 "Credits",
-                format!("{} cr", ui.player.credits),
+                format!("{} cr", crate::credits_text::grouped(ui.player.credits)),
                 GOLD,
             ),
         ],
@@ -1690,7 +1692,7 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                 SectionItem::icon_stat(
                     icons::mineral(mineral),
                     format!("{} x{quantity}", mineral.name()),
-                    format!("est. {value} cr"),
+                    format!("est. {} cr", crate::credits_text::grouped(value)),
                     GOLD,
                 )
             })
@@ -1708,7 +1710,7 @@ fn draw_inventory_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
                     artifact.name(),
                     format!(
                         "x{quantity} | base {} cr",
-                        artifact.value().saturating_mul(quantity)
+                        crate::credits_text::grouped(artifact.value().saturating_mul(quantity))
                     ),
                     PINK,
                 )

@@ -3,8 +3,8 @@
 use super::{
     AsteroidBelt, AsteroidOre, Atmosphere, BodyKind, CELL_TILES, Comet, Derelict, DerelictKind,
     HOME_SECTOR, Nebula, PLANET_RADIUS, Ring, SMALL_BODY_RADIUS, SYSTEM_MAX_EXTENT, Sector,
-    SpaceBody, SpaceSector, SpaceTile, Star, StarSystem, Station, StationId, StationKind,
-    SystemRef, TURN, Theme, home, interstellar, trig::polar,
+    SpaceBody, SpaceGenerator, SpaceSector, SpaceSeed, SpaceTile, Star, StarSystem, Station,
+    StationId, StationKind, SystemRef, TURN, Theme, home, interstellar, trig::polar,
 };
 use crate::{
     star_chart::{StarChart, StarClass, star_name},
@@ -17,6 +17,8 @@ const SALT_SYSTEM_ID: u64 = 0x5BAC_E200;
 const SALT_GROUND: u64 = 0x5BAC_E300;
 const SALT_FREE: u64 = 0x5BAC_E400;
 const SALT_DERELICT: u64 = 0x5BAC_E500;
+/// V2's small-body themes (Wave 14 finish).
+const SALT_RETHEME: u64 = 0x5BAC_E600;
 
 /// Arc length of one belt segment at the belt's middle, tiles.
 pub(super) const BELT_SEGMENT_TILES: i64 = 8_192;
@@ -77,9 +79,21 @@ pub const fn system_uid(seed: u64, sector: SpaceSector, index: u8) -> u64 {
     hash2(seed, SALT_SYSTEM_ID + index as u64, sector.x, sector.y) | 1
 }
 
-/// Generates sector `sector` of the space of a world seeded `seed`.
+/// Generates sector `sector` of the space of a world seeded `seed` (a plain seed: the current
+/// generator's galaxy).
 #[must_use]
-pub fn generate_sector(seed: u64, sector: SpaceSector) -> Sector {
+pub fn generate_sector(key: SpaceSeed, sector: SpaceSector) -> Sector {
+    let mut out = generate_sector_v1(key.seed, sector);
+    if key.generator == SpaceGenerator::V2 {
+        for system in &mut out.systems {
+            retheme_small_bodies(key.seed, system);
+        }
+    }
+    out
+}
+
+/// The V1 generator (Waves 11-13; [`super::GOLDEN_SPACE_DIGEST`]).
+fn generate_sector_v1(seed: u64, sector: SpaceSector) -> Sector {
     let layout = cell_layout(seed, sector);
     let mut out = Sector {
         coords: sector,
@@ -519,6 +533,67 @@ fn orbit_temperature(star_k: f64, radius: u32, distance: i64) -> i32 {
     (star_k * ratio.sqrt() * 0.231) as i32
 }
 
+/// V2 (Wave 14 finish): small bodies carry themes, so every theme's small-body secret is found
+/// in play. A pure function of the V1 body and a hash of its own (no generator draw moves:
+/// every position, orbit and size stays V1's).
+///
+/// * A **moon** takes its planet's theme one time in two (a jungle moon of a jungle world, an
+///   icy moon of a gas giant); otherwise it keeps a V1 theme other than barren, and a barren
+///   one becomes any of the twelve by its warmth three times in five.
+/// * A **crater rock** keeps a V1 theme other than barren; a barren one becomes any of the
+///   twelve by its warmth three times in five.
+///
+/// The body's climate follows its new theme (its temperature clamped to the theme's range,
+/// its air drawn from the theme's, a locked world's endless day).
+fn retheme_small_bodies(seed: u64, system: &mut StarSystem) {
+    let parents: Vec<(u8, Theme)> = system
+        .bodies
+        .iter()
+        .map(|body| (body.index, body.theme))
+        .collect();
+    for body in &mut system.bodies {
+        if !matches!(body.kind, BodyKind::Moon | BodyKind::CraterRock) {
+            continue;
+        }
+        let roll = hash2(seed ^ system.id, SALT_RETHEME, i32::from(body.index), 0);
+        let parent = body
+            .parent
+            .and_then(|index| parents.iter().find(|(id, _)| *id == index))
+            .map(|(_, theme)| *theme)
+            .filter(|theme| Theme::PLANET.contains(theme));
+        let kelvin = i32::from(body.temperature_c) + 273;
+        let warm_pick = || {
+            let weights = theme_weights(kelvin);
+            let total: u32 = weights.iter().sum();
+            let mut pick = ((roll >> 16) % u64::from(total.max(1))) as u32;
+            for (index, weight) in weights.iter().enumerate() {
+                if pick < *weight {
+                    return Theme::PLANET[index];
+                }
+                pick -= weight;
+            }
+            Theme::Barren
+        };
+        let theme = match parent {
+            Some(theme) if body.kind == BodyKind::Moon && roll % 100 < 50 => theme,
+            _ if body.theme != Theme::Barren => body.theme,
+            _ if (roll >> 8) % 100 < 60 => warm_pick(),
+            _ => Theme::Barren,
+        };
+        if theme == body.theme {
+            continue;
+        }
+        body.theme = theme;
+        let (low, high) = theme_temperature(theme);
+        body.temperature_c = i32::from(body.temperature_c).clamp(low, high) as i16;
+        let mut rng = RegionRng::new(seed ^ system.id, SALT_RETHEME + 1, i32::from(body.index), 0);
+        body.atmosphere = atmosphere(&mut rng, theme);
+        if theme == Theme::TidallyLocked {
+            body.day_seconds = 0;
+        }
+    }
+}
+
 /// Theme weights by orbit temperature, in `Theme::PLANET` order (jungle, ocean, ice, desert,
 /// volcanic, crystal, fungal, machine, gas giant, locked, ring, dead).
 const fn theme_weights(kelvin: i32) -> [u32; 12] {
@@ -859,7 +934,8 @@ pub struct ChartTarget {
 #[must_use]
 pub fn chart_target(seed: u64, sector: (i32, i32), roll: u64) -> ChartTarget {
     let coords = SpaceSector::new(sector.0, sector.1);
-    let generated = generate_sector(seed, coords);
+    // Systems and their places are the same under every generator.
+    let generated = generate_sector(SpaceSeed::current(seed), coords);
     let candidates: Vec<&StarSystem> = generated
         .systems
         .iter()
@@ -889,7 +965,8 @@ pub fn chart_target(seed: u64, sector: (i32, i32), roll: u64) -> ChartTarget {
 #[must_use]
 pub fn resolve_chart(seed: u64, chart: &StarChart) -> SystemRef {
     let coords = SpaceSector::new(chart.sector.0, chart.sector.1);
-    let generated = generate_sector(seed, coords);
+    // Systems and their places are the same under every generator.
+    let generated = generate_sector(SpaceSeed::current(seed), coords);
     let index = generated
         .systems
         .iter()

@@ -77,7 +77,7 @@ impl Offer {
 
     /// A price in credits, red when `credits` cannot cover it.
     fn price(mut self, cost: u32, credits: u32) -> Self {
-        self.value = cost.to_string();
+        self.value = crate::credits_text::grouped(cost);
         self.coin = true;
         if credits < cost {
             self.value_color = RED;
@@ -88,7 +88,7 @@ impl Offer {
 
     /// A payout or credit gain.
     fn payout(mut self, amount: u32) -> Self {
-        self.value = format!("+{amount}");
+        self.value = format!("+{}", crate::credits_text::grouped(amount));
         self.value_color = LIME;
         self.coin = true;
         self
@@ -141,7 +141,12 @@ fn offer_items(offers: Vec<Offer>, selected: usize) -> (Vec<SectionItem>, Option
 
 /// The wallet line every counter starts with.
 fn credits_item(credits: u32) -> SectionItem {
-    SectionItem::icon_stat(&icons::CREDITS, "Your credits", credits.to_string(), GOLD)
+    SectionItem::icon_stat(
+        &icons::CREDITS,
+        "Your credits",
+        crate::credits_text::grouped(credits),
+        GOLD,
+    )
 }
 
 /// Draws a counter panel: a status section, the offers, and the selected row's details.
@@ -218,9 +223,7 @@ fn service_offers(
             };
             Offer::new(icon, label, detail)
                 .price(charge, credits)
-                .about(format!(
-                    "Every choice fills it up: {units} {unit} at {unit_cost} cr each. Short on credits, the counter sells as much as you can pay for."
-                ))
+                .about(format!("Every choice fills it up: {units} {unit} at {} cr each. Short on credits, the counter sells as much as you can pay for.", crate::credits_text::grouped(unit_cost)))
         })
         .collect()
 }
@@ -392,7 +395,7 @@ fn shop_offers(ui: &UiFrame<'_, '_>) -> Vec<Offer> {
                     .about(format!(
                         "{} ({} cr). {}.",
                         lock.reason(),
-                        offer.cost,
+                        crate::credits_text::grouped(offer.cost),
                         offer.description
                     ));
             }
@@ -513,11 +516,15 @@ fn finance_offer(ui: &UiFrame<'_, '_>) -> Offer {
         Offer::new(
             &menu_icons::BANK,
             "Take out a loan",
-            format!("Repay {} cr later", advance + premium),
+            format!(
+                "Repay {} cr later",
+                crate::credits_text::grouped(advance + premium)
+            ),
         )
         .payout(advance)
         .about(format!(
-            "The bank advances {advance} cr now; you owe {} cr, paid back from this counter.",
+            "The bank advances {} cr now; you owe {} cr, paid back from this counter.",
+            crate::credits_text::grouped(advance),
             advance + premium
         ))
     } else {
@@ -525,7 +532,10 @@ fn finance_offer(ui: &UiFrame<'_, '_>) -> Offer {
         Offer::new(
             &menu_icons::BANK,
             "Repay loan",
-            format!("{} cr still owed", player.loan_debt),
+            format!(
+                "{} cr still owed",
+                crate::credits_text::grouped(player.loan_debt)
+            ),
         )
         .price(payment, player.credits)
         .unavailable_if(payment == 0)
@@ -577,7 +587,7 @@ pub(super) fn draw_bank(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
     let mut status = vec![credits_item(player.credits)];
     status.push(SectionItem::stat(
         "Loan debt",
-        format!("{} cr", player.loan_debt),
+        format!("{} cr", crate::credits_text::grouped(player.loan_debt)),
         if player.loan_debt > 0 { ORANGE } else { FOG },
     ));
     draw_counter(
@@ -970,7 +980,7 @@ pub(super) fn draw_salvage(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>
     .unavailable_if(!lost)
     .about(format!(
         "A crew hauls your dropped cargo home for {} cr per item.",
-        12_u32.saturating_sub(u32::from(level) * 3)
+        crate::credits_text::grouped(12_u32.saturating_sub(u32::from(level) * 3))
     ));
     let hull_full = ui.player.hull >= ui.player.max_hull();
     let patch = Offer::new(
@@ -1119,7 +1129,7 @@ pub(super) fn draw_headquarters(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
                 SectionItem::icon_stat(
                     &menu_icons::CONTRACT,
                     contract.title.clone(),
-                    format!("{} cr", contract.reward),
+                    format!("{} cr", crate::credits_text::grouped(contract.reward)),
                     GOLD,
                 ),
                 SectionItem::meter(
@@ -1333,7 +1343,7 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             )
             .about(format!(
                 "Pays {} cr when the contract's cargo is in the hold.",
-                contract.reward
+                crate::credits_text::grouped(contract.reward)
             )),
         Offer::new(
             &icons::CARGO,
@@ -1361,7 +1371,10 @@ pub(super) fn draw_depot(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) 
             if lab == 0 {
                 "Needs a scanner lab".to_owned()
             } else {
-                format!("{} cr per scan marker", 12 + u32::from(lab) * 4)
+                format!(
+                    "{} cr per scan marker",
+                    crate::credits_text::grouped(12 + u32::from(lab) * 4)
+                )
             },
         )
         .tag("DATA", MINT)
@@ -1458,7 +1471,7 @@ pub(super) fn hopper_section(ui: &UiFrame<'_, '_>) -> (Section, Option<String>) 
             .about(format!(
                 "Tips every {} out beside the rig; the depot pays {} cr each instead.",
                 block.name(),
-                block_sale_value(block)
+                crate::credits_text::grouped(block_sale_value(block))
             )),
         })
         .collect();
@@ -1551,7 +1564,9 @@ fn cargo_items(ui: &UiFrame<'_, '_>) -> Vec<SectionItem> {
                     format!("{} x{count}", mineral.name()),
                     format!(
                         "{} cr",
-                        ui.snapshot.market_value(mineral).saturating_mul(count)
+                        crate::credits_text::grouped(
+                            ui.snapshot.market_value(mineral).saturating_mul(count)
+                        )
                     ),
                     GOLD,
                 )
@@ -1559,7 +1574,10 @@ fn cargo_items(ui: &UiFrame<'_, '_>) -> Vec<SectionItem> {
             .chain(player.cargo_bay.artifacts().map(|(artifact, count)| {
                 SectionItem::stat(
                     format!("{} x{count}", artifact.name()),
-                    format!("{} cr", artifact.value().saturating_mul(count)),
+                    format!(
+                        "{} cr",
+                        crate::credits_text::grouped(artifact.value().saturating_mul(count))
+                    ),
                     PINK,
                 )
             }))
@@ -1597,7 +1615,10 @@ fn market_items(ui: &UiFrame<'_, '_>) -> Vec<SectionItem> {
             SectionItem::icon_stat(
                 icons::mineral(mineral),
                 mineral.name(),
-                format!("{} cr {trend}", ui.snapshot.market_value(mineral)),
+                format!(
+                    "{} cr {trend}",
+                    crate::credits_text::grouped(ui.snapshot.market_value(mineral))
+                ),
                 color,
             )
         })

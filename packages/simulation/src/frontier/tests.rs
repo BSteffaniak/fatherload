@@ -148,7 +148,7 @@ fn every_frontier_theme_is_registered_and_space_bodies_with_its_tag_get_it() {
     assert_eq!(crate::place::planet_theme_of(Theme::Crystal), CRYSTAL_WORLD);
     // A real generated body of each tag grounds as its frontier world.
     let seed = 0x0D3E_9DE5;
-    let space = crate::space::Space::shared(seed);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(seed));
     let mut found = std::collections::BTreeSet::new();
     for coords in crate::space::report::sectors_around_home(3) {
         let sector = space.sector(coords);
@@ -159,7 +159,8 @@ fn every_frontier_theme_is_registered_and_space_bodies_with_its_tag_get_it() {
                     system: system.index,
                     body: body.index,
                 };
-                if let Some(params) = crate::place::planet_params_for(seed, id)
+                if let Some(params) =
+                    crate::place::planet_params_for(crate::space::SpaceSeed::from(seed), id)
                     && let Some(style) = style_of(params.theme)
                 {
                     found.insert(style);

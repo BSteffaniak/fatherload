@@ -565,7 +565,7 @@ impl SpaceBot {
 pub fn chart_with_a_small_moon(
     seed: u64,
 ) -> Option<(crate::star_chart::StarChart, SystemRef, FlightBody)> {
-    let galaxy = super::GeneratedSpace::new(seed);
+    let galaxy = super::GeneratedSpace::new(crate::space::SpaceSeed::current(seed));
     for x in 0..400 {
         let chart = crate::star_chart::chart_at_site(
             seed,
@@ -584,7 +584,7 @@ pub fn chart_with_a_small_moon(
             .filter(|body| body.kind == BodyKind::Planet && body.radius <= space::tiles(560.0))
             .filter(|body| {
                 galaxy.space_body(body.body).is_some_and(|id| {
-                    crate::place::planet_params_for(seed, id)
+                    crate::place::planet_params_for(crate::space::SpaceSeed::current(seed), id)
                         .is_some_and(|params| params.gravity() <= 0.5)
                 })
             })

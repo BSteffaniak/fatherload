@@ -459,7 +459,8 @@ pub fn lair_tile(ground: &PlanetGround, lair: &Lair, column: i64, row: i32) -> O
     // The hall's lining: two tiles round the open space, builder lamps along its sides and
     // ceiling.
     if dx.abs() <= LAIR_HALF_WIDTH + 2 && row >= lair.top - 2 && row <= lair.floor + 1 {
-        let lamp_on_side = dx.abs() == LAIR_HALF_WIDTH + 1 && row == lair.floor - 5;
+        let lamp_on_side =
+            dx.abs() == LAIR_HALF_WIDTH + 1 && (row == lair.top + 4 || row == lair.floor - 8);
         let lamp_overhead =
             row == lair.top - 1 && dx.abs() < LAIR_HALF_WIDTH - 5 && dx.rem_euclid(LAMP_EVERY) == 4;
         if lamp_on_side || lamp_overhead {

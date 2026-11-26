@@ -158,6 +158,8 @@ impl WorldState {
             endgame: _,
             // The road is the crew's: a leaving player's part stays in its stats (Wave 13).
             galaxy_story: _,
+            // The galaxy's generator is the world's (Wave 14 finish).
+            space_generator: _,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).

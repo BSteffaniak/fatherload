@@ -92,8 +92,19 @@ impl WorldState {
 
     /// The world's seed (the home terrain's, also inside a body store's ground pass).
     #[must_use]
-    pub const fn world_seed(&self) -> u64 {
-        self.home_seed()
+    pub const fn world_seed(&self) -> crate::space::SpaceSeed {
+        crate::space::SpaceSeed::new(self.home_seed(), self.space_generator)
+    }
+
+    /// The space generator this world's galaxy is made by (Wave 14 finish).
+    #[must_use]
+    pub const fn space_generator(&self) -> crate::space::SpaceGenerator {
+        self.space_generator
+    }
+
+    /// Sets the space generator (tests and tools that load or stage an old world's galaxy).
+    pub const fn set_space_generator(&mut self, generator: crate::space::SpaceGenerator) {
+        self.space_generator = generator;
     }
 
     /// Every body near `pos` (owned, so the world can be borrowed mutably after).

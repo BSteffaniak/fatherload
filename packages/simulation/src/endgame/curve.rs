@@ -129,7 +129,7 @@ fn mission_minutes(kind: MissionKind, elsewhere: bool) -> f64 {
 /// up to six of its systems.
 #[must_use]
 pub fn ring_rates(seed: u64, ring: u8) -> RingRates {
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::current(seed));
     let mut credits = 0.0;
     let mut minutes = 0.0;
     let mut stations = 0;
@@ -159,7 +159,12 @@ pub fn ring_rates(seed: u64, ring: u8) -> RingRates {
                     stations += 1;
                     for serial in 1..=2 {
                         for slot in 0..3 {
-                            let Some(mission) = offer(seed, &context, slot, serial) else {
+                            let Some(mission) = offer(
+                                crate::space::SpaceSeed::current(seed),
+                                &context,
+                                slot,
+                                serial,
+                            ) else {
                                 continue;
                             };
                             let elsewhere = match mission.kind {

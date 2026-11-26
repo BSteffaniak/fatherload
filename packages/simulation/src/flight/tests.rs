@@ -597,8 +597,8 @@ fn assists_and_flight_switches_are_off_by_default() {
 
 #[test]
 fn the_generated_galaxy_is_deterministic_and_honours_the_charts() {
-    let space = GeneratedSpace::new(0xF00D);
-    let again = GeneratedSpace::new(0xF00D);
+    let space = GeneratedSpace::new(crate::space::SpaceSeed::from(0xF00D));
+    let again = GeneratedSpace::new(crate::space::SpaceSeed::from(0xF00D));
     let home = space.system_at((0, 0)).expect("home");
     assert_eq!(home.system, HOME_SYSTEM);
     let bodies = space.bodies_of(&home);
@@ -640,7 +640,10 @@ fn the_generated_galaxy_is_deterministic_and_honours_the_charts() {
             );
             // Every landable body has round ground to land on.
             let id = space.space_body(body.body).expect("a generated body");
-            assert!(crate::place::planet_params_for(0xF00D, id).is_some());
+            assert!(
+                crate::place::planet_params_for(crate::space::SpaceSeed::from(0xF00D), id)
+                    .is_some()
+            );
             assert_eq!(space.body_ref(id), Some(body.body));
         }
     }

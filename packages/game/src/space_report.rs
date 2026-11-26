@@ -83,7 +83,10 @@ pub fn run(options: &SpaceReportOptions, out: &mut impl std::io::Write) -> Resul
     let start = std::time::Instant::now();
     for coords in &sectors {
         let one = std::time::Instant::now();
-        let _ = generate_sector(options.seed, *coords);
+        let _ = generate_sector(
+            fatherload_simulation::space::SpaceSeed::from(options.seed),
+            *coords,
+        );
         slowest = slowest.max(one.elapsed().as_secs_f64() * 1_000.0);
     }
     let total = start.elapsed().as_secs_f64() * 1_000.0;

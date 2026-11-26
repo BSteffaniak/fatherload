@@ -205,6 +205,11 @@ mod wilds_tests;
 mod outlands;
 #[cfg(test)]
 mod outlands_tests;
+// Wave 14 finish: the Wave 12 worlds' theme bosses in play.
+#[cfg(test)]
+mod lair_tests;
+#[cfg(test)]
+mod space_generator_tests;
 pub use aliens::{
     HOME_BUILD_DAY_DIVISOR, alien_species_of, home_price as alien_home_price, trail_system,
 };
@@ -682,6 +687,12 @@ pub struct WorldState {
     /// landed on, and each player's part.
     #[serde(default)]
     galaxy_story: crate::galaxy_story::GalaxyStory,
+    /// The space generator this world's galaxy is made by (Wave 14 finish, see
+    /// [`crate::space::SpaceGenerator`]): a save without it (Waves 11-13) keeps V1's small
+    /// bodies; new worlds take the current one. Saved and sent in the keyframe, never hashed
+    /// (it never changes).
+    #[serde(default)]
+    space_generator: crate::space::SpaceGenerator,
 }
 
 impl WorldState {

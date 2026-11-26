@@ -651,8 +651,8 @@ pub struct PlaceScene<'w> {
     /// and the flat test ground): where it is in space and what it looks like, for the polar
     /// renderer (Wave 11 integration).
     pub body: Option<PlaceBody>,
-    /// The world's seed (the space generator's galaxy round the body).
-    pub seed: u64,
+    /// The world's galaxy key (its seed and space generator: the galaxy round the body).
+    pub seed: fatherload_simulation::space::SpaceSeed,
     /// The seat's player's own map of this ground (Wave 12 systems: a body's map is its own;
     /// tiles keyed round the lap, `Terrain::lap_tile`).
     pub discovered: Option<&'w fatherload_simulation::world::DiscoveredTiles>,
@@ -1116,8 +1116,8 @@ pub struct Flyer {
 /// What the space view and the nav HUD read (Wave 11).
 #[derive(Clone, Debug)]
 pub struct SpaceSnapshot<'w> {
-    /// The world seed (the galaxy is a pure function of it and the charts).
-    pub seed: u64,
+    /// The world's galaxy key (the galaxy is a pure function of it and the charts).
+    pub seed: fatherload_simulation::space::SpaceSeed,
     pub charts: &'w [fatherload_simulation::star_chart::StarChart],
     pub shared: &'w fatherload_simulation::flight::FlightShared,
     /// Every system the crew knows.
@@ -1326,7 +1326,7 @@ impl<'w> RenderSnapshot<'w> {
             heart_centre: world.heart_centre(),
             cable: world.cable_path(),
             space: SpaceSnapshot {
-                seed: world.world_settings().seed,
+                seed: world.world_seed(),
                 charts: world.star_charts(),
                 shared: world.flight_shared(),
                 known: world.known_systems(),

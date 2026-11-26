@@ -292,7 +292,7 @@ fn gravity_scales_with_each_body_and_shows_one_number() {
 
 /// Landable bodies of the world seeded `seed` near home: `(key, params)`.
 fn landable_bodies(seed: u64) -> Vec<(SpaceBodyKey, PlanetParams, Atmosphere)> {
-    let space = crate::space::Space::shared(seed);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(seed));
     let mut out = Vec::new();
     for y in -2..=2 {
         for x in -2..=2 {
@@ -304,7 +304,9 @@ fn landable_bodies(seed: u64) -> Vec<(SpaceBodyKey, PlanetParams, Atmosphere)> {
                         system: system.index,
                         body: body.index,
                     };
-                    if let Some(params) = crate::place::planet_params_for(seed, key) {
+                    if let Some(params) =
+                        crate::place::planet_params_for(crate::space::SpaceSeed::from(seed), key)
+                    {
                         out.push((key, params, body.atmosphere));
                     }
                 }
@@ -381,7 +383,9 @@ fn seats_on_different_bodies_read_their_own_day_and_air() {
     for (key, params, _) in [breathing, airless] {
         let body = space.body_ref(key).expect("a flight body");
         let flight = space.body(body).expect("found");
-        let life = crate::world::body_life_of(SEED, Some(key), params).expect("life");
+        let life =
+            crate::world::body_life_of(crate::space::SpaceSeed::from(SEED), Some(key), params)
+                .expect("life");
         let ground = f32::from(life.gravity_milli()) / 1_000.0;
         assert!((flight.surface_gravity / crate::flight::space::FLIGHT_G_PX - ground).abs() < 1e-4);
         assert!((params.gravity() - ground).abs() < 1e-4);

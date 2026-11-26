@@ -268,7 +268,7 @@ pub fn station_rows(
         }
         StationPage::Market => {
             rows.push(StationRow::SellOre);
-            let goods = goods_of(station, world.world_seed());
+            let goods = goods_of(station, world.world_seed().seed);
             rows.extend(goods.iter().map(|(good, _)| StationRow::BuyGood(*good)));
             if let Some(hold) = ledger.hold(player) {
                 rows.extend(

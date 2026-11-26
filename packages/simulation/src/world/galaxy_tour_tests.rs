@@ -216,8 +216,8 @@ fn sectors(reach: i32) -> Vec<SpaceSector> {
 
 /// A big belt rock near home.
 fn belt_rock(world: &WorldState) -> FlightBody {
-    let generated = GeneratedSpace::new(SEED);
-    let space = crate::space::Space::shared(SEED);
+    let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     for sector in sectors(4) {
         for system in &space.sector(sector).systems {
             for belt in &system.belts {
@@ -238,7 +238,7 @@ fn belt_rock(world: &WorldState) -> FlightBody {
 
 /// A landable planet with space theme `theme` near home (`SpaceBodyKey`).
 pub(super) fn body_of_theme(theme: Theme) -> SpaceBodyKey {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let mut best: Option<(u32, SpaceBodyKey)> = None;
     for sector in sectors(6) {
         for system in &space.sector(sector).systems {
@@ -251,7 +251,9 @@ pub(super) fn body_of_theme(theme: Theme) -> SpaceBodyKey {
                     system: system.index,
                     body: body.index,
                 };
-                if crate::place::planet_params_for(SEED, id).is_none() {
+                if crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id)
+                    .is_none()
+                {
                     continue;
                 }
                 // The biggest found (a planet's full strata), first found among equals.
@@ -269,7 +271,7 @@ pub(super) fn body_of_theme(theme: Theme) -> SpaceBodyKey {
 
 /// A bounty against pirates on a board near home: (station, slot, target id).
 fn pirate_bounty(world: &WorldState) -> (StationId, u8, crate::hostiles::BountyTarget) {
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     for sector in sectors(2) {
         for system in &space.sector(sector).systems {
             for station in &system.stations {
@@ -281,7 +283,8 @@ fn pirate_bounty(world: &WorldState) -> (StationId, u8, crate::hostiles::BountyT
                     let Some(offer) = offer else {
                         continue;
                     };
-                    if let Some(target) = bounty_target_of(SEED, offer.kind)
+                    if let Some(target) =
+                        bounty_target_of(crate::space::SpaceSeed::from(SEED), offer.kind)
                         && target.faction == Faction::Pirates
                     {
                         return (profile.id, u8::try_from(slot).unwrap_or(0), target);
@@ -752,7 +755,8 @@ fn tour() {
     // 7. Meet an alien species, trade, learn, and complete their first chapter.
     let species = AlienSpecies::Tokkari;
     let id = first_home(SEED, species).expect("a first home");
-    let params = crate::place::planet_params_for(SEED, id).expect("landable");
+    let params =
+        crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id).expect("landable");
     let towns = towns_of(&params);
     let found = std::sync::Arc::clone(&towns[0]);
     let events = act(
@@ -826,7 +830,7 @@ fn tour() {
         "a chapter done"
     );
     // 8. Through a wormhole.
-    let generated = GeneratedSpace::new(SEED);
+    let generated = GeneratedSpace::new(crate::space::SpaceSeed::from(SEED));
     let mouth = sectors(12)
         .into_iter()
         .find_map(|sector| {

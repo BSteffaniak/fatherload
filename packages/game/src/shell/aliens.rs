@@ -206,7 +206,7 @@ pub fn row_text(
             "Take a lesson".to_owned(),
             format!(
                 "{} cr, once a day",
-                fatherload_simulation::alien::language::LESSON_PRICE
+                crate::credits_text::grouped(fatherload_simulation::alien::language::LESSON_PRICE)
             ),
         ),
         AlienRow::Chapter(ChapterRow::Ask) => {
@@ -228,12 +228,18 @@ pub fn row_text(
             let unit = world.alien_ore_price(player_id, species, ore).unwrap_or(0);
             (
                 format!("Sell {count} {}", ore.name()),
-                format!("{} cr", u64::from(unit) * u64::from(count)),
+                format!(
+                    "{} cr",
+                    crate::credits_text::grouped(u64::from(unit) * u64::from(count))
+                ),
             )
         }
         AlienRow::Buy(good) => (
             good.name().to_owned(),
-            format!("{} cr", world.alien_good_price(player_id, species, good)),
+            format!(
+                "{} cr",
+                crate::credits_text::grouped(world.alien_good_price(player_id, species, good))
+            ),
         ),
         AlienRow::Plot(plot) => {
             let home = world.aliens().home_at(found.id, plot);
@@ -241,7 +247,9 @@ pub fn row_text(
             let detail = match home {
                 None => format!(
                     "{} cr",
-                    fatherload_simulation::world::alien_home_price(species)
+                    crate::credits_text::grouped(fatherload_simulation::world::alien_home_price(
+                        species
+                    ))
                 ),
                 Some(home) if Some(home.owner) == player => {
                     format!("yours: building {}%", home.progress_per_mille(now) / 10)
@@ -258,7 +266,10 @@ pub fn row_text(
                     fatherload_simulation::endgame::works::materials_line(bill.materials);
                 (
                     format!("Raise a wing: {}", wing.name().to_lowercase()),
-                    format!("{} cr + {materials}", bill.credits),
+                    format!(
+                        "{} cr + {materials}",
+                        crate::credits_text::grouped(bill.credits)
+                    ),
                 )
             },
         ),

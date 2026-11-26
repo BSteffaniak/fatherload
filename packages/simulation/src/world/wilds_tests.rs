@@ -978,8 +978,10 @@ fn real_body(seed: u64, theme: crate::space::Theme) -> crate::place::SpaceBodyKe
                 if x.abs().max(y.abs()) != ring {
                     continue;
                 }
-                let sector =
-                    generate_sector(seed, SpaceSector::new(HOME_SECTOR.x + x, HOME_SECTOR.y + y));
+                let sector = generate_sector(
+                    crate::space::SpaceSeed::from(seed),
+                    SpaceSector::new(HOME_SECTOR.x + x, HOME_SECTOR.y + y),
+                );
                 for system in &sector.systems {
                     for body in &system.bodies {
                         let key = crate::place::SpaceBodyKey {
@@ -990,7 +992,11 @@ fn real_body(seed: u64, theme: crate::space::Theme) -> crate::place::SpaceBodyKe
                         if body.theme == theme
                             && body.kind == BodyKind::Planet
                             && body.radius <= 4_000
-                            && crate::place::planet_params_for(seed, key).is_some()
+                            && crate::place::planet_params_for(
+                                crate::space::SpaceSeed::from(seed),
+                                key,
+                            )
+                            .is_some()
                         {
                             return key;
                         }
@@ -1013,7 +1019,8 @@ fn a_real_glacier_body_plays_its_rules_for_its_rig_only_while_the_crew_is_split(
     const ONE: PlayerId = PlayerId::new(1);
     const TWO: PlayerId = PlayerId::new(2);
     let key = real_body(SEED, crate::space::Theme::Ice);
-    let params = crate::place::planet_params_for(SEED, key).expect("a body");
+    let params =
+        crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), key).expect("a body");
     assert_eq!(params.theme, PlanetThemeId::GLACIER);
     let settings = WorldSettings {
         generator: GeneratorVersion::V11,

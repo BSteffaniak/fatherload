@@ -178,7 +178,7 @@ impl SeatUi {
             self.pickup_armed = PICKUP_CONFIRM_SECONDS;
             self.message = format!(
                 "Rig link: calling the rig over. Press {use_key} again to radio for a pickup ({} cr).",
-                fatherload_simulation::pilot::PILOT_RECALL_FEE
+                crate::credits_text::grouped(fatherload_simulation::pilot::PILOT_RECALL_FEE)
             );
             return;
         }
@@ -190,7 +190,7 @@ impl SeatUi {
             });
             self.message = format!(
                 "Pickup called: hauled back aboard for {} credits.",
-                fatherload_simulation::pilot::PILOT_RECALL_FEE
+                crate::credits_text::grouped(fatherload_simulation::pilot::PILOT_RECALL_FEE)
             );
             return;
         }
@@ -199,12 +199,12 @@ impl SeatUi {
         self.message = if wrecked {
             format!(
                 "Your rig is wrecked. Press {use_key} again to radio for a pickup ({} cr).",
-                fatherload_simulation::pilot::PILOT_RECALL_FEE
+                crate::credits_text::grouped(fatherload_simulation::pilot::PILOT_RECALL_FEE)
             )
         } else {
             format!(
                 "Walk up to your rig to board it, or press {use_key} again to radio for a pickup ({} cr).",
-                fatherload_simulation::pilot::PILOT_RECALL_FEE
+                crate::credits_text::grouped(fatherload_simulation::pilot::PILOT_RECALL_FEE)
             )
         };
     }

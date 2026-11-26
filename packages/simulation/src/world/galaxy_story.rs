@@ -903,7 +903,7 @@ impl WorldState {
             let step = self.combat_step_now();
             let tier = self.pacing_tier(player);
             let roll = hash64(
-                seed,
+                seed.seed,
                 0x6A1A_D157,
                 i64::from(record.index),
                 step.cast_signed(),
@@ -1052,7 +1052,7 @@ impl WorldState {
             .map_or(2, |found| encounter::danger_ring(found.centre.pos()));
         let step = self.combat_step_now();
         let roll = hash64(
-            self.world_seed(),
+            self.world_seed().seed,
             0x6A1A_401D,
             i64::from(column),
             step.cast_signed(),

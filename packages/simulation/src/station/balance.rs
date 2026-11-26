@@ -119,7 +119,7 @@ fn best_trade(seed: u64, from: &StationProfile, to: &StationProfile) -> Option<(
     clippy::cast_sign_loss
 )]
 pub fn first_trip(seed: u64) -> TripModel {
-    let space = Space::new(seed);
+    let space = Space::new(crate::space::SpaceSeed::current(seed));
     let halcyon = StationId {
         sector: HOME_SECTOR,
         system: 0,
@@ -137,7 +137,12 @@ pub fn first_trip(seed: u64) -> TripModel {
     // Two boards' worth: the starter set, then the next roll of each slot.
     for round in 0..2 {
         for slot in 0..3_u8 {
-            let Some(mission) = offer(seed, &context, slot, serials[usize::from(slot)]) else {
+            let Some(mission) = offer(
+                crate::space::SpaceSeed::current(seed),
+                &context,
+                slot,
+                serials[usize::from(slot)],
+            ) else {
                 continue;
             };
             serials[usize::from(slot)] += 1;
@@ -158,7 +163,7 @@ pub fn first_trip(seed: u64) -> TripModel {
                 }
                 MissionKind::Deliver { to, units, .. } => {
                     let Some(target) = super::profile::profile_of_id(
-                        &crate::flight::GeneratedSpace::new(seed),
+                        &crate::flight::GeneratedSpace::new(crate::space::SpaceSeed::current(seed)),
                         to,
                     ) else {
                         continue;

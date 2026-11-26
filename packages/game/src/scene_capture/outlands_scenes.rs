@@ -33,7 +33,7 @@ fn outland_body(world: &WorldState, theme: Theme) -> Option<FlightBody> {
                     continue;
                 }
                 let sector = generate_sector(
-                    SCENE_SEED,
+                    fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
                     SpaceSector::new(HOME_SECTOR.x + x, HOME_SECTOR.y + y),
                 );
                 for system in &sector.systems {

@@ -61,7 +61,8 @@ fn world_at(hz: u32) -> WorldState {
 /// The first home of `species` and its towns.
 fn first_towns(species: AlienSpecies) -> (SpaceBodyKey, Arc<Vec<Arc<AlienTown>>>) {
     let id = first_home(SEED, species).expect("a first home");
-    let params = crate::place::planet_params_for(SEED, id).expect("landable");
+    let params =
+        crate::place::planet_params_for(crate::space::SpaceSeed::from(SEED), id).expect("landable");
     (id, towns_of(&params))
 }
 
@@ -424,9 +425,12 @@ fn play_arc(world: &mut WorldState, species: AlienSpecies) {
         .iter()
         .find(|lead| lead.species == species)
         .expect("the builders' trail lead");
-    assert_eq!(lead.system, super::aliens::trail_system(SEED, species));
+    assert_eq!(
+        lead.system,
+        super::aliens::trail_system(crate::space::SpaceSeed::from(SEED), species)
+    );
     // The lead is on the nav chart.
-    let space = crate::space::Space::shared(SEED);
+    let space = crate::space::Space::shared(crate::space::SpaceSeed::from(SEED));
     let system = space.system(lead.system).expect("a real system");
     let reference = crate::flight::GeneratedSpace::reference(lead.system.sector, &system);
     assert!(world.known_systems().contains(&reference));

@@ -480,7 +480,7 @@ fn draw_warning(
     match telegraph.attack {
         Attack::Lance => {
             if let Unleash::Shots(volleys) =
-                boss::unleash(ship, telegraph, rig, snapshot.space.seed)
+                boss::unleash(ship, telegraph, rig, snapshot.space.seed.seed)
                 && ship.class == ShipClass::Arbiter
             {
                 for volley in volleys {
@@ -534,7 +534,7 @@ fn draw_warning(
         Attack::Broadside | Attack::SporeRing | Attack::Volley => {
             // Where every shell, spore or pulse will go: short paths off the hull.
             if let Unleash::Shots(volleys) =
-                boss::unleash(ship, telegraph, rig, snapshot.space.seed)
+                boss::unleash(ship, telegraph, rig, snapshot.space.seed.seed)
             {
                 let colour = match telegraph.attack {
                     Attack::Broadside => ORANGE,
@@ -715,10 +715,14 @@ pub(super) fn draw_hostile_hud(
             EncounterState::Demand { credits, until } => {
                 let seconds = until.saturating_sub(step) as f32 / COMBAT_STEP_HZ as f32;
                 let text = if narrow {
-                    format!("CORSAIRS: PAY {credits} CR? {seconds:.0}s")
+                    format!(
+                        "CORSAIRS: PAY {} CR? {seconds:.0}s",
+                        crate::credits_text::grouped(credits)
+                    )
                 } else {
                     format!(
-                        "THE CORSAIRS HAIL: \"{credits} credits or we open fire\"  {seconds:.0}s"
+                        "THE CORSAIRS HAIL: \"{} credits or we open fire\"  {seconds:.0}s",
+                        crate::credits_text::grouped(credits)
                     )
                 };
                 top = banner(draw, layout, &text, GOLD, top);

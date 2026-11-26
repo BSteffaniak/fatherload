@@ -484,7 +484,7 @@ impl WorldState {
             encounter::compose(
                 faction,
                 8,
-                hash64(self.world_seed(), 0x7E57, step as i64, 0),
+                hash64(self.world_seed().seed, 0x7E57, step as i64, 0),
             )
         };
         let mut output = TickOutput::default();
@@ -532,7 +532,7 @@ impl WorldState {
             return None;
         }
         let roll = hash64(
-            self.world_seed(),
+            self.world_seed().seed,
             0xE4C0,
             step as i64,
             i64::from(player_id.get() as u32),
@@ -829,7 +829,7 @@ impl WorldState {
                     let ships = encounter::compose(
                         Faction::Machine,
                         2 + patrol.size,
-                        hash64(seed, patrol.id, step as i64, 0),
+                        hash64(seed.seed, patrol.id, step as i64, 0),
                     );
                     if self
                         .start_encounter(
@@ -860,7 +860,12 @@ impl WorldState {
             if encounter::calm_at(&space, rig.pos) {
                 continue;
             }
-            let roll = hash64(seed, 0xE11C, step as i64, i64::from(rig.id.get() as u32));
+            let roll = hash64(
+                seed.seed,
+                0xE11C,
+                step as i64,
+                i64::from(rig.id.get() as u32),
+            );
             let tier = self.pacing_tier(rig.id);
             if roll % 1_000 >= u64::from(encounter::chance_permille(ring, tier)) {
                 continue;
@@ -1026,7 +1031,7 @@ impl WorldState {
                     &mates,
                     leader.as_ref(),
                     step,
-                    seed,
+                    seed.seed,
                 )
             };
             if order.face == 0.0 && order.ax == 0.0 && order.ay == 0.0 && rig.is_none() {
@@ -1070,7 +1075,7 @@ impl WorldState {
                     if let Some(telegraph) = ship.telegraph
                         && step >= telegraph.fire_at
                     {
-                        match boss::unleash(&ship, &telegraph, rig, seed) {
+                        match boss::unleash(&ship, &telegraph, rig, seed.seed) {
                             Unleash::Shots(volleys) => {
                                 let scale = encounter.damage_scale();
                                 if let Some(first) = volleys.first() {
@@ -1172,8 +1177,9 @@ impl WorldState {
                     ship.next_attack = step + ai::DIVE_STEPS;
                 } else if ship.phase == 1 && step >= ship.next_attack {
                     ship.phase = 0;
-                    ship.next_attack =
-                        step + 200 + hash64(seed, 0xD1FE, i64::from(ship.id), step as i64) % 260;
+                    ship.next_attack = step
+                        + 200
+                        + hash64(seed.seed, 0xD1FE, i64::from(ship.id), step as i64) % 260;
                 }
             }
             // The gun.
@@ -1306,8 +1312,10 @@ impl WorldState {
     }
 
     /// Damage `amount` to `player_id`'s rig: the deflector first, then the hull (settled once
-    /// a tick); an escape jump spooling halves it.
+    /// a tick; the Starwright Hull's plating softens it, Wave 14 finish); an escape jump
+    /// spooling halves it.
     fn hurt_rig(&mut self, player_id: PlayerId, amount: f32, step: u64, tally: &mut Tally) {
+        let plating = self.ship_effects(player_id).combat_scale;
         let mut combat = self.rig_combat(player_id);
         let amount = if combat.escape.is_some() {
             amount * ESCAPE_DAMAGE_SHARE
@@ -1322,7 +1330,7 @@ impl WorldState {
             tally.shield_down.push(player_id);
         }
         self.hostiles.rigs.insert(player_id, combat);
-        let rest = amount - soaked;
+        let rest = (amount - soaked) * plating;
         if rest > 0.0 {
             *tally.rig_damage.entry(player_id).or_default() += rest;
         }
@@ -1411,7 +1419,12 @@ impl WorldState {
             .hostiles
             .encounter(ship.encounter)
             .map_or(1, |encounter| encounter.danger);
-        let roll = hash64(self.world_seed(), 0x3EC4, i64::from(ship.id), step as i64);
+        let roll = hash64(
+            self.world_seed().seed,
+            0x3EC4,
+            i64::from(ship.id),
+            step as i64,
+        );
         let mineral = crate::enemy::tier_mineral(4 + ring.min(5) + u8::from(ship.class.is_boss()));
         let mut cargo = Vec::new();
         let count = stats.cargo + u32::try_from(roll % 3).unwrap_or(0);
@@ -1945,7 +1958,7 @@ impl WorldState {
         };
         let ring = danger_ring(body.centre.pos());
         let roll = hash64(
-            self.world_seed(),
+            self.world_seed().seed,
             0x4A1D,
             step as i64,
             i64::try_from(code >> 2).unwrap_or(0),
@@ -1976,7 +1989,7 @@ impl WorldState {
         let Some(site) = self.raid_site_of(player_id) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
-        let roll = hash64(self.world_seed(), 0x7A1D, step as i64, 0);
+        let roll = hash64(self.world_seed().seed, 0x7A1D, step as i64, 0);
         self.land_raid(store, site, faction, 4, roll, step, &mut output);
         PlayerScopedCommandOutcome::Applied
     }
@@ -1990,7 +2003,7 @@ impl WorldState {
             return false;
         }
         let step = self.combat_step_now();
-        let roll = hash64(self.world_seed(), 0x57A6, step as i64, 0);
+        let roll = hash64(self.world_seed().seed, 0x57A6, step as i64, 0);
         self.with_store_ground(store, |world| {
             let Some(site) = world.raid_site_of(player_id) else {
                 return false;

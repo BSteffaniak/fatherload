@@ -193,7 +193,11 @@ fn a_client_lands_in_an_alien_town_talks_learns_and_trades_online() {
     );
     // A purchase from the trader, if they are in reach.
     let trader = town::towns_of(
-        &fatherload_simulation::place::planet_params_for(SEED, id).expect("a planet"),
+        &fatherload_simulation::place::planet_params_for(
+            fatherload_simulation::space::SpaceSeed::from(SEED),
+            id,
+        )
+        .expect("a planet"),
     )[0]
     .population
     .characters[town::TRADER]

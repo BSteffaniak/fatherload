@@ -361,7 +361,18 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   art (`ShipClass::hull_scale`): host and client must agree on every hit.
 /// * Integration: a relic's `RelicSite::base` (an outpost's floor; derived, never sent) and the
 ///   theme bosses recorded on the endgame's hunt list (in the `Endgame` section).
-pub const PROTOCOL_VERSION: u8 = 21;
+///
+/// Version 22 (Wave 14 finish, Part III's open items):
+///
+/// * The Wave 12 worlds' theme bosses: six appended `EnemyKind`s (`BrambleKing` ..
+///   `GeodeColossus`) in entity records, `TileKind::Lair(LairTile)` tiles (kind codes
+///   `0x3A00..=0x3BFF`: the bosses' relics, the halls' lamps) in terrain ops, store tile ops,
+///   chunk refreshes and keyframes, and the lair events 1200-1219 (`GameplayEventKind::Lair`
+///   with `planet::lairs::LairEvent` and the boss).
+/// * The space generator per world: the `space_generator` world field and each body store's
+///   own in keyframes (`space::SpaceGenerator`; a world without one is V1), so a client builds
+///   its galaxy and its bodies' ground by the host's generator.
+pub const PROTOCOL_VERSION: u8 = 22;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

@@ -108,11 +108,73 @@ pub const HOME_SECTOR: SpaceSector = SpaceSector {
     y: crate::star_chart::HOME_SECTOR.1,
 };
 
-/// Pins the space generator (Wave 11 space-gen).
+/// Pins the space generator (Wave 11 space-gen; [`SpaceGenerator::V1`], every world made
+/// before Wave 14).
 ///
 /// The `StateHasher` digest of the 25 sectors within two of home on the default world seed.
 /// Change it only on purpose, and say so: every space position moves with it.
 pub const GOLDEN_SPACE_DIGEST: u64 = 0x0c0c_b46c_12ea_7136;
+
+/// Pins [`SpaceGenerator::V2`] (Wave 14 finish: small bodies carry themes): the same 25
+/// sectors on the default seed. Every position is V1's; only small bodies' tags (and their
+/// climate) differ.
+pub const GOLDEN_SPACE_V2_DIGEST: u64 = 0xf560_7cf2_7d39_2f54;
+
+/// Which space generator a world's galaxy is made by (Wave 14 finish).
+///
+/// A world keeps the generator it was made with, like its home generator
+/// ([`crate::worldgen::GeneratorVersion`]): saves of Waves 11-13 carry no field and load as
+/// [`Self::V1`], so their moons and crater rocks stay what they were; new worlds take
+/// [`Self::CURRENT`].
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
+pub enum SpaceGenerator {
+    /// Waves 11-13: every small moon and crater rock barren, icy, volcanic, crystal or dead.
+    #[default]
+    V1,
+    /// Wave 14 finish: small bodies carry themes (a moon often its planet's; any of the twelve
+    /// by the orbit's warmth otherwise), so every theme's small-body secret is found in play.
+    /// Positions, orbits and everything else are V1's.
+    V2,
+}
+
+impl SpaceGenerator {
+    /// The generator new worlds use.
+    pub const CURRENT: Self = Self::V2;
+}
+
+/// The key of a world's galaxy: its seed and its space generator.
+///
+/// A plain `u64` seed converts to the current generator's key (tests, tools and new worlds);
+/// a world hands out its own ([`crate::WorldState::world_seed`]).
+#[derive(
+    Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
+)]
+pub struct SpaceSeed {
+    /// The world seed (every hash of the galaxy's generation uses it).
+    pub seed: u64,
+    pub generator: SpaceGenerator,
+}
+
+impl SpaceSeed {
+    #[must_use]
+    pub const fn new(seed: u64, generator: SpaceGenerator) -> Self {
+        Self { seed, generator }
+    }
+
+    /// The current generator's galaxy of `seed`.
+    #[must_use]
+    pub const fn current(seed: u64) -> Self {
+        Self::new(seed, SpaceGenerator::CURRENT)
+    }
+}
+
+impl From<u64> for SpaceSeed {
+    fn from(seed: u64) -> Self {
+        Self::current(seed)
+    }
+}
 
 /// Whether worlds of `generator` have space (V11, the Deep Descent, and later only).
 #[must_use]

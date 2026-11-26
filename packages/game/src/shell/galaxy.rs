@@ -234,7 +234,7 @@ pub fn lead_entry(world: &WorldState, index: usize) -> Option<(String, String, S
     let next = if record.done {
         format!(
             "Done: {} credits. {}",
-            lead.credits,
+            crate::credits_text::grouped(lead.credits),
             FRAGMENTS
                 .get(usize::from(lead.fragment))
                 .copied()
@@ -245,7 +245,7 @@ pub fn lead_entry(world: &WorldState, index: usize) -> Option<(String, String, S
             "{} Next: {} Pays {} credits. Confirm to set course.",
             lead.text,
             lead.step_text(record.step, &system),
-            lead.credits
+            crate::credits_text::grouped(lead.credits)
         )
     };
     Some((lead.title, status, next))
@@ -340,7 +340,7 @@ pub fn event_words(world: &WorldState, what: GalaxyEvent, detail: u32) -> Galaxy
                     format!(
                         "Chapter {} done: +{} credits. The journal keeps it.",
                         chapter + 1,
-                        def.credits
+                        crate::credits_text::grouped(def.credits)
                     )
                 }),
                 everyone: false,

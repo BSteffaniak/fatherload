@@ -273,7 +273,7 @@ fn entry(
         icon: Some(icon),
         label: label.into(),
         detail: detail.into(),
-        value: value.map_or_else(String::new, |value| value.to_string()),
+        value: value.map_or_else(String::new, crate::credits_text::grouped),
         value_color: GOLD,
         coin: value.is_some(),
         selected: picked,

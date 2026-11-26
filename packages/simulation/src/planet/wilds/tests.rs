@@ -245,8 +245,14 @@ fn the_ocean_is_a_sea_with_islands_ruins_and_smokers() {
         kind(&sea, spire, ocean::SEA_LEVEL - 1),
         TileKind::Wild(WildTile::RuinRelic)
     );
+    // Flooded below its floor, round the Tidecaller's dry well down its middle (Wave 14).
     assert_eq!(
-        kind(&sea, spire, ocean::SEA_LEVEL + 2),
+        kind(&sea, spire + 3, ocean::SEA_LEVEL + 2),
+        TileKind::Wild(WildTile::RuinStone)
+    );
+    assert_eq!(kind(&sea, spire, ocean::SEA_LEVEL + 2), TileKind::Air);
+    assert_eq!(
+        kind(&sea, spire - 6, ocean::SEA_LEVEL + 2),
         TileKind::Fluid(crate::fluid::FluidKind::Water)
     );
     // Halls, relics and smokers below.

@@ -209,7 +209,7 @@ impl GalaxyStory {
 
     /// The lead `record` names in the world seeded `seed`.
     #[must_use]
-    pub fn lead_of_seed(seed: u64, record: &LeadRecord) -> Option<Lead> {
+    pub fn lead_of_seed(seed: crate::space::SpaceSeed, record: &LeadRecord) -> Option<Lead> {
         discovery::leads_cached(seed, record.system)
             .iter()
             .find(|lead| lead.index == record.index)
@@ -218,7 +218,7 @@ impl GalaxyStory {
 
     /// The crew's stats in the world seeded `seed` (leads by kind need the seed).
     #[must_use]
-    pub fn stats_of_seed(&self, seed: u64) -> GalaxyStats {
+    pub fn stats_of_seed(&self, seed: crate::space::SpaceSeed) -> GalaxyStats {
         let mut stats = self.stats();
         let mut by_kind = [0_u32; 5];
         for record in self.leads.iter().filter(|record| record.done) {
@@ -428,7 +428,7 @@ pub struct StopWords {
 
 /// The names of chapter `chapter`'s stop in `plan` (the world seeded `seed`).
 #[must_use]
-pub fn stop_words(seed: u64, plan: &plan::StoryPlan, chapter: u8) -> StopWords {
+pub fn stop_words(seed: crate::space::SpaceSeed, plan: &plan::StoryPlan, chapter: u8) -> StopWords {
     let space = crate::space::Space::shared(seed);
     let harbour = space
         .system(plan.harbour.system)

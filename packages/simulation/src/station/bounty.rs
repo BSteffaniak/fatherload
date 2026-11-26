@@ -287,7 +287,12 @@ pub fn reward_for(kind: MissionKind, station: &StationProfile, context: &BoardCo
 
 /// The mission in `slot` of `context`'s board at serial `serial` (`None`: nothing to offer).
 #[must_use]
-pub fn offer(seed: u64, context: &BoardContext, slot: u8, serial: u16) -> Option<Mission> {
+pub fn offer(
+    seed: crate::space::SpaceSeed,
+    context: &BoardContext,
+    slot: u8,
+    serial: u16,
+) -> Option<Mission> {
     let station = context.station.as_ref()?;
     if !station.bounties {
         return None;
@@ -298,7 +303,7 @@ pub fn offer(seed: u64, context: &BoardContext, slot: u8, serial: u16) -> Option
         serial,
     };
     let roll = station_hash(
-        seed,
+        seed.seed,
         station.id,
         SALT_MISSION ^ (u64::from(slot) << 16) ^ (u64::from(serial) << 24),
     );
@@ -340,7 +345,7 @@ pub fn offer(seed: u64, context: &BoardContext, slot: u8, serial: u16) -> Option
 /// A bounty on a board: one of the hostile factions' targets posted round the station's
 /// system (the targets change with the slot's serial, so a taken bounty is replaced).
 fn bounty_offer(
-    seed: u64,
+    seed: crate::space::SpaceSeed,
     station: &StationProfile,
     serial: u16,
     roll: u64,
@@ -368,7 +373,10 @@ fn bounty_offer(
 
 /// The hostile target a bounty mission names (`None` for other kinds).
 #[must_use]
-pub fn bounty_target_of(seed: u64, kind: MissionKind) -> Option<crate::hostiles::BountyTarget> {
+pub fn bounty_target_of(
+    seed: crate::space::SpaceSeed,
+    kind: MissionKind,
+) -> Option<crate::hostiles::BountyTarget> {
     let MissionKind::Bounty {
         posted, day, index, ..
     } = kind
@@ -494,7 +502,7 @@ pub fn describe(space: &Space, kind: MissionKind) -> String {
             good.name(),
             station_name(space, to)
         ),
-        MissionKind::Bounty { .. } => bounty_target_of(space.seed(), kind).map_or_else(
+        MissionKind::Bounty { .. } => bounty_target_of(space.space_seed(), kind).map_or_else(
             || "Bounty".to_owned(),
             |target| format!("Bounty: {} ({})", target.name, target.faction.name()),
         ),

@@ -165,10 +165,10 @@ fn chapter_tracker(stage: &mut SceneStage<'_>) {
 
 /// The first home of `species` in the scene world and its towns.
 fn first_towns(
-    seed: u64,
+    seed: fatherload_simulation::space::SpaceSeed,
     species: AlienSpecies,
 ) -> Option<(SpaceBodyKey, std::sync::Arc<Vec<std::sync::Arc<AlienTown>>>)> {
-    let id = first_home(seed, species)?;
+    let id = first_home(seed.seed, species)?;
     let params = fatherload_simulation::place::planet_params_for(seed, id)?;
     Some((id, towns_of(&params)))
 }

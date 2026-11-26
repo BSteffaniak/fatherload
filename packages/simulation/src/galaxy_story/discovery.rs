@@ -177,7 +177,11 @@ pub fn ring_of(system: SystemRef) -> u32 {
 }
 
 /// The landable worlds of a system (planets with ground), in body order.
-fn worlds(seed: u64, reference: SystemRef, system: &StarSystem) -> Vec<SpaceBodyId> {
+fn worlds(
+    seed: crate::space::SpaceSeed,
+    reference: SystemRef,
+    system: &StarSystem,
+) -> Vec<SpaceBodyId> {
     system
         .bodies
         .iter()
@@ -209,12 +213,15 @@ const SHIP_NAMES: [&str; 12] = [
 /// A system's leads (pure; none for home), memoized per seed and system (the discovery log
 /// reads them every check and the renderer every frame).
 #[must_use]
-pub fn leads_cached(seed: u64, reference: SystemRef) -> std::sync::Arc<Vec<Lead>> {
+pub fn leads_cached(
+    seed: crate::space::SpaceSeed,
+    reference: SystemRef,
+) -> std::sync::Arc<Vec<Lead>> {
     use std::{
         collections::BTreeMap,
         sync::{Arc, Mutex, PoisonError},
     };
-    type LeadCache = Mutex<BTreeMap<(u64, SystemRef), Arc<Vec<Lead>>>>;
+    type LeadCache = Mutex<BTreeMap<(crate::space::SpaceSeed, SystemRef), Arc<Vec<Lead>>>>;
     static CACHE: LeadCache = Mutex::new(BTreeMap::new());
     if let Some(found) = CACHE
         .lock()
@@ -234,7 +241,7 @@ pub fn leads_cached(seed: u64, reference: SystemRef) -> std::sync::Arc<Vec<Lead>
 
 /// A system's leads (pure; none for home).
 #[must_use]
-pub fn leads_of(seed: u64, reference: SystemRef) -> Vec<Lead> {
+pub fn leads_of(seed: crate::space::SpaceSeed, reference: SystemRef) -> Vec<Lead> {
     let space = Space::shared(seed);
     let Some(system) = space.system(reference) else {
         return Vec::new();
@@ -244,7 +251,7 @@ pub fn leads_of(seed: u64, reference: SystemRef) -> Vec<Lead> {
     }
     let roll = |salt: u64| {
         hash64(
-            seed,
+            seed.seed,
             SALT_LEADS ^ salt,
             i64::from(reference.sector.x) * 8 + i64::from(reference.system),
             i64::from(reference.sector.y),
@@ -310,7 +317,7 @@ fn point_in(system: &StarSystem, detail: u64) -> SpaceTile {
     reason = "a lead's whole make-up, each kind's tellings in one match"
 )]
 fn build(
-    seed: u64,
+    seed: crate::space::SpaceSeed,
     reference: SystemRef,
     system: &StarSystem,
     worlds: &[SpaceBodyId],

@@ -28,7 +28,7 @@ fn settled(seed: u64, radius: u32, species: AlienSpecies) -> PlanetParams {
 #[test]
 fn every_species_has_a_first_home_near_home_on_a_planet_it_likes() {
     for seed in [DEFAULT_WORLD_SEED, 7, 0x00C0_FFEE] {
-        let space = Space::shared(seed);
+        let space = Space::shared(crate::space::SpaceSeed::from(seed));
         let mut homes = Vec::new();
         for species in AlienSpecies::ALL {
             let id = first_home(seed, species).expect("a first home");
@@ -42,7 +42,8 @@ fn every_species_has_a_first_home_near_home_on_a_planet_it_likes() {
             assert!(!homes.contains(&id), "one species per first home");
             homes.push(id);
             // The body's params (what the store generates) name the species.
-            let params = crate::place::planet_params_for(seed, id).expect("landable");
+            let params = crate::place::planet_params_for(crate::space::SpaceSeed::from(seed), id)
+                .expect("landable");
             assert_eq!(AlienSpecies::from_folk(params.folk), Some(species));
             // A wild world (its own whole ground) holds one town on its settlement site; every
             // other planet two or more.

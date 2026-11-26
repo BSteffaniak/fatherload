@@ -171,12 +171,16 @@ pub const THEME_WORLD_SEARCH_RINGS: i32 = 8;
 /// Ring by ring, the biggest of a ring: a theme boss's lair is on every full planet of its
 /// theme (small bodies have none). Memoized: the hunt list asks every frame it shows.
 #[must_use]
-pub fn nearest_theme_world(seed: u64, world: Theme) -> Option<crate::space::SpaceBodyId> {
+pub fn nearest_theme_world(
+    seed: crate::space::SpaceSeed,
+    world: Theme,
+) -> Option<crate::space::SpaceBodyId> {
     use std::{
         collections::BTreeMap,
         sync::{Mutex, PoisonError},
     };
-    type Cache = Mutex<BTreeMap<(u64, Theme), Option<crate::space::SpaceBodyId>>>;
+    type Cache =
+        Mutex<BTreeMap<(crate::space::SpaceSeed, Theme), Option<crate::space::SpaceBodyId>>>;
     static CACHE: Cache = Mutex::new(BTreeMap::new());
     if let Some(found) = CACHE
         .lock()

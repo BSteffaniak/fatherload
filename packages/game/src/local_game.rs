@@ -1769,8 +1769,9 @@ impl LocalGame {
                     "Past the point of no return: call the emergency beacon (nav chart).".to_owned()
                 }
                 E::HoleRescued => format!(
-                    "The event horizon: the beacon's tug pulled you out for {detail} credits; \
-                     the hold went into the hole."
+                    "The event horizon: the beacon's tug pulled you out for {} credits; \
+                     the hold went into the hole.",
+                    crate::credits_text::grouped(detail)
                 ),
                 E::WormholeEntered if detail == 1 => {
                     "Wormhole transit: a new route, now on the nav HUD.".to_owned()
@@ -1832,7 +1833,10 @@ impl LocalGame {
                      the emergency beacon (nav chart)."
                 ),
                 FlightEvent::BeaconReturn => {
-                    format!("Emergency beacon: towed home for {detail} credits.")
+                    format!(
+                        "Emergency beacon: towed home for {} credits.",
+                        crate::credits_text::grouped(detail)
+                    )
                 }
                 FlightEvent::EnteredSpace => {
                     "Open space. The map button opens the nav chart; the anchor button cruises."
@@ -1982,9 +1986,18 @@ impl LocalGame {
                     format!("The {name} tongue opens up: {}.", level.name())
                 }
                 E::LexiconFound => format!("A {name} lexicon stone: their writing, word by word."),
-                E::Lesson => format!("A lesson in the {name} tongue ({detail} cr)."),
-                E::Sold => format!("The {name} pay {detail} credits."),
-                E::Bought => format!("Bought from the {name} for {detail} credits."),
+                E::Lesson => format!(
+                    "A lesson in the {name} tongue ({} cr).",
+                    crate::credits_text::grouped(detail)
+                ),
+                E::Sold => format!(
+                    "The {name} pay {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
+                E::Bought => format!(
+                    "Bought from the {name} for {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
                 E::ChapterOffered => format!("The elder asks: \"{}\"", chapter_title()),
                 E::ChapterAccepted => format!("Taken on: \"{}\"", chapter_title()),
                 E::ChapterReached => format!("Done: \"{}\". Tell the elder.", chapter_title()),
@@ -2038,17 +2051,33 @@ impl LocalGame {
                 ),
                 E::ShipUpgraded => format!("Ship upgraded: tier {detail} fitted."),
                 E::GearFitted => format!("Planet gear fitted: tier {detail}."),
-                E::GoodsBought => format!("Goods loaded for {detail} credits."),
-                E::GoodsSold => format!("Goods sold for {detail} credits."),
-                E::OreSold => format!("Ore sold for {detail} credits."),
+                E::GoodsBought => format!(
+                    "Goods loaded for {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
+                E::GoodsSold => format!(
+                    "Goods sold for {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
+                E::OreSold => format!(
+                    "Ore sold for {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
                 E::MissionAccepted => {
                     format!(
-                        "Mission accepted: {detail} credits on completion. Waypoint set; no clock runs."
+                        "Mission accepted: {} credits on completion. Waypoint set; no clock runs.",
+                        crate::credits_text::grouped(detail)
                     )
                 }
                 E::MissionProgress => format!("Mission progress: {detail}."),
-                E::MissionPaid => format!("Bounty paid: {detail} credits."),
-                E::Salvaged => format!("Salvage: {detail} credits and scrap for the hold."),
+                E::MissionPaid => format!(
+                    "Bounty paid: {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
+                E::Salvaged => format!(
+                    "Salvage: {} credits and scrap for the hold.",
+                    crate::credits_text::grouped(detail)
+                ),
                 E::RumourHeard => {
                     "Rumour heard: the world is on your nav chart as a waypoint.".to_owned()
                 }
@@ -2150,10 +2179,14 @@ impl LocalGame {
             let message = match what {
                 E::EncounterStarted => format!("Contact: {faction} on the scanner."),
                 E::Hailed => format!(
-                    "The corsairs hail: \"{detail} credits, or we open fire.\" Use pays; the \
-                     warp button jumps clear."
+                    "The corsairs hail: \"{} credits, or we open fire.\" Use pays; the \
+                     warp button jumps clear.",
+                    crate::credits_text::grouped(detail)
                 ),
-                E::TributePaid => format!("Paid {detail} credits. The corsairs peel away."),
+                E::TributePaid => format!(
+                    "Paid {} credits. The corsairs peel away.",
+                    crate::credits_text::grouped(detail)
+                ),
                 E::TurnedHostile => "They open fire! Turn your nose onto them to aim.".to_owned(),
                 E::Interdicted => "Interdicted: pulled out of cruise.".to_owned(),
                 E::BossAppeared => format!(
@@ -2164,10 +2197,15 @@ impl LocalGame {
                     "{faction}'s champion is destroyed. Fly through its wreck to salvage its \
                      tech."
                 ),
-                E::WreckLooted => format!("Salvaged {detail} credits."),
+                E::WreckLooted => {
+                    format!("Salvaged {} credits.", crate::credits_text::grouped(detail))
+                }
                 E::Escaped => "Escape jump: clear of the fight.".to_owned(),
                 E::EncounterOver => "All clear.".to_owned(),
-                E::BountyClaimed => format!("Bounty claimed: {detail} credits."),
+                E::BountyClaimed => format!(
+                    "Bounty claimed: {} credits.",
+                    crate::credits_text::grouped(detail)
+                ),
                 E::RaidLanded => format!("{faction} raiders landed nearby!"),
                 E::GearBought => format!(
                     "Fitted: {}.",
@@ -3118,10 +3156,16 @@ fn cache_message(
         "Treasure cache"
     };
     furniture.map_or_else(
-        || format!("{name}: +{credits} credits, and loot spills out!"),
+        || {
+            format!(
+                "{name}: +{} credits, and loot spills out!",
+                crate::credits_text::grouped(credits)
+            )
+        },
         |piece| {
             format!(
-                "{name}: +{credits} credits, and an antique {} for your home!",
+                "{name}: +{} credits, and an antique {} for your home!",
+                crate::credits_text::grouped(credits),
                 piece.name().to_lowercase()
             )
         },

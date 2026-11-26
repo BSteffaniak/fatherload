@@ -107,7 +107,8 @@ impl LocalGame {
                             seat,
                             "A whole skeleton".to_owned(),
                             format!(
-                                "All {bones} bones, unbroken. The museum pays {bounty} credits."
+                                "All {bones} bones, unbroken. The museum pays {} credits.",
+                                crate::credits_text::grouped(bounty)
                             ),
                         ));
                     }

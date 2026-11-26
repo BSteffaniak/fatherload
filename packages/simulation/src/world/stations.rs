@@ -47,7 +47,7 @@ const fn station_event(what: StationEvent, player_id: PlayerId, detail: u32) -> 
 /// Board contexts, memoised per world seed and station (pure data: the space round a station
 /// never changes).
 fn cached_context(world: &WorldState, station: StationId) -> Option<Arc<BoardContext>> {
-    type Cache = Mutex<BTreeMap<(u64, StationId), Arc<BoardContext>>>;
+    type Cache = Mutex<BTreeMap<(crate::space::SpaceSeed, StationId), Arc<BoardContext>>>;
     static CACHE: OnceLock<Cache> = OnceLock::new();
     let seed = world.world_seed();
     let cache = CACHE.get_or_init(Mutex::default);
@@ -116,7 +116,7 @@ impl WorldState {
     /// The patrons at `station`'s bar.
     #[must_use]
     pub fn station_patrons(&self, station: StationId) -> Vec<Patron> {
-        type Cache = Mutex<BTreeMap<(u64, StationId), Arc<Vec<Patron>>>>;
+        type Cache = Mutex<BTreeMap<(crate::space::SpaceSeed, StationId), Arc<Vec<Patron>>>>;
         static CACHE: OnceLock<Cache> = OnceLock::new();
         let Some(context) = cached_context(self, station) else {
             return Vec::new();
@@ -150,7 +150,7 @@ impl WorldState {
     #[must_use]
     pub fn station_quote(&self, station: &StationProfile, good: Good) -> Option<Quote> {
         price(
-            self.world_seed(),
+            self.world_seed().seed,
             station,
             good,
             self.stations.shift(station.id, good),
@@ -338,7 +338,7 @@ impl WorldState {
             .ok_or(StationRefusal::NotDocked)?;
         // Priced unit by unit: the lot pays its own price impact.
         let (lot, cost) = trade_lot(
-            seed,
+            seed.seed,
             profile,
             good,
             shift_before,
@@ -400,7 +400,7 @@ impl WorldState {
         }
         // Priced unit by unit, like buying.
         let (_, paid) = trade_lot(
-            self.world_seed(),
+            self.world_seed().seed,
             profile,
             good,
             shift_before,
@@ -659,7 +659,7 @@ impl WorldState {
         if self.stations.salvaged.contains(&profile.id) {
             return Err(StationRefusal::Stripped);
         }
-        let roll = station_hash(self.world_seed(), profile.id, SALT_SALVAGE);
+        let roll = station_hash(self.world_seed().seed, profile.id, SALT_SALVAGE);
         let credits =
             crate::endgame::economy::space_credits(400 + u32::try_from(roll % 600).unwrap_or(0));
         let room = self
@@ -943,6 +943,6 @@ pub fn station_profile_at(
     body: crate::flight::BodyRef,
 ) -> Option<StationProfile> {
     station_at(&world.space(), body).map(|(system, station)| {
-        crate::station::profile::profile_of(world.world_seed(), &system, &station)
+        crate::station::profile::profile_of(world.world_seed().seed, &system, &station)
     })
 }

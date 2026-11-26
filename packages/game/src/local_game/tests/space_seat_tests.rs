@@ -178,7 +178,9 @@ fn split_screen_seats_in_two_places_each_see_their_own() {
 
 /// A landable body near home whose space theme is `theme` (the first found).
 fn body_of_theme(seed: u64, theme: fatherload_simulation::space::Theme) -> Place {
-    let space = fatherload_simulation::space::Space::shared(seed);
+    let space = fatherload_simulation::space::Space::shared(
+        fatherload_simulation::space::SpaceSeed::from(seed),
+    );
     for ring in 0..=6_i32 {
         for y in -ring..=ring {
             for x in -ring..=ring {
@@ -194,7 +196,11 @@ fn body_of_theme(seed: u64, theme: fatherload_simulation::space::Theme) -> Place
                             body: body.index,
                         };
                         if body.theme == theme
-                            && fatherload_simulation::place::planet_params_for(seed, id).is_some()
+                            && fatherload_simulation::place::planet_params_for(
+                                fatherload_simulation::space::SpaceSeed::from(seed),
+                                id,
+                            )
+                            .is_some()
                         {
                             return Place::OnBody(BodyId::Space(id));
                         }

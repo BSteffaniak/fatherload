@@ -55,8 +55,14 @@ fn road(world: &mut WorldState, player: PlayerId, chapter: u8, step: u8) {
         rig.credits = 48_600;
         rig.attitude = RigAttitude::LEVEL;
     }
-    let anchor = plan::anchor_of(SCENE_SEED, world.star_charts());
-    let road = plan::plan_for(SCENE_SEED, anchor);
+    let anchor = plan::anchor_of(
+        fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+        world.star_charts(),
+    );
+    let road = plan::plan_for(
+        fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+        anchor,
+    );
     let logs = fatherload_simulation::galaxy_story::CHAPTERS
         .iter()
         .take(usize::from(chapter))
@@ -79,7 +85,10 @@ fn road(world: &mut WorldState, player: PlayerId, chapter: u8, step: u8) {
                     sector: coords,
                     system: index,
                 };
-                for lead in leads_of(SCENE_SEED, system) {
+                for lead in leads_of(
+                    fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+                    system,
+                ) {
                     visited.insert(system);
                     let done = leads.len() % 3 == 0;
                     leads.push(LeadRecord {
@@ -179,7 +188,10 @@ fn beside_relic(world: &mut WorldState, player: PlayerId, off: i32) {
     let Some((body, site, _)) = world.galaxy_relic() else {
         return;
     };
-    let Some(params) = fatherload_simulation::place::planet_params_for(SCENE_SEED, body) else {
+    let Some(params) = fatherload_simulation::place::planet_params_for(
+        fatherload_simulation::space::SpaceSeed::from(SCENE_SEED),
+        body,
+    ) else {
         return;
     };
     let ground = fatherload_simulation::planet::PlanetGround::new(params);

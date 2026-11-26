@@ -78,9 +78,9 @@ impl SeatLogistics {
 fn price_label(credits: u32, fuel: u32) -> String {
     match (credits, fuel) {
         (0, 0) => "free".to_owned(),
-        (credits, 0) => format!("{credits} cr"),
+        (credits, 0) => format!("{} cr", crate::credits_text::grouped(credits)),
         (0, fuel) => format!("{fuel} fuel"),
-        (credits, fuel) => format!("{fuel} fuel + {credits} cr"),
+        (credits, fuel) => format!("{fuel} fuel + {} cr", crate::credits_text::grouped(credits)),
     }
 }
 
@@ -108,7 +108,10 @@ pub fn logistics_rows(world: &WorldState, player: PlayerId) -> SeatLogistics {
         };
         let (value, refusal) = match verdict {
             Ok(_) if sale.is_some() => (sale.unwrap_or_default(), None),
-            Ok(quote) if quote.refund > 0 => (format!("+{} cr", quote.refund), None),
+            Ok(quote) if quote.refund > 0 => (
+                format!("+{} cr", crate::credits_text::grouped(quote.refund)),
+                None,
+            ),
             Ok(quote) => (price_label(quote.credits, quote.fuel), None),
             Err(refusal) => ("-".to_owned(), Some(refusal.message())),
         };

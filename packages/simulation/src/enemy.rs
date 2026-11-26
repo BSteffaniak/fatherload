@@ -7070,7 +7070,9 @@ mod tests {
                 // ... and the outland worlds' theme bosses (Wave 13), in their own lairs.
                 || kind.is_outland_boss()
                 // The exotic worlds' theme bosses (Wave 13).
-                || kind.is_exotic_boss();
+                || kind.is_exotic_boss()
+                // The Wave 12 worlds' theme bosses (Wave 14 finish).
+                || kind.is_lair_boss();
             assert!(
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"
