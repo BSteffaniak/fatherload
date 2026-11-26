@@ -114,3 +114,61 @@ fn each_seat_warps_its_own_rig_and_toggles_apply_on_resume() {
     );
     assert_eq!(game.shell.pending_test_mode, None);
 }
+
+/// Seat `seat` steps the open toolkit dialog to `row` and confirms it.
+fn use_toolkit_row(game: &mut LocalGame, seat: usize, row: crate::shell::test_toolkit::ToolkitRow) {
+    let descents = game
+        .runtime
+        .world()
+        .world_settings()
+        .generator
+        .has_descents();
+    let rows = crate::shell::test_toolkit::ToolkitRow::rows(descents);
+    let target = rows.iter().position(|entry| *entry == row).expect("listed");
+    for _ in 0..rows.len() {
+        press_seat(game, seat, up());
+    }
+    for _ in 0..target {
+        press_seat(game, seat, down());
+    }
+    press_seat(game, seat, confirm_input());
+}
+
+#[test]
+fn a_seat_uses_the_toolkit_on_its_own_rig() {
+    use crate::shell::test_toolkit::ToolkitRow;
+    use fatherload_simulation::{enemy::EnemyDifficulty, test_mode::StockItem};
+    let mut world = split_world(&[None, None]);
+    world.set_enemy_difficulty(EnemyDifficulty::Normal);
+    world.enable_test_mode();
+    let second = PlayerId::new(2);
+    let mut game = playing(world, 2, "test-toolkit-split");
+    idle(&mut game, 5);
+    assert!(game.runtime.world().test_stock_gaps(second).is_empty());
+
+    // Seat 2 opens the toolkit from the pause menu, turns infinite supplies off and spawns a
+    // creature beside its own rig.
+    choose(&mut game, 1, PauseOption::TestToolkit);
+    assert_eq!(game.shell.modal, Some(ModalScreen::TestToolkit));
+    use_toolkit_row(&mut game, 1, ToolkitRow::InfiniteSupplies);
+    use_toolkit_row(&mut game, 1, ToolkitRow::SpawnCreature);
+    press_seat(&mut game, 1, back_input());
+    assert_eq!(game.shell.modal, None);
+    press_seat(&mut game, 1, pause_input());
+    assert_eq!(game.shell.run_mode, RunMode::Playing);
+    idle(&mut game, 3);
+    let world = game.runtime.world();
+    assert!(!world.test_mode().expect("test mode").infinite_supplies);
+    let near = |player: PlayerId| {
+        let rig = world.player(player).expect("rig");
+        world
+            .enemies()
+            .filter(|(entity, _)| {
+                let (dx, dy) = (entity.body.x - rig.x, entity.body.y - rig.y);
+                dx.mul_add(dx, dy * dy) <= (6.0 * TILE_SIZE) * (6.0 * TILE_SIZE)
+            })
+            .count()
+    };
+    assert!(near(second) >= 1, "spawned beside seat 2's rig");
+    assert_eq!(world.stock_count(second, StockItem::Bombs), 99);
+}
