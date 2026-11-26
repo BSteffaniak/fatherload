@@ -728,7 +728,7 @@ impl NetSimulation for WorldState {
         // of place changes the mode too, so the client snaps instead of smoothing across.
         let store = self.store_of(sim_id);
         if !store.is_home() {
-            let frame = self.store_frame(store)?;
+            let frame = self.player_frame(sim_id)?;
             let origin = [frame.origin_col(), frame.origin_row()];
             let region = store.code();
             let salt = u32::try_from(region & 0x7FFF_FFFF).unwrap_or(0) | 1;

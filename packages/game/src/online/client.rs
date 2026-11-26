@@ -326,9 +326,15 @@ impl OnlineClient {
         // Poses carry their frame origin (F7): rebase each onto the rendered world's frame so a
         // frame move between ticks never shows as a jump.
         let origin = fatherload_netcode::world::frame_origin(self.world());
-        // A pose in another place (F11) is rebased onto that place's own frame.
-        let px = |pose: &fatherload_netcode::Pose| {
-            let origin = fatherload_netcode::world::region_origin(self.world(), pose.region)
+        // A pose in another place (F11) is rebased onto that place's own frame; a rig of a far
+        // group in free flight onto its group's (Wave 13 QA).
+        let px = |player: PlayerId, pose: &fatherload_netcode::Pose| {
+            let space = pose.region == fatherload_simulation::place::StoreKey::Space.code();
+            let origin = space
+                .then(|| self.world().player_frame(player))
+                .flatten()
+                .map(|frame| [frame.origin_col(), frame.origin_row()])
+                .or_else(|| fatherload_netcode::world::region_origin(self.world(), pose.region))
                 .unwrap_or(origin);
             let local = pose.rebased(origin);
             (local.x * TILE_SIZE, local.y * TILE_SIZE)
@@ -336,10 +342,14 @@ impl OnlineClient {
         let mut poses: BTreeMap<PlayerId, (f32, f32)> = view
             .remote_poses
             .iter()
-            .map(|(player, pose)| (to_sim_player(*player), px(pose)))
+            .map(|(player, pose)| {
+                let player = to_sim_player(*player);
+                (player, px(player, pose))
+            })
             .collect();
         if let (Some(player), Some(pose)) = (view.local_player, view.local_pose) {
-            poses.insert(to_sim_player(player), px(&pose));
+            let player = to_sim_player(player);
+            poses.insert(player, px(player, &pose));
         }
         poses
     }

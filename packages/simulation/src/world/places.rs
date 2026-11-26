@@ -340,6 +340,20 @@ impl Places {
     }
 }
 
+/// Free flight's rigs this far apart (sectors, either axis) or nearer share a frame (Wave 13
+/// QA: farther, `f32` positions in one frame lose their sub-pixel grid).
+pub const SPACE_GROUP_LINK_SECTORS: u64 = 4;
+
+/// A group of free flight's rigs near each other and the frame their positions are measured
+/// in ([`WorldState::space_groups`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpaceGroup {
+    /// Its rigs, in id order.
+    pub members: Vec<PlayerId>,
+    /// Its own frame (round its first rig); `None` for the group measured in the store's.
+    pub frame: Option<Frame>,
+}
+
 /// What the running pass is (never saved, hashed or replicated).
 #[derive(Clone, Debug, Default)]
 pub struct PlacePass {
@@ -498,6 +512,135 @@ impl WorldState {
         self.store_terrain(store).map(Terrain::frame)
     }
 
+    /// The groups of free flight's rigs, each with the frame its rigs' positions are measured
+    /// in (Wave 13 QA: per-occupant frames, see [`SpaceGroup`]). The first group (the store's
+    /// first rig's) is measured in the store's own frame; a group farther than
+    /// [`SPACE_GROUP_LINK_SECTORS`] from every other rig has its own, round its first rig. A
+    /// pure function of the rigs' exact space positions, so every peer groups alike.
+    #[must_use]
+    pub fn space_groups(&self) -> Vec<SpaceGroup> {
+        let rigs: Vec<(PlayerId, WorldPos)> = self
+            .players
+            .iter()
+            .filter(|(id, _)| self.store_of(**id) == StoreKey::Space)
+            .map(|(id, rig)| (*id, rig.flight.pos))
+            .collect();
+        if rigs.is_empty() {
+            return Vec::new();
+        }
+        // Linked when within reach of each other (single linkage), in id order.
+        let mut group_of: Vec<usize> = (0..rigs.len()).collect();
+        let near = |a: WorldPos, b: WorldPos| {
+            a.sector_x.abs_diff(b.sector_x) <= SPACE_GROUP_LINK_SECTORS
+                && a.sector_y.abs_diff(b.sector_y) <= SPACE_GROUP_LINK_SECTORS
+        };
+        for i in 0..rigs.len() {
+            for j in 0..i {
+                if near(rigs[i].1, rigs[j].1) {
+                    let (from, to) = (group_of[i].max(group_of[j]), group_of[i].min(group_of[j]));
+                    for group in &mut group_of {
+                        if *group == from {
+                            *group = to;
+                        }
+                    }
+                }
+            }
+        }
+        let mut groups: Vec<SpaceGroup> = Vec::new();
+        let mut index: BTreeMap<usize, usize> = BTreeMap::new();
+        for (rig, group) in group_of.iter().enumerate() {
+            let at = *index.entry(*group).or_insert_with(|| {
+                let anchor = rigs[rig].1;
+                groups.push(SpaceGroup {
+                    members: Vec::new(),
+                    frame: (!groups.is_empty())
+                        .then(|| Frame::floating_at(anchor.sector_x, anchor.sector_y)),
+                });
+                groups.len() - 1
+            });
+            groups[at].members.push(rigs[rig].0);
+        }
+        groups
+    }
+
+    /// The frame `player_id`'s rig position is measured in: its store's, or its far group's
+    /// own in free flight (Wave 13 QA).
+    #[must_use]
+    pub fn player_frame(&self, player_id: PlayerId) -> Option<Frame> {
+        let store = self.store_of(player_id);
+        if store == StoreKey::Space
+            && let Some(group) = self
+                .space_groups()
+                .into_iter()
+                .find(|group| group.members.contains(&player_id))
+            && let Some(frame) = group.frame
+        {
+            return Some(frame);
+        }
+        self.store_frame(store)
+    }
+
+    /// Whether `player_id`'s rig is measured in its store's own frame (every rig but a far
+    /// group's in free flight).
+    fn in_store_frame(&self, player_id: PlayerId) -> bool {
+        self.store_of(player_id) != StoreKey::Space
+            || self
+                .space_groups()
+                .into_iter()
+                .find(|group| group.members.contains(&player_id))
+                .is_none_or(|group| group.frame.is_none())
+    }
+
+    /// After the tick: each far group's rigs measured in its own frame again (their exact space
+    /// positions say where; a rig that joined the first group is measured in the store's).
+    fn settle_space_groups(&mut self) {
+        let Some(store_frame) = self.store_frame(StoreKey::Space) else {
+            return;
+        };
+        let groups = self.space_groups();
+        if groups.len() < 2 {
+            // Everyone in the store's frame: a rig a far group left behind (its position a
+            // whole number of sectors off) is measured in it again. A rig already in it is
+            // left exactly as it is.
+            for group in &groups {
+                for member in &group.members {
+                    if let Some(rig) = self.players.get_mut(member)
+                        && rig.flight.away()
+                    {
+                        let (x, y) = store_frame.local(rig.flight.pos);
+                        if (rig.x - x).abs() > 1.0 || (rig.y - y).abs() > 1.0 {
+                            rig.x = x;
+                            rig.y = y;
+                        }
+                    }
+                }
+            }
+            return;
+        }
+        for group in groups {
+            let frame = group.frame.unwrap_or(store_frame);
+            for member in group.members {
+                if let Some(rig) = self.players.get_mut(&member)
+                    && rig.flight.away()
+                {
+                    let (x, y) = frame.local(rig.flight.pos);
+                    rig.x = x;
+                    rig.y = y;
+                }
+            }
+        }
+    }
+
+    /// A ground pass's frame moved to `frame` with only the store's things (its entities)
+    /// following (a far group of free flight ticks in its own frame, Wave 13 QA).
+    fn move_ground_entities(&mut self, frame: Frame) {
+        let shift = self.terrain.frame().shift_to(frame);
+        self.terrain.set_frame(frame);
+        if !shift.is_zero() {
+            self.entities.reframe_all(shift);
+        }
+    }
+
     /// The live players in `store`, in id order.
     pub fn players_in(&self, store: StoreKey) -> impl Iterator<Item = PlayerId> + '_ {
         self.players
@@ -510,7 +653,7 @@ impl WorldState {
     #[must_use]
     pub fn rig_world_pos(&self, player_id: PlayerId) -> Option<(Place, WorldPos)> {
         let player = self.players.get(&player_id)?;
-        let frame = self.store_frame(self.store_of(player_id))?;
+        let frame = self.player_frame(player_id)?;
         Some((self.place_of(player_id), frame.world(player.x, player.y)))
     }
 
@@ -520,13 +663,14 @@ impl WorldState {
     pub fn occupied_regions(&self) -> Vec<RegionId> {
         let mut regions = BTreeSet::new();
         for store in self.occupied_stores() {
-            let Some(frame) = self.store_frame(store) else {
-                continue;
-            };
+            // Each rig in its own frame (free flight's far groups have theirs, Wave 13 QA).
             let tiles: Vec<TilePosition> = self
                 .players_in(store)
-                .filter_map(|player| self.actor_in(store, player))
-                .map(|(x, y)| frame.tile_at(x, y))
+                .filter_map(|player| {
+                    let frame = self.player_frame(player)?;
+                    self.actor_in(store, player)
+                        .map(|(x, y)| frame.tile_at(x, y))
+                })
                 .collect();
             for (cell_x, cell_y) in occupied_cells(tiles) {
                 regions.insert(RegionId {
@@ -723,7 +867,12 @@ impl WorldState {
             }
             return;
         }
-        let players: Vec<PlayerId> = self.players_in(store).collect();
+        // Free flight's far groups keep their own frames (Wave 13 QA): only the rigs measured
+        // in the store's frame move with it.
+        let players: Vec<PlayerId> = self
+            .players_in(store)
+            .filter(|player| store != StoreKey::Space || self.in_store_frame(*player))
+            .collect();
         let Some(world) = self.places.stores.get_mut(&store) else {
             return;
         };
@@ -1011,11 +1160,24 @@ impl WorldState {
         self.restore_players(stash);
         // One ground pass per other occupied store.
         for store in others {
-            let mut store_output = self.simulate_store(store, tick, inputs);
-            // Events are routed by place (Wave 13 QA): everything this pass raised is the
-            // store's.
-            store_output.stamp_stores(0, |_| store);
-            output.merge_pass(store_output);
+            // Free flight's far-apart groups each tick in their own frame (Wave 13 QA).
+            let groups = if store == StoreKey::Space {
+                self.space_groups()
+            } else {
+                Vec::new()
+            };
+            let passes: Vec<Option<&SpaceGroup>> = if groups.len() > 1 {
+                groups.iter().map(Some).collect()
+            } else {
+                vec![None]
+            };
+            for group in passes {
+                let mut store_output = self.simulate_store(store, tick, inputs, group);
+                // Events are routed by place (Wave 13 QA): everything this pass raised is the
+                // store's.
+                store_output.stamp_stores(0, |_| store);
+                output.merge_pass(store_output);
+            }
         }
         // Space combat (Wave 12 hostiles) once a tick with every rig back from its store: free
         // flight's rigs live in the Space store, far flyers park in the home store, and the
@@ -1053,6 +1215,8 @@ impl WorldState {
                 output.stamp_stores(at, |_| place.store());
             }
         }
+        // Each far group in free flight keeps its rigs in its own frame (Wave 13 QA).
+        self.settle_space_groups();
         let _ = next_tick;
         output
     }
@@ -1089,6 +1253,7 @@ impl WorldState {
         store: StoreKey,
         tick: SimulationTick,
         inputs: &TickInputs,
+        group: Option<&SpaceGroup>,
     ) -> TickOutput {
         self.ensure_store(store);
         let Some(mut world) = self.places.stores.remove(&store) else {
@@ -1097,7 +1262,11 @@ impl WorldState {
                 ..TickOutput::default()
             };
         };
-        let members: BTreeSet<PlayerId> = self.players_in(store).collect();
+        // One group of free flight's rigs (Wave 13 QA), or everyone in the store.
+        let members: BTreeSet<PlayerId> = group.map_or_else(
+            || self.players_in(store).collect(),
+            |group| group.members.iter().copied().collect(),
+        );
         let store_inputs = filter_inputs(inputs, |player| members.contains(&player));
         let stash = self.stash_players(|player| !members.contains(&player));
         // The store continues the world's entity counters (ids and revisions stay unique).
@@ -1115,8 +1284,31 @@ impl WorldState {
         );
         self.place_pass.store = store;
         self.place_pass.ground_only = true;
-        self.place_pass.awake_cells = self.awake_cells_here();
+        // A far group of free flight ticks in its own frame round its rigs (exact wherever it
+        // is), and only the store's things round it wake (each thing ticks once a tick).
+        let store_frame = group.and_then(|group| group.frame).map(|frame| {
+            let home = self.terrain.frame();
+            self.move_ground_entities(frame);
+            for member in &group.map_or_else(Vec::new, |group| group.members.clone()) {
+                if let Some(rig) = self.players.get_mut(member)
+                    && rig.flight.away()
+                {
+                    let (x, y) = frame.local(rig.flight.pos);
+                    rig.x = x;
+                    rig.y = y;
+                }
+            }
+            home
+        });
+        self.place_pass.awake_cells = if group.is_some() {
+            Some(self.occupied_cells_here())
+        } else {
+            self.awake_cells_here()
+        };
         let mut output = self.simulate_pass(tick, &store_inputs);
+        if let Some(home) = store_frame {
+            self.move_ground_entities(home);
+        }
         output.discoveries.clear();
         world.discovered = std::mem::replace(&mut self.discovered_tiles, discovered);
         for tiles in world.discovered.values_mut() {
@@ -1152,6 +1344,11 @@ impl WorldState {
         if !self.ticks_by_region() {
             return None;
         }
+        Some(self.occupied_cells_here())
+    }
+
+    /// The cells round the occupants of the ground swapped in.
+    fn occupied_cells_here(&self) -> BTreeSet<(i64, i64)> {
         let frame = self.frame();
         let mut tiles: Vec<TilePosition> = self
             .players
@@ -1162,7 +1359,7 @@ impl WorldState {
             self.pilots()
                 .map(|(_, body, _)| frame.tile_at(body.x, body.y)),
         );
-        Some(occupied_cells(tiles))
+        occupied_cells(tiles)
     }
 
     /// Whether an entity at local `(x, y)` is frozen this pass (outside every awake region).
