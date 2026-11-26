@@ -539,6 +539,27 @@ impl Space {
             .fold(1.0, f32::min)
     }
 
+    /// The wormhole mouths of the wormhole regions within `rings` regions of `at`'s, ring by
+    /// ring (Wave 14 destination index: a pure read of the pairing, no sector generated).
+    #[must_use]
+    pub fn wormholes_near(&self, at: impl Into<SpaceTile>, rings: i32) -> Vec<WormholeMouth> {
+        let centre = super::interstellar::region_of(SpaceSector::of_tile(at.into()));
+        let mut out = Vec::new();
+        for ring in 0..=rings.max(0) {
+            for y in -ring..=ring {
+                for x in -ring..=ring {
+                    if x.abs().max(y.abs()) != ring {
+                        continue;
+                    }
+                    let region = (centre.0 + x, centre.1 + y);
+                    let sector = super::interstellar::mouth_sector(self.seed.seed, region);
+                    out.extend(super::interstellar::wormhole_in(self.seed.seed, sector));
+                }
+            }
+        }
+        out
+    }
+
     /// The wormhole mouth `at` is inside, if any.
     #[must_use]
     pub fn wormhole_at(&self, at: impl Into<SpaceTile>) -> Option<WormholeMouth> {

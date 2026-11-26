@@ -25,6 +25,8 @@ pub const SURFACE: i64 = i64::MIN / 4;
 pub const RINGS: i32 = 3;
 /// Sector rings searched for sites on bodies (towns, outposts), which read the grounds.
 pub const SITE_RINGS: i32 = 1;
+/// Wormhole regions (eight sectors a side) searched round the player's.
+pub const WORMHOLE_RINGS: i32 = 2;
 /// Tiles kept between a stopped rig and a body's surface (or a station's hull).
 pub const SAFE_TILES: i64 = 3_000;
 /// Tiles kept past a black hole's lensing radius.
@@ -227,8 +229,8 @@ pub fn candidates(
                     found.push(destination);
                 }
             }
-            DestinationKind::Wormhole => {
-                for mouth in &sector.wormholes {
+            DestinationKind::Wormhole if sector_coords == SpaceSector::of_tile(query.from) => {
+                for mouth in &query.space.wormholes_near(query.from, WORMHOLE_RINGS) {
                     let mut destination = free(
                         kind,
                         above(mouth.centre, i64::from(mouth.radius) + SAFE_TILES),

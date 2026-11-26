@@ -24,6 +24,13 @@ use super::{Destination, DestinationFilter, DestinationId, DestinationKind};
 pub const WINDOW_COLUMNS: i32 = 1_536;
 /// Depth steps of an unfiltered [`DestinationKind::Depth`] list, metres.
 pub const DEPTH_STEP_METRES: i32 = 500;
+/// Columns and rows either side of the anchor a costly kind's first search covers (caves and
+/// points of interest; it doubles until it finds [`ENOUGH`], up to the full window).
+pub const FIRST_REACH: (i32, i32) = (128, 128);
+/// Rows either side of the anchor a costly kind's search reaches at most.
+pub const MAX_REACH_ROWS: i32 = 4_096;
+/// Candidates a costly kind's search is happy with.
+pub const ENOUGH: usize = 8;
 /// Rows above a boss arena's roof its door pocket is carved at.
 pub const ARENA_DOOR_ROWS: i32 = 8;
 
@@ -149,6 +156,19 @@ pub fn candidates(
     kind: DestinationKind,
     filter: DestinationFilter,
 ) -> Vec<Destination> {
+    // A Descent or stratum filter searches round that Descent's (or stratum's) middle row.
+    let mut anchored = *query;
+    if let Some(layout) = query.layout() {
+        let rows = match filter {
+            DestinationFilter::Descent(descent) => Some(layout.descent_rows(descent)),
+            DestinationFilter::Stratum(stratum) => Some(layout.rows(stratum)),
+            _ => None,
+        };
+        if let Some((top, bottom)) = rows {
+            anchored.anchor.y = i32::midpoint(top, bottom);
+        }
+    }
+    let query = &anchored;
     let mut found = gather(query, kind, filter);
     for destination in &mut found {
         describe(query, destination);
@@ -247,21 +267,27 @@ fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -
                 })
                 .collect()
         }
-        DestinationKind::Cave => features(query, &[FeatureKind::Cave, FeatureKind::LargeCavern])
-            .into_iter()
-            .map(|feature| {
-                let name = feature.detail.cave().map_or_else(
-                    || "Large cavern".to_owned(),
-                    |cave| format!("{cave:?} cave"),
-                );
-                at(kind, feature.center.x, feature.center.y, name)
-            })
-            .collect(),
+        DestinationKind::Cave => features_near(
+            query,
+            &[FeatureKind::Cave, FeatureKind::LargeCavern],
+            |_| true,
+        )
+        .into_iter()
+        .map(|feature| {
+            let name = feature.detail.cave().map_or_else(
+                || "Large cavern".to_owned(),
+                |cave| format!("{cave:?} cave"),
+            );
+            at(kind, feature.center.x, feature.center.y, name)
+        })
+        .collect(),
         DestinationKind::Vault | DestinationKind::Landmark => {
             let vaults = kind == DestinationKind::Vault;
-            let mut found: Vec<Destination> = features(query, &[FeatureKind::PointOfInterest])
+            let mut found: Vec<Destination> =
+                features_near(query, &[FeatureKind::PointOfInterest], |feature| {
+                    (feature.poi_kind() == Some(PoiKind::Vault)) == vaults
+                })
                 .into_iter()
-                .filter(|feature| (feature.poi_kind() == Some(PoiKind::Vault)) == vaults)
                 .map(|feature| {
                     let name = feature
                         .poi_kind()
@@ -465,6 +491,42 @@ impl KindName for crate::worldgen::features::WorldFeature {
             FeatureKind::SkyContinent => "Sky continent",
             _ => "Sky island",
         }
+    }
+}
+
+/// The features of `kinds` that `accept` takes, in a window round the anchor that doubles
+/// from [`FIRST_REACH`] until it holds [`ENOUGH`] (or reaches the full window): caves and
+/// points of interest are costly to place, so a query reads only as far as it needs.
+fn features_near(
+    query: &HomeQuery,
+    kinds: &[FeatureKind],
+    accept: impl Fn(&crate::worldgen::features::WorldFeature) -> bool,
+) -> Vec<crate::worldgen::features::WorldFeature> {
+    if !query.settings.generator.is_streamed() {
+        return Vec::new();
+    }
+    let full = query.window();
+    let (mut columns, mut rows) = FIRST_REACH;
+    loop {
+        let rect = TileRect {
+            min: TilePosition {
+                x: (query.anchor.x - columns).max(full.min.x),
+                y: (query.anchor.y - rows).max(full.min.y),
+            },
+            max: TilePosition {
+                x: (query.anchor.x + columns).min(full.max.x),
+                y: (query.anchor.y + rows).min(full.max.y),
+            },
+        };
+        let found: Vec<_> = streamed::features_in(query.settings, &rect, Some(kinds))
+            .into_iter()
+            .filter(|feature| accept(feature))
+            .collect();
+        if found.len() >= ENOUGH || (columns >= WINDOW_COLUMNS && rows >= MAX_REACH_ROWS) {
+            return found;
+        }
+        columns = (columns * 2).min(WINDOW_COLUMNS);
+        rows = (rows * 2).min(MAX_REACH_ROWS);
     }
 }
 
