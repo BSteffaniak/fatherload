@@ -436,7 +436,7 @@ fn draw_purchase_confirm(
     let mut items = Vec::new();
     let mut cost = None;
     if let Some(offer) = offer {
-        cost = offer.value.parse::<u32>().ok().filter(|_| offer.coin);
+        cost = crate::credits_text::parse_grouped(&offer.value).filter(|_| offer.coin);
         let about = offer.about.clone();
         let (rows, _) = offer_items(vec![offer], 0);
         items.extend(rows);
@@ -447,15 +447,27 @@ fn draw_purchase_confirm(
     let mut ledger = vec![SectionItem::icon_stat(
         &icons::CREDITS,
         "Credits now",
-        credits.to_string(),
+        crate::credits_text::grouped(credits),
         GOLD,
     )];
     if let Some(cost) = cost {
-        ledger.push(SectionItem::stat("Price", format!("-{cost}"), ORANGE));
+        ledger.push(SectionItem::stat(
+            "Price",
+            format!("-{}", crate::credits_text::grouped(cost)),
+            ORANGE,
+        ));
         let (label, value, color) = if credits >= cost {
-            ("Balance after", (credits - cost).to_string(), BONE)
+            (
+                "Balance after",
+                crate::credits_text::grouped(credits - cost),
+                BONE,
+            )
         } else {
-            ("Short by", (cost - credits).to_string(), RED)
+            (
+                "Short by",
+                crate::credits_text::grouped(cost - credits),
+                RED,
+            )
         };
         ledger.push(SectionItem::stat(label, value, color));
     }

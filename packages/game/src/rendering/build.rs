@@ -40,10 +40,17 @@ fn cost_line(preview: &BuildPreview) -> (String, Color) {
                 (Some(block), _, _) => format!(
                     "1 {} or {} c",
                     block.name(),
-                    fatherload_simulation::base::block_credit_price(block)
+                    crate::credits_text::grouped(fatherload_simulation::base::block_credit_price(
+                        block
+                    ))
                 ),
-                (None, 0, credits) => format!("{credits} c"),
-                (None, blocks, credits) => format!("{credits} c + {blocks} blocks"),
+                (None, 0, credits) => format!("{} c", crate::credits_text::grouped(credits)),
+                (None, blocks, credits) => {
+                    format!(
+                        "{} c + {blocks} blocks",
+                        crate::credits_text::grouped(credits)
+                    )
+                }
             };
             (text, FOG)
         },
@@ -52,9 +59,14 @@ fn cost_line(preview: &BuildPreview) -> (String, Color) {
             let credits = quote.cost.credits;
             let text = match (blocks, credits) {
                 (0, 0) => "Free".to_owned(),
-                (0, credits) => format!("{credits} c"),
+                (0, credits) => format!("{} c", crate::credits_text::grouped(credits)),
                 (blocks, 0) => format!("{blocks} block{}", if blocks == 1 { "" } else { "s" }),
-                (blocks, credits) => format!("{blocks} blocks + {credits} c"),
+                (blocks, credits) => {
+                    format!(
+                        "{blocks} blocks + {} c",
+                        crate::credits_text::grouped(credits)
+                    )
+                }
             };
             (text, GOLD)
         },
@@ -80,12 +92,15 @@ fn remove_line(preview: &BuildPreview) -> Option<String> {
     let credits = quote.refund.credits;
     Some(match (blocks, credits) {
         (0, 0) => "Take down".to_owned(),
-        (0, credits) => format!("Take down: +{credits} c"),
+        (0, credits) => format!("Take down: +{} c", crate::credits_text::grouped(credits)),
         (blocks, 0) => format!(
             "Take down: +{blocks} block{}",
             if blocks == 1 { "" } else { "s" }
         ),
-        (blocks, credits) => format!("Take down: +{blocks} blocks, +{credits} c"),
+        (blocks, credits) => format!(
+            "Take down: +{blocks} blocks, +{} c",
+            crate::credits_text::grouped(credits)
+        ),
     })
 }
 

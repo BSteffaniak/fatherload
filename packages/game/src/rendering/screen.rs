@@ -793,7 +793,7 @@ fn draw_wallet_panel(
     top: i32,
 ) -> Option<(i32, i32)> {
     let hud = view.hud;
-    let money = format!("{}", hud.credits);
+    let money = crate::credits_text::grouped(hud.credits);
     // Underground (or on the ground): depth below the local surface; in the air: altitude
     // above it.
     let (depth, depth_icon, depth_color) = hud.altitude.map_or_else(

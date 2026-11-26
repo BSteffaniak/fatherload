@@ -19,9 +19,27 @@ pub fn grouped(value: impl Into<i128>) -> String {
     out
 }
 
+/// A figure written by [`grouped`] (or plainly) read back: "1,200" is 1200. `None` for
+/// anything else.
+#[must_use]
+pub fn parse_grouped<T: std::str::FromStr>(text: &str) -> Option<T> {
+    let digits: String = text.chars().filter(|c| *c != ',').collect();
+    digits.parse().ok()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::grouped;
+    use super::{grouped, parse_grouped};
+
+    #[test]
+    fn a_grouped_figure_reads_back() {
+        assert_eq!(
+            parse_grouped::<u32>(&grouped(1_200_000_u32)),
+            Some(1_200_000)
+        );
+        assert_eq!(parse_grouped::<u32>("940"), Some(940));
+        assert_eq!(parse_grouped::<u32>("free"), None);
+    }
 
     #[test]
     fn big_numbers_read_in_groups_of_three() {
