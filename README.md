@@ -1342,6 +1342,45 @@ tactics and boss:
   `space_dogfight`, `space_boss_pirate_king`, `space_boss_swarm_queen`, `space_boss_arbiter`,
   `space_salvage`, `space_ground_raid`, `touch_space_combat`.
 
+### The long game in space (wave 13 endgame)
+
+Space has its own economy, made to last a rig that arrives after the Heart with millions in its
+purse.
+
+- **Space materials**: belt rocks give **Meteoric Iron**, **Kamacite**, **Volatile Ice**,
+  **Cobalt Bloom**, **Star Platinum**, **Iridium** and **Voidglass** (rarer farther out; the
+  rare ones run out fast in each rock), and a comet's tail gives **Comet Dust**. They sell at
+  any counter, but they are worth more spent: stations sell only the four commons, at three
+  times their value.
+- **One credit scale**: every station price and reward is on the space scale, so an hour of
+  boards, bounties or belt mining earns about what an hour at the Heart did. Home ore still
+  sells at stations, at its plain value (no Descent premium).
+- **Late tiers need ore**: a ship line's tiers 3-5 ask for space materials as well as credits
+  (the shipyard row shows the bill). A big purse buys tiers 1-2 at once; the rest is mined.
+- **The Works** (a station counter): buy common materials; raise alien tech to **Mk II and Mk
+  III** at alien-run stations (talked through in the station's own tongue: Conversant, then
+  Fluent); commission the **Starwright Hull and Engine**, the endgame ship, at a great human
+  shipyard (tier 5 hull and engine lines first); fit the **Heartline Drive** (warps cost half the
+  fuel and spool twice as fast) once the Starwright ship is yours and every faction boss is down;
+  deliver the eight parts of the **Halcyon Gate** at Halcyon Dock with your crew (it rises beside
+  the dock, segment by segment; finished, it jumps you to any system you know); and buy space
+  paints and the Ion Blue flame from the **outfitter**.
+- **Records** (a station counter): the **hunt list** (the Gilded Maw, the Swarm Queen, the
+  Arbiter and every theme world's boss; pick one to set the waypoint on its lair) and your
+  **completion**: worlds landed, kinds of world, species met, tongues spoken, bosses, story,
+  the materials codex, the ship, the gate and your estate, and achievements.
+- **Achievements**: a new Space group on the progression screen (Star Miner, Planetfall,
+  Atlas of Worlds, Fluent, Crown Breaker, Starwright, Heartline, Gatebuilder, Lord of the Manor,
+  Fatherload for 100 %...), each unlocking a paint, a flame, a decal or a hull pattern.
+- **Estates**: a home in an alien town grows wing by wing (a bedroom annex, a kitchen, a
+  garage, a greenhouse, an upper storey, a gallery and an observatory dome), raised by the
+  town's builder from the Homes page. Have the **neighbours** over once a day: they leave a gift
+  of space ore and a few words of their tongue.
+- Scenes: `endgame_works_halcyon`, `endgame_works_starwright`, `endgame_works_alien`,
+  `endgame_shipyard_bills`, `endgame_records`, `endgame_gate_building`, `endgame_gate_open`,
+  `endgame_starwright_flight`, `endgame_estate`, `endgame_estate_young`,
+  `endgame_achievements`, `endgame_split`, `touch_endgame`.
+
 ### The Fathers' expedition (wave 8 story)
 
 A generation ago six people from the town went down the builders' cable to find out what hums.

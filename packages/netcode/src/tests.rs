@@ -7,6 +7,7 @@ mod support;
 mod units;
 mod world_aliens;
 mod world_e2e;
+mod world_endgame;
 mod world_far;
 mod world_galaxy;
 mod world_hostiles;

@@ -9928,6 +9928,10 @@ Halcyon Dock plus any of its own); the nav HUD and chart now call a station by i
 
 ### The shipyard (`station::shipyard`)
 
+> Wave 13 endgame: every station figure in this section is now on the space credit scale
+> (x20, `endgame::economy::SPACE_CREDIT_SCALE`; see "Wave 13 endgame" below), and tiers 3-5
+> of each line also ask for space materials.
+
 Everything fitted lives in the rig's loadout, `HazardGear::ship: ShipGear` (serde default).
 `ShipUpgrade::{Line, Gear, Alien}`; `level`, `max_level`, `price(level)`, `sold_to(station)`
 (a yard fits up to its tier), `effect(level)`.
@@ -11094,6 +11098,237 @@ stratum to 11, one more two sectors from home; `exotic_tier`). Fauna are spared 
 - **The cloud-tops scene** hovers just over the billows in the afternoon (it sat 30 rows up at
   night and showed only stars).
 - The Gloamwarden paces only toward rigs on the ground (not ones away in space).
+
+## Wave 13 endgame: space materials, one credit scale, the long curve, the Works, the hunt list, completion and estates (`src/endgame.rs`, `src/endgame/{materials,economy,works,hunt,completion,curve,state}.rs`, `src/world/endgame.rs`)
+
+Expansion plan §16 WP-SPACE ("progression in space", "homes for sale") and the Wave 12
+integration's open items: the space economy's scale against a late purse, and space items for
+belt ore and comet dust. Everything is a pure function of the world seed and the crew's state;
+nothing here touches home or space generation (V1-V10, `GOLDEN_V11_DIGEST` and
+`GOLDEN_SPACE_DIGEST` are unchanged).
+
+### Space materials (`endgame::materials`)
+
+Eight minerals appended to `MineralKind` (codes 12-19 after Cloud Silver; the cargo bay, every
+sale counter, drops, the inventory and the tile codec already know a mineral): **Meteoric Iron**
+(iron rocks), **Kamacite** (nickel), **Volatile Ice** (ice), **Cobalt Bloom** (cobalt), **Star
+Platinum** (platinum, 40 a rock), **Iridium** (20 a rock), **Voidglass** (12 a rock) and **Comet
+Dust** (6 a comet). `flight::systems::asteroid_mineral` / `COMET_MINERAL` now give them
+(`belt_material`, `COMET_MATERIAL`); no home mineral is a stand-in any more. They have no depth
+curve (`worldgen::deposits` never grows them), their own pixel-art icons, ore stamps, drop
+glows and atlas entries. Values (credits a unit, on the space scale): 40, 70, 55, 160, 1,500,
+4,000, 10,000, 5,000. Crewed stations with a market **sell the commons** (Meteoric Iron,
+Kamacite, Volatile Ice; Cobalt Bloom at shipyards and outposts) at `MATERIAL_MARKUP_PERCENT`
+(300 %) of their value; the rare ones are mined, gathered or given (the neighbours).
+
+### One credit scale (`endgame::economy`)
+
+The decision the Wave 12 stations review asked for: **every station figure is multiplied by
+`SPACE_CREDIT_SCALE` (20)** through `space_credits(base)`: ship lines, planet gear, alien tech,
+flight gear (Wave 11), arms (hostiles), trade goods, mission rewards, bar rounds, derelict
+salvage, wreck credits, bounty targets, pirate demands' bounds, alien goods, lessons and alien
+home plots. Ratios inside space are unchanged (the first-hour model still affords the first
+ship-line tier in about 40 minutes), but an hour of space work now earns what an hour at the
+Heart does. Two things stay unscaled on purpose: **services by the unit** (fuel, hull points: the
+tank and plating they fill already grew with the rig) and **home ore at stations** (classic
+value at the station's ore rate, no Descent premium, so hauling Heart ore to an alien station no
+longer out-earns the boards). Far boards pay more: a mission's reward grows a quarter a ring of
+galactic sectors from home (`bounty::reward_for`; Halcyon, ring 0, is unchanged).
+
+`late_purse()` reads the Descent probe (`balance::descent::run_descent`, uncalibrated, memoised;
+`StratumRun` gained `purse`, `trip_credits` and `trip_minutes`): a rig leaves the Heart at
+**82.7 h with 6,665,550 credits**, its everyday Descent VIII trips earning **805,967 an hour**.
+
+### The Works (`endgame::works`, `StationAction::Works(WorkOrder)`, `world/endgame.rs`)
+
+Everything late is a **bill**: credits *and* materials from the cargo bay.
+
+| Goal | Where | Credits | Materials | Effect |
+|---|---|---|---|---|
+| Ship line tier 3 / 4 / 5 | a yard of that tier | the line's price | `line_bill` (commons, then cobalt, then platinum / iridium / dust) | Wave 12's |
+| Alien tech Mk II / Mk III | alien-run stations | 4x / 8x Mk I | `mark_bill` | lattice +3/+4 shield tiers; spool /3, /4; lens x2.5, x3; weave 0.9/s to 85 %, 1.2/s to 100 % |
+| Starwright Hull | people-run tier-5 yards | 3,600,000 | 60 iridium, 80 star platinum, 8 voidglass | space and hazard damage x0.35 (tier 5: x0.5) |
+| Starwright Engine | people-run tier-5 yards | 4,000,000 | 200 volatile ice, 40 iridium, 20 comet dust | thrust and impulse x1.9 (tier 5: x1.6) |
+| Heartline Drive | people-run tier-5 yards | 8,000,000 | 24 voidglass, 40 comet dust, 80 iridium | warp range x2, spool /2 |
+| Halcyon Gate (8 parts) | Halcyon Dock | 1.2 M a segment, 2.4 M the lens, 3.2 M the keystone | rings of common ore; platinum and dust; voidglass and iridium | a jump to any known system |
+| Estate wings (7) | your home's door, alien towns | `estate_price` (3x the job, x the wings) | `estate_bill` | rooms, a floor, a bay; the neighbours |
+| Outfitter (5) | Halcyon, people-run trade posts and shipyards | 250,000-1,500,000 | - | space paints, the Ion Blue flame |
+
+* **Marks** need the station kin's tongue: Mk II at Conversant, Mk III at Fluent
+  (`mark_fluency`), so learning a species' language is part of the endgame.
+* **The Starwright line** needs the hull and engine lines at tier 5; **the Heartline** the whole
+  Starwright ship, every faction boss beaten and up to `HEARTLINE_THEME_BOSSES` (3) theme bosses,
+  as many as are registered.
+* **The gate** is the crew's (one bitset): the keystone goes in last; finished, Halcyon's Works
+  lists every known system (`known_systems`) and a ride is a 6 s `StarDrive::Transit` streak to
+  `GATE_ARRIVAL_TILES` (30,000) from the target's star, or half again its approach when that is
+  farther, turned a quarter at a time until clear of every body; the system is marked found.
+* `WorldState::ship_effects(player)` (`works::ship_effects`) folds the ship lines, the marks,
+  the Starwright parts and the Heartline into one `ShipEffects`; flight's engine power, hull
+  damage, warp range and spool, re-entry shield, scanner reach (ping and body scans) and the
+  weave read it (`world/flight.rs`, `world/stations.rs`). The stock ship is unchanged.
+* Refusals are `EndgameEvent::Refused` with an `EndgameRefusal` (not here, credits, materials,
+  locked, done, bay full, no home, already today, no route); `works_quote` gives the bill or the
+  refusal for the counter. A line's material shortfall at the shipyard is the appended
+  `StationRefusal::Materials`.
+
+### The hunt list, completion and achievements (`endgame::{hunt,completion}`, `milestone`)
+
+* **Hunt list** (`WorldState::hunt`): the three faction bosses with their lairs
+  (`boss_lair`), then every registered theme boss. **TODO-SEAM(w13-planets-c/d, theme
+  worlds):** append a `ThemeBoss { theme, world, name }` to `hunt::THEME_BOSSES` and call
+  `WorldState::record_theme_boss(theme, by, output)` when it falls (it raises
+  `EndgameEvent::QuarryDown`; faction bosses raise it from `HostileEvent::BossDefeated`).
+* **Completion** (`WorldState::completion`): ten categories, each a share of its goal, the
+  total their mean: worlds landed (25), the twelve kinds of world (`Theme::PLANET`), species
+  met, tongues spoken fluently, bosses (Descent gates, factions, theme bosses), story (the
+  eighty logs, the Heart woken, **TODO-SEAM(w13-story)** the galaxy story's chapters:
+  `CompletionFacts::story_done/story_total` are 0 of 0 until the story track fills them), the
+  codex (every space material mined once), the ship (five lines at tier 5, the Starwright parts,
+  the Heartline), the gate and an estate with every wing, and every other achievement.
+* **Careers** (`EndgameState::careers`): worlds landed (any rig standing `Landed` on a body,
+  once a body; `EndgameEvent::WorldLanded`), their space themes, space materials mined and the
+  catalogue, comet dust, marks, Starwright parts, the Heartline, outfits bought.
+* **Achievements**: nineteen appended `Milestone`s in the new `MilestoneGroup::Space` (Star
+  Miner, Comet Chaser, Planetfall, Wanderer, Atlas of Worlds, Hello Neighbour, Fluent, Many
+  Tongues, Crown Breaker, Queenfall, Overruled, The Hunt Is Over, Shipwright, Starwright,
+  Heartline, Gatebuilder, Home Away From Home, Lord of the Manor, Fatherload), each with a
+  cosmetic reward (fourteen appended paints, the Comet Tail and Heartline flames, the Ringed
+  Planet and Alien Glyph decals, the Constellation hull pattern). `MilestoneFacts::space`
+  (`SpaceFacts`) carries the world's part. The home pass only sees players at home, so
+  `advance_endgame` (once a tick with every rig back from its store, after space combat)
+  checks the Space group for every primed player wherever they are. The outfitter's five
+  items are `is_outfitter_stock`, never village vendor stock.
+
+### Estates on alien worlds (`AlienCommand::{ExpandHome, CallNeighbours}`)
+
+The aliens track's homes in alien towns (a contractor-built `home::Home` on a plot the builder
+sold) grow into **estates**: `ExpandHome` at the house raises the next of `ESTATE_WINGS`
+(bedroom, kitchen, garage, hydroponics, a floor, gallery, observatory) through
+`Home::expand`, at `estate_price` (three times the contractor's job on the space scale, times
+the wings so far) and `estate_bill`; the town's builder gains goodwill. `CallNeighbours` once a
+people-clock day: a seeded gift on the doorstep (3-6 common space materials, more with the
+wings; one comet dust in seven), `NEIGHBOUR_UNDERSTANDING` words of the town's tongue, and
+goodwill with the trader and the builder. Both are refused away from the house (its reach grows
+four columns a wing). The polar renderer draws the wings round the house (a paved terrace, an
+annex and its upper storey, a chimney breathing smoke, a garage, a greenhouse, a gallery tower
+and an observatory dome).
+
+### The long curve (`endgame::curve`)
+
+`run_career(seed, purse)` is a bot playing a career in 15-minute steps over the real prices,
+bills, boards and belts. `ring_rates(seed, ring)` measures each ring: the boards of up to six
+crewed stations (two boards each, the first-hour model's minutes per kind of mission) and a
+mining bot over three segments of every belt of up to six systems (a 20 s hop between rocks,
+the beam's unit a second, a dock to sell when a 1,000-slot bay fills; two comet tails an hour
+when out for materials). The bot buys what it can in the list's order (each goal after the one
+the game wants first), then works toward the first goal it could not buy: a boss (45 minutes,
+once its lair's ring is in reach and its hull and engine lines are up), the materials of a bill
+(at the ring that gives the scarcest fastest, selling what no goal needs, buying commons the
+stations sell), or credits (the better of the ring's boards and mining to sell). Its reach is
+ring 1 plus its Star Drive range tier (two more with the Heartline); Mk II waits for 4 h in
+space (Conversant), Mk III for 12 h (Fluent).
+
+Hour rates on seed 0xC0FFEE (credits an hour; the Heart's everyday income is 805,967):
+
+| Ring | Boards | Belt mining, all sold |
+|---|---|---|
+| 1 | 334,357 | 444,200 |
+| 3 | 523,517 | 645,387 |
+| 5 | 631,110 | 751,690 |
+| 7 | 729,925 | 560,163 |
+
+CURVE_TABLE
+
+* **From an empty purse** the first ship-line tier comes within the first hour (the first-hour
+  model's 40 minutes), every first tier within three, and credits hold the bot back in about
+  nine steps of ten for the first twenty hours.
+* **From the post-Heart purse** the purse buys every tier 1-2 line, the planet gear, the four
+  alien techs, a home and the outfitter's paints at once, then runs dry within hours on tier 3's
+  ore and credits: credits still hold the bot back in most steps of the first twenty hours, and
+  every goal is reached only after many tens of hours. The purse is a head start of about a
+  dozen hours, never the finish.
+
+### State, formats and codes
+
+* `WorldState::endgame: EndgameState` (serde default; shared `SectionKey::Endgame`, appended to
+  `SHARED`, now 37; hashed only once non-empty): careers (pair list), the gate's parts and who
+  delivered each, theme bosses beaten, estates by (town, plot) (pair list). Kept when a player
+  leaves (`roster`), like their tongues.
+* Commands: `StationAction::Works(WorkOrder)` (appended; `BuyMaterial`, `AlienMark`,
+  `Starwright`, `Heartline`, `GatePart`, `GateJump`, `Cosmetic`) and `AlienCommand::{ExpandHome,
+  CallNeighbours}` (appended).
+* Events 1060-1079: `GameplayEventKind::Endgame { what: EndgameEvent, player_id, detail }` (13
+  kinds). Sounds map to existing cues (`audio::cues::endgame_cue`).
+* **`PROTOCOL_VERSION` 21** (this track's one bump: the minerals, the scaled prices, the
+  commands, the section, the events, the milestones and cosmetics). **Save format**: no bump
+  (every field has a serde default; minerals and milestones are serialized by name, the tile
+  codec's mineral list grew at its end).
+
+### Game side
+
+* `shell/station.rs`: the hub's **The Works** page (materials ten at a time, marks, Starwright
+  parts and the Heartline, gate parts and gate rides, the outfitter) and **Records** page (the
+  hunt list's rows set the waypoint on a lair; completion's categories). The shipyard's line
+  rows show their material bill and disable when the bay is short.
+  `rendering/station_hub.rs` + `rendering/endgame_view.rs`: the Works bay (crates of the eight
+  materials stencilled with their icons, a tag lit for each held; at Halcyon the gate's model
+  lit part by part; at a great yard the Starwright hull on its cradle, ribs until fitted, a
+  white-gold hull with fins, keel band and canopy after, the engine bell's steady glow; at an
+  alien-run station a grown vat with a pod per tech ringed per mark; elsewhere the outfitter's
+  paint booth) and the Records wall (a banner per boss, gold and lit when beaten; the
+  completion dial and a pip per category). Sized to a split-screen sheet.
+* `rendering/space_view.rs`: the **Halcyon Gate** beside Halcyon Dock from its first part
+  (segments as rings, the missing ones dashed amber scaffold, the lens breathing slowly once
+  open, the keystone; a few `draw_ring` calls, cheap on WebGL1) and the **Starwright trim**
+  drawn in the rig's own frame (swept white-gold plates, a gold sill, twin gold engine bells
+  with a steady glow, the Heartline's keel line), for every flyer.
+* `shell/aliens.rs`: the builder's Homes page lists **Raise a wing** (with its bill) and **Have
+  the neighbours over** for a finished home of yours.
+* The progression screen has the Space group (icon and colour); rig art has the new paints,
+  flames, decals and pattern.
+* Scenes (`scene_capture/endgame_scenes.rs`): `endgame_works_halcyon`,
+  `endgame_works_starwright`, `endgame_works_alien`, `endgame_shipyard_bills`,
+  `endgame_records`, `endgame_gate_building`, `endgame_gate_open`,
+  `endgame_starwright_flight`, `endgame_estate`, `endgame_estate_young`,
+  `endgame_achievements`, `endgame_split`, `touch_endgame`.
+
+### Tests
+
+* `endgame::materials`: every belt ore and the comet give their own material; none is a home
+  mineral; rarer is dearer. `endgame::economy`: the late purse is millions and its income near a
+  million an hour. `endgame::completion`: the mean of the categories, full only when all are
+  (a registered theme boss keeps it open). `endgame::curve`: rings pay more and give rarer ore
+  farther out; from an empty purse the first line within the hour and the end far off, credits
+  limiting most of the way; from the post-Heart purse tiers 1-2 at once, twenty hours and more
+  of goals, credits limiting a good share of the first twenty, a head start over the empty purse.
+* `world::endgame_tests`: a belt rock drilled from flight gives its space material (no home
+  stand-ins), the career counts and catalogues it and Star Miner is earned; a late rig's purse
+  at a great yard buys every line to tier 2 and tier 3 waits for belt ore (refused with
+  `Materials`, then fitted and the ore spent), commons bought at three times their value, rare
+  ones not for sale; the Starwright ship (locked until tier 5, then materials, then fitted: the
+  effects) and the Heartline (locked until every faction boss, then range x2); alien tech marks
+  behind the tongue (Conversant, Fluent) and the lens growing x2 -> x2.5 -> x3; the gate part by
+  part (keystone last), no ride until finished or to an unknown system, then a transit to a
+  known system's star; the outfitter once; an estate raised wing by wing, the neighbours once a
+  day with a gift and words, nothing away from the house; landings counted once a world into
+  completion and Planetfall; the hunt list's lairs and the theme seam; the endgame state saves
+  (JSON, postcard), replicates as its section and stays out of an old world's hash.
+* Updated for the scale: the stations' and galaxy tour's grants, the starter board's reward
+  range; the cosmetics tests (a third of the items are starters now; the last paint).
+
+### Seams and known limits
+
+* TODO-SEAM(w13-planets-c/d): theme bosses register in `hunt::THEME_BOSSES` and call
+  `record_theme_boss`; theme worlds' own ores still sell at body markets at their classic value.
+* TODO-SEAM(w13-story): the galaxy story's chapters fill `CompletionFacts::story_done/total`.
+* TODO-SEAM(w13-artaudio): the endgame's events reuse existing cues; a Works ambience, a gate
+  hum and a Heartline fanfare would be appended patches.
+* Tests and tools that give a rig a fixed number of credits for space purchases should scale
+  them (`space_credits(x)`); the scale is the one constant to tune.
+* The bot's career is a model: the Mk II/III tongue hours and the boss minutes are estimates
+  from the aliens' and hostiles' tracks' bots; the galaxy story's rewards (another track) will
+  shorten it.
 
 ## Replication
 

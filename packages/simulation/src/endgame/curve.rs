@@ -267,6 +267,20 @@ impl Goal {
         }
     }
 
+    /// The goal the game wants done first, if any.
+    #[must_use]
+    pub const fn requires(self) -> Option<Self> {
+        match self {
+            Self::Line(line, tier) if tier > 1 => Some(Self::Line(line, tier - 1)),
+            Self::Gear(gear, tier) if tier > 1 => Some(Self::Gear(gear, tier - 1)),
+            Self::Mark(tech, mark) if mark > 2 => Some(Self::Mark(tech, mark - 1)),
+            Self::Mark(tech, _) => Some(Self::Tech(tech)),
+            Self::Wing(0) => Some(Self::AlienHome),
+            Self::Wing(wing) => Some(Self::Wing(wing - 1)),
+            _ => None,
+        }
+    }
+
     /// Its credits and materials.
     #[must_use]
     pub fn bill(self) -> (f64, Materials) {
@@ -500,6 +514,14 @@ pub fn run_career(seed: u64, purse: f64) -> CareerRun {
                 }
                 _ => true,
             };
+            // The goal before it in the game's own order must be in (a line's or a gear's
+            // tier before, Mk I before a mark, the estate's wing before).
+            let ready = ready
+                && goal.requires().is_none_or(|before| {
+                    list.iter()
+                        .position(|each| *each == before)
+                        .is_none_or(|other| done[other])
+                });
             let (price, materials) = goal.bill();
             if ready && credits >= price && has(&stock, materials) {
                 credits -= price;

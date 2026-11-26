@@ -62,7 +62,7 @@ fn dock(game: &mut LocalGame, seat: usize, player: PlayerId, station: StationId)
         rig.y = park.1;
         rig.velocity_x = 0.0;
         rig.velocity_y = 0.0;
-        rig.credits = 60_000;
+        rig.credits = fatherload_simulation::endgame::economy::space_credits(60_000);
     });
     let ui = game.shell.seat_mut(seat);
     ui.modal = Some(ModalScreen::Station);
@@ -190,4 +190,61 @@ fn two_seats_at_two_stations_use_their_own_hubs() {
     // Each seat's view draws its own station headlessly.
     let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
     assert_eq!(snapshot.views.len(), 2);
+}
+
+#[test]
+fn the_works_and_the_records_go_through_the_tick() {
+    use fatherload_simulation::{endgame::materials::station_stock, terrain::MineralKind};
+    let settings = WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(SEED)
+    };
+    let world = WorldState::new_game_with_settings(
+        PLAYER,
+        &settings,
+        fatherload_simulation::SimulationParams::new(30),
+    );
+    let mut game = playing(world, 1, "qa-station-works");
+    let seat = game.runtime.local_seats()[0].player;
+    dock(&mut game, 0, seat, HALCYON);
+    idle(&mut game, 2);
+    // Wave 13 endgame: the hub lists the Works and the Records.
+    choose(&mut game, 0, seat, StationRow::Open(StationPage::Works));
+    assert_eq!(game.shell.seat(0).station.page, StationPage::Works);
+    let profile = game.world().docked_station(seat).expect("docked");
+    let (mineral, price) = station_stock(&profile)[0];
+    assert_eq!(mineral, MineralKind::MeteoricIron);
+    let before = game.world().player(seat).expect("rig").credits;
+    choose(&mut game, 0, seat, StationRow::Material(mineral));
+    idle(&mut game, 3);
+    let rig = game.world().player(seat).expect("rig");
+    assert_eq!(
+        rig.cargo_bay.mineral(mineral),
+        u32::from(crate::shell::station::MATERIAL_LOT)
+    );
+    assert_eq!(
+        rig.credits,
+        before - price * u32::from(crate::shell::station::MATERIAL_LOT)
+    );
+    // Halcyon builds the gate: its parts are rows.
+    let rows = station_rows(game.world(), seat, &profile, StationPage::Works);
+    assert!(rows.contains(&StationRow::Order(
+        fatherload_simulation::endgame::WorkOrder::GatePart(0)
+    )));
+    press_seat(&mut game, 0, back_input());
+    assert_eq!(game.shell.seat(0).station.page, StationPage::Hub);
+    // The Records: a hunt-list row sets the waypoint on a faction boss's lair.
+    choose(&mut game, 0, seat, StationRow::Open(StationPage::Records));
+    choose(&mut game, 0, seat, StationRow::Quarry(0));
+    idle(&mut game, 3);
+    let lair = game
+        .world()
+        .hunt()
+        .first()
+        .and_then(|(_, _, lair)| *lair)
+        .expect("the Gilded Maw's lair");
+    assert_eq!(
+        game.world().waypoint_of(seat),
+        Some(NavTarget::System(lair))
+    );
 }

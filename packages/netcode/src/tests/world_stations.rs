@@ -128,7 +128,7 @@ fn world() -> WorldState {
     };
     template.x = park.0;
     template.y = park.1;
-    template.credits = 50_000;
+    template.credits = fatherload_simulation::endgame::economy::space_credits(50_000);
     world.set_player_template(template);
     world
 }
