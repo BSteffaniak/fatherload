@@ -10703,6 +10703,13 @@ nobody, and then it is told to every local seat, the Wave 12 limit below).
   spore air and reactor heat with and without their gear; each boss waking, calling its
   brood after its warning, falling and paying (seal spent, vault open, never again), resting
   whole when the crew leaves, and a Peaceful lair yielding.
+- Review additions: `a_bot_with_late_kit_beats_each_theme_boss_for_real` (a lair bot with
+  every upgrade and a railgun, Normal, no test mode, no repairs: the Sporemother falls in about
+  90 s with 61 % hull left, the Reactor Warden in about 100 s with 73 %, the Ashen Sovereign
+  in about 115 s with 45 %; each calls its brood 8-10 times); and
+  `the_home_roster_never_spawns_on_an_outland_world` (`Terrain::creature_roster` is empty on
+  an outland planet, as on a frontier one: before, the generic roaming spawner put home cave
+  bats into the fungal forests and the boss lairs).
 - Game: `the_gear_scene_shows_the_gears_turning`; the art test holds every outland creature's
   contact box to its drawn body; the cue tests give every outland event an answer.
 

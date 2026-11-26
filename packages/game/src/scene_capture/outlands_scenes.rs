@@ -353,8 +353,8 @@ const DEAD_LIFE: &[(EnemyKind, i32, i32)] = &[
 const TOMB_LIFE: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Gravewarden, 3, -1)];
 const SHADES: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Shade, 4, -3)];
 const SPOREMOTHER: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Sporemother, 8, -1)];
-const REACTOR_WARDEN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::ReactorWarden, 8, -6)];
-const ASHEN_SOVEREIGN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::AshenSovereign, 8, -1)];
+const REACTOR_WARDEN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::ReactorWarden, 6, -3)];
+const ASHEN_SOVEREIGN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::AshenSovereign, 6, -1)];
 
 pub const OUTLANDS_SCENES: &[Scene] = &[
     Scene {
