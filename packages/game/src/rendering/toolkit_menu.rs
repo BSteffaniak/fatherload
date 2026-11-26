@@ -107,6 +107,10 @@ impl RowText {
 /// A row with its current value, read from the frame's snapshot.
 fn row_text(row: ToolkitRow, ui: &UiFrame<'_, '_>, state: TestModeState) -> RowText {
     let snapshot = ui.snapshot;
+    // What the dialog chose and the world does not show yet (a paused world applies it on
+    // resume).
+    let pending = ui.shell.toolkit_pending;
+    let difficulty = pending.difficulty().unwrap_or(snapshot.enemy_difficulty);
     match row {
         ToolkitRow::InfiniteSupplies => RowText::toggle(
             "Every consumable is topped back up each tick",
@@ -124,8 +128,9 @@ fn row_text(row: ToolkitRow, ui: &UiFrame<'_, '_>, state: TestModeState) -> RowT
         ),
         ToolkitRow::Gate(descent) => {
             let boss = DescentBoss::ALL[usize::from(descent).min(7)];
-            let cleared =
-                snapshot.expedition.beat(boss) || (descent == 0 && snapshot.crust.deep_claim);
+            let cleared = pending.gate(descent).unwrap_or_else(|| {
+                snapshot.expedition.beat(boss) || (descent == 0 && snapshot.crust.deep_claim)
+            });
             if cleared {
                 RowText::value("Its boss beaten, its reward held", "CLEARED", LIME)
             } else {
@@ -134,19 +139,30 @@ fn row_text(row: ToolkitRow, ui: &UiFrame<'_, '_>, state: TestModeState) -> RowT
         }
         ToolkitRow::EndingDone => RowText::toggle(
             "The Heart woke, the cable lit, the stars open",
-            snapshot.heart.fight.beaten && snapshot.expedition.cable_lit,
+            pending
+                .ending_done()
+                .unwrap_or(snapshot.heart.fight.beaten && snapshot.expedition.cable_lit),
         ),
         ToolkitRow::TimeOfDay => {
-            let (hours, minutes) = snapshot.clock.hours_minutes();
+            let (hours, minutes) = pending.minutes().map_or_else(
+                || snapshot.clock.hours_minutes(),
+                |chosen| {
+                    (
+                        u8::try_from(chosen / 60).unwrap_or(0),
+                        u8::try_from(chosen % 60).unwrap_or(0),
+                    )
+                },
+            );
             RowText::value(
                 "Confirm: the next stop | left/right: an hour",
                 format!("{hours:02}:{minutes:02}"),
                 GOLD,
             )
         }
-        ToolkitRow::DayLock => {
-            RowText::toggle("Hold the time of day where it is", snapshot.clock.is_held())
-        }
+        ToolkitRow::DayLock => RowText::toggle(
+            "Hold the time of day where it is",
+            pending.held().unwrap_or_else(|| snapshot.clock.is_held()),
+        ),
         ToolkitRow::Weather => RowText::value(
             "Forced on every planet and moon",
             weather_name(state.weather),
@@ -167,9 +183,9 @@ fn row_text(row: ToolkitRow, ui: &UiFrame<'_, '_>, state: TestModeState) -> RowT
             )
         }
         ToolkitRow::SpawnCreature => RowText {
-            disabled: !snapshot.enemy_difficulty.hostile(),
+            disabled: !difficulty.hostile(),
             ..RowText::value(
-                if snapshot.enemy_difficulty.hostile() {
+                if difficulty.hostile() {
                     "At a safe distance to your side"
                 } else {
                     "Creatures are off: set Enemies first"
@@ -183,9 +199,9 @@ fn row_text(row: ToolkitRow, ui: &UiFrame<'_, '_>, state: TestModeState) -> RowT
             RowText::toggle("Creatures and their shots stand still", state.ai_frozen)
         }
         ToolkitRow::Difficulty => RowText::value(
-            snapshot.enemy_difficulty.description(),
-            snapshot.enemy_difficulty.name(),
-            difficulty_color(snapshot.enemy_difficulty),
+            difficulty.description(),
+            difficulty.name(),
+            difficulty_color(difficulty),
         ),
     }
 }

@@ -2783,6 +2783,9 @@ pub struct ShellState {
     pub pending_test_mode: Option<TestModeState>,
     /// The creature the god-mode toolkit spawns (an index into `EnemyKind::ALL`, Wave 14).
     pub toolkit_creature: usize,
+    /// Toolkit values chosen that the world has not shown yet (Wave 14, see
+    /// [`test_toolkit::ToolkitPending`]).
+    pub toolkit_pending: test_toolkit::ToolkitPending,
 }
 
 impl Default for ShellState {
@@ -2831,6 +2834,7 @@ impl ShellState {
             world_setup: None,
             pending_test_mode: None,
             toolkit_creature: 0,
+            toolkit_pending: test_toolkit::ToolkitPending::default(),
         }
     }
 
@@ -2946,6 +2950,7 @@ impl ShellState {
         self.save_dirty = false;
         self.play_seconds = play_seconds;
         self.pending_test_mode = None;
+        self.toolkit_pending = test_toolkit::ToolkitPending::default();
         self.message = message.into();
     }
 
@@ -3027,6 +3032,7 @@ impl ShellState {
         }
         self.reclaim_orphaned_menu();
         self.sync_pending_test_mode(ctx.world.test_mode());
+        self.sync_toolkit_pending(ctx.world);
         let menu_input = inputs.get(self.menu_seat).copied().unwrap_or(primary);
         if self.handle_exit_modal(menu_input, &mut requests) {
             return requests;

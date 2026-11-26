@@ -186,7 +186,127 @@ impl ToolkitView {
     }
 }
 
+/// Toolkit values chosen in the dialog that the world does not show yet. A paused local world
+/// runs the toolkit's actions only when it resumes (and online they take a round trip), so the
+/// dialog shows what was chosen until the world agrees: a gate flipped twice is flipped back,
+/// and the hour steps on from the hour just picked.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ToolkitPending {
+    /// The gates chosen (`gates_set` says which bits of `gates` were).
+    gates: u8,
+    gates_set: u8,
+    ending_done: Option<bool>,
+    minutes: Option<u16>,
+    held: Option<bool>,
+    difficulty: Option<EnemyDifficulty>,
+}
+
+impl ToolkitPending {
+    /// `view` with the pending choices over it.
+    #[must_use]
+    pub const fn over(self, mut view: ToolkitView) -> ToolkitView {
+        let chosen = self.gates_set;
+        view.gates = (view.gates & !chosen) | (self.gates & chosen);
+        if let Some(done) = self.ending_done {
+            view.ending_done = done;
+        }
+        if let Some(minutes) = self.minutes {
+            view.minutes = minutes;
+        }
+        if let Some(held) = self.held {
+            view.held = held;
+        }
+        if let Some(difficulty) = self.difficulty {
+            view.difficulty = difficulty;
+        }
+        view
+    }
+
+    /// Forgets each choice the world shows (`world`: its own view); `ticking`: the world runs
+    /// again, so a chosen time has been applied and the clock moves on from it.
+    fn settle(&mut self, world: &ToolkitView, ticking: bool) {
+        let agree = !(world.gates ^ self.gates) & self.gates_set;
+        self.gates_set &= !agree;
+        if self.ending_done == Some(world.ending_done) {
+            self.ending_done = None;
+        }
+        if ticking || self.minutes == Some(world.minutes) {
+            self.minutes = None;
+        }
+        if self.held == Some(world.held) {
+            self.held = None;
+        }
+        if self.difficulty == Some(world.difficulty) {
+            self.difficulty = None;
+        }
+    }
+
+    /// Gate `descent` as chosen, if it is pending.
+    #[must_use]
+    pub const fn gate(self, descent: u8) -> Option<bool> {
+        if self.gates_set & (1 << descent) == 0 {
+            None
+        } else {
+            Some(self.gates & (1 << descent) != 0)
+        }
+    }
+
+    /// The ending as chosen, if pending.
+    #[must_use]
+    pub const fn ending_done(self) -> Option<bool> {
+        self.ending_done
+    }
+
+    /// The time of day chosen (minutes past midnight), if pending.
+    #[must_use]
+    pub const fn minutes(self) -> Option<u16> {
+        self.minutes
+    }
+
+    /// The day/night lock as chosen, if pending.
+    #[must_use]
+    pub const fn held(self) -> Option<bool> {
+        self.held
+    }
+
+    /// The enemy setting chosen, if pending.
+    #[must_use]
+    pub const fn difficulty(self) -> Option<EnemyDifficulty> {
+        self.difficulty
+    }
+
+    const fn set_gate(&mut self, descent: u8, cleared: bool) {
+        let bit = 1 << descent;
+        self.gates_set |= bit;
+        if cleared {
+            self.gates |= bit;
+        } else {
+            self.gates &= !bit;
+        }
+    }
+}
+
 impl ShellState {
+    /// The toolkit's view of `world` with the dialog's pending choices over it.
+    #[must_use]
+    pub fn toolkit_view(&self, world: &WorldState) -> ToolkitView {
+        self.toolkit_pending.over(ToolkitView::of(
+            world,
+            self.shown_test_mode(world.test_mode()),
+        ))
+    }
+
+    /// Forgets the toolkit choices the world shows (every frame, like the pending toggles).
+    pub(super) fn sync_toolkit_pending(&mut self, world: &WorldState) {
+        if world.test_mode().is_none() {
+            self.toolkit_pending = ToolkitPending::default();
+            return;
+        }
+        let ticking = self.world_should_tick();
+        self.toolkit_pending
+            .settle(&ToolkitView::of(world, None), ticking);
+    }
+
     /// The creature the toolkit spawns.
     #[must_use]
     pub const fn toolkit_creature(&self) -> EnemyKind {
@@ -204,7 +324,7 @@ impl ShellState {
             self.modal = None;
             return;
         }
-        let view = ToolkitView::of(world, self.shown_test_mode(world.test_mode()));
+        let view = self.toolkit_view(world);
         let rows = ToolkitRow::rows(view.descents);
         if input.menu_up {
             self.selected_menu_item = self.selected_menu_item.saturating_sub(1);
@@ -295,6 +415,7 @@ impl ShellState {
             }
             ToolkitRow::Gate(descent) => {
                 let cleared = !view.gate(descent);
+                self.toolkit_pending.set_gate(descent, cleared);
                 (
                     TestModeAction::SetGateCleared { descent, cleared },
                     format!(
@@ -304,14 +425,17 @@ impl ShellState {
                     ),
                 )
             }
-            ToolkitRow::EndingDone => (
-                TestModeAction::SetEndingDone(!view.ending_done),
-                if view.ending_done {
-                    "The Heart sleeps again: the ending is undone.".to_owned()
-                } else {
-                    "The Heart woke: the ending counts as done.".to_owned()
-                },
-            ),
+            ToolkitRow::EndingDone => {
+                self.toolkit_pending.ending_done = Some(!view.ending_done);
+                (
+                    TestModeAction::SetEndingDone(!view.ending_done),
+                    if view.ending_done {
+                        "The Heart sleeps again: the ending is undone.".to_owned()
+                    } else {
+                        "The Heart woke: the ending counts as done.".to_owned()
+                    },
+                )
+            }
             ToolkitRow::TimeOfDay => {
                 let next = TIME_STOPS
                     .iter()
@@ -321,14 +445,17 @@ impl ShellState {
                 self.set_toolkit_time(next, requests);
                 return;
             }
-            ToolkitRow::DayLock => (
-                TestModeAction::SetDayLock(!view.held),
-                if view.held {
-                    "The clock runs again.".to_owned()
-                } else {
-                    "The time of day is held.".to_owned()
-                },
-            ),
+            ToolkitRow::DayLock => {
+                self.toolkit_pending.held = Some(!view.held);
+                (
+                    TestModeAction::SetDayLock(!view.held),
+                    if view.held {
+                        "The clock runs again.".to_owned()
+                    } else {
+                        "The time of day is held.".to_owned()
+                    },
+                )
+            }
             ToolkitRow::Weather => {
                 self.cycle_weather(view, 1, requests);
                 return;
@@ -382,6 +509,7 @@ impl ShellState {
     }
 
     fn set_toolkit_time(&mut self, minutes: u16, requests: &mut Vec<ShellRequest>) {
+        self.toolkit_pending.minutes = Some(minutes);
         self.message = format!("Time set to {:02}:{:02}.", minutes / 60, minutes % 60);
         self.toolkit_action(TestModeAction::SetTimeOfDay { minutes }, requests);
     }
@@ -416,6 +544,7 @@ impl ShellState {
             .and_then(|at| i32::try_from(at).ok())
             .unwrap_or(0);
         let next = all[usize::try_from((at + step).rem_euclid(count)).unwrap_or(0)];
+        self.toolkit_pending.difficulty = Some(next);
         requests.push(ShellRequest::Action {
             seat: self.menu_seat,
             command: PlayerCommand::SetEnemyDifficulty(next),
@@ -577,6 +706,67 @@ mod tests {
         // Back closes the dialog.
         shell.handle_toolkit(press(|input| input.back = true), &world, &mut requests);
         assert_eq!(shell.modal, None);
+    }
+
+    #[test]
+    fn a_paused_world_shows_what_was_chosen_until_it_applies_it() {
+        // The local world is paused under the dialog: nothing applies until it resumes, so
+        // each choice must build on the last one rather than on the world's stale value.
+        let mut world = deep_test_world();
+        let mut shell = toolkit_shell();
+        let mut requests = Vec::new();
+        select(&mut shell, &world, ToolkitRow::Gate(3));
+        for _ in 0..2 {
+            shell.handle_toolkit(press(|input| input.confirm = true), &world, &mut requests);
+        }
+        select(&mut shell, &world, ToolkitRow::DayLock);
+        for _ in 0..2 {
+            shell.handle_toolkit(press(|input| input.confirm = true), &world, &mut requests);
+        }
+        select(&mut shell, &world, ToolkitRow::TimeOfDay);
+        for _ in 0..2 {
+            shell.handle_toolkit(
+                press(|input| input.menu_right = true),
+                &world,
+                &mut requests,
+            );
+        }
+        select(&mut shell, &world, ToolkitRow::Gate(4));
+        shell.handle_toolkit(press(|input| input.confirm = true), &world, &mut requests);
+        let (hours, _) = world.clock().hours_minutes();
+        let first = (u16::from(hours) + 1) % 24 * 60;
+        let second = (u16::from(hours) + 2) % 24 * 60;
+        let gate = |descent, cleared| {
+            PlayerCommand::TestMode(TestModeAction::SetGateCleared { descent, cleared })
+        };
+        assert_eq!(
+            actions(&requests),
+            vec![
+                gate(3, true),
+                gate(3, false),
+                PlayerCommand::TestMode(TestModeAction::SetDayLock(true)),
+                PlayerCommand::TestMode(TestModeAction::SetDayLock(false)),
+                PlayerCommand::TestMode(TestModeAction::SetTimeOfDay { minutes: first }),
+                PlayerCommand::TestMode(TestModeAction::SetTimeOfDay { minutes: second }),
+                gate(4, true),
+            ]
+        );
+        assert!(shell.toolkit_view(&world).gate(4));
+        assert_eq!(shell.toolkit_view(&world).minutes, second);
+        // Once the world shows a choice, the dialog forgets it.
+        let tick = world.simulation_tick();
+        let mut inputs = fatherload_simulation::TickInputs::default();
+        inputs.act_as(
+            PlayerId::new(1),
+            PlayerCommand::TestMode(TestModeAction::SetGateCleared {
+                descent: 4,
+                cleared: true,
+            }),
+        );
+        let _ = world.simulate_tick(tick, &inputs);
+        shell.sync_toolkit_pending(&world);
+        assert_eq!(shell.toolkit_pending.gate(4), None);
+        assert!(shell.toolkit_view(&world).gate(4));
     }
 
     #[test]
