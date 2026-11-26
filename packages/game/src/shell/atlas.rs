@@ -20,7 +20,9 @@
 
 use std::collections::BTreeMap;
 
-use fatherload_simulation::{PlayerCommand, PlayerId, WorldState, place::Place, space::SpaceTile};
+use fatherload_simulation::{
+    PlayerCommand, PlayerId, TestModeAction, WorldState, place::Place, space::SpaceTile,
+};
 
 use super::{ModalScreen, SeatContext, SeatUi, ShellRequest, SoundCue};
 use crate::{
@@ -42,6 +44,9 @@ const MAX_SEARCH: usize = 32;
 const MAP_CURSOR_SPEED: f32 = 0.35;
 /// One map step from a menu key press (map widths).
 const MAP_STEP: f32 = 1.0 / 48.0;
+/// Frames a depth warp waits for the trip home before it is dropped (online, the host's
+/// answer takes a round trip).
+const PENDING_FRAMES: u16 = 600;
 /// The depth map's width over its height (the drawn map's own shape is close to this).
 pub const DEPTH_MAP_ASPECT: f32 = 0.75;
 
@@ -87,6 +92,9 @@ pub struct SeatAtlas {
     pub hovered: Option<(f32, f32)>,
     /// The Random button's draw (presentation only).
     random: u64,
+    /// A depth warp waiting for the rig to reach the home world's ground (sent from space or
+    /// another body, the trip goes home first), with the frames it may still wait.
+    pending: Option<(PlayerCommand, u16)>,
 }
 
 impl Default for SeatAtlas {
@@ -117,6 +125,7 @@ impl SeatAtlas {
             picked: None,
             hovered: None,
             random: 0x9E37_79B9_7F4A_7C15,
+            pending: None,
         }
     }
 
@@ -215,8 +224,12 @@ impl SeatAtlas {
             for category in AtlasCategory::ALL {
                 every.extend(self.list(world, player, category));
             }
+            // A place listed under two categories shows once; a planet and the alien town
+            // its warp lands in share a spot but stay two results.
             let mut seen = std::collections::BTreeSet::new();
-            every.retain(|destination| seen.insert(destination.target.key()));
+            every.retain(|destination| {
+                seen.insert((destination.target.key(), destination.name.clone()))
+            });
             search::filter(&every, &self.search)
                 .into_iter()
                 .map(|index| every[index].clone())
@@ -723,9 +736,35 @@ impl SeatUi {
         let from = here(ctx.world, player);
         self.atlas.record_trip(from, destination);
         self.send_travel(command, ctx, requests);
-        self.message = format!("Travelling to {}.", destination.name);
+        self.message = index::arrival_text(ctx.world, &destination.target).map_or_else(
+            || format!("Travelling to {}.", destination.name),
+            |arrives| format!("Travelling to {}: arriving at {arrives}.", destination.name),
+        );
         cues.push(SoundCue::Ui);
         self.close_atlas();
+    }
+
+    /// Sends a waiting depth warp once the rig stands on the home world (every frame, open
+    /// or not); it is dropped when the trip home never arrives.
+    pub(super) fn flush_atlas_trip(
+        &mut self,
+        ctx: &SeatContext<'_>,
+        requests: &mut Vec<ShellRequest>,
+    ) {
+        let Some((command, frames)) = self.atlas.pending.take() else {
+            return;
+        };
+        let Some(player) = ctx.player else {
+            return;
+        };
+        if ctx.world.place_of(player) == Place::HOME {
+            requests.push(ShellRequest::Action {
+                seat: ctx.seat,
+                command,
+            });
+        } else if frames > 0 {
+            self.atlas.pending = Some((command, frames - 1));
+        }
     }
 
     fn send_travel(
@@ -739,6 +778,23 @@ impl SeatUi {
         self.village.interior = None;
         self.village.talk = None;
         self.home = super::homes::SeatHome::new();
+        // A depth warp only works on the home world's ground: from space, the Moon or another
+        // body the trip goes home first and the warp follows once the rig is there
+        // ([`SeatUi::flush_atlas_trip`]; TODO-SEAM w14-index: `TravelTo` crosses places).
+        if matches!(
+            command,
+            PlayerCommand::TestMode(TestModeAction::WarpToBand(_))
+        ) && let Some(player) = ctx.player
+            && ctx.world.place_of(player) != Place::HOME
+        {
+            self.atlas.pending = Some((command, PENDING_FRAMES));
+            requests.push(ShellRequest::Action {
+                seat: ctx.seat,
+                command: PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::HOME)),
+            });
+            return;
+        }
+        self.atlas.pending = None;
         requests.push(ShellRequest::Action {
             seat: ctx.seat,
             command,

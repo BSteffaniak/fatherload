@@ -489,7 +489,87 @@ fn home_warp(world: &WorldState, tile: TilePosition) -> TestModeAction {
     if tile.y <= surface + 2 {
         return TestModeAction::WarpToPlace(Place::HOME);
     }
-    TestModeAction::WarpToBand(world.terrain().band_at(tile))
+    let band = warp_band(&settings, tile);
+    if band == Band::Topsoil {
+        return TestModeAction::WarpToPlace(Place::HOME);
+    }
+    TestModeAction::WarpToBand(band)
+}
+
+/// The band whose warp (`WarpToBand`) lands nearest above home tile `tile`.
+///
+/// A classic world's warp goes to the top of the band the tile lies in. A Deep Descent world
+/// has 41 strata but only twelve warps (each band warps to the top of the one stratum
+/// `Stratum::of_band` names, which may lie in another Descent than the band's other strata):
+/// the warp chosen is the deepest one whose top is not below the target, so the rig always
+/// arrives above the target, as close as today's warps allow, never in a deeper Descent.
+///
+/// **TODO-SEAM (w14-index):** `TravelTo` with the index's exact arrival replaces this.
+#[must_use]
+pub fn warp_band(settings: &WorldSettings, tile: TilePosition) -> Band {
+    if !settings.generator.has_descents() {
+        return worldgen::band_at(settings, tile.x, tile.y);
+    }
+    Band::ALL
+        .into_iter()
+        .map(|band| {
+            (
+                worldgen::strata::band_solid_top_row(settings, band, tile.x),
+                band,
+            )
+        })
+        .filter(|(top, _)| *top <= tile.y)
+        .max_by_key(|(top, band)| (*top, band.index()))
+        .map_or(Band::Topsoil, |(_, band)| band)
+}
+
+/// Where Go lands when that is not the destination itself (today's warps: the card's "Arrives"
+/// line and the trip's message); `None` when it lands right there.
+///
+/// **TODO-SEAM (w14-index):** with `TravelTo`'s exact arrival this goes away.
+#[must_use]
+pub fn arrival_text(world: &WorldState, target: &AtlasTarget) -> Option<String> {
+    match *target {
+        AtlasTarget::Home(tile) => {
+            let settings = *world.world_settings();
+            if let Some(moon) = worldgen::sky::moon(&settings)
+                && (tile.x - moon.center_x).abs() <= moon.half_width
+                && tile.y < 0
+            {
+                return None;
+            }
+            let surface = world.terrain().surface_row(tile.x);
+            if tile.y <= surface + 2 {
+                // The surface and the sky go to the home town's spawn.
+                return ((tile.x - worldgen::SPAWN_TILE_X).abs() > 24)
+                    .then(|| "the home town".to_owned());
+            }
+            Some(warp_arrival_text(world, tile))
+        }
+        AtlasTarget::Space { .. } => Some("free flight by home".to_owned()),
+        AtlasTarget::Player(id) => {
+            let resolved = resolve_player(world, id)?;
+            arrival_text(world, &resolved)
+        }
+        AtlasTarget::Body { .. } | AtlasTarget::Story => None,
+    }
+}
+
+/// Where a trip to home tile `tile` arrives with today's warps (the card's "Arrives" line):
+/// the surface, or the top of a stratum.
+#[must_use]
+pub fn warp_arrival_text(world: &WorldState, tile: TilePosition) -> String {
+    let settings = *world.world_settings();
+    let surface = world.terrain().surface_row(tile.x);
+    let band = warp_band(&settings, tile);
+    if tile.y <= surface + 2 || band == Band::Topsoil {
+        return "the surface".to_owned();
+    }
+    if settings.generator.has_descents() {
+        format!("top of {}", Stratum::of_band(band).name())
+    } else {
+        format!("top of {}", band.name())
+    }
 }
 
 /// Every destination of `category` in `world`, seen from `player` (bookmarks and recent
@@ -1006,7 +1086,10 @@ fn boss_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destin
                 AtlasCategory::Bosses,
                 boss.name,
                 format!("Lair on {world_name} ({})", boss.world.name()),
-                AtlasTarget::Body { body, column: 0 },
+                AtlasTarget::Body {
+                    body,
+                    column: arrival_column(seed, body),
+                },
             )
             .fact("Theme", boss.world.name())
             .fact("Gravity", gravity_text(found.gravity_milli_g))
@@ -1174,7 +1257,7 @@ fn space_destinations(world: &WorldState) -> Vec<Destination> {
         else {
             continue;
         };
-        out.push(planet_destination(&system, &found, body));
+        out.push(planet_destination(seed, &system, &found, body));
     }
     let home = galaxy.home_system();
     for (index, body) in home.bodies.iter().enumerate() {
@@ -1192,7 +1275,7 @@ fn space_destinations(world: &WorldState) -> Vec<Destination> {
         if body.radius < space::MIN_LANDABLE_RADIUS {
             continue;
         }
-        out.push(planet_destination(&home, body, key));
+        out.push(planet_destination(seed, &home, body, key));
     }
     let centre = home.centre;
     for (reference, distance) in galaxy
@@ -1338,7 +1421,23 @@ fn space_destinations(world: &WorldState) -> Vec<Destination> {
     out
 }
 
+/// The column of body `key`'s strip a warp there arrives over: its first alien town's square
+/// on a settled world, else column 0 (`WorldState::warp_to_place`), so the preview shows where
+/// Go lands.
+///
+/// **TODO-SEAM (w14-index):** the index's `resolve_travel` names the arrival instead.
+fn arrival_column(seed: fatherload_simulation::space::SpaceSeed, key: SpaceBodyKey) -> i64 {
+    fatherload_simulation::place::planet_params_for(seed, key)
+        .and_then(|params| {
+            fatherload_simulation::alien::town::towns_of(&params)
+                .first()
+                .map(|town| i64::from(town.site.centre))
+        })
+        .unwrap_or(0)
+}
+
 fn planet_destination(
+    seed: fatherload_simulation::space::SpaceSeed,
     system: &space::StarSystem,
     body: &space::SpaceBody,
     key: SpaceBodyKey,
@@ -1361,7 +1460,7 @@ fn planet_destination(
         ),
         AtlasTarget::Body {
             body: key,
-            column: 0,
+            column: arrival_column(seed, key),
         },
     )
     .fact("Theme", body.theme.name())

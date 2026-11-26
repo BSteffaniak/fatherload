@@ -329,3 +329,93 @@ fn each_split_screen_seat_has_its_own_atlas() {
     assert_eq!(depth_of(&game, second), second_depth);
     assert_eq!(game.shell.seat(1).modal, Some(ModalScreen::Atlas));
 }
+
+/// A tester's pass (review): Go on one destination of every kind the Atlas lists, one after
+/// another without coming home between, and each trip lands where its preview said: a planet,
+/// moon, theme boss or alien town on that body, a space target in free flight, a home depth
+/// in the band of its target (the fallback warp's arrival until the index's `TravelTo`).
+#[test]
+fn go_reaches_every_kind_of_destination_one_after_another() {
+    use crate::atlas::AtlasTarget;
+    use fatherload_simulation::place::{BodyId, Place};
+
+    let mut game = atlas_game(1, "atlas-every-kind");
+    let mut seen = std::collections::BTreeSet::new();
+    let mut trips = 0;
+    for category in [
+        AtlasCategory::Depth,
+        AtlasCategory::Places,
+        AtlasCategory::Bosses,
+        AtlasCategory::Settlements,
+        AtlasCategory::Space,
+    ] {
+        press_seat(&mut game, 0, f2());
+        press_seat(&mut game, 0, pick(AtlasHit::Category(category.index())));
+        let shown = game.shell.seat(0).atlas.shown.clone();
+        assert!(!shown.is_empty(), "{category:?} lists something");
+        press_seat(&mut game, 0, f2());
+        assert_eq!(game.shell.seat(0).modal, None, "F2 closes it again");
+        for kind in shown.iter().map(|destination| destination.kind) {
+            if !seen.insert(kind) {
+                continue;
+            }
+            press_seat(&mut game, 0, f2());
+            press_seat(&mut game, 0, pick(AtlasHit::Category(category.index())));
+            // Lists of places near the seat change as it travels: find the kind's row again.
+            let Some(row) = game
+                .shell
+                .seat(0)
+                .atlas
+                .shown
+                .iter()
+                .position(|listed| listed.kind == kind)
+            else {
+                press_seat(&mut game, 0, f2());
+                continue;
+            };
+            press_seat(&mut game, 0, pick(AtlasHit::Row(row)));
+            let destination = game
+                .shell
+                .seat(0)
+                .atlas
+                .current()
+                .cloned()
+                .expect("the row previews first");
+            assert_eq!(destination.kind, kind);
+            press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Go)));
+            idle(&mut game, 12);
+            let world = game.runtime.world();
+            let place = world.place_of(PLAYER);
+            let what = format!(
+                "{category:?} {:?} {} ({})",
+                destination.kind,
+                destination.name,
+                game.shell.seat(0).message
+            );
+            match destination.target {
+                AtlasTarget::Body { body, .. } => {
+                    assert_eq!(place, Place::OnBody(BodyId::Space(body)), "{what}");
+                }
+                AtlasTarget::Space { .. } => assert_eq!(place, Place::Space, "{what}"),
+                AtlasTarget::Home(tile) => {
+                    assert!(place.is_home_store(), "{what}: {place:?}");
+                    if place == Place::HOME && tile.y > world.terrain().surface_row(tile.x) + 2 {
+                        let at = world.player(PLAYER).expect("rig").tile_in(world.frame());
+                        // Today's warps land at the top of the nearest stratum above the
+                        // target (never deeper; the index's TravelTo lands on it exactly).
+                        let deep = crate::atlas::index::warp_band(world.world_settings(), tile)
+                            != fatherload_simulation::worldgen::Band::Topsoil;
+                        assert!(
+                            at.y <= tile.y + 8
+                                && (!deep || at.y > world.terrain().surface_row(at.x)),
+                            "{what}: arrived at {at:?} for {tile:?}"
+                        );
+                    }
+                }
+                AtlasTarget::Player(_) | AtlasTarget::Story => {}
+            }
+            trips += 1;
+        }
+    }
+    assert!(trips >= 15, "one trip per kind: {trips} ({seen:?})");
+}

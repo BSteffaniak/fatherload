@@ -718,6 +718,10 @@ fn draw_card(
     }
     let distance = index::distance_text(world, &destination.target, &ui.seat.atlas.origin);
     let mut lines: Vec<(&str, String)> = vec![("Distance", distance)];
+    // Where Go lands until the index's exact travel is wired (TODO-SEAM w14-index).
+    if let Some(arrives) = index::arrival_text(world, &destination.target) {
+        lines.push(("Arrives", arrives));
+    }
     lines.extend(
         destination
             .facts

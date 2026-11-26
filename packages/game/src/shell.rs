@@ -1651,7 +1651,9 @@ impl SeatUi {
             }
         }
         // The Atlas (Wave 14) covers the view and takes every key while it is open; F2 (or the
-        // touch ATLAS button) opens it in a test-mode world.
+        // touch ATLAS button) opens it in a test-mode world. A trip it sent may still have a
+        // depth warp waiting for the rig to get home.
+        self.flush_atlas_trip(&ctx, requests);
         if self.modal == Some(ModalScreen::Atlas) {
             self.handle_atlas(input, delta_seconds, &ctx, cues, requests);
             return false;
