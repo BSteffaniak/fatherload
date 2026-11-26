@@ -577,14 +577,16 @@ impl WorldState {
         // Not here (never called, or the rig fled or was towed home and its fight ended).
         self.galaxy_story.warden_on = None;
         let (player, _) = near?;
-        if self.hostiles.engaged(*player).is_some() {
+        // Not on a rig already fighting, nor one resting after a fight or an escape jump (the
+        // jump is shorter than the gate's reach: it must not land back in the fight).
+        let step = self.combat_step_now();
+        if self.hostiles.engaged(*player).is_some() || step < self.rig_combat(*player).next_roll {
             return None;
         }
         let ring = self
             .players
             .get(player)
             .map_or(1, |rig| encounter::danger_ring(rig.flight.pos));
-        let step = self.combat_step_now();
         if self
             .start_encounter(
                 *player,
