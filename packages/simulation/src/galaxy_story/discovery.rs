@@ -206,6 +206,32 @@ const SHIP_NAMES: [&str; 12] = [
     "Brightwater",
 ];
 
+/// A system's leads (pure; none for home), memoized per seed and system (the discovery log
+/// reads them every check and the renderer every frame).
+#[must_use]
+pub fn leads_cached(seed: u64, reference: SystemRef) -> std::sync::Arc<Vec<Lead>> {
+    use std::{
+        collections::BTreeMap,
+        sync::{Arc, Mutex, PoisonError},
+    };
+    type LeadCache = Mutex<BTreeMap<(u64, SystemRef), Arc<Vec<Lead>>>>;
+    static CACHE: LeadCache = Mutex::new(BTreeMap::new());
+    if let Some(found) = CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&(seed, reference))
+    {
+        return Arc::clone(found);
+    }
+    let leads = Arc::new(leads_of(seed, reference));
+    let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+    if cache.len() > 4_096 {
+        cache.clear();
+    }
+    cache.insert((seed, reference), Arc::clone(&leads));
+    leads
+}
+
 /// A system's leads (pure; none for home).
 #[must_use]
 pub fn leads_of(seed: u64, reference: SystemRef) -> Vec<Lead> {

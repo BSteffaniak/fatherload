@@ -210,9 +210,10 @@ impl GalaxyStory {
     /// The lead `record` names in the world seeded `seed`.
     #[must_use]
     pub fn lead_of_seed(seed: u64, record: &LeadRecord) -> Option<Lead> {
-        leads_of(seed, record.system)
-            .into_iter()
+        discovery::leads_cached(seed, record.system)
+            .iter()
             .find(|lead| lead.index == record.index)
+            .cloned()
     }
 
     /// The crew's stats in the world seeded `seed` (leads by kind need the seed).

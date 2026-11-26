@@ -702,18 +702,31 @@ impl WorldState {
         output: &mut TickOutput,
     ) {
         let seed = self.world_seed();
+        let here: std::collections::BTreeSet<SystemRef> = crew
+            .iter()
+            .filter_map(|(_, where_)| where_.system())
+            .collect();
         for index in 0..self.galaxy_story.leads.len() {
             let record = self.galaxy_story.leads[index];
             if record.done {
                 continue;
             }
-            // Only leads of systems someone is in (or a dock anywhere) can move.
-            let Some(lead) = GalaxyStory::lead_of_seed(seed, &record) else {
+            let leads = galaxy_story::discovery::leads_cached(seed, record.system);
+            let Some(lead) = leads.iter().find(|lead| lead.index == record.index) else {
                 continue;
             };
             let Some(step) = lead.steps.get(usize::from(record.step)).copied() else {
                 continue;
             };
+            // Only steps of systems someone is in move, besides those done anywhere (a dock, a
+            // scan from afar, a people met elsewhere, an ambush's end).
+            let anywhere = matches!(
+                step,
+                LeadStep::Dock | LeadStep::Scan(_) | LeadStep::MeetFolk(..) | LeadStep::Survive(_)
+            );
+            if !anywhere && !here.contains(&record.system) {
+                continue;
+            }
             let in_system = |where_: &Whereabouts| where_.system() == Some(record.system);
             let by: Option<PlayerId> = match step {
                 LeadStep::ReachPoint(point) => crew
