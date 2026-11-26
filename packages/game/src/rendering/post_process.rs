@@ -106,9 +106,13 @@ struct Locations {
     lens: i32,
 }
 
-/// The pipeline: the effect shader and each seat's targets, levels and plan.
+/// The pipeline: the effect and copy shaders and each seat's targets, levels and plan.
 pub struct PostProcess {
     shader: Option<Shader>,
+    /// The plain copy ([`COPY_BODY`]) for the roll pass and an unshaded effect pass: raylib's
+    /// default shader is `mediump` in the browser, too coarse to address every texel of a big
+    /// target. `None` (it did not compile) falls back to raylib's default.
+    copy: Option<Shader>,
     locations: Locations,
     targets: Vec<SeatTargets>,
     fx: Vec<SeatFx>,
@@ -120,29 +124,37 @@ impl PostProcess {
     /// desktop). Without it (a driver that refuses it) effects are skipped; the roll still
     /// works.
     pub fn new(raylib: &mut RaylibHandle, thread: &RaylibThread) -> Self {
-        let source = fragment_source(cfg!(target_os = "emscripten"));
-        let shader = raylib.load_shader_from_memory(thread, None, Some(&source));
-        let default_id = unsafe { ffi::rlGetShaderIdDefault() };
-        let (shader, locations) = if shader.id == 0 || shader.id == default_id {
-            eprintln!("post-process: the effect shader did not compile; screen effects are off");
-            (None, Locations::default())
-        } else {
-            let location = |name: &str| shader.get_shader_location(name);
-            let locations = Locations {
-                a: location("uA"),
-                b: location("uB"),
-                c: location("uC"),
-                d: location("uD"),
-                e: location("uE"),
-                grade: location("uGrade"),
-                fog: location("uFogColor"),
-                size: location("uSize"),
-                lens: location("uLens"),
-            };
-            (Some(shader), locations)
-        };
+        let gles = cfg!(target_os = "emscripten");
+        let copy = compile(raylib, thread, &copy_source(gles));
+        if copy.is_none() {
+            eprintln!("post-process: the copy shader did not compile; using raylib's default");
+        }
+        let (shader, locations) = compile(raylib, thread, &fragment_source(gles)).map_or_else(
+            || {
+                eprintln!(
+                    "post-process: the effect shader did not compile; screen effects are off"
+                );
+                (None, Locations::default())
+            },
+            |shader| {
+                let location = |name: &str| shader.get_shader_location(name);
+                let locations = Locations {
+                    a: location("uA"),
+                    b: location("uB"),
+                    c: location("uC"),
+                    d: location("uD"),
+                    e: location("uE"),
+                    grade: location("uGrade"),
+                    fog: location("uFogColor"),
+                    size: location("uSize"),
+                    lens: location("uLens"),
+                };
+                (Some(shader), locations)
+            },
+        );
         Self {
             shader,
+            copy,
             locations,
             targets: Vec::new(),
             fx: Vec::new(),
@@ -314,6 +326,9 @@ impl PostProcess {
             unsafe {
                 ffi::BeginTextureMode(**view);
                 ffi::ClearBackground(super::palette::SKY_LIGHT);
+                if let Some(copy) = self.copy.as_ref() {
+                    ffi::BeginShaderMode(**copy);
+                }
                 ffi::DrawTexturePro(
                     world.texture,
                     ffi::Rectangle {
@@ -335,6 +350,9 @@ impl PostProcess {
                     -plan.roll.to_degrees(),
                     Color::WHITE,
                 );
+                if self.copy.is_some() {
+                    ffi::EndShaderMode();
+                }
                 ffi::EndTextureMode();
             }
             view
@@ -345,10 +363,12 @@ impl PostProcess {
         if shaded {
             self.apply_uniforms(plan);
         }
+        // The effect shader when there are effects, else the plain copy.
+        let pass = if shaded { self.shader.as_ref() } else { None }.or(self.copy.as_ref());
         let (width, height) = (plan.view_size.0 as f32, plan.view_size.1 as f32);
         // SAFETY: a shader mode balanced within this block, drawing a live texture.
         unsafe {
-            if shaded && let Some(shader) = self.shader.as_ref() {
+            if let Some(shader) = pass {
                 ffi::BeginShaderMode(**shader);
             }
             ffi::DrawTexturePro(
@@ -369,7 +389,7 @@ impl PostProcess {
                 0.0,
                 Color::WHITE,
             );
-            if shaded && self.shader.is_some() {
+            if pass.is_some() {
                 ffi::EndShaderMode();
             }
         }
@@ -508,9 +528,29 @@ fn ensure_target(
 /// `fragColor`.
 #[must_use]
 pub fn fragment_source(gles: bool) -> String {
-    let header = if gles {
+    format!("{}{FRAGMENT_BODY}", header(gles))
+}
+
+/// The plain copy shader's fragment source (see [`fragment_source`] for the versions).
+#[must_use]
+pub fn copy_source(gles: bool) -> String {
+    format!("{}{COPY_BODY}", header(gles))
+}
+
+/// The fragment header for `gles` (GLSL ES 100) or the desktop (GLSL 330).
+///
+/// In the browser it asks for `highp` where the GPU has it. Phone GPUs run `mediump` as 16-bit
+/// floats, whose texture coordinates step 1/2048 past the middle of a texture: too coarse for a
+/// view or roll target over 2048 texels wide, which then drops and doubles texel columns (a
+/// stretched, pixelated picture). `mediump` remains the fallback.
+const fn header(gles: bool) -> &'static str {
+    if gles {
         "#version 100\n\
+         #ifdef GL_FRAGMENT_PRECISION_HIGH\n\
+         precision highp float;\n\
+         #else\n\
          precision mediump float;\n\
+         #endif\n\
          varying vec2 fragTexCoord;\n\
          varying vec4 fragColor;\n\
          #define TEX texture2D\n\
@@ -522,9 +562,27 @@ pub fn fragment_source(gles: bool) -> String {
          out vec4 finalColor;\n\
          #define TEX texture\n\
          #define OUT finalColor\n"
-    };
-    format!("{header}{FRAGMENT_BODY}")
+    }
 }
+
+/// Compiles a fragment shader over raylib's default vertex shader; `None` when the driver
+/// refused it (raylib then hands back its default shader).
+fn compile(raylib: &mut RaylibHandle, thread: &RaylibThread, source: &str) -> Option<Shader> {
+    let shader = raylib.load_shader_from_memory(thread, None, Some(source));
+    // SAFETY: reads raylib's default shader id; the window (and GL context) exists.
+    let default_id = unsafe { ffi::rlGetShaderIdDefault() };
+    (shader.id != 0 && shader.id != default_id).then_some(shader)
+}
+
+/// The plain copy: what raylib's default fragment shader does, at the header's precision.
+const COPY_BODY: &str = r"
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+
+void main() {
+    OUT = TEX(texture0, fragTexCoord) * colDiffuse * fragColor;
+}
+";
 
 /// The stack, shared by both GLSL versions (see the module docs for the order).
 const FRAGMENT_BODY: &str = r"
@@ -752,6 +810,25 @@ mod tests {
         let desktop = fragment_source(false);
         assert!(desktop.starts_with("#version 330\n"));
         assert!(desktop.contains("out vec4 finalColor;"));
+    }
+
+    #[test]
+    fn browser_passes_ask_for_high_precision() {
+        // A phone's `mediump` texture coordinates drop texel columns past the middle of a roll
+        // target thousands of texels wide, so both passes ask for `highp` where it exists.
+        for es in [fragment_source(true), copy_source(true)] {
+            let high = es.find("#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n");
+            let fallback = es.find("#else\nprecision mediump float;\n#endif\n");
+            assert!(high.is_some() && fallback.is_some(), "{es}");
+            assert!(high < fallback);
+        }
+        for gles in [true, false] {
+            let copy = copy_source(gles);
+            assert!(copy.contains(" texture0;") && copy.contains(" colDiffuse;"));
+            assert!(copy.contains("OUT = TEX(texture0, fragTexCoord) * colDiffuse * fragColor;"));
+        }
+        assert!(copy_source(false).starts_with("#version 330\n"));
+        assert!(!COPY_BODY.contains("texture("), "use TEX()");
     }
 
     #[test]
