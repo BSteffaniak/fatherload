@@ -11746,6 +11746,21 @@ combat; no dedicated Works, gate or Harbour music; the Wave 13 creatures are gen
 (the bosses read, the small fauna are small on screen); hand play-testing of the whole arc was
 not done (bots and screenshots only).
 
+### Validation and measurements (integration run)
+
+* Every commit of the branch passes `cargo clippy --workspace --all-targets -- -D warnings`
+  (checked commit by commit). `cargo test --workspace --no-fail-fast` (debug): simulation 1925
+  passed / 53 ignored, game 493 + headless 1, netcode 91 / 3 ignored, quic_transport 10 + 11,
+  the rest pass; zero failures.
+* `--space-report`: all twelve tags land on their own theme world (fungal 41, machine 38, gas
+  giant 53, tidally locked 39, ring 40, dead 112 bodies within four sectors of home).
+* `--balance-report --only descent` (one seed): every target met. `--only tombs` (4 seeds):
+  byte-identical to the Wave 12 master build.
+* Browser (Chrome on the GPU, 1280x720, 5 s each, load ~2-8): every theme world 300 frames in
+  5 s, mean work 2.1-2.6 ms, p95 4.6-5.3 ms, max 8.7 ms (dunes); space views (black hole, belt,
+  nebula, orbit looks, planet gallery, night side, Arbiter, swarm, dogfight, split places)
+  60.0 fps, mean 1.8-2.5 ms, max 6.8 ms. The web acceptance tests pass.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
