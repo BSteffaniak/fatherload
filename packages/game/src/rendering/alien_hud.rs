@@ -181,7 +181,11 @@ pub(super) fn draw_alien_talk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
                 | AlienRow::GiftItem(_) => &menu_icons::GIFT,
                 AlienRow::Lesson | AlienRow::Chapter(ChapterRow::Ask) => &menu_icons::BOOK,
                 AlienRow::Chapter(_) => &menu_icons::CONTRACT,
-                AlienRow::Homes | AlienRow::Plot(_) | AlienRow::Rest(_) => &menu_icons::HOUSE,
+                AlienRow::Homes
+                | AlienRow::Plot(_)
+                | AlienRow::Rest(_)
+                | AlienRow::Expand(_)
+                | AlienRow::Neighbours(_) => &menu_icons::HOUSE,
                 AlienRow::Goodbye | AlienRow::Back => &menu_icons::BACK,
             };
             SectionItem::item(ItemEntry {

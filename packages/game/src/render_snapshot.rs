@@ -656,6 +656,8 @@ pub struct PlaceScene<'w> {
     /// What players did with the friendly aliens (Wave 12): the monuments raised and the homes
     /// bought in the body's towns.
     pub aliens: &'w fatherload_simulation::alien::AlienState,
+    /// The endgame (Wave 13): the wings raised on homes in alien towns.
+    pub endgame: &'w fatherload_simulation::endgame::EndgameState,
     /// The world's tick (where walking residents are along their legs).
     pub tick: fatherload_simulation::ids::SimulationTick,
 }
@@ -755,6 +757,7 @@ impl<'w> PlaceScene<'w> {
             seed: world.world_seed(),
             discovered: world.store_discovered(store, player_id),
             aliens: world.aliens(),
+            endgame: world.endgame(),
             tick: world.simulation_tick(),
         })
     }

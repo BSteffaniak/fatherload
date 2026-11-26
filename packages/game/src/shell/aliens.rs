@@ -91,6 +91,10 @@ pub enum AlienRow {
     Rest(u8),
     GiftItem(ItemKind),
     Back,
+    /// Raise the next wing of one's own home on a plot (Wave 13 endgame).
+    Expand(u8),
+    /// Have the neighbours over at one's own home on a plot (Wave 13 endgame).
+    Neighbours(u8),
 }
 
 /// The town and resident slot of `character`, if an alien resident.
@@ -155,13 +159,17 @@ pub fn alien_rows(
         AlienPage::Homes => {
             let mut rows: Vec<AlienRow> = found
                 .home_plots()
-                .map(|plot| {
+                .flat_map(|plot| {
                     let home = world.aliens().home_at(found.id, plot.index);
                     match home {
-                        Some(home) if Some(home.owner) == player && home.home.is_some() => {
-                            AlienRow::Rest(plot.index)
-                        }
-                        _ => AlienRow::Plot(plot.index),
+                        // A finished home of one's own: rest, grow the estate (Wave 13), have
+                        // the neighbours over.
+                        Some(home) if Some(home.owner) == player && home.home.is_some() => vec![
+                            AlienRow::Rest(plot.index),
+                            AlienRow::Expand(plot.index),
+                            AlienRow::Neighbours(plot.index),
+                        ],
+                        _ => vec![AlienRow::Plot(plot.index)],
                     }
                 })
                 .collect();
@@ -243,6 +251,29 @@ pub fn row_text(
             (format!("Plot {plot}"), detail)
         }
         AlienRow::Rest(_) => ("Rest at your home".to_owned(), "air and hull".to_owned()),
+        AlienRow::Expand(plot) => world.estate_quote(found.id, plot).map_or_else(
+            || ("Your estate".to_owned(), "every wing raised".to_owned()),
+            |(wing, bill)| {
+                let materials =
+                    fatherload_simulation::endgame::works::materials_line(bill.materials);
+                (
+                    format!("Raise a wing: {}", wing.name().to_lowercase()),
+                    format!("{} cr + {materials}", bill.credits),
+                )
+            },
+        ),
+        AlienRow::Neighbours(plot) => {
+            let today = world.people_clock().day;
+            let called = world.endgame().estate(found.id, plot).visited_day == Some(today);
+            (
+                "Have the neighbours over".to_owned(),
+                if called {
+                    "they called today".to_owned()
+                } else {
+                    "a gift and their words".to_owned()
+                },
+            )
+        }
         AlienRow::GiftItem(item) => (item_label(item), String::new()),
         AlienRow::Back => ("Back".to_owned(), String::new()),
     }
@@ -272,6 +303,7 @@ impl SeatUi {
     }
 
     /// The alien panel.
+    #[allow(clippy::too_many_lines, reason = "one arm per row reads best together")]
     pub(super) fn handle_alien_talk(
         &mut self,
         input: PlayerInput,
@@ -369,6 +401,30 @@ impl SeatUi {
                     requests,
                 );
                 self.turn_page(AlienPage::Talk);
+            }
+            AlienRow::Expand(plot) => {
+                if let Some((found, _)) = resident(talk.speaker) {
+                    self.send_alien(
+                        &ctx,
+                        alien(AlienCommand::ExpandHome {
+                            town: found.id,
+                            plot,
+                        }),
+                        requests,
+                    );
+                }
+            }
+            AlienRow::Neighbours(plot) => {
+                if let Some((found, _)) = resident(talk.speaker) {
+                    self.send_alien(
+                        &ctx,
+                        alien(AlienCommand::CallNeighbours {
+                            town: found.id,
+                            plot,
+                        }),
+                        requests,
+                    );
+                }
             }
             AlienRow::Goodbye => self.end_alien_talk(&ctx, requests),
         }

@@ -27,6 +27,7 @@ mod counters;
 mod crypt_map;
 mod descent_hud;
 pub mod drowned_hud;
+pub mod endgame_view;
 mod ending;
 pub mod exotic_hud;
 mod expedition_card;

@@ -28,6 +28,12 @@
 
 use fatherload_simulation::{
     PlayerId, WorldState,
+    endgame::{
+        EndgameRefusal, WorkOrder,
+        hunt::Quarry,
+        materials::{material_price, uses},
+        works::{OUTFITTER, StarwrightPart, gate_part_name, materials_line},
+    },
     station::{
         Good, ShipUpgrade, StationOwner, StationProfile,
         bar::{ALIEN_ROUND_PRICE, Patron, ROUND_PRICE},
@@ -140,7 +146,7 @@ pub(super) fn draw_station_hub(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
     let page = ui.seat.station.page;
     let seconds = ui_kit::seconds();
     let viewport = ui_kit::canvas().rect();
-    draw_interior(draw, viewport, &profile, page, world, seconds);
+    draw_interior(draw, viewport, &profile, page, world, player_id, seconds);
     let rows = station_rows(world, player_id, &profile, page);
     let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
     let mut sections: Vec<(&'static str, Color, Vec<SectionItem>)> = Vec::new();
@@ -215,6 +221,8 @@ const fn page_line(page: StationPage, profile: &StationProfile) -> &'static str 
         StationPage::Market => "Fill the hold where it's cheap, empty it where it's wanted.",
         StationPage::Board => "Work for hire. Paid at any board, no clock running.",
         StationPage::Bar => "Buy a round and people talk.",
+        StationPage::Works => "Credits and space ore: the long goals of the stars.",
+        StationPage::Records => "Every boss of the galaxy, and how much you have seen.",
     }
 }
 
@@ -234,6 +242,21 @@ const fn group_of(row: StationRow) -> (&'static str, Color) {
         StationRow::TurnIn | StationRow::Mission(_) => ("Under way", GOLD),
         StationRow::Offer(_) => ("Offered", SKY_LIGHT),
         StationRow::Patron(_) => ("Patrons", ROSE),
+        // Wave 13 endgame.
+        StationRow::Material(_) | StationRow::Order(WorkOrder::BuyMaterial(..)) => {
+            ("Space materials", MINT)
+        }
+        StationRow::Order(WorkOrder::AlienMark(_)) => ("Alien tech marks", LAVENDER),
+        StationRow::Order(WorkOrder::Starwright(_) | WorkOrder::Heartline) => {
+            ("The Starwright line", CREAM)
+        }
+        StationRow::Order(WorkOrder::GatePart(_)) => ("The Halcyon Gate", GOLD),
+        StationRow::GateJump(_) | StationRow::Order(WorkOrder::GateJump(_)) => {
+            ("Ride the gate", SKY_LIGHT)
+        }
+        StationRow::Order(WorkOrder::Cosmetic(_)) => ("Outfitter", PINK),
+        StationRow::Quarry(_) => ("The hunt list", RED),
+        StationRow::Record(_) => ("Completion", SKY_LIGHT),
         StationRow::Save | StationRow::Undock | StationRow::Back | StationRow::Close => ("", FOG),
     }
 }
@@ -280,6 +303,8 @@ fn entry_for(
                 StationPage::Market => (&menu_icons::BANK, "goods and ore"),
                 StationPage::Board => (&menu_icons::CONTRACT, "missions for hire"),
                 StationPage::Bar => (&menu_icons::PERSON, "patrons and rumours"),
+                StationPage::Works => (&menu_icons::HAMMER, "materials, marks, the long goals"),
+                StationPage::Records => (&menu_icons::MEDAL_GOLD, "the hunt list, completion"),
                 StationPage::Hub => (&menu_icons::BACK, ""),
             };
             (
@@ -400,7 +425,28 @@ fn entry_for(
                     upgrade.effect(level)
                 )
             };
+            // Wave 13 endgame: tiers 3-5 of a line ask for space materials too.
+            let bill = match upgrade {
+                ShipUpgrade::Line(line) if !maxed => world.line_bill_for(player_id, line),
+                _ => &[],
+            };
+            let short = !bill.is_empty()
+                && bill
+                    .iter()
+                    .any(|(mineral, units)| player.cargo_bay.mineral(*mineral) < u32::from(*units));
+            let detail = if bill.is_empty() || maxed || yard_limit {
+                detail
+            } else {
+                format!("{detail} + {}", materials_line(bill))
+            };
             let note = match upgrade {
+                ShipUpgrade::Line(line) if !maxed && !bill.is_empty() => format!(
+                    "Next: {}. {}. Needs {} in the bay{}.",
+                    line.tier_name(level + 1),
+                    upgrade.effect(level),
+                    materials_line(bill),
+                    if short { " (mine belts for it)" } else { "" }
+                ),
                 ShipUpgrade::Line(line) if !maxed => {
                     format!(
                         "Next: {}. {}.",
@@ -423,9 +469,100 @@ fn entry_for(
                     detail,
                     (!maxed && !yard_limit).then_some(price),
                     picked,
-                    maxed || yard_limit || credits < price,
+                    maxed || yard_limit || credits < price || short,
                 ),
                 note,
+            )
+        }
+        StationRow::Material(mineral) => {
+            let price = material_price(mineral) * u32::from(crate::shell::station::MATERIAL_LOT);
+            let held = player.cargo_bay.mineral(mineral);
+            (
+                entry(
+                    icons::mineral(mineral),
+                    format!(
+                        "{} x{}",
+                        mineral.name(),
+                        crate::shell::station::MATERIAL_LOT
+                    ),
+                    format!("{held} aboard"),
+                    Some(price),
+                    picked,
+                    credits < price || !player.has_cargo_space(),
+                ),
+                uses(mineral).unwrap_or_default().to_owned(),
+            )
+        }
+        StationRow::Order(_) | StationRow::GateJump(_) => order_of(row).map_or_else(
+            || {
+                (
+                    entry(&menu_icons::BACK, "", "", None, picked, true),
+                    String::new(),
+                )
+            },
+            |order| works_entry(world, player_id, profile, order, picked),
+        ),
+        StationRow::Quarry(index) => {
+            let hunt = world.hunt();
+            let Some((quarry, beaten, lair)) = hunt.get(usize::from(index)).copied() else {
+                return (
+                    entry(&icons::WARNING, "", "", None, picked, true),
+                    String::new(),
+                );
+            };
+            let detail = if beaten {
+                "beaten".to_owned()
+            } else if lair.is_some() {
+                format!("{}: set the waypoint", quarry.whereabouts())
+            } else {
+                quarry.whereabouts()
+            };
+            let icon = if beaten {
+                &menu_icons::MEDAL_GOLD
+            } else {
+                &menu_icons::MEDAL_LOCKED
+            };
+            let note = match quarry {
+                Quarry::Faction(faction) => format!(
+                    "{} leads {}. A boss stays beaten; its wreck holds its tech.",
+                    quarry.name(),
+                    faction.name()
+                ),
+                Quarry::Theme(_) => format!("{} rules its world.", quarry.name()),
+            };
+            (
+                entry(icon, quarry.name(), detail, None, picked, beaten),
+                note,
+            )
+        }
+        StationRow::Record(index) => {
+            let completion = world.completion(player_id);
+            let total = completion.per_mille();
+            let Some(category) = completion.categories.get(usize::from(index)).copied() else {
+                return (
+                    entry(&icons::WARNING, "", "", None, picked, true),
+                    String::new(),
+                );
+            };
+            (
+                entry(
+                    if category.complete() {
+                        &menu_icons::READY
+                    } else {
+                        &menu_icons::WAITING
+                    },
+                    category.name,
+                    format!(
+                        "{}/{} ({}%)",
+                        category.done.min(category.goal),
+                        category.goal,
+                        category.per_mille() / 10
+                    ),
+                    None,
+                    picked,
+                    false,
+                ),
+                format!("Completion {}.{}%", total / 10, total % 10),
             )
         }
         StationRow::SellOre => {
@@ -628,6 +765,139 @@ fn entry_for(
     }
 }
 
+/// The Works order a row places (`None`: not a Works row).
+const fn order_of(row: StationRow) -> Option<WorkOrder> {
+    match row {
+        StationRow::Order(order) => Some(order),
+        StationRow::GateJump(system) => Some(WorkOrder::GateJump(system)),
+        StationRow::Material(mineral) => Some(WorkOrder::BuyMaterial(
+            mineral,
+            crate::shell::station::MATERIAL_LOT,
+        )),
+        _ => None,
+    }
+}
+
+/// The entry of a Works order: its name, bill and why it can't be placed yet.
+fn works_entry(
+    world: &WorldState,
+    player_id: PlayerId,
+    profile: &StationProfile,
+    order: WorkOrder,
+    picked: bool,
+) -> (ItemEntry, String) {
+    let quote = world.works_quote(player_id, profile, order);
+    let career = world.career(player_id);
+    let (icon, label, effect): (&'static super::pixel_art::sprite::SpriteDef, String, String) =
+        match order {
+            WorkOrder::AlienMark(tech) => {
+                let mark = career.mark(tech);
+                (
+                    &menu_icons::SIGNAL,
+                    format!("{} Mk {}", tech.name(), roman(mark + 1)),
+                    format!("a stronger {}", tech.effect()),
+                )
+            }
+            WorkOrder::Starwright(part) => (
+                &menu_icons::ROCKET,
+                part.name().to_owned(),
+                part.effect().to_owned(),
+            ),
+            WorkOrder::Heartline => (
+                &menu_icons::CROWN,
+                "The Heartline Drive".to_owned(),
+                "warps cost half the fuel, the spool halves; needs the Starwright ship and every \
+                 faction boss beaten"
+                    .to_owned(),
+            ),
+            WorkOrder::GatePart(part) => (
+                &menu_icons::KEY,
+                gate_part_name(part).to_owned(),
+                format!(
+                    "part {} of 8: the gate rides to any system you know",
+                    part + 1
+                ),
+            ),
+            WorkOrder::GateJump(system) => (
+                &menu_icons::GLOBE,
+                format!(
+                    "Ride to {}",
+                    crate::shell::flight::system_name(world.star_charts(), system)
+                ),
+                "six seconds of streak, out in free flight".to_owned(),
+            ),
+            WorkOrder::Cosmetic(item) => (
+                &menu_icons::GIFT,
+                item.label().to_owned(),
+                "a space paint, never sold in villages".to_owned(),
+            ),
+            WorkOrder::BuyMaterial(mineral, _) => (
+                icons::mineral(mineral),
+                mineral.name().to_owned(),
+                String::new(),
+            ),
+        };
+    let _ = (StarwrightPart::Hull, OUTFITTER.len());
+    match quote {
+        Ok(bill) => {
+            let player = world.player(player_id);
+            let short = player.is_some_and(|player| !bill.materials_in(&player.cargo_bay));
+            let poor = player.is_some_and(|player| player.credits < bill.credits);
+            let detail = if bill.materials.is_empty() {
+                effect.clone()
+            } else {
+                format!("+ {}", bill.materials_line())
+            };
+            let note = if bill.materials.is_empty() {
+                effect
+            } else {
+                format!(
+                    "{effect}. Needs {} in the bay{}.",
+                    bill.materials_line(),
+                    if short { " (not all aboard)" } else { "" }
+                )
+            };
+            (
+                entry(
+                    icon,
+                    label,
+                    detail,
+                    (bill.credits > 0).then_some(bill.credits),
+                    picked,
+                    short || poor,
+                ),
+                note,
+            )
+        }
+        Err(why) => {
+            let detail = match why {
+                EndgameRefusal::Done => "done".to_owned(),
+                EndgameRefusal::Locked => match order {
+                    WorkOrder::AlienMark(_) => "learn the station's tongue first".to_owned(),
+                    WorkOrder::Starwright(part) => {
+                        format!("needs {} at tier 5", part.line().name())
+                    }
+                    WorkOrder::Heartline => {
+                        "needs the Starwright ship and the hunt list's bosses".to_owned()
+                    }
+                    WorkOrder::GatePart(_) => "goes in last".to_owned(),
+                    _ => why.reason().to_owned(),
+                },
+                _ => why.reason().to_owned(),
+            };
+            (entry(icon, label, detail, None, picked, true), effect)
+        }
+    }
+}
+
+const fn roman(mark: u8) -> &'static str {
+    match mark {
+        0 | 1 => "I",
+        2 => "II",
+        _ => "III",
+    }
+}
+
 const fn good_icon(good: Good) -> &'static super::pixel_art::sprite::SpriteDef {
     match good {
         Good::WaterIce => &icons::AIR,
@@ -652,6 +922,7 @@ fn draw_interior(
     profile: &StationProfile,
     page: StationPage,
     world: &WorldState,
+    player_id: PlayerId,
     seconds: f32,
 ) {
     let colours = palette_of(profile.owner);
@@ -694,6 +965,17 @@ fn draw_interior(
         StationPage::Bar => draw_bar(
             draw, stage, left, floor_y, profile, world, &colours, seconds,
         ),
+        // Wave 13 endgame.
+        StationPage::Works => {
+            super::endgame_view::draw_works(
+                draw, stage, left, floor_y, profile, world, player_id, seconds,
+            );
+        }
+        StationPage::Records => {
+            super::endgame_view::draw_records(
+                draw, stage, left, floor_y, world, player_id, seconds,
+            );
+        }
     }
 }
 

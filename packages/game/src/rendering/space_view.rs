@@ -261,13 +261,22 @@ pub(super) fn draw_space_world(
     order.sort_by(|a, b| b.approach.total_cmp(&a.approach));
     for body in order {
         // Who runs a station decides its look (Wave 12).
-        let owner = if body.kind == BodyKind::Station {
-            fatherload_simulation::world::station_profile_at(snapshot.space.world, body.body)
-                .map_or(StationOwner::Human, |profile| profile.owner)
-        } else {
-            StationOwner::Human
-        };
+        let profile = (body.kind == BodyKind::Station)
+            .then(|| {
+                fatherload_simulation::world::station_profile_at(snapshot.space.world, body.body)
+            })
+            .flatten();
+        let owner = profile
+            .as_ref()
+            .map_or(StationOwner::Human, |profile| profile.owner);
         draw_body(draw, &frame, body, &bodies, ticks, owner);
+        // Wave 13 endgame: the crew's Halcyon Gate rises beside Halcyon Dock part by part.
+        if profile.as_ref().is_some_and(|profile| profile.halcyon) {
+            let parts = snapshot.space.world.endgame().gate_parts;
+            if parts != 0 {
+                draw_halcyon_gate(draw, &frame, body, parts, ticks);
+            }
+        }
     }
     draw_ping(draw, &frame, snapshot, view.player_id);
     for flyer in &snapshot.space.flyers {
@@ -924,6 +933,99 @@ fn draw_approach_guide(
 
 /// A station: solar wings, a spar, a ring with lit windows, a hub, and the docking port's
 /// light with its approach guide.
+/// The Halcyon Gate (Wave 13 endgame) beside Halcyon Dock: six ring segments, the lens and
+/// the keystone, each drawn once delivered (the missing ones as faint scaffold arcs). Drawn
+/// with a few rings per segment, cheap on the browser build.
+fn draw_halcyon_gate(
+    draw: &mut RaylibDrawHandle<'_>,
+    frame: &SpaceFrame,
+    station: &FlightBody,
+    parts: u16,
+    ticks: u64,
+) {
+    use fatherload_simulation::endgame::works::GATE_PARTS;
+    // Off the station's side, across its port's axis, three station radii wide.
+    let (sin, cos) = station.port_angle.sin_cos();
+    let reach = station.radius * 9.0;
+    let centre = station.centre.offset(-sin * reach, cos * reach);
+    let at = frame.project(centre);
+    let radius = station.radius * 3.0 * frame.scale;
+    if !frame.visible(at, radius * 1.3 + 8.0) {
+        return;
+    }
+    let delivered = |part: u8| parts & (1 << part) != 0;
+    if radius < 4.0 {
+        let colour = if parts.count_ones() >= u32::from(GATE_PARTS) {
+            SKY_LIGHT
+        } else {
+            GOLD
+        };
+        draw.draw_rectangle(at.x as i32 - 1, at.y as i32 - 1, 3, 3, colour);
+        return;
+    }
+    let roll = -frame.roll.to_degrees();
+    let thickness = (radius * 0.14).clamp(1.5, 18.0);
+    for segment in 0..6_u8 {
+        let start = f32::from(segment).mul_add(60.0, roll + 3.0);
+        let end = start + 54.0;
+        if delivered(segment) {
+            draw.draw_ring(at, radius - thickness, radius, start, end, 24, STEEL_LIGHT);
+            draw.draw_ring(at, radius - thickness * 0.35, radius, start, end, 24, GOLD);
+            draw.draw_ring(
+                at,
+                radius - thickness,
+                radius - thickness * 0.8,
+                start,
+                end,
+                24,
+                STEEL_DARK,
+            );
+        } else {
+            draw.draw_ring(
+                at,
+                radius - 1.0,
+                radius,
+                start,
+                end,
+                24,
+                with_alpha(SLATE_LIGHT, 90),
+            );
+        }
+    }
+    let open = parts.count_ones() >= u32::from(GATE_PARTS);
+    let lens = radius - thickness * 1.3;
+    if delivered(6) {
+        // A slow breath across the lens once the gate is open (never a flash).
+        let breath = if open {
+            ((ticks as f32 / 60.0) * std::f32::consts::TAU / 5.0)
+                .sin()
+                .mul_add(0.5, 0.5)
+        } else {
+            0.0
+        };
+        draw.draw_circle_v(
+            at,
+            lens,
+            Color::new(90, 170, 255, (40.0 + 50.0 * breath) as u8),
+        );
+        draw.draw_circle_v(
+            at,
+            lens * 0.4,
+            with_alpha(ICE, (60.0 + 60.0 * breath) as u8),
+        );
+    }
+    if delivered(GATE_PARTS - 1) {
+        let (ks, kc) = (frame.roll).sin_cos();
+        let key = Vector2::new(at.x + ks * radius, at.y - kc * radius);
+        let size = (thickness * 1.4).max(3.0);
+        draw.draw_rectangle_v(
+            Vector2::new(key.x - size * 0.5, key.y - size * 0.5),
+            Vector2::new(size, size),
+            CREAM,
+        );
+    }
+}
+
 fn draw_station(
     draw: &mut RaylibDrawHandle<'_>,
     frame: &SpaceFrame,
@@ -1138,6 +1240,15 @@ fn draw_flyer(
         return;
     };
     let roll = frame.roll;
+    draw_starwright_trim(
+        draw,
+        snapshot,
+        flyer.player_id,
+        at,
+        flyer.orientation - roll,
+        frame.rig_zoom,
+        ticks,
+    );
     draw_rig_at(
         draw,
         terrain,
@@ -1148,6 +1259,81 @@ fn draw_flyer(
         frame.rig_zoom,
         ticks,
     );
+}
+
+/// The Starwright ship's look (Wave 13 endgame), drawn under the rig: swept white-gold hull
+/// plates either side once the Starwright Hull is fitted, twin gold engine bells with a steady
+/// glow behind once the Starwright Engine is, and the Heartline Drive's red-gold keel line.
+/// Nothing flashes (the glow breathes over seconds).
+fn draw_starwright_trim(
+    draw: &mut RaylibDrawHandle<'_>,
+    snapshot: &RenderSnapshot<'_>,
+    player_id: fatherload_simulation::PlayerId,
+    at: Vector2,
+    turn: f32,
+    zoom: f32,
+    ticks: u64,
+) {
+    use fatherload_simulation::endgame::StarwrightPart;
+    let career = snapshot.space.world.career(player_id);
+    let hull = career.has_starwright(StarwrightPart::Hull);
+    let engine = career.has_starwright(StarwrightPart::Engine);
+    if !(hull || engine || career.heartline) {
+        return;
+    }
+    let (sin, cos) = turn.sin_cos();
+    // The rig's own axes on screen: `up` toward its nose, `side` to its right.
+    let up = Vector2::new(sin, -cos);
+    let side = Vector2::new(cos, sin);
+    let point = |forward: f32, right: f32| {
+        Vector2::new(
+            at.x + (up.x * forward + side.x * right) * zoom,
+            at.y + (up.y * forward + side.y * right) * zoom,
+        )
+    };
+    if engine {
+        let breath = ((ticks as f32 / 60.0) * std::f32::consts::TAU / 3.0)
+            .sin()
+            .mul_add(0.5, 0.5);
+        for right in [-5.0_f32, 5.0] {
+            let bell = point(-9.0, right);
+            fill_disc_screen(
+                draw,
+                point(-14.0, right),
+                4.0 * zoom,
+                with_alpha(GOLD, (60.0 + 60.0 * breath) as u8),
+            );
+            draw.draw_line_ex(bell, point(-12.0, right), 3.0 * zoom, GOLD);
+            draw.draw_line_ex(bell, point(-11.0, right), 1.5 * zoom, CREAM);
+        }
+    }
+    if hull {
+        for right in [-1.0_f32, 1.0] {
+            let root = point(3.0, 7.0 * right);
+            let tip = point(-7.0, 15.0 * right);
+            let back = point(-6.0, 8.0 * right);
+            draw.draw_triangle(
+                if right > 0.0 { root } else { tip },
+                if right > 0.0 { tip } else { root },
+                back,
+                CREAM,
+            );
+            draw.draw_line_ex(root, tip, 1.5 * zoom, GOLD);
+        }
+    }
+    if career.heartline {
+        draw.draw_line_ex(
+            point(8.0, 0.0),
+            point(-10.0, 0.0),
+            1.0 * zoom,
+            with_alpha(RED, 200),
+        );
+    }
+}
+
+/// A plain screen disc (no culling against a frame).
+fn fill_disc_screen(draw: &mut RaylibDrawHandle<'_>, at: Vector2, radius: f32, colour: Color) {
+    draw.draw_circle_v(at, radius.max(0.5), colour);
 }
 
 /// The seat's own rig in the middle, upright (or turned, chart-up), with its drive's glow and
@@ -1206,6 +1392,15 @@ fn draw_own_rig(
         }
         StarDrive::Off | StarDrive::Warp(_) | StarDrive::Transit(_) => {}
     }
+    draw_starwright_trim(
+        draw,
+        snapshot,
+        view.player_id,
+        frame.centre,
+        turn,
+        zoom,
+        ticks,
+    );
     if let Some(presentation) = presentation_of(snapshot, view, view.player_id) {
         draw_rig_at(
             draw,

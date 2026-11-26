@@ -537,7 +537,7 @@ fn the_outfitter_sells_space_paints_once() {
 }
 
 #[test]
-#[allow(clippy::too_many_lines, reason = "an estate from home to neighbours")]
+#[allow(clippy::too_many_lines, reason = "the estate's whole story in order")]
 fn estates_grow_on_alien_worlds_and_the_neighbours_call_once_a_day() {
     const ALIEN_SEED: u64 = 0xA11E_0012;
     let mut world = world_of(ALIEN_SEED);

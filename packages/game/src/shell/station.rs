@@ -7,14 +7,26 @@
 //! [`PlayerCommand::Flight`] for the seat's player, so it works the same in split screen (each
 //! seat on its own page, at its own station) and online. Abandoning a mission takes a second
 //! confirm on the same row.
+//!
+//! Wave 13 endgame: the **Works** counter (space materials, alien tech marks, the Starwright
+//! ship, the Heartline Drive, the Halcyon Gate and its jump, the outfitter) and the **Records**
+//! (the hunt list, whose rows point the waypoint at a boss's lair, and completion).
 
 use fatherload_simulation::{
     PlayerCommand, PlayerId, WorldState,
-    flight::{FlightCommand, FlightGearKind, FlightPlace, StationService},
-    station::{
-        Good, ShipUpgrade, StationAction, StationProfile, bar::PATRONS, bounty::BOARD_SLOTS,
-        market::goods_of,
+    endgame::{
+        WorkOrder,
+        materials::station_stock,
+        works::{GATE_PARTS, OUTFITTER, StarwrightPart, builds_starwright, has_outfitter},
     },
+    flight::{
+        FlightCommand, FlightGearKind, FlightPlace, StationService, SystemRef, nav::NavTarget,
+    },
+    station::{
+        AlienTech, Good, ShipUpgrade, StationAction, StationProfile, bar::PATRONS,
+        bounty::BOARD_SLOTS, market::goods_of,
+    },
+    terrain::MineralKind,
 };
 
 use super::{SeatContext, SeatUi, ShellRequest, SoundCue};
@@ -29,6 +41,10 @@ pub enum StationPage {
     Market,
     Board,
     Bar,
+    /// The Works (Wave 13 endgame): materials, marks, the Starwright ship, the gate, outfits.
+    Works,
+    /// The hunt list and completion (Wave 13 endgame).
+    Records,
 }
 
 impl StationPage {
@@ -41,6 +57,8 @@ impl StationPage {
             Self::Market => "Market",
             Self::Board => "Bounty Board",
             Self::Bar => "The Bar",
+            Self::Works => "The Works",
+            Self::Records => "Records",
         }
     }
 }
@@ -76,6 +94,80 @@ pub enum StationRow {
     Close,
     /// Space weapons and the deflector (Wave 12 hostiles, sold at the shipyard).
     Arm(fatherload_simulation::hostiles::ShipGearKind),
+    /// Ten units of a common space material (Wave 13 endgame).
+    Material(MineralKind),
+    /// A Works order: a mark, a Starwright part, the Heartline, a gate part, an outfit.
+    Order(WorkOrder),
+    /// Ride the finished gate to a known system.
+    GateJump(SystemRef),
+    /// The hunt list's entry `index` (confirm: the waypoint to its lair).
+    Quarry(u8),
+    /// Completion's category `index` (a read-out).
+    Record(u8),
+}
+
+/// How many units a Material row buys.
+pub const MATERIAL_LOT: u16 = 10;
+
+/// Whether `station` has anything at the Works counter.
+#[must_use]
+pub fn has_works(station: &StationProfile) -> bool {
+    !station_stock(station).is_empty()
+        || station.alien_tech
+        || builds_starwright(station)
+        || station.halcyon
+        || has_outfitter(station)
+}
+
+/// The Works rows for `player` at `station`.
+fn works_rows(world: &WorldState, player: PlayerId, station: &StationProfile) -> Vec<StationRow> {
+    let mut rows: Vec<StationRow> = station_stock(station)
+        .into_iter()
+        .map(|(mineral, _)| StationRow::Material(mineral))
+        .collect();
+    if station.alien_tech {
+        let gear = world.ship_gear(player);
+        rows.extend(
+            AlienTech::ALL
+                .into_iter()
+                .filter(|tech| gear.has(*tech))
+                .map(|tech| StationRow::Order(WorkOrder::AlienMark(tech))),
+        );
+    }
+    if builds_starwright(station) {
+        rows.extend(
+            StarwrightPart::ALL
+                .into_iter()
+                .map(|part| StationRow::Order(WorkOrder::Starwright(part))),
+        );
+        rows.push(StationRow::Order(WorkOrder::Heartline));
+    }
+    if station.halcyon {
+        let endgame = world.endgame();
+        rows.extend(
+            (0..GATE_PARTS)
+                .filter(|part| !endgame.gate_part(*part))
+                .map(|part| StationRow::Order(WorkOrder::GatePart(part))),
+        );
+        if endgame.gate_open() {
+            rows.extend(
+                world
+                    .known_systems()
+                    .into_iter()
+                    .filter(|system| *system != fatherload_simulation::flight::space::HOME_SYSTEM)
+                    .take(8)
+                    .map(StationRow::GateJump),
+            );
+        }
+    }
+    if has_outfitter(station) {
+        rows.extend(
+            OUTFITTER
+                .iter()
+                .map(|(item, _)| StationRow::Order(WorkOrder::Cosmetic(*item))),
+        );
+    }
+    rows
 }
 
 /// The seat's hub state.
@@ -104,6 +196,7 @@ pub fn docked_profile(world: &WorldState, player: PlayerId) -> Option<StationPro
 
 /// The rows of `page` for `player` docked at `station`.
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "one arm per row reads best together")]
 pub fn station_rows(
     world: &WorldState,
     player: PlayerId,
@@ -129,6 +222,13 @@ pub fn station_rows(
             }
             if station.bar {
                 rows.push(StationRow::Open(StationPage::Bar));
+            }
+            // Wave 13 endgame: the Works and the records.
+            if has_works(station) {
+                rows.push(StationRow::Open(StationPage::Works));
+            }
+            if station.owner.crewed() {
+                rows.push(StationRow::Open(StationPage::Records));
             }
             if station.salvage {
                 rows.push(StationRow::Salvage);
@@ -194,12 +294,24 @@ pub fn station_rows(
             rows.extend((0..patrons).map(StationRow::Patron));
             rows.push(StationRow::Back);
         }
+        StationPage::Works => {
+            rows.extend(works_rows(world, player, station));
+            rows.push(StationRow::Back);
+        }
+        StationPage::Records => {
+            let quarries = u8::try_from(world.hunt().len()).unwrap_or(u8::MAX);
+            rows.extend((0..quarries).map(StationRow::Quarry));
+            let categories = u8::try_from(world.completion(player).categories.len()).unwrap_or(0);
+            rows.extend((0..categories).map(StationRow::Record));
+            rows.push(StationRow::Back);
+        }
     }
     rows
 }
 
 impl SeatUi {
     /// The docked station's hub.
+    #[allow(clippy::too_many_lines, reason = "one arm per row reads best together")]
     pub(super) fn handle_station(
         &mut self,
         input: PlayerInput,
@@ -273,6 +385,33 @@ impl SeatUi {
             Some(StationRow::Offer(slot)) => hub(StationAction::Accept(slot)),
             Some(StationRow::Patron(index)) => hub(StationAction::BuyRound(index)),
             Some(StationRow::Salvage) => hub(StationAction::Salvage),
+            Some(StationRow::Material(mineral)) => hub(StationAction::Works(
+                WorkOrder::BuyMaterial(mineral, MATERIAL_LOT),
+            )),
+            Some(StationRow::Order(order)) => hub(StationAction::Works(order)),
+            Some(StationRow::GateJump(system)) => {
+                // The ride closes the hub: the rig is under way.
+                self.modal = None;
+                self.station = SeatStation::new();
+                hub(StationAction::Works(WorkOrder::GateJump(system)))
+            }
+            Some(StationRow::Quarry(index)) => {
+                let lair = ctx
+                    .world
+                    .hunt()
+                    .get(usize::from(index))
+                    .and_then(|(_, beaten, lair)| (!beaten).then_some(*lair).flatten());
+                let Some(system) = lair else {
+                    cues.push(SoundCue::UiMove);
+                    return;
+                };
+                "Waypoint set on the lair.".clone_into(&mut self.message);
+                FlightCommand::SetWaypoint(Some(NavTarget::System(system)))
+            }
+            Some(StationRow::Record(_)) => {
+                cues.push(SoundCue::UiMove);
+                return;
+            }
             Some(StationRow::Arm(kind)) => {
                 cues.push(SoundCue::Ui);
                 requests.push(ShellRequest::Action {

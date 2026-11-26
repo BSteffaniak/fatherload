@@ -663,6 +663,9 @@ pub struct BuildingLook {
     pub built: bool,
     /// The building's index in its town (varies the details).
     pub index: u8,
+    /// A built home's estate wings (Wave 13 endgame, in
+    /// [`fatherload_simulation::endgame::works::ESTATE_WINGS`] order).
+    pub wings: u8,
 }
 
 /// Draws a town building `width` x `height` tiles of `kind` in `species`' style, its ground
@@ -1248,6 +1251,109 @@ fn draw_monument(
     }
 }
 
+/// An estate's wings round a home on an alien world (Wave 13 endgame), in the order they are
+/// raised: a bedroom annex right, a kitchen with its chimney left, a garage right, a glass
+/// greenhouse left, an upper storey, a gallery's tall windows right and an observatory's dome
+/// on top. Walls take the species' stone, roofs its accent.
+fn draw_estate_wings(
+    draw: &mut impl RaylibDraw,
+    pen: ArtPen,
+    species: AlienSpecies,
+    w: i32,
+    h: i32,
+    wings: u8,
+    seconds: f32,
+) {
+    if wings == 0 {
+        return;
+    }
+    let (wall, roof) = match species {
+        AlienSpecies::Vessi => (Color::new(0x9c, 0xb8, 0xc8, 255), ROSE),
+        AlienSpecies::Tokkari => (Color::new(0xb6, 0x90, 0x6a, 255), ORANGE),
+        AlienSpecies::Siphra => (Color::new(0x8c, 0x84, 0xb0, 255), MINT),
+    };
+    let window = lit(AMBER, 0.9);
+    let half = w / 2 - 4;
+    let has = |wing: u8| wings > wing;
+    // 0: a bedroom annex on the right.
+    if has(0) {
+        pen.rect(draw, half, -30, 18, 30, wall);
+        pen.rect(draw, half, -30, 18, 2, lit(wall, 1.2));
+        pen.rect(draw, half - 1, -34, 20, 4, roof);
+        pen.rect(draw, half + 6, -22, 6, 6, window);
+    }
+    // 1: a kitchen on the left, its chimney breathing smoke.
+    if has(1) {
+        pen.rect(draw, -half - 18, -26, 18, 26, wall);
+        pen.rect(draw, -half - 19, -30, 20, 4, roof);
+        pen.rect(draw, -half - 14, -40, 4, 10, lit(wall, 0.7));
+        let rise = ((seconds * 0.6) % 6.0) as i32;
+        pen.rect(
+            draw,
+            -half - 14 + rise / 3,
+            -44 - rise,
+            3,
+            3,
+            alpha(FOG, 140),
+        );
+        pen.rect(draw, -half - 10, -18, 5, 5, window);
+    }
+    // 2: a garage bay on the right, past the annex.
+    if has(2) {
+        pen.rect(draw, half + 18, -20, 24, 20, lit(wall, 0.85));
+        pen.rect(draw, half + 17, -23, 26, 3, roof);
+        pen.rect(draw, half + 22, -16, 16, 16, lit(STEEL_DARK, 1.0));
+        for slat in (-15..0).step_by(3) {
+            pen.rect(draw, half + 22, slat, 16, 1, STEEL);
+        }
+    }
+    // 3: a glass greenhouse on the left, past the kitchen.
+    if has(3) {
+        pen.rect(draw, -half - 40, -22, 22, 22, alpha(MINT, 110));
+        pen.rect(draw, -half - 40, -22, 22, 1, ICE);
+        for mullion in (-half - 40..-half - 18).step_by(5) {
+            pen.rect(draw, mullion, -22, 1, 22, alpha(ICE, 180));
+        }
+        for plant in 0..4 {
+            pen.rect(draw, -half - 37 + plant * 5, -8, 2, 8, LEAF);
+            pen.rect(draw, -half - 38 + plant * 5, -10, 4, 3, MOSS);
+        }
+    }
+    // 4: an upper storey across the house.
+    if has(4) {
+        pen.rect(draw, -half + 6, -h - 18, w - 20, 18, wall);
+        pen.rect(draw, -half + 4, -h - 21, w - 16, 3, roof);
+        for x in (-half + 12..half - 14).step_by(12) {
+            pen.rect(draw, x, -h - 13, 5, 6, window);
+        }
+    }
+    // 5: a gallery on the far right, tall windows.
+    if has(5) {
+        let x = half + if has(2) { 42 } else { 18 };
+        pen.rect(draw, x, -40, 16, 40, lit(wall, 1.05));
+        pen.rect(draw, x - 1, -44, 18, 4, roof);
+        pen.rect(draw, x + 3, -34, 3, 20, alpha(SKY_LIGHT, 200));
+        pen.rect(draw, x + 10, -34, 3, 20, alpha(SKY_LIGHT, 200));
+    }
+    // 6: an observatory dome on top, its slit facing the sky.
+    if has(6) {
+        let top = -h - if has(4) { 21 } else { 3 };
+        for dy in 0..10 {
+            let r = 10 - dy * dy / 10;
+            pen.rect(
+                draw,
+                -r,
+                top - dy,
+                r * 2,
+                1,
+                lit(STEEL_LIGHT, 1.0 - dy as f32 * 0.03),
+            );
+        }
+        pen.rect(draw, -1, top - 10, 2, 8, NIGHT);
+        pen.rect(draw, 3, top - 9, 6, 2, STEEL_DARK);
+    }
+}
+
 fn draw_plot(
     draw: &mut impl RaylibDraw,
     pen: ArtPen,
@@ -1296,6 +1402,7 @@ fn draw_plot(
                 seconds,
             ),
         }
+        draw_estate_wings(draw, pen, species, w, height * 16, look.wings, seconds);
         // The owner's pennant on a short staff at the plot's corner, beside the door (a staff
         // as tall as the home stood apart from it and read as a lone pole).
         let sway = ((seconds * 2.0).sin() * 1.5).round() as i32;

@@ -547,6 +547,15 @@ fn alien_town_things(
                 sold: home.is_some(),
                 built: home.is_some_and(|home| home.home.is_some()),
                 index: building.index,
+                // Wave 13 endgame: the estate's wings.
+                wings: u8::try_from(
+                    scene
+                        .endgame
+                        .estate(found.id, building.index)
+                        .expansions
+                        .len(),
+                )
+                .unwrap_or(u8::MAX),
             };
             #[allow(clippy::cast_precision_loss, reason = "a strip column")]
             let column = f64::from(building.first_column) + f64::from(building.width) * 0.5;
