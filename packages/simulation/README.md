@@ -11347,6 +11347,31 @@ engine's first tier, the dearest, comes at 1.5-2.5 h because the bot buys in lis
   from the aliens' and hostiles' tracks' bots; the galaxy story's rewards (another track) will
   shorten it.
 
+### Review (w13-endgame-review)
+
+Fixed: the gate ride's arrival used `f64::hypot` (platform libm) inside the tick, now
+`polar::trig::hypot`; estate orders (`ExpandHome`, `CallNeighbours`) are taken anywhere in the
+home's town, since their rows live on the builder's page and the builder walks a schedule; the
+gate's ride list shows the eight farthest known systems, not the first eight in chart order;
+the endgame section hashes after the hostiles'; a misplaced doc comment in `space_view`.
+
+Still open, for the integrator or a later pass:
+
+* **Space pays less than the Heart near home.** Ring 1 boards earn about 334,000 an hour and
+  belt mining about 444,000, against 806,000 for everyday Heart trips; only rings 5-7 come
+  close. A credit-minded player can go home to mine credits and come out only for materials.
+  The career bot never goes home, so the documented curve is the space-only one. Raising
+  `SPACE_CREDIT_SCALE`, or the far-ring bonus, is the lever.
+* **The Starwright Hull doesn't soften combat.** `ShipEffects::damage_scale` covers flight
+  hazards (heat, impacts); hostile shots and rams (`world/hostiles.rs`) ignore every hull line,
+  as in Wave 12. The shop line says "space damage", which a player will read as including
+  combat.
+* **Big numbers have no thousands separators** in the hub ("1200000"), and nothing gives the
+  gate's ride its own sound or the Works its own music (TODO-SEAM(w13-artaudio)).
+* The hunt list's theme bosses and the story's completion are empty until planets-c/d and
+  story register them (the seams above). The Wave 12 theme worlds (ids 3-8) have no bosses yet
+  either.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
