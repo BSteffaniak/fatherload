@@ -239,6 +239,12 @@ impl<'de> Deserialize<'de> for BodyWorld {
             // Wave 12 re-theme (the wild and frontier worlds, the aliens' towns) relies on it.
             return Ok(fresh);
         }
+        // The saved edits' own digest: when the ground has grown since the save (Wave 14
+        // finish: the Wave 12 worlds' lairs under their landmarks), an old edit equal to the new
+        // generated tile (a tunnel dug where the hall now is) stops counting as an edit, so the
+        // rebuilt digest is smaller though every edit arrived whole. Its edits laid over the new
+        // ground are exactly the player's ground, so it loads.
+        let saved_edits_digest = Terrain::edits_digest(&data.packed.0);
         let mut world = Self::build(data.store, seed, data.frame, data.packed.0)
             .ok_or_else(|| serde::de::Error::custom("the home store is not a body world"))?;
         if world.fingerprint() != data.fingerprint {
@@ -249,7 +255,8 @@ impl<'de> Deserialize<'de> for BodyWorld {
                 world.fingerprint()
             )));
         }
-        if world.terrain.digest() != data.digest {
+        let regrown = world.planet().is_some() && saved_edits_digest == data.digest;
+        if world.terrain.digest() != data.digest && !regrown {
             return Err(serde::de::Error::custom(format!(
                 "body {:?} ground digest mismatch (expected {:#x}, got {:#x})",
                 data.store,
@@ -1671,5 +1678,87 @@ fn filter_inputs(inputs: &TickInputs, keep: impl Fn(PlayerId) -> bool) -> TickIn
             .filter(|(player, _)| keep(**player))
             .map(|(player, input)| (*player, input.clone()))
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod regrown_ground_tests {
+    //! A saved body whose generated ground has grown since the save (Wave 14 finish: the
+    //! Wave 12 worlds' lairs) still loads, with every edit it had.
+
+    use super::{BodyWorld, BodyWorldData};
+    use crate::{
+        place::StoreKey,
+        planet::lairs::lair_of,
+        position::Frame,
+        space::{SpaceSeed, Theme},
+        terrain::{ChunkPosition, PackedChunks, Terrain, TileDiffs, TileKind, TilePosition},
+        worldgen::DEFAULT_WORLD_SEED,
+    };
+
+    #[test]
+    fn a_saved_body_whose_old_edit_the_new_ground_now_matches_still_loads() {
+        let seed = SpaceSeed::current(DEFAULT_WORLD_SEED);
+        let id = crate::endgame::hunt::nearest_theme_world(seed, Theme::Jungle)
+            .expect("a jungle world near home");
+        let store = StoreKey::Body(id);
+        let mut body = BodyWorld::generate(store, seed, Frame::FLOATING).expect("a body");
+        let planet = *body.planet().expect("a planet");
+        let lair = lair_of(&planet).expect("a lair");
+        let (middle, row) = lair.middle();
+        let middle = i32::try_from(middle).expect("column");
+        // An ordinary edit: a tunnel tile above the hall's ceiling.
+        let dug = TilePosition {
+            x: middle,
+            y: lair.top - 6,
+        };
+        assert_ne!(
+            body.terrain.tile(dug).map(|tile| tile.kind),
+            Some(TileKind::Air)
+        );
+        assert!(body.terrain.set_kind(dug, TileKind::Air));
+        let mut edits = body.terrain.edited_chunk_diffs();
+        assert_eq!(Terrain::edits_digest(&edits), body.terrain.digest());
+        // A Wave 13 save also dug where the hall now is: its edit is the Air the new ground
+        // now generates there itself.
+        let tunnel = TilePosition { x: middle, y: row };
+        let air = body.terrain.tile(tunnel).expect("loaded");
+        assert_eq!(air.kind, TileKind::Air);
+        let chunk = ChunkPosition::of(tunnel);
+        let local = u32::try_from(ChunkPosition::local_index(tunnel)).expect("index");
+        match edits.iter_mut().find(|(at, _)| *at == chunk) {
+            Some((_, diffs)) => {
+                let entries: Vec<_> = diffs.iter().chain([(local, air)]).collect();
+                *diffs = TileDiffs::new(entries);
+            }
+            None => edits.push((chunk, TileDiffs::new([(local, air)]))),
+        }
+        let digest = Terrain::edits_digest(&edits);
+        assert_ne!(digest, body.terrain.digest());
+        let data = BodyWorldData {
+            store,
+            seed: seed.seed,
+            space_generator: seed.generator,
+            fingerprint: body.fingerprint(),
+            digest,
+            frame: body.terrain.frame(),
+            packed: PackedChunks(edits),
+            entities: body.entities.clone(),
+            fluids: body.fluids.clone(),
+            discovered: body.discovered.clone(),
+        };
+        let json = serde_json::to_string(&data).expect("save");
+        let loaded: BodyWorld = serde_json::from_str(&json).expect("the old body loads");
+        assert_eq!(
+            loaded.terrain.tile(dug).map(|tile| tile.kind),
+            Some(TileKind::Air),
+            "the player's edit survives"
+        );
+        assert_eq!(loaded.terrain.digest(), body.terrain.digest());
+
+        // A save whose edits did not arrive whole still fails.
+        let mut broken: serde_json::Value = serde_json::from_str(&json).expect("json");
+        broken["digest"] = serde_json::json!(digest.wrapping_add(1));
+        assert!(serde_json::from_value::<BodyWorld>(broken).is_err());
     }
 }

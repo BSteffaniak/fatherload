@@ -1042,6 +1042,29 @@ impl Terrain {
         terrain
     }
 
+    /// The streamed digest saved `edits` add up to on their own (each edit's position and
+    /// tile, as [`Self::digest`] counts them), whatever ground they are laid over: a saved
+    /// body's check that its edits arrived whole when its generated ground has since grown
+    /// (Wave 14 finish: a regenerated tile equal to an old edit no longer counts as one).
+    #[must_use]
+    pub fn edits_digest(edits: &[(ChunkPosition, TileDiffs)]) -> u64 {
+        let mut digest = 0_u64;
+        for (chunk, diffs) in edits {
+            let origin = chunk.origin();
+            for (local, tile) in diffs.iter() {
+                let Ok(local) = i32::try_from(local) else {
+                    continue;
+                };
+                let position = TilePosition {
+                    x: origin.x + local % CHUNK_SIZE_TILES,
+                    y: origin.y + local / CHUNK_SIZE_TILES,
+                };
+                digest = digest.wrapping_add(position_digest(position, tile));
+            }
+        }
+        digest
+    }
+
     /// A round body's ground (Wave 11 integration): [`Self::planet`] in `frame` with `edits`
     /// applied (a body store's saved or replicated ground, [`crate::place::BodyWorld`]).
     #[must_use]

@@ -11895,8 +11895,15 @@ either way. The endgame's curve tests pass unchanged.
   their galaxy V1).
 - V1-V10 and `GOLDEN_V11_DIGEST` unchanged; `GOLDEN_SPACE_DIGEST` unchanged (V1);
   `GOLDEN_SPACE_V2_DIGEST` new. The wild and frontier worlds' golden digests are unchanged (they
-  sample the surface and core; the lairs lie 52 rows under the landmarks); their bodies in a
-  Wave 12-13 save regenerate with their lairs (the fingerprint rule: such a body loads fresh).
+  sample the surface and core; the lairs lie 52 rows under the landmarks). Their bodies in a
+  Wave 12-13 save keep their edits and gain their lairs: a body's fingerprint samples the
+  surface chunk at column 0, which the lair (under the landmark, half a lap from the
+  settlement) does not reach, so the edits are laid over the new ground. An old edit the new
+  ground now generates itself (a tunnel dug where the hall is) stops counting as an edit, so the
+  rebuilt terrain digest can be smaller than the saved one; the load then checks the saved
+  edits' own digest instead (`Terrain::edits_digest`, review fix: such a save used to fail to
+  load with "ground digest mismatch"). Test
+  `world::places::regrown_ground_tests`.
 
 ### Tests
 
