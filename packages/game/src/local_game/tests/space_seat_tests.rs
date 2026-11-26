@@ -50,6 +50,10 @@ fn tick_both(world: &mut WorldState, bots: &mut [(PlayerId, SpaceBot); 2]) {
 }
 
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one journey of two seats, then each seat's view"
+)]
 fn split_screen_seats_in_two_places_each_see_their_own() {
     let settings = WorldSettings {
         generator: GeneratorVersion::DEEP_DESCENT,
@@ -152,5 +156,22 @@ fn split_screen_seats_in_two_places_each_see_their_own() {
             .as_ref()
             .is_none_or(|scene| scene.store == StoreKey::Space && scene.body.is_none())
     );
+    // The seat on the moon reads the moon's own life (Wave 12 bodylife): its hour, not the
+    // home clock's, its air and gravity.
+    let life = ground
+        .body
+        .as_ref()
+        .and_then(|body| body.life.as_ref())
+        .expect("the body's life for its seat");
+    let body_life = world.body_life_of_player(seats[0]).expect("on a body");
+    assert_eq!(
+        life.reading.local_permille,
+        world
+            .body_reading_of(seats[0])
+            .expect("a reading")
+            .local_permille
+    );
+    assert_eq!(life.gravity_milli, body_life.gravity_milli());
+    assert!(!life.name.is_empty());
     assert!(snapshot.views[1].player.flight.away(), "seat 1 flies");
 }

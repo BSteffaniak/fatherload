@@ -93,6 +93,10 @@ fn a_storm_carries_an_airborne_rig_and_shelter_stops_it() {
         .body_wind_at(rig.x, rig.y)
         .expect("wind under the open sky");
     assert!(wind.abs() > 60.0, "a storm's wind {wind}");
+    assert!(
+        world.body_visibility_at(rig.x, rig.y) < 0.6,
+        "a storm hides the view"
+    );
     for _ in 0..30 {
         let _ = step(&mut world, idle());
     }
