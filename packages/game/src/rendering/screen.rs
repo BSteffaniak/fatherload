@@ -192,7 +192,14 @@ pub(super) fn draw_view_hud(
     );
     // On a landscape phone the thumb cluster's upper buttons rise level with the badge: it
     // steps left of them.
-    let thumb_buttons = super::touch_controls::cluster_rects();
+    let mut thumb_buttons = super::touch_controls::cluster_rects();
+    // The stats panel too: a narrow seat's badge goes under it instead of over it.
+    thumb_buttons.push(Rectangle::new(
+        left as f32,
+        top as f32,
+        width as f32,
+        panel_height as f32,
+    ));
     // On a body (Wave 12 bodylife) its own day, climate, air, gravity and weather take the
     // clock's place: the home world's clock is not the seat's.
     let body_life = view

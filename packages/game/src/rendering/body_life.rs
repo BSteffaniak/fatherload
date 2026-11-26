@@ -272,9 +272,25 @@ const fn air_word(life: &BodyLifeView) -> (&'static str, Color) {
     }
 }
 
+/// The badge's little disc: the body, lit on the star's side.
+fn draw_dial(draw: &mut RaylibDrawHandle<'_>, (cx, cy): (i32, i32), day_side: bool) {
+    draw.draw_circle(cx, cy, 6.0, SLATE_DARK);
+    let lit = if day_side { GOLD } else { LAVENDER };
+    draw.draw_circle_sector(
+        Vector2::new(cx as f32, cy as f32),
+        6.0,
+        if day_side { -90.0 } else { 90.0 },
+        if day_side { 90.0 } else { 270.0 },
+        8,
+        lit,
+    );
+    draw.draw_circle_lines(cx, cy, 6.0, INK);
+}
+
 /// The body badge, in the clock badge's place (right-aligned at `top` in `rect`): the body's
 /// name, its local hour (or its side, when tidally locked), temperature, air, gravity and the
 /// weather. Returns where it was drawn.
+#[allow(clippy::too_many_lines, reason = "the full badge and its compact form")]
 pub fn draw_body_badge(
     draw: &mut RaylibDrawHandle<'_>,
     life: &BodyLifeView,
@@ -336,22 +352,35 @@ pub fn draw_body_badge(
         return None;
     }
     let badge = super::screen::badge_rect(rect, top, (width, height), avoid);
+    // Under the stats panel in a narrow seat (Wave 13): a compact badge (the name, the hour
+    // and the air), clear of the prompts over the rig in the view's middle.
+    if badge.y as i32 > top {
+        let summary = format!("{time}  {air}");
+        let width = ui_kit::PANEL_PADDING * 2
+            + dial
+            + 5
+            + ui_kit::text_width(&name, TextStyle::Bold)
+                .max(ui_kit::text_width(&summary, TextStyle::Body));
+        let compact = super::screen::badge_rect(rect, top, (width, 26), avoid);
+        ui_kit::panel(draw, compact, PanelStyle::Standard);
+        let x = compact.x as i32 + ui_kit::PANEL_PADDING;
+        let top = compact.y as i32;
+        draw_dial(draw, (x + dial / 2, top + 12), day_side);
+        ui_kit::text(draw, &name, x + dial + 5, top + 5, TextStyle::Bold, GOLD);
+        ui_kit::text(
+            draw,
+            &summary,
+            x + dial + 5,
+            top + 15,
+            TextStyle::Body,
+            air_colour,
+        );
+        return Some(compact);
+    }
     ui_kit::panel(draw, badge, PanelStyle::Standard);
     let x = badge.x as i32 + ui_kit::PANEL_PADDING;
     // A little disc: the body, lit on the star's side.
-    let cx = x + dial / 2;
-    let cy = top + 12;
-    draw.draw_circle(cx, cy, 6.0, SLATE_DARK);
-    let lit = if day_side { GOLD } else { LAVENDER };
-    draw.draw_circle_sector(
-        Vector2::new(cx as f32, cy as f32),
-        6.0,
-        if day_side { -90.0 } else { 90.0 },
-        if day_side { 90.0 } else { 270.0 },
-        8,
-        lit,
-    );
-    draw.draw_circle_lines(cx, cy, 6.0, INK);
+    draw_dial(draw, (x + dial / 2, top + 12), day_side);
     let text_x = x + dial + 5;
     let mut y = top + 5;
     ui_kit::text(draw, &name, text_x, y, TextStyle::Bold, GOLD);

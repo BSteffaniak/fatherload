@@ -258,7 +258,7 @@ fn boss(stage: &mut SceneStage<'_>, faction: Faction, frames: usize) {
         );
     });
     stage.play_on(|world| {
-        gather(world, 430.0, 0.0, EncounterState::Fighting);
+        gather(world, 340.0, 0.0, EncounterState::Fighting);
         let mut hostiles = world.hostiles().clone();
         if let Some(boss) = hostiles.ships.iter_mut().find(|ship| ship.class.is_boss()) {
             // The Pirate King shows its flank; the others face the rig.

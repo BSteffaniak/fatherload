@@ -62,6 +62,18 @@ pub(in crate::rendering) fn badge_rect(
         };
         x = (left - 4.0 - width as f32).max(rect.x + 4.0);
     }
+    // Still over something (a narrow split-screen seat: the stats panel on the left): right-
+    // aligned again, under it (Wave 13 art-audio).
+    let badge = Rectangle::new(x, top as f32, width as f32, height as f32);
+    if let Some(below) = avoid
+        .iter()
+        .filter(|panel| overlaps(panel, &badge))
+        .map(|panel| panel.y + panel.height)
+        .reduce(f32::max)
+    {
+        let x = rect.x + rect.width - 16.0 - width as f32;
+        return Rectangle::new(x.round(), below + 3.0, width as f32, height as f32);
+    }
     Rectangle::new(x.round(), top as f32, width as f32, height as f32)
 }
 
@@ -102,7 +114,8 @@ pub(super) fn draw_clock_badge(
         .max(label_width);
     let width = ui_kit::PANEL_PADDING * 2 + DIAL_WIDTH + 5 + text_width;
     let height = if night_safe.is_some() { 36 } else { 26 };
-    let x = badge_rect(rect, top, (width, height), avoid).x as i32;
+    let placed = badge_rect(rect, top, (width, height), avoid);
+    let (x, top) = (placed.x as i32, placed.y as i32);
     if top + height > (rect.y + rect.height) as i32 - 8 {
         return None;
     }
@@ -297,5 +310,16 @@ mod placement_tests {
         // Buttons below the badge (a portrait phone's cluster) leave it where it was.
         let low = [Rectangle::new(700.0, 300.0, 60.0, 60.0)];
         assert!((badge_rect(view, 132, size, &low).x - alone.x).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_narrow_seats_badge_goes_under_the_stats_panel() {
+        // A split-screen seat (240 x 270): the stats panel reaches past where the badge would
+        // sit right-aligned under the wallet.
+        let view = Rectangle::new(0.0, 0.0, 240.0, 270.0);
+        let stats = Rectangle::new(4.0, 4.0, 132.0, 68.0);
+        let placed = badge_rect(view, 46, (112, 46), &[stats]);
+        assert!(!overlaps(&stats, &placed), "{placed:?}");
+        assert!(placed.y >= stats.y + stats.height);
     }
 }

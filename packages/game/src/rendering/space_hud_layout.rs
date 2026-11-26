@@ -114,6 +114,20 @@ pub fn inside(inner: Rectangle, outer: Rectangle) -> bool {
         && bottom(inner) <= bottom(outer) + 0.01
 }
 
+/// Where a message toast rises in a seat's view (`screen::draw_toast`: centred, at most 300
+/// points wide, resting 28 points above the bottom, up to three lines).
+#[must_use]
+pub fn toast_band(rect: Rectangle) -> Rectangle {
+    let width = (rect.width - 24.0).min(300.0);
+    let height = 40.0;
+    Rectangle::new(
+        rect.x + (rect.width - width) * 0.5,
+        bottom(rect) - 28.0 - height,
+        width,
+        height,
+    )
+}
+
 impl SpaceHudLayout {
     /// Lays the fixed panels out in `rect` (UI points).
     #[must_use]
@@ -202,12 +216,17 @@ impl SpaceHudLayout {
             })
             .flatten();
         cursor = layout.note.map_or(cursor, |note| bottom(note) + GAP);
-        // The bounties, bottom left above the prompts (only where there is room for them).
+        // The bounties, bottom left above the prompts and clear of where a message toast rises
+        // (only where there is room for them).
+        let toast = toast_band(rect);
         layout.bounties = (spec.missions > 0 && !spec.touch && rect.height >= 200.0)
             .then(|| {
                 let width = (rect.width * 0.36).clamp(150.0, 230.0);
                 let height = 14.0 + spec.missions as f32 * 10.0;
-                let panel = Rectangle::new(rect.x + 4.0, floor - height, width, height);
+                let mut panel = Rectangle::new(rect.x + 4.0, floor - height, width, height);
+                if overlaps(panel, toast) {
+                    panel.y = toast.y - GAP - height;
+                }
                 let clear = panel.y >= cursor
                     && prompts.is_none_or(|bar| !overlaps(grown(panel, 1.0), bar));
                 clear.then_some(panel)
@@ -704,6 +723,13 @@ mod tests {
                 }
                 let panels = layout.panels();
                 assert_apart(&format!("{name} {spec:?}"), &panels);
+                // The bounties keep clear of a message toast.
+                if let Some(bounties) = layout.bounties {
+                    assert!(
+                        !overlaps(bounties, toast_band(rect)),
+                        "{name} {spec:?}: the bounties sit where a toast rises"
+                    );
+                }
                 for panel in &panels {
                     assert!(
                         panel.x >= rect.x && right(*panel) <= right(rect) + 0.01,
