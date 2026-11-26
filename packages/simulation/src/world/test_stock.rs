@@ -21,10 +21,9 @@ use crate::{
     endgame::works::{MARK_MAX, StarwrightPart},
     enemy::EnemyKind,
     entity::{EntityId, EntityKind},
-    event::TickOutput,
     expedition::{ECHOES, LOGS, anomaly::AnomalyKind, progress::boss_bit},
     flight::FlightGearKind,
-    heart::ENDING_SHIELD_MILLIS,
+    heart::{ENDING_SHIELD_MILLIS, HeartPhase},
     hostiles::{BossTech, ShipGearKind},
     old_deep::{CorePhase, LOG_CORE_REVEAL},
     pilot::{PilotGearKind, arsenal::PILOT_WEAPONS},
@@ -621,7 +620,7 @@ impl WorldState {
     /// Whether the Heart's ending is done (the Heart woke and the cable lit).
     #[must_use]
     pub const fn ending_done(&self) -> bool {
-        self.heart.fight.beaten && self.heart.cable_lit_millis.is_some()
+        self.heart.fight.beaten && self.expedition.cable_lit
     }
 
     /// Marks the Heart's ending done or not. Done: the Heart wakes (space opens and every rig
@@ -637,11 +636,19 @@ impl WorldState {
         }
         if done {
             if !self.heart.fight.beaten {
+                self.put_heart_to_sleep();
                 let now = self.millis_at(self.simulation_tick);
-                let played = now.saturating_sub(ENDING_SHIELD_MILLIS + 1_000);
-                let mut sink = TickOutput::default();
-                self.heart_wakes(None, played, &mut sink);
+                let fight = &mut self.heart.fight;
+                fight.phase = HeartPhase::Awakened;
+                fight.phase_millis = now;
+                fight.beaten = true;
+                // The ending counts as played: its sequence never starts (a world too young
+                // for a lit time that long ago keeps the cable's time unset).
+                self.heart.cable_lit_millis = now.checked_sub(ENDING_SHIELD_MILLIS + 1_000);
             }
+            self.heart.space_unlocked = true;
+            let players: Vec<PlayerId> = self.players.keys().copied().collect();
+            self.heart.star_drive.extend(players);
             self.expedition.cable_lit = true;
         } else {
             self.put_heart_to_sleep();

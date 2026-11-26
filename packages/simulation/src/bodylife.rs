@@ -201,11 +201,19 @@ impl BodyLife {
     #[must_use]
     pub fn weather_with(&self, millis: u64, column: i64, forced: Option<WeatherId>) -> WeatherNow {
         let night = self.clock.daylight(millis, column, 0) < 300;
-        let only = forced.map(|kind| [weather::odds(kind, 1)]);
-        let table = only
-            .as_ref()
-            .map_or_else(|| self.hooks().weather_table(), |only| &only[..]);
-        forecast(self.seed, table, self.climate.atmosphere, millis, night)
+        let Some(kind) = forced else {
+            let table = self.hooks().weather_table();
+            return forecast(self.seed, table, self.climate.atmosphere, millis, night);
+        };
+        // One spell on: the very first spell of world time fades in, a forced one never does.
+        let at = millis.saturating_add(weather::SPELL_MILLIS);
+        forecast(
+            self.seed,
+            &[weather::odds(kind, 1)],
+            self.climate.atmosphere,
+            at,
+            night,
+        )
     }
 
     /// Everything at strip tile `(column, row)` at world time `millis`, `surface` being the
