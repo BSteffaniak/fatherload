@@ -498,6 +498,10 @@ impl LocalGame {
         // same transform) and remote rigs where interpolation puts them.
         snapshot.bomb_alpha = self.runtime.interpolation_alpha();
         snapshot.effects = self.shell.effects;
+        snapshot.reveal = self.shell.debug_views.shows(
+            crate::debug_views::DebugView::MapReveal,
+            self.runtime.world().is_test_mode(),
+        );
         snapshot.pickups = self.effects.pickups();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
@@ -2837,7 +2841,7 @@ impl LocalGame {
                     self.start_actions = actions;
                     self.shell
                         .console
-                        .print(format!("--start-at {target:?}: travelling"));
+                        .print(format!("--start-at: {}", target.words()));
                 }
                 Err(error) => self.shell.message = error,
             }

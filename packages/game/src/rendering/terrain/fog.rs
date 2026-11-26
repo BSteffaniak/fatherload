@@ -61,10 +61,20 @@ pub const fn distance_darkness(distance: i32) -> u8 {
     ((MAX_DARK_ALPHA * (distance - DISTANCE_FADE_START_TILES)) / span) as u8
 }
 
+thread_local! {
+    /// Test mode's map reveal (Wave 14): every tile drawn as explored.
+    static REVEAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Switches the map reveal; returns whether it changed (the chunks then repaint).
+pub fn set_reveal(reveal: bool) -> bool {
+    REVEAL.with(|cell| cell.replace(reveal) != reveal)
+}
+
 /// Darkness of tile row `tile_y` given whether it is explored and its distance to exploration.
 #[must_use]
 pub fn tile_darkness(tile_y: i32, explored: bool, distance: i32) -> u8 {
-    if explored || tile_y <= SKY_MAX_TILE_Y {
+    if explored || tile_y <= SKY_MAX_TILE_Y || REVEAL.with(std::cell::Cell::get) {
         return 0;
     }
     let darkness = depth_darkness(tile_y).max(distance_darkness(distance));

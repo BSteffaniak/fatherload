@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Lines of output the panel shows.
-const SHOWN_LINES: usize = 8;
+const SHOWN_LINES: usize = 10;
 
 /// Draws the palette along the bottom of the screen (UI canvas).
 #[allow(
@@ -40,14 +40,30 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
     let margin = 6;
     let width = (canvas.width - margin * 2).min(520);
     let left = (canvas.width - width) / 2;
-    let shown: Vec<&String> = console
-        .lines
+    // Long lines wrap (continuations indented); the newest rows that fit are shown, each in
+    // its line's colour: typed commands, previews and travels, replies.
+    let mut wrapped: Vec<(String, Color)> = Vec::new();
+    for line in &console.lines {
+        let body = line.trim_start();
+        let indent = i32::try_from(line.len() - body.len()).unwrap_or(0) * 3;
+        let color = if line.starts_with("> ") {
+            palette::MIST
+        } else if body.starts_with('?') || body.starts_with("->") {
+            palette::GOLD
+        } else {
+            palette::MINT
+        };
+        for (part, row) in ui_kit::wrap(body, width - 20 - indent - 12, TextStyle::Body)
+            .into_iter()
+            .enumerate()
+        {
+            let pad = if part == 0 { indent } else { indent + 12 };
+            wrapped.push((format!("{}{row}", " ".repeat((pad / 3) as usize)), color));
+        }
+    }
+    let shown: Vec<&(String, Color)> = wrapped
         .iter()
-        .rev()
-        .take(SHOWN_LINES)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
+        .skip(wrapped.len().saturating_sub(SHOWN_LINES))
         .collect();
     let completions: Vec<&String> = console
         .completions
@@ -85,16 +101,9 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
     ui_kit::divider(draw, left + 6, top + 15, width - 12);
     let text_width = width - 16;
     let mut y = top + 19;
-    for line in shown {
-        let color = if line.starts_with("> ") {
-            palette::MIST
-        } else if line.starts_with("  ?") || line.starts_with("  ->") {
-            palette::GOLD
-        } else {
-            palette::MINT
-        };
+    for (line, color) in shown {
         let row = ui_kit::truncate(line, text_width, TextStyle::Body);
-        ui_kit::text(draw, &row, left + 8, y, TextStyle::Body, color);
+        ui_kit::text(draw, &row, left + 8, y, TextStyle::Body, *color);
         y += line_height;
     }
     if !completions.is_empty() {
@@ -164,7 +173,8 @@ pub fn draw_frame_stats(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState, tes
     let canvas = ui_kit::canvas();
     let width = ui_kit::text_width(&text, TextStyle::Body) + 12;
     let left = (canvas.width - width) / 2;
-    let top = 40;
+    // Under the HUD's alert row.
+    let top = 82;
     ui_kit::panel(
         draw,
         Rectangle::new(left as f32, top as f32, width as f32, 15.0),
@@ -193,10 +203,10 @@ pub fn draw_time_scale(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState, test
     let left = (canvas.width - width) / 2;
     ui_kit::panel(
         draw,
-        Rectangle::new(left as f32, 58.0, width as f32, 15.0),
+        Rectangle::new(left as f32, 99.0, width as f32, 15.0),
         ui_kit::PanelStyle::Warning,
     );
-    ui_kit::text(draw, &text, left + 6, 62, TextStyle::Bold, palette::GOLD);
+    ui_kit::text(draw, &text, left + 6, 103, TextStyle::Bold, palette::GOLD);
 }
 
 /// The world-space debug views over a seat's world (inside its 2D camera; `visible` is the
@@ -215,10 +225,12 @@ pub fn draw_world_debug(
         draw_grid(draw, visible, line);
     }
     if views.is_on(DebugView::FieldZones) {
+        // Zones are in absolute tiles; the view draws in the world's frame.
+        let frame = crate::view_frame::frame();
         for (_, zone) in snapshot.world.field_zones().iter() {
             let rect = Rectangle::new(
-                view_x(zone.min_x),
-                view_x(zone.min_y),
+                frame.col_px(zone.min_x),
+                frame.row_px(zone.min_y),
                 view_x(zone.max_x - zone.min_x + 1),
                 view_x(zone.max_y - zone.min_y + 1),
             );
@@ -292,7 +304,7 @@ pub fn draw_world_debug(
     }
 }
 
-/// Tile `n`'s pixel edge in the drawn frame (the view frame is the world's).
+/// `tiles` tiles in pixels.
 fn view_x(tiles: i32) -> f32 {
     tiles as f32 * TILE_SIZE
 }

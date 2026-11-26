@@ -42,6 +42,39 @@ pub enum TpTarget {
     Moon,
 }
 
+impl TpTarget {
+    /// The target as the palette's words (`descent v`, `planet random ice`).
+    #[must_use]
+    pub fn words(&self) -> String {
+        let step = |step: &Step| match step {
+            Step::Nearest => "nearest",
+            Step::Next => "next",
+            Step::Previous => "prev",
+            Step::Random => "random",
+        };
+        match self {
+            Self::Planet { step: how, theme } => format!(
+                "planet {}{}",
+                step(how),
+                theme.map_or_else(String::new, |theme| format!(
+                    " {}",
+                    names::word(theme.name())
+                ))
+            ),
+            Self::Descent(descent) => format!("descent {}", descent.numeral().to_ascii_lowercase()),
+            Self::Depth(rows) => format!("depth {rows}m"),
+            Self::Stratum(stratum) => format!("stratum {}", names::word(stratum.name())),
+            Self::Boss(boss) => format!("boss {}", names::word(boss.name())),
+            Self::Station(how) => format!("station {}", step(how)),
+            Self::Player(number) => format!("player {number}"),
+            Self::Bookmark(name) => format!("bookmark {name}"),
+            Self::Back => "back".to_owned(),
+            Self::Home => "home".to_owned(),
+            Self::Moon => "moon".to_owned(),
+        }
+    }
+}
+
 /// `give` what.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Give {

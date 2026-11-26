@@ -352,6 +352,10 @@ impl GameRenderer {
         snapshot: &RenderSnapshot<'_>,
         report: &FrameReport,
     ) {
+        // Test mode's map reveal (Wave 14) repaints every chunk's fog when it flips.
+        if terrain::fog::set_reveal(snapshot.reveal) && !report.world_replaced {
+            self.terrain.mark_all_dirty();
+        }
         if report.world_replaced {
             self.terrain.mark_all_dirty();
             self.explored_drawn = DiscoveredTiles::default();
@@ -1107,11 +1111,7 @@ impl GameRenderer {
             active_drill: view.active_drill,
             lost_cargo: view.lost_cargo,
             // Test mode's map reveal (Wave 14): no fog.
-            explored: (!shell.debug_views.shows(
-                crate::debug_views::DebugView::MapReveal,
-                snapshot.world.is_test_mode(),
-            ))
-            .then_some(&self.explored_drawn),
+            explored: (!snapshot.reveal).then_some(&self.explored_drawn),
             ticks: shell.update_ticks,
             aim_preview: view.aim_preview.as_ref(),
             critters: &snapshot.critters,

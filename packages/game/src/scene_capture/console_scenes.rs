@@ -19,6 +19,13 @@ fn start(stage: &mut SceneStage<'_>, target: &TpTarget) {
     let report = stage.game.start_test_world(DEFAULT_TEST_SEED, Some(target));
     stage.absorb(report);
     stage.settle(30);
+    // The subject is the palette and the views, not the story's cards or the arrival toast.
+    for ui in &mut stage.game.shell.seats {
+        ui.story_moment = None;
+        ui.fanfare = None;
+        ui.descent.banner = None;
+    }
+    "Test mode: press ` for the command palette.".clone_into(&mut stage.game.shell.message);
 }
 
 fn press(stage: &mut SceneStage<'_>, input: PlayerInput) {
@@ -97,14 +104,7 @@ pub(super) const CONSOLE_SCENES: &[Scene] = &[
             start(stage, &OLD_DEEP);
             type_line(stage, "help tp", true);
             type_line(stage, "tp descent 5 ?", true);
-            type_line(stage, "tp planet next i", false);
-            press(
-                stage,
-                PlayerInput {
-                    inventory: true,
-                    ..PlayerInput::default()
-                },
-            );
+            type_line(stage, "tp planet ne", false);
         },
     },
     Scene {
@@ -114,6 +114,7 @@ pub(super) const CONSOLE_SCENES: &[Scene] = &[
             start(stage, &TpTarget::Descent(Descent::Crust));
             type_line(stage, "tp boss leviathan", true);
             stage.settle(20);
+            stage.seat(0).story_moment = None;
             type_line(stage, "give dynamite 99", true);
         },
     },

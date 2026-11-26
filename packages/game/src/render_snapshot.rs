@@ -994,6 +994,8 @@ pub struct RenderSnapshot<'w> {
     pub moon: fatherload_simulation::clock::MoonAnchor,
     /// The screen effects accessibility setting (F9; set by the game from its settings).
     pub effects: crate::screen_fx::EffectsIntensity,
+    /// Test mode's map reveal (Wave 14 debug views): the home ground drawn with no fog.
+    pub reveal: bool,
     /// Descent II's live state (Wave 8): dose meters, mutations, halls, the set pieces' fights.
     pub old_deep: &'w fatherload_simulation::old_deep::OldDeep,
     /// The Hollow World's shared state (Wave 9): exposure, anchors, rides, the serpent.
@@ -1218,6 +1220,7 @@ impl<'w> RenderSnapshot<'w> {
         let forts = forts_near_seats(world, seats);
         Self {
             effects: crate::screen_fx::EffectsIntensity::Full,
+            reveal: false,
             tick: world.simulation_tick().get(),
             tick_rate: world.timing().rate,
             terrain: world.terrain(),
