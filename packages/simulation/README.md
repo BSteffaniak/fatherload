@@ -11238,7 +11238,19 @@ Hour rates on seed 0xC0FFEE (credits an hour; the Heart's everyday income is 805
 | 5 | 631,110 | 751,690 |
 | 7 | 729,925 | 560,163 |
 
-CURVE_TABLE
+Milestones of the bot's career (hours; `cargo test --release -p fatherload_simulation career_report -- --ignored --nocapture`):
+
+| Seed / purse | Engine T1 | Gilded Maw | Swarm Queen | Engine T5 | Arbiter | Starwright Hull | Starwright Engine | Heartline (all done) | Credits held it back, h 0-20 |
+|---|---|---|---|---|---|---|---|---|---|
+| 0xC0FFEE, empty | 2.5 | 18.75 | 32.75 | 59.5 | 60.25 | 85.75 | 92.0 | 104.75 | 92 % |
+| 0xC0FFEE, post-Heart 6.67 M | 0 | 7.5 | 22.0 | 47.5 | 48.25 | 73.75 | 80.0 | 92.75 | 88 % |
+| 1, empty | 1.5 | 14.5 | 30.0 | 52.75 | 58.25 | 65.25 | 90.5 | 102.5 | 92 % |
+| 1, post-Heart | 0 | 3.75 | 17.5 | 40.25 | 45.75 | 53.0 | 78.0 | 90.0 | 82 % |
+| 7, empty | 1.75 | 16.5 | 32.0 | 45.5 | 54.25 | 65.0 | 89.0 | 101.25 | 92 % |
+| 7, post-Heart | 0 | 3.75 | 17.75 | 31.5 | 40.25 | 52.75 | 74.75 | 87.0 | 84 % |
+
+(The first line bought from an empty purse is a cheaper one, within the first half hour; the
+engine's first tier, the dearest, comes at 1.5-2.5 h because the bot buys in list order.)
 
 * **From an empty purse** the first ship-line tier comes within the first hour (the first-hour
   model's 40 minutes), every first tier within three, and credits hold the bot back in about
@@ -11321,6 +11333,9 @@ CURVE_TABLE
 
 * TODO-SEAM(w13-planets-c/d): theme bosses register in `hunt::THEME_BOSSES` and call
   `record_theme_boss`; theme worlds' own ores still sell at body markets at their classic value.
+* Tile codes: the space materials take the ore family's next codes (`0x100 | 12..=19`), not the
+  track's 0x3800 range; they never lie in ground, so an integrator may reorder them after other
+  appended minerals without breaking a save.
 * TODO-SEAM(w13-story): the galaxy story's chapters fill `CompletionFacts::story_done/total`.
 * TODO-SEAM(w13-artaudio): the endgame's events reuse existing cues; a Works ambience, a gate
   hum and a Heartline fanfare would be appended patches.
