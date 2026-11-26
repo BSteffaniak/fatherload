@@ -18,6 +18,21 @@ mod crew;
 mod old_deep_news;
 mod rewards;
 
+/// Whether an event (`player_id`'s, or nobody's) reaches the seat of `seat_player` (Wave 13
+/// QA: routed by place): a player's event is that player's; a player-less event of a body or
+/// of free flight reaches only the seats in that store (the home pass's reach every seat).
+fn seat_hears(
+    world: &WorldState,
+    store: fatherload_simulation::place::StoreKey,
+    player_id: Option<PlayerId>,
+    seat_player: PlayerId,
+) -> bool {
+    player_id.map_or_else(
+        || store.is_home() || world.store_of(seat_player) == store,
+        |owner| owner == seat_player,
+    )
+}
+
 #[cfg(test)]
 pub use crew::saved_seat_count;
 
@@ -1339,7 +1354,7 @@ impl LocalGame {
                 _ => continue,
             };
             for (seat, player) in players.iter().enumerate() {
-                if player_id.is_none_or(|owner| owner == *player) {
+                if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                     messages.push((seat, text.clone()));
                 }
             }
@@ -1413,7 +1428,7 @@ impl LocalGame {
                 _ => continue,
             };
             for (seat, player) in players.iter().enumerate() {
-                if player_id.is_none_or(|owner| owner == *player) {
+                if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                     messages.push((seat, text.clone()));
                 }
             }
@@ -1532,7 +1547,8 @@ impl LocalGame {
                     | E::SealOpening
             );
             for (seat, player) in players.iter().enumerate() {
-                if crew_wide || player_id.is_none_or(|owner| owner == *player) {
+                if crew_wide || seat_hears(self.runtime.world(), gameplay.store, player_id, *player)
+                {
                     messages.push((seat, text.clone()));
                 }
             }
@@ -1612,7 +1628,7 @@ impl LocalGame {
             };
             let tide = matches!(what, E::TideRising);
             for (seat, player) in players.iter().enumerate() {
-                let mine = player_id.is_none_or(|owner| owner == *player);
+                let mine = seat_hears(self.runtime.world(), gameplay.store, player_id, *player);
                 // The tide only matters to a seat in the Flesh Caverns.
                 if mine && (!tide || world.heartbeat_for(*player).is_some()) {
                     messages.push((seat, text.clone()));
@@ -1689,7 +1705,7 @@ impl LocalGame {
                 _ => continue,
             };
             for (seat, player) in players.iter().enumerate() {
-                if player_id.is_none_or(|owner| owner == *player) {
+                if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                     messages.push((seat, text.to_owned()));
                 }
             }
@@ -2012,7 +2028,11 @@ impl LocalGame {
             Faction, HostileEvent as E, ShipClass, ShipGearKind,
         };
         let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
-        let mut news: Vec<(Option<usize>, String)> = Vec::new();
+        let mut news: Vec<(
+            Option<usize>,
+            String,
+            fatherload_simulation::place::StoreKey,
+        )> = Vec::new();
         for event in &self.frame_events {
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
@@ -2063,15 +2083,16 @@ impl LocalGame {
                 E::EscapeSpooling => "Escape jump spooling: hold on.".to_owned(),
                 E::ShipDestroyed | E::RigHit | E::Fired | E::ShipHit | E::BossTelegraph => continue,
             };
-            news.push((seat, message));
+            news.push((seat, message, gameplay.store));
         }
-        let seats = players.len();
-        for (seat, message) in news {
+        for (seat, message, store) in news {
             match seat {
                 Some(seat) => self.shell.seat_mut(seat).message = message,
                 None => {
-                    for seat in 0..seats {
-                        self.shell.seat_mut(seat).message.clone_from(&message);
+                    for (seat, player) in players.iter().enumerate() {
+                        if seat_hears(self.runtime.world(), store, None, *player) {
+                            self.shell.seat_mut(seat).message.clone_from(&message);
+                        }
                     }
                 }
             }
@@ -2123,7 +2144,7 @@ impl LocalGame {
                         _ => continue,
                     };
                     for (seat, player) in players.iter().enumerate() {
-                        if player_id.is_none_or(|owner| owner == *player) {
+                        if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                             messages.push((seat, text.to_owned()));
                         }
                     }
@@ -2150,7 +2171,9 @@ impl LocalGame {
                             self.runtime.world().place_of(*player),
                             fatherload_simulation::place::Place::OnBody(_)
                         );
-                        if here && player_id.is_none_or(|owner| owner == *player) {
+                        if here
+                            && seat_hears(self.runtime.world(), gameplay.store, player_id, *player)
+                        {
                             messages.push((seat, text.to_owned()));
                         }
                     }
@@ -2169,7 +2192,7 @@ impl LocalGame {
                         P::Righted => "Back on the tracks.",
                     };
                     for (seat, player) in players.iter().enumerate() {
-                        if player_id.is_none_or(|owner| owner == *player) {
+                        if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                             messages.push((seat, text.to_owned()));
                         }
                     }
@@ -2200,7 +2223,7 @@ impl LocalGame {
                         W::RimeBroke => "The rime gives way!",
                     };
                     for (seat, player) in players.iter().enumerate() {
-                        if player_id.is_none_or(|owner| owner == *player) {
+                        if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
                             messages.push((seat, text.to_owned()));
                         }
                     }

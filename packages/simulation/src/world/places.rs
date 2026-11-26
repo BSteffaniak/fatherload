@@ -1011,7 +1011,10 @@ impl WorldState {
         self.restore_players(stash);
         // One ground pass per other occupied store.
         for store in others {
-            let store_output = self.simulate_store(store, tick, inputs);
+            let mut store_output = self.simulate_store(store, tick, inputs);
+            // Events are routed by place (Wave 13 QA): everything this pass raised is the
+            // store's.
+            store_output.stamp_stores(0, |_| store);
             output.merge_pass(store_output);
         }
         // Space combat (Wave 12 hostiles) once a tick with every rig back from its store: free
@@ -1019,7 +1022,21 @@ impl WorldState {
         // ships fight them all on one clock (Wave 12 integration).
         self.place_pass.store = StoreKey::Home;
         self.place_pass.ground_only = false;
+        let combat_from = output.events.len();
         self.advance_hostiles(inputs, next_tick, &mut output);
+        // A fight's events are its rig's place's; a ship's own (no rig) are free flight's.
+        let stores: BTreeMap<PlayerId, StoreKey> = self
+            .players
+            .keys()
+            .map(|player| (*player, self.store_of(*player)))
+            .collect();
+        output.stamp_stores(combat_from, |kind| match kind {
+            crate::event::GameplayEventKind::Hostile {
+                player_id: Some(player),
+                ..
+            } => stores.get(player).copied().unwrap_or(StoreKey::Space),
+            _ => StoreKey::Space,
+        });
         self.place_pass.running = false;
         self.place_pass.store = StoreKey::Home;
         self.place_pass.ground_only = false;
@@ -1032,6 +1049,8 @@ impl WorldState {
                     from,
                     to: place,
                 });
+                let at = output.events.len() - 1;
+                output.stamp_stores(at, |_| place.store());
             }
         }
         let _ = next_tick;

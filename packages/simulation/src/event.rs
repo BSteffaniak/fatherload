@@ -1429,6 +1429,22 @@ pub enum ImpactSurface {
 pub struct GameplayEvent {
     pub id: GameplayEventId,
     pub kind: GameplayEventKind,
+    /// The store whose pass raised the event (Wave 13 QA: events are routed by place). An
+    /// event of a body's or free flight's store with no player attached reaches only the
+    /// seats and clients in that store; the home pass's events (`Home`, world-wide news
+    /// included) reach everyone as before.
+    #[serde(default)]
+    pub store: crate::place::StoreKey,
+}
+
+impl GameplayEvent {
+    /// Whether this event reaches a viewer in `viewer_store`: an event with a player attached
+    /// is that player's (callers route it), a home-pass event reaches everyone, and a
+    /// player-less event of another store reaches only viewers in that store.
+    #[must_use]
+    pub fn reaches_store(&self, has_player: bool, viewer_store: crate::place::StoreKey) -> bool {
+        has_player || self.store.is_home() || self.store == viewer_store
+    }
 }
 
 /// How one one-shot action submitted for a tick was resolved.
@@ -1469,6 +1485,9 @@ impl TickOutput {
         } = other;
         for event in events {
             self.push_event(event.kind);
+            if let Some(last) = self.events.last_mut() {
+                last.store = event.store;
+            }
         }
         self.action_outcomes.extend(action_outcomes);
         self.terrain_ops.extend(terrain_ops);
@@ -1484,7 +1503,20 @@ impl TickOutput {
                 ordinal,
             },
             kind,
+            store: crate::place::StoreKey::Home,
         });
+    }
+
+    /// Tags the events from index `from` on with the store `store_of` names for each (Wave 13
+    /// QA: events are routed by place).
+    pub(crate) fn stamp_stores(
+        &mut self,
+        from: usize,
+        mut store_of: impl FnMut(&GameplayEventKind) -> crate::place::StoreKey,
+    ) {
+        for event in self.events.iter_mut().skip(from) {
+            event.store = store_of(&event.kind);
+        }
     }
 }
 

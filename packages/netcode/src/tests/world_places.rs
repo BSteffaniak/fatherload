@@ -230,3 +230,82 @@ fn a_finite_relevance_keeps_players_in_other_places_out() {
         Place::Space
     );
 }
+
+/// Events are routed by place (Wave 13 QA): a player-less event raised by a body's pass is
+/// tagged with that body's store, and only clients in that store (or a spectator) receive
+/// it; a home-pass event and any event with a player attached reach everyone as before.
+#[test]
+fn a_bodys_player_less_events_reach_only_the_clients_there() {
+    use crate::world::WorldEvent;
+    use fatherload_simulation::{GameplayEvent, GameplayEventId, GameplayEventKind, TickInputs};
+    let mut world = world(60);
+    let away = fatherload_simulation::PlayerId::new(1);
+    world.add_player(away);
+    let body = Place::OnBody(BodyId::Space(BODY));
+    let mut inputs = TickInputs::default();
+    inputs.act_as(away, warp(body).remove(0));
+    let output = world.simulate_tick(world.simulation_tick(), &inputs);
+    let _ = output;
+    let output = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+    let _ = output;
+    assert_eq!(world.place_of(away), body);
+    // Every event of the body's own pass carries its store.
+    let mut inputs = TickInputs::default();
+    inputs.act_as(away, warp(Place::HOME).remove(0));
+    let output = world.simulate_tick(world.simulation_tick(), &inputs);
+    let moved = output
+        .events
+        .iter()
+        .find(|event| matches!(event.kind, GameplayEventKind::PlaceChanged { .. }))
+        .expect("the warp home is told");
+    assert_eq!(moved.store, StoreKey::Home, "a move is its destination's");
+    let mut inputs = TickInputs::default();
+    inputs.act_as(away, warp(body).remove(0));
+    let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+    let _ = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+    let event = |store| {
+        WorldEvent::Gameplay(GameplayEvent {
+            id: GameplayEventId {
+                tick: world.simulation_tick(),
+                ordinal: 0,
+            },
+            kind: GameplayEventKind::HazardChanged,
+            store,
+        })
+    };
+    let home_viewer = Some(PlayerId(0));
+    let body_viewer = Some(PlayerId(1));
+    let on_body = event(body.store());
+    assert!(!NetSimulation::event_visible(
+        &world,
+        &on_body,
+        None,
+        home_viewer
+    ));
+    assert!(NetSimulation::event_visible(
+        &world,
+        &on_body,
+        None,
+        body_viewer
+    ));
+    assert!(NetSimulation::event_visible(&world, &on_body, None, None));
+    assert!(NetSimulation::event_visible(
+        &world,
+        &on_body,
+        Some(PlayerId(1)),
+        home_viewer
+    ));
+    let at_home = event(StoreKey::Home);
+    assert!(NetSimulation::event_visible(
+        &world,
+        &at_home,
+        None,
+        body_viewer
+    ));
+    assert!(NetSimulation::event_visible(
+        &world,
+        &at_home,
+        None,
+        home_viewer
+    ));
+}

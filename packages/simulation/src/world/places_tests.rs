@@ -718,3 +718,51 @@ fn a_body_whose_ground_a_newer_build_regenerated_loads_fresh() {
     assert!(body.is_pristine());
     assert_eq!(body.fingerprint(), fingerprint);
 }
+
+/// Events are routed by place (Wave 13 QA): a pass's events carry its store through the merge
+/// of the tick's passes, and a warp's `PlaceChanged` is its destination's.
+#[test]
+fn every_pass_tags_its_events_with_its_store() {
+    use crate::event::{GameplayEventKind, TickOutput};
+    let mut home = TickOutput::default();
+    home.push_event(GameplayEventKind::HazardChanged);
+    let mut body = TickOutput::default();
+    body.push_event(GameplayEventKind::BouldersChanged);
+    body.push_event(GameplayEventKind::HazardChanged);
+    let store = StoreKey::Body(BODY_A);
+    body.stamp_stores(0, |_| store);
+    home.merge_pass(body);
+    let stores: Vec<StoreKey> = home.events.iter().map(|event| event.store).collect();
+    assert_eq!(stores, vec![StoreKey::Home, store, store]);
+    let ordinals: Vec<u32> = home.events.iter().map(|event| event.id.ordinal).collect();
+    assert_eq!(ordinals, vec![0, 1, 2], "numbered on");
+    assert!(!home.events[1].reaches_store(false, StoreKey::Home));
+    assert!(home.events[1].reaches_store(false, store));
+    assert!(home.events[1].reaches_store(true, StoreKey::Home));
+    assert!(home.events[0].reaches_store(false, store));
+
+    let mut world = deep_world(2);
+    world.enable_test_mode();
+    let mut inputs = TickInputs::default();
+    inputs.act_as(
+        TWO,
+        crate::PlayerCommand::TestMode(TestModeAction::WarpToPlace(place_of(BODY_A))),
+    );
+    let output = world.simulate_tick(world.simulation_tick(), &inputs);
+    let moved = output
+        .events
+        .iter()
+        .find(|event| matches!(event.kind, GameplayEventKind::PlaceChanged { .. }))
+        .expect("the warp is told");
+    assert_eq!(moved.store, store);
+    // Everything the body's own pass raises from now on is the body's.
+    for _ in 0..30 {
+        let output = world.simulate_tick(world.simulation_tick(), &TickInputs::default());
+        for event in &output.events {
+            if let GameplayEventKind::Planet { player_id, .. } = event.kind {
+                assert_eq!(player_id, Some(TWO));
+                assert_eq!(event.store, store);
+            }
+        }
+    }
+}

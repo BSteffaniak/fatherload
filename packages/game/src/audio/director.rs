@@ -481,6 +481,8 @@ impl Ambience {
 struct Listener {
     seat: usize,
     player_id: PlayerId,
+    /// The store the seat is in (Wave 13 QA: world sounds are heard by place).
+    store: fatherload_simulation::place::StoreKey,
     x: f32,
     y: f32,
     /// Pan of this seat's own sounds.
@@ -851,9 +853,18 @@ impl Director {
     /// Gain, pan and cutoff for a sound from `source`, or `None` when it is out of earshot.
     fn place(
         source: SoundSource,
+        store: fatherload_simulation::place::StoreKey,
         snapshot: &RenderSnapshot<'_>,
         listeners: &[Listener],
     ) -> Option<(f32, f32, f32)> {
+        // A sound in the world reaches only the seats in its store (Wave 13 QA: a body's
+        // creature is not heard by a seat at home whose rig stands at the same pixels).
+        let here: Vec<Listener> = listeners
+            .iter()
+            .filter(|listener| listener.store == store)
+            .copied()
+            .collect();
+        let listeners_here = here.as_slice();
         match source {
             SoundSource::Interface => Some((1.0, 0.0, 20_000.0)),
             SoundSource::Player(player) => {
@@ -866,9 +877,9 @@ impl Director {
                     return Some((1.0, listener.pan, cutoff));
                 }
                 let presentation = snapshot.players.iter().find(|p| p.player_id == player)?;
-                spatial(presentation.x, presentation.y, listeners)
+                spatial(presentation.x, presentation.y, listeners_here)
             }
-            SoundSource::World { x, y } => spatial(x as f32, y as f32, listeners),
+            SoundSource::World { x, y } => spatial(x as f32, y as f32, listeners_here),
         }
     }
 
@@ -877,7 +888,7 @@ impl Director {
         snapshot: &RenderSnapshot<'_>,
         listeners: &[Listener],
     ) -> Option<PlayRequest> {
-        let (gain, pan, cutoff) = Self::place(cue.source, snapshot, listeners)?;
+        let (gain, pan, cutoff) = Self::place(cue.source, cue.store, snapshot, listeners)?;
         let patch = cue_patch(cue.cue);
         let gain = gain
             * match cue.cue {
@@ -2754,6 +2765,12 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
             Listener {
                 seat: view.seat_index,
                 player_id: view.player_id,
+                store: view
+                    .place_scene
+                    .as_ref()
+                    .map_or(fatherload_simulation::place::StoreKey::Home, |scene| {
+                        scene.store
+                    }),
                 x,
                 y,
                 pan,

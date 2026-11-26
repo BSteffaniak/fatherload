@@ -324,7 +324,12 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   wrecks, encounters, each rig's guns and deflector, bosses beaten, bounties, raids), the
 ///   raid troopers (`EnemyKind::{RaidCorsair, SwarmSkitter, MachineTrooper}`) and the hostile
 ///   events 980-999 (`GameplayEventKind::Hostile`).
-pub const PROTOCOL_VERSION: u8 = 20;
+///
+/// Version 21 (Wave 13; every track's bump collapses into one):
+///
+/// * QA (w13-qa-perf): `GameplayEvent::store` (the store whose pass raised an event: a
+///   player-less event of a body or of free flight reaches only the clients there).
+pub const PROTOCOL_VERSION: u8 = 21;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

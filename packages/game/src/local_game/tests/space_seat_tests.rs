@@ -282,3 +282,100 @@ fn split_screen_seats_on_a_jungle_and_a_volcanic_world_each_see_their_own() {
         "each seat draws its own world"
     );
 }
+
+/// Events are routed by place (Wave 13 QA): a player-less event of one body (an eruption on a
+/// volcanic world) reaches the seat on that body (its message and a sound in that store) and
+/// never the seat at home, whose rig may stand at the same pixels of its own ground.
+#[test]
+fn a_player_less_event_on_a_body_reaches_only_the_seat_there() {
+    use fatherload_simulation::{
+        GameplayEvent, GameplayEventId, GameplayEventKind, SimulationTick, frontier::FrontierEvent,
+        space::Theme,
+    };
+    let settings = WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(SEED)
+    };
+    let world = WorldState::new_game_with_settings(
+        PLAYER,
+        &settings,
+        fatherload_simulation::SimulationParams::new(30),
+    );
+    let mut game = playing(world, 2, "qa-routed-events");
+    let seats: Vec<PlayerId> = game
+        .runtime
+        .local_seats()
+        .iter()
+        .map(|seat| seat.player)
+        .collect();
+    let volcanic = body_of_theme(SEED, Theme::Volcanic);
+    game.edit_world(|world| {
+        world.enable_test_mode();
+        if let Some(rig) = world.player_mut(seats[0]) {
+            rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
+        }
+        let mut inputs = TickInputs::default().hold_as(seats[0], ControlState::default());
+        inputs.act_as(
+            seats[0],
+            PlayerCommand::TestMode(fatherload_simulation::TestModeAction::WarpToPlace(volcanic)),
+        );
+        let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+    });
+    idle(&mut game, 10);
+    assert_eq!(game.world().place_of(seats[0]), volcanic);
+    assert!(game.world().place_of(seats[1]).store().is_home());
+    let (x, y) = game
+        .world()
+        .player(seats[1])
+        .map(|rig| (rig.x, rig.y))
+        .expect("the home seat's rig");
+    #[allow(clippy::cast_possible_truncation, reason = "test pixels")]
+    let eruption = |store| RuntimeEvent {
+        epoch: 1,
+        tick: 9_999,
+        player: None,
+        kind: 1,
+        ordinal: 0,
+        event: RuntimeEventKind::Gameplay(GameplayEvent {
+            id: GameplayEventId {
+                tick: SimulationTick::new(9_999),
+                ordinal: 0,
+            },
+            kind: GameplayEventKind::Frontier {
+                what: FrontierEvent::EruptionStarted,
+                player_id: None,
+                x: (x / 16.0) as i32,
+                y: (y / 16.0) as i32,
+            },
+            store,
+        }),
+    };
+    for seat in 0..2 {
+        game.shell.seat_mut(seat).message.clear();
+    }
+    game.frame_events = vec![eruption(volcanic.store())];
+    game.observe_events();
+    assert!(
+        game.shell.seat(0).message.contains("ERUPTION"),
+        "the seat on the volcanic world is told: {:?}",
+        game.shell.seat(0).message
+    );
+    assert!(
+        game.shell.seat(1).message.is_empty(),
+        "the seat at home is not: {:?}",
+        game.shell.seat(1).message
+    );
+    // Its sounds are the body's: a listener elsewhere never hears them.
+    let cues = game
+        .effects
+        .apply(&game.frame_events, game.runtime.world(), &seats);
+    assert!(cues.iter().all(|cue| cue.store == volcanic.store()));
+    // With only the home seat local, a body's player-less event makes no sound at all.
+    let mut effects = crate::effects::Effects::default();
+    let home_only = effects.apply(
+        &[eruption(volcanic.store())],
+        game.runtime.world(),
+        &seats[1..],
+    );
+    assert!(home_only.is_empty(), "nobody local is there: {home_only:?}");
+}

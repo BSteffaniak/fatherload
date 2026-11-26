@@ -340,13 +340,28 @@ impl Effects {
                     if matches!(gameplay.kind, GameplayEventKind::NightSkipped { .. })
             )
         });
+        // A world sound is heard only by seats in the store it happened in (Wave 13 QA): the
+        // cues each event adds are tagged with its store (at the next event, as the arms below
+        // `continue`, and after the last).
+        let mut stamped = 0;
+        let mut previous_store = fatherload_simulation::place::StoreKey::Home;
         for event in events {
+            stamp_cue_stores(&mut cues, &mut stamped, previous_store);
             let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
                 continue;
             };
-            let local = event
-                .player
-                .is_none_or(|player| local_players.contains(&player));
+            previous_store = gameplay.store;
+            // Routed by place (Wave 13 QA): a player-less event of a body or of free flight
+            // is heard only when a local seat is there.
+            let local = event.player.map_or_else(
+                || {
+                    gameplay.store.is_home()
+                        || local_players
+                            .iter()
+                            .any(|player| world.store_of(*player) == gameplay.store)
+                },
+                |player| local_players.contains(&player),
+            );
             match gameplay.kind {
                 GameplayEventKind::CargoChanged { player_id }
                 | GameplayEventKind::PoiOpened { player_id, .. } => {
@@ -931,6 +946,7 @@ impl Effects {
                 |player| PlacedCue::player(cue, player),
             ));
         }
+        stamp_cue_stores(&mut cues, &mut stamped, previous_store);
         for player_id in local_players {
             if let Some(player) = world.player(*player_id) {
                 self.cargo_totals.insert(*player_id, cargo_total(player));
@@ -1281,6 +1297,18 @@ fn cargo_total(player: &fatherload_simulation::Player) -> u32 {
         .sum()
 }
 
+/// Tags the cues added since `stamped` with `store` (the store of the event that made them).
+fn stamp_cue_stores(
+    cues: &mut [PlacedCue],
+    stamped: &mut usize,
+    store: fatherload_simulation::place::StoreKey,
+) {
+    for cue in cues.iter_mut().skip(*stamped) {
+        cue.store = store;
+    }
+    *stamped = cues.len();
+}
+
 #[cfg(test)]
 mod tests {
     use fatherload_simulation::{GameplayEvent, GameplayEventId, SimulationTick};
@@ -1300,6 +1328,7 @@ mod tests {
                     ordinal: 0,
                 },
                 kind,
+                store: fatherload_simulation::place::StoreKey::Home,
             }),
         }
     }

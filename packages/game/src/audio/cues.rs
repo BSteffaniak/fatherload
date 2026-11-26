@@ -33,6 +33,8 @@ pub enum SoundSource {
 pub struct PlacedCue {
     pub cue: SoundCue,
     pub source: SoundSource,
+    /// The store a world sound happened in (Wave 13 QA): only seats there hear it.
+    pub store: fatherload_simulation::place::StoreKey,
 }
 
 impl PlacedCue {
@@ -42,6 +44,7 @@ impl PlacedCue {
         Self {
             cue,
             source: SoundSource::Interface,
+            store: fatherload_simulation::place::StoreKey::Home,
         }
     }
 
@@ -51,6 +54,7 @@ impl PlacedCue {
         Self {
             cue,
             source: SoundSource::Player(player),
+            store: fatherload_simulation::place::StoreKey::Home,
         }
     }
 
@@ -68,6 +72,7 @@ impl PlacedCue {
                 x: x.round() as i32,
                 y: y.round() as i32,
             },
+            store: fatherload_simulation::place::StoreKey::Home,
         }
     }
 }

@@ -928,7 +928,11 @@ impl NetSimulation for WorldState {
         viewer: Option<PlayerId>,
     ) -> bool {
         match event {
-            WorldEvent::Gameplay(_) => true,
+            // Routed by place (Wave 13 QA): a player-less event of a body's or free flight's
+            // store reaches only the clients there (a spectator sees every store).
+            WorldEvent::Gameplay(gameplay) => viewer.is_none_or(|viewer| {
+                gameplay.reaches_store(player.is_some(), self.store_of(to_sim_player(viewer)))
+            }),
             // An action result names the command (a purchase, a loan, ...) and whether the
             // player could afford it: private to the player who submitted it.
             WorldEvent::ActionResolved { .. } => player.is_some() && player == viewer,
