@@ -258,6 +258,15 @@ pub fn reward_for(kind: MissionKind, station: &StationProfile, context: &BoardCo
         // the board shows that figure ([`offer`]).
         MissionKind::Bounty { .. } => return 0,
     };
+    // Wave 13: on the space credit scale (the delivery's goods already are; their share is
+    // taken back out so it is not scaled twice).
+    let base = match kind {
+        MissionKind::Deliver { good, units, .. } => {
+            let goods = u32::from(units) * good.base_price() / 2;
+            crate::endgame::economy::space_credits(base - goods) + goods
+        }
+        _ => crate::endgame::economy::space_credits(base),
+    };
     if station.kind == StationKind::Outpost {
         base + base / 5
     } else {

@@ -112,7 +112,15 @@ const fn assert_payload_kinds_listed(mineral: MineralKind, artifact: ArtifactKin
         | MineralKind::Uranium
         | MineralKind::Mythril
         | MineralKind::Skystone
-        | MineralKind::CloudSilver => {}
+        | MineralKind::CloudSilver
+        | MineralKind::MeteoricIron
+        | MineralKind::Kamacite
+        | MineralKind::VolatileIce
+        | MineralKind::CobaltBloom
+        | MineralKind::StarPlatinum
+        | MineralKind::Iridium
+        | MineralKind::Voidglass
+        | MineralKind::CometDust => {}
     }
     match artifact {
         ArtifactKind::Fossil
@@ -155,6 +163,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     ];
     kinds.extend(crate::worldgen::deposits::MINERALS.map(TileKind::Ore));
     kinds.extend([MineralKind::Skystone, MineralKind::CloudSilver].map(TileKind::Ore));
+    kinds.extend(crate::endgame::materials::SPACE_MATERIALS.map(TileKind::Ore));
     kinds.extend(
         [
             ArtifactKind::Fossil,
@@ -223,7 +232,7 @@ fn every_tile_code_round_trips_and_unknown_codes_are_rejected() {
     }
     for code in [
         12 << 8,
-        0x10C << 8,
+        0x11F << 8,
         0x21F << 8,
         0x3FF << 8,
         0x47F << 8,

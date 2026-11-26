@@ -31,8 +31,8 @@ use crate::{
 /// Patrons at a bar.
 pub const PATRONS: u8 = 3;
 /// What a round costs at a human bar, and at an alien one.
-pub const ROUND_PRICE: u32 = 30;
-pub const ALIEN_ROUND_PRICE: u32 = 45;
+pub const ROUND_PRICE: u32 = crate::endgame::economy::space_credits(30);
+pub const ALIEN_ROUND_PRICE: u32 = crate::endgame::economy::space_credits(45);
 
 const SALT_PATRON: u64 = 0x57A7_0301;
 

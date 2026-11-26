@@ -56,7 +56,17 @@ const fn depth_curve(mineral: MineralKind) -> (i32, i32, i32, u32) {
         MineralKind::Uranium => (128, 162, 220, 12),
         MineralKind::Mythril => (140, 190, 220, 9),
         // Sky ores never grow underground (the sky generator places them, V9).
-        MineralKind::Skystone | MineralKind::CloudSilver => (i32::MAX, i32::MAX, i32::MAX, 0),
+        // Nor do space materials (belts and comets give them, Wave 13 endgame).
+        MineralKind::Skystone
+        | MineralKind::CloudSilver
+        | MineralKind::MeteoricIron
+        | MineralKind::Kamacite
+        | MineralKind::VolatileIce
+        | MineralKind::CobaltBloom
+        | MineralKind::StarPlatinum
+        | MineralKind::Iridium
+        | MineralKind::Voidglass
+        | MineralKind::CometDust => (i32::MAX, i32::MAX, i32::MAX, 0),
     }
 }
 

@@ -99,14 +99,15 @@ impl AlienGood {
     /// Base price (credits) before understanding and the body's economy.
     #[must_use]
     pub const fn base_price(self) -> u32 {
-        match self {
+        // On the space credit scale (Wave 13).
+        crate::endgame::economy::space_credits(match self {
             Self::Primer(_) => 240,
             Self::SongLantern | Self::GeodeLamp | Self::MemoryGlass => 180,
             Self::FrostDown | Self::GlowPearls | Self::VeinChart => 260,
             Self::HullPlates => 150,
             Self::AirBloom => 90,
             Self::StarMemory => 420,
-        }
+        })
     }
 
     /// The home furniture it is, if it is a piece for a home.

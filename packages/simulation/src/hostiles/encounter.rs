@@ -497,7 +497,9 @@ pub fn bounty_targets(seed: u64, system: SystemRef, day: u32) -> Vec<BountyTarge
                 escorts: 2 + ring.min(4),
                 system: at.system,
                 pos,
-                reward: class.bounty() * (2 + u32::from(ring)) + 500,
+                reward: crate::endgame::economy::space_credits(
+                    class.bounty() * (2 + u32::from(ring)) + 500,
+                ),
             }
         })
         .collect()

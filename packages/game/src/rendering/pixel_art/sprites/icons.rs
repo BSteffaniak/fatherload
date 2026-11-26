@@ -493,6 +493,213 @@ mineral_icon!(
     CREAM
 );
 
+// --- Space materials (Wave 13 endgame) -----------------------------------------------------
+
+/// A pitted meteorite lump: `p` pits.
+const METEORITE: &[&str] = &[
+    "..ooooo..",
+    ".ommlmmo.",
+    "omplmmdmo",
+    "omllmpmdo",
+    "ompmmmmdo",
+    "ommmpmddo",
+    ".odmmddo.",
+    "..ooooo..",
+    ".........",
+];
+
+/// Cut nickel-iron with its crosshatch (`x`).
+const CROSSHATCH: &[&str] = &[
+    "..ooooo..",
+    ".olxlmxo.",
+    "olmxlxmdo",
+    "omlxmxmdo",
+    "oxmmxmxdo",
+    "omxmxmddo",
+    ".odxmddo.",
+    "..ooooo..",
+    ".........",
+];
+
+/// An ice shard fuming (`v` vapour).
+const FUMING_SHARD: &[&str] = &[
+    "v...o..v.",
+    "...owo...",
+    "..owlmo..",
+    ".v.olmo.v",
+    "..olmmo..",
+    "..olmdo..",
+    ".olmmmdo.",
+    ".oddddoo.",
+    "..ooooo..",
+];
+
+/// A crust of crystals on dark rock (`r`).
+const BLOOM: &[&str] = &[
+    ".........",
+    "..o...o..",
+    ".owo.owo.",
+    ".olmoolmo",
+    "olmdoolmo",
+    "olmmdomdo",
+    "orrrrrro.",
+    ".oooooo..",
+    ".........",
+];
+
+/// A bright nugget with a star glint.
+const STAR_NUGGET: &[&str] = &[
+    "....w....",
+    "...ooo...",
+    "..owlmo..",
+    ".owwlmmo.",
+    ".olllmmdo",
+    "olllmmmdo",
+    "olmmmmddo",
+    ".oddddoo.",
+    "..oooo...",
+];
+
+/// A dense, squared nugget.
+const DENSE: &[&str] = &[
+    ".........",
+    "..ooooo..",
+    ".ollllmo.",
+    "olwllmmdo",
+    "olllmmmdo",
+    "ommmmmddo",
+    ".odddddo.",
+    "..ooooo..",
+    ".........",
+];
+
+/// A shard of black glass full of stars (`x`).
+const STARRY_SHARD: &[&str] = &[
+    "....o....",
+    "...owo...",
+    "..omxmo..",
+    "..ommdo..",
+    ".omxmmdo.",
+    ".ommmxdo.",
+    "omxmmmddo",
+    "oddddddoo",
+    ".ooooooo.",
+];
+
+/// A little heap of glittering dust (`x` sparkles).
+const DUST_HEAP: &[&str] = &[
+    "x.......x",
+    "....x....",
+    "..x......",
+    "...ooo.x.",
+    "..owlmo..",
+    ".olllmdo.",
+    "olmlmmmdo",
+    "oddddddoo",
+    ".ooooooo.",
+];
+
+pub const METEORIC_IRON_ORE: SpriteDef = SpriteDef {
+    name: "icon_meteoric_iron",
+    legend: &[
+        ('o', INK),
+        ('d', STONE_DARK),
+        ('m', RUST),
+        ('l', STONE),
+        ('w', STONE_LIGHT),
+        ('p', NIGHT),
+    ],
+    frames: &[METEORITE],
+    frame_seconds: 0.0,
+};
+pub const KAMACITE_ORE: SpriteDef = SpriteDef {
+    name: "icon_kamacite",
+    legend: &[
+        ('o', INK),
+        ('d', STEEL_DARK),
+        ('m', STEEL),
+        ('l', STEEL_LIGHT),
+        ('x', BONE),
+    ],
+    frames: &[CROSSHATCH],
+    frame_seconds: 0.0,
+};
+pub const VOLATILE_ICE_ORE: SpriteDef = SpriteDef {
+    name: "icon_volatile_ice",
+    legend: &[
+        ('o', INK),
+        ('d', OCEAN),
+        ('m', SKY_LIGHT),
+        ('l', ICE),
+        ('w', BONE),
+        ('v', FOG),
+    ],
+    frames: &[FUMING_SHARD],
+    frame_seconds: 0.0,
+};
+pub const COBALT_BLOOM_ORE: SpriteDef = SpriteDef {
+    name: "icon_cobalt_bloom",
+    legend: &[
+        ('o', INK),
+        ('d', PLUM),
+        ('m', VIOLET),
+        ('l', PINK),
+        ('w', BONE),
+        ('r', SLATE_DARK),
+    ],
+    frames: &[BLOOM],
+    frame_seconds: 0.0,
+};
+pub const STAR_PLATINUM_ORE: SpriteDef = SpriteDef {
+    name: "icon_star_platinum",
+    legend: &[
+        ('o', INK),
+        ('d', STEEL),
+        ('m', MIST),
+        ('l', BONE),
+        ('w', CREAM),
+    ],
+    frames: &[STAR_NUGGET],
+    frame_seconds: 0.0,
+};
+pub const IRIDIUM_ORE: SpriteDef = SpriteDef {
+    name: "icon_iridium",
+    legend: &[
+        ('o', INK),
+        ('d', SLATE_DARK),
+        ('m', SLATE_LIGHT),
+        ('l', STEEL_LIGHT),
+        ('w', ICE),
+    ],
+    frames: &[DENSE],
+    frame_seconds: 0.0,
+};
+pub const VOIDGLASS_ORE: SpriteDef = SpriteDef {
+    name: "icon_voidglass",
+    legend: &[
+        ('o', LAVENDER),
+        ('d', NIGHT),
+        ('m', PLUM),
+        ('w', LAVENDER),
+        ('x', BONE),
+    ],
+    frames: &[STARRY_SHARD],
+    frame_seconds: 0.0,
+};
+pub const COMET_DUST_ORE: SpriteDef = SpriteDef {
+    name: "icon_comet_dust",
+    legend: &[
+        ('o', INK),
+        ('d', TEAL_DARK),
+        ('m', TEAL),
+        ('l', MINT),
+        ('w', BONE),
+        ('x', SKY_LIGHT),
+    ],
+    frames: &[DUST_HEAP],
+    frame_seconds: 0.0,
+};
+
 /// The icon for `mineral`.
 #[must_use]
 pub const fn mineral(mineral: MineralKind) -> &'static SpriteDef {
@@ -509,6 +716,14 @@ pub const fn mineral(mineral: MineralKind) -> &'static SpriteDef {
         MineralKind::Mythril => &MYTHRIL_ORE,
         MineralKind::Skystone => &SKYSTONE_ORE,
         MineralKind::CloudSilver => &CLOUD_SILVER_ORE,
+        MineralKind::MeteoricIron => &METEORIC_IRON_ORE,
+        MineralKind::Kamacite => &KAMACITE_ORE,
+        MineralKind::VolatileIce => &VOLATILE_ICE_ORE,
+        MineralKind::CobaltBloom => &COBALT_BLOOM_ORE,
+        MineralKind::StarPlatinum => &STAR_PLATINUM_ORE,
+        MineralKind::Iridium => &IRIDIUM_ORE,
+        MineralKind::Voidglass => &VOIDGLASS_ORE,
+        MineralKind::CometDust => &COMET_DUST_ORE,
     }
 }
 

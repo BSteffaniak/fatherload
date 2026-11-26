@@ -436,7 +436,8 @@ impl FlightGearKind {
             Self::AutoLand => 2_800,
             Self::MiningBeam => 3_400,
         };
-        base * (level as u32 + 1)
+        // On the space credit scale (Wave 13).
+        crate::endgame::economy::space_credits(base * (level as u32 + 1))
     }
 }
 

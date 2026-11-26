@@ -600,6 +600,14 @@ const fn mineral_color(mineral: MineralKind) -> Color {
         MineralKind::Mythril => palette::LAVENDER,
         MineralKind::Skystone => palette::SKY_LIGHT,
         MineralKind::CloudSilver => palette::BONE,
+        MineralKind::MeteoricIron => palette::RUST,
+        MineralKind::Kamacite => palette::STEEL,
+        MineralKind::VolatileIce => palette::FOG,
+        MineralKind::CobaltBloom => palette::VIOLET,
+        MineralKind::StarPlatinum => palette::MIST,
+        MineralKind::Iridium => palette::SLATE_LIGHT,
+        MineralKind::Voidglass => palette::PLUM,
+        MineralKind::CometDust => palette::TEAL,
     }
 }
 

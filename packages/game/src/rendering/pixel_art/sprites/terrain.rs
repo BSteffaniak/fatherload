@@ -142,6 +142,79 @@ pub const ORE_MYTHRIL_GEODE: SpriteDef = SpriteDef {
     frames: &[GEM],
     frame_seconds: 0.0,
 };
+// Space materials (Wave 13 endgame).
+ore_stamp!(
+    ORE_METEORIC_IRON,
+    "ore_meteoric_iron",
+    CHUNK,
+    STONE_DARK,
+    RUST,
+    STONE,
+    STONE_LIGHT
+);
+ore_stamp!(
+    ORE_KAMACITE,
+    "ore_kamacite",
+    CHUNK,
+    STEEL_DARK,
+    STEEL,
+    STEEL_LIGHT,
+    BONE
+);
+ore_stamp!(
+    ORE_VOLATILE_ICE,
+    "ore_volatile_ice",
+    GEM,
+    OCEAN,
+    SKY_LIGHT,
+    ICE,
+    BONE
+);
+ore_stamp!(
+    ORE_COBALT_BLOOM,
+    "ore_cobalt_bloom",
+    GEM,
+    PLUM,
+    VIOLET,
+    PINK,
+    BONE
+);
+ore_stamp!(
+    ORE_STAR_PLATINUM,
+    "ore_star_platinum",
+    NUGGET,
+    STEEL,
+    MIST,
+    BONE,
+    CREAM
+);
+ore_stamp!(
+    ORE_IRIDIUM,
+    "ore_iridium",
+    NUGGET,
+    SLATE_DARK,
+    SLATE_LIGHT,
+    STEEL_LIGHT,
+    ICE
+);
+ore_stamp!(
+    ORE_VOIDGLASS,
+    "ore_voidglass",
+    GEM,
+    NIGHT,
+    PLUM,
+    LAVENDER,
+    BONE
+);
+ore_stamp!(
+    ORE_COMET_DUST,
+    "ore_comet_dust",
+    FLAKE,
+    TEAL_DARK,
+    TEAL,
+    MINT,
+    BONE
+);
 // Volatile crystals in explosive pockets.
 ore_stamp!(
     VOLATILE_CRYSTAL,
@@ -169,6 +242,16 @@ pub const fn ore_stamp(mineral: MineralKind) -> (&'static SpriteDef, u32) {
         MineralKind::Mythril => (&ORE_MYTHRIL, 3),
         MineralKind::Skystone => (&ORE_SKYSTONE, 3),
         MineralKind::CloudSilver => (&ORE_CLOUD_SILVER, 4),
+        // Space materials never lie in a world's ground (Wave 13 endgame); their own stamps,
+        // should a tool or a later world ever place one.
+        MineralKind::MeteoricIron => (&ORE_METEORIC_IRON, 3),
+        MineralKind::Kamacite => (&ORE_KAMACITE, 3),
+        MineralKind::VolatileIce => (&ORE_VOLATILE_ICE, 3),
+        MineralKind::CobaltBloom => (&ORE_COBALT_BLOOM, 3),
+        MineralKind::StarPlatinum => (&ORE_STAR_PLATINUM, 3),
+        MineralKind::Iridium => (&ORE_IRIDIUM, 3),
+        MineralKind::Voidglass => (&ORE_VOIDGLASS, 3),
+        MineralKind::CometDust => (&ORE_COMET_DUST, 4),
     }
 }
 

@@ -71,10 +71,10 @@ impl Good {
         }
     }
 
-    /// Base price, credits a unit.
+    /// Base price, credits a unit (on the space credit scale, Wave 13).
     #[must_use]
     pub const fn base_price(self) -> u32 {
-        match self {
+        crate::endgame::economy::space_credits(match self {
             Self::WaterIce => 40,
             Self::Hydroponics => 55,
             Self::MachineParts => 110,
@@ -84,7 +84,7 @@ impl Good {
             Self::XenoSilk => 320,
             Self::SalvagedAlloy => 130,
             Self::BuilderRelic => 600,
-        }
+        })
     }
 
     /// Its wire id (the index in [`Self::ALL`]).

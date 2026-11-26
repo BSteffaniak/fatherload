@@ -864,7 +864,7 @@ impl Tile {
     #[must_use]
     #[allow(clippy::too_many_lines, reason = "one arm per tile family")]
     pub const fn from_code(code: u64) -> Option<Self> {
-        const MINERALS: [MineralKind; 12] = [
+        const MINERALS: [MineralKind; 20] = [
             MineralKind::Copper,
             MineralKind::Iron,
             MineralKind::Silver,
@@ -877,6 +877,14 @@ impl Tile {
             MineralKind::Mythril,
             MineralKind::Skystone,
             MineralKind::CloudSilver,
+            MineralKind::MeteoricIron,
+            MineralKind::Kamacite,
+            MineralKind::VolatileIce,
+            MineralKind::CobaltBloom,
+            MineralKind::StarPlatinum,
+            MineralKind::Iridium,
+            MineralKind::Voidglass,
+            MineralKind::CometDust,
         ];
         const ARTIFACTS: [ArtifactKind; 18] = [
             ArtifactKind::Fossil,

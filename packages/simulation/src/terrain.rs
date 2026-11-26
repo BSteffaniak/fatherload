@@ -50,6 +50,25 @@ pub enum MineralKind {
     /// Sky ore of the cloud archipelagos' deeper rock: silver that rings like a bell, as hard as
     /// stone.
     CloudSilver,
+    // Space materials (Wave 13 endgame, see [`crate::endgame::materials`]): mined from belt
+    // rocks and gathered from comet tails, never grown in a world's ground. Appended: the
+    // earlier minerals keep their codes.
+    /// Belt iron: rust-dark meteoric iron, pitted by the vacuum (the commonest belt ore).
+    MeteoricIron,
+    /// Belt nickel: kamacite, nickel-iron with a silver crosshatch when cut.
+    Kamacite,
+    /// Belt ice: volatile ice that fumes in sunlight (fuel and air for the Works).
+    VolatileIce,
+    /// Belt cobalt: cobalt bloom, crusts of pink-violet crystals on dark rock.
+    CobaltBloom,
+    /// Belt platinum: star platinum, a white metal that never tarnishes.
+    StarPlatinum,
+    /// Belt iridium: dense blue-grey iridium nuggets, the hull-maker's metal.
+    Iridium,
+    /// Belt voidglass: black glass full of pinprick stars (the rarest belt ore).
+    Voidglass,
+    /// Comet dust: glittering dust swept from a comet's tail.
+    CometDust,
 }
 
 impl MineralKind {
@@ -68,6 +87,14 @@ impl MineralKind {
             Self::Mythril => "Mythril",
             Self::Skystone => "Skystone",
             Self::CloudSilver => "Cloud Silver",
+            Self::MeteoricIron => "Meteoric Iron",
+            Self::Kamacite => "Kamacite",
+            Self::VolatileIce => "Volatile Ice",
+            Self::CobaltBloom => "Cobalt Bloom",
+            Self::StarPlatinum => "Star Platinum",
+            Self::Iridium => "Iridium",
+            Self::Voidglass => "Voidglass",
+            Self::CometDust => "Comet Dust",
         }
     }
 
@@ -86,6 +113,17 @@ impl MineralKind {
             Self::Mythril => 520,
             Self::Skystone => 58,
             Self::CloudSilver => 150,
+            // Space materials are priced on the space credit scale
+            // ([`crate::endgame::economy::SPACE_CREDIT_SCALE`]): a common belt ore a little
+            // over a Heart ore unit's classic value, the rare ones capped per rock.
+            Self::MeteoricIron => 40,
+            Self::Kamacite => 70,
+            Self::VolatileIce => 55,
+            Self::CobaltBloom => 160,
+            Self::StarPlatinum => 1_500,
+            Self::Iridium => 4_000,
+            Self::Voidglass => 10_000,
+            Self::CometDust => 5_000,
         }
     }
 }
@@ -2476,7 +2514,17 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
             MineralKind::Diamond
             | MineralKind::Platinum
             | MineralKind::Uranium
-            | MineralKind::Mythril,
+            | MineralKind::Mythril
+            // Space materials never lie in a world's ground; as hard as the deep ores if a
+            // tool ever places one.
+            | MineralKind::MeteoricIron
+            | MineralKind::Kamacite
+            | MineralKind::VolatileIce
+            | MineralKind::CobaltBloom
+            | MineralKind::StarPlatinum
+            | MineralKind::Iridium
+            | MineralKind::Voidglass
+            | MineralKind::CometDust,
         )
         | TileKind::Artifact(
             ArtifactKind::BuriedIdol | ArtifactKind::StarCore | ArtifactKind::CloudPearl,

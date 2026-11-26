@@ -76,11 +76,12 @@ pub const REST_HULL_SHARE: f32 = 0.25;
 /// What a home plot in a town of `species` costs (land and building).
 #[must_use]
 pub const fn home_price(species: AlienSpecies) -> u32 {
-    match species {
+    // On the space credit scale (Wave 13).
+    crate::endgame::economy::space_credits(match species {
         AlienSpecies::Vessi => 2_400,
         AlienSpecies::Tokkari => 2_000,
         AlienSpecies::Siphra => 2_800,
-    }
+    })
 }
 
 /// The species of `character`, if one of the friendly aliens.

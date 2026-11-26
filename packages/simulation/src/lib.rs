@@ -30,6 +30,7 @@ pub mod descent;
 pub mod distortion;
 pub mod drowned;
 pub mod economy;
+pub mod endgame;
 pub mod enemy;
 pub mod entity;
 pub mod environment;

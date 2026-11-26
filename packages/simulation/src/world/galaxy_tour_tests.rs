@@ -88,7 +88,7 @@ fn world() -> WorldState {
     rig.hazard_gear.arms = crate::hostiles::ShipGear::default();
     rig.hull = rig.max_hull();
     rig.fuel = rig.fuel_capacity;
-    rig.credits = 16_000;
+    rig.credits = crate::endgame::economy::space_credits(16_000);
     world
 }
 

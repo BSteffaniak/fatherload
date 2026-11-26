@@ -33,7 +33,7 @@ pub const GIFT_UNDERSTANDING: Understanding = 18;
 /// Understanding a lesson at the lexicon house gives (one a day per species).
 pub const LESSON_UNDERSTANDING: Understanding = 70;
 /// Credits a lesson costs.
-pub const LESSON_PRICE: u32 = 60;
+pub const LESSON_PRICE: u32 = crate::endgame::economy::space_credits(60);
 /// Understanding a lexicon stone dug out gives.
 pub const LEXICON_STONE_UNDERSTANDING: Understanding = 110;
 /// Understanding a finished quest chapter gives.

@@ -107,7 +107,8 @@ impl ShipLine {
     }
 
     /// Credits for tier `tier` (1-5): the first is about an hour's earnings on a first trip out
-    /// (see [`super::balance`]), each next about 1.9 times the last.
+    /// (see [`super::balance`]), each next about 1.9 times the last; on the space credit scale
+    /// ([`crate::endgame::economy::SPACE_CREDIT_SCALE`], Wave 13).
     #[must_use]
     pub const fn price(self, tier: u8) -> u32 {
         let base = match self {
@@ -119,7 +120,9 @@ impl ShipLine {
         };
         let steps: [u32; 5] = [100, 190, 360, 680, 1_300];
         let index = if tier == 0 { 0 } else { tier as usize - 1 };
-        base / 100 * steps[if index > 4 { 4 } else { index }]
+        crate::endgame::economy::space_credits(
+            base / 100 * steps[if index > 4 { 4 } else { index }],
+        )
     }
 }
 
@@ -159,7 +162,7 @@ impl SpaceGear {
             Self::ToxicFilter => 2_200,
             Self::GravityStruts => 2_600,
         };
-        if tier >= 2 { base * 3 } else { base }
+        crate::endgame::economy::space_credits(if tier >= 2 { base * 3 } else { base })
     }
 }
 
@@ -202,12 +205,12 @@ impl AlienTech {
 
     #[must_use]
     pub const fn price(self) -> u32 {
-        match self {
+        crate::endgame::economy::space_credits(match self {
             Self::PhaseLattice => 7_500,
             Self::GravitonSpool => 9_000,
             Self::XenoLens => 6_500,
             Self::SymbiontWeave => 11_000,
-        }
+        })
     }
 
     /// What it does (the shop line).

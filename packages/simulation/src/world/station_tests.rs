@@ -180,7 +180,8 @@ fn docking_opens_the_hub_and_every_service_works() {
         ),
         StationRefusal::Credits
     ));
-    world.player_mut(PLAYER).expect("rig").credits = 100_000;
+    world.player_mut(PLAYER).expect("rig").credits =
+        crate::endgame::economy::space_credits(100_000);
     for tier in 1..=2 {
         let events = hub(
             &mut world,
@@ -193,7 +194,10 @@ fn docking_opens_the_hub_and_every_service_works() {
     }
     assert_eq!(world.ship_gear(PLAYER).engine, 2);
     let spent = ShipLine::Engine.price(1) + ShipLine::Engine.price(2);
-    assert_eq!(world.player(PLAYER).expect("rig").credits, 100_000 - spent);
+    assert_eq!(
+        world.player(PLAYER).expect("rig").credits,
+        crate::endgame::economy::space_credits(100_000) - spent
+    );
     assert!(refused(
         &hub(
             &mut world,
@@ -465,7 +469,8 @@ fn ship_lines_apply_in_flight() {
 #[test]
 fn alien_stations_sell_alien_tech_and_derelicts_are_stripped_once() {
     let mut world = world_at(30);
-    world.player_mut(PLAYER).expect("rig").credits = 100_000;
+    world.player_mut(PLAYER).expect("rig").credits =
+        crate::endgame::economy::space_credits(100_000);
     let stations = stations_near(&world, 3);
     let alien = stations
         .iter()
@@ -828,7 +833,8 @@ fn a_bot_completes_the_starter_board_with_the_players_controls() {
 fn station_state_saves_and_replicates() {
     assert!(SectionKey::SHARED.contains(&SectionKey::Stations));
     let mut world = world_at(30);
-    world.player_mut(PLAYER).expect("rig").credits = 100_000;
+    world.player_mut(PLAYER).expect("rig").credits =
+        crate::endgame::economy::space_credits(100_000);
     dock_at(&mut world, HALCYON);
     let _ = hub(
         &mut world,
@@ -859,7 +865,8 @@ fn station_state_saves_and_replicates() {
     assert_eq!(own.ship_gear(PLAYER).hold, 1);
     // The same actions give the same world on another run.
     let mut again = world_at(30);
-    again.player_mut(PLAYER).expect("rig").credits = 100_000;
+    again.player_mut(PLAYER).expect("rig").credits =
+        crate::endgame::economy::space_credits(100_000);
     dock_at(&mut again, HALCYON);
     let _ = hub(
         &mut again,

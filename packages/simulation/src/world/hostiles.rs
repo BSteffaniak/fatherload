@@ -447,14 +447,17 @@ impl WorldState {
     /// the credits, 150-5,000.
     fn demand_of(&self, player_id: PlayerId) -> u32 {
         let Some(player) = self.players.get(&player_id) else {
-            return 150;
+            return crate::endgame::economy::space_credits(150);
         };
         let cargo: u32 = player
             .cargo_bay
             .stacks()
             .map(|stack| stack.kind.base_value().saturating_mul(stack.count))
             .fold(0, u32::saturating_add);
-        (cargo / 4 + player.credits / 20).clamp(150, 5_000)
+        (cargo / 4 + player.credits / 20).clamp(
+            crate::endgame::economy::space_credits(150),
+            crate::endgame::economy::space_credits(5_000),
+        )
     }
 
     // --- Test mode ----------------------------------------------------------------------------
@@ -1415,7 +1418,9 @@ impl WorldState {
             pos: ship.pos,
             vx: ship.vx * 0.3,
             vy: ship.vy * 0.3,
-            credits: stats.credits + stats.credits * u32::from(ring.saturating_sub(1)) / 4,
+            credits: crate::endgame::economy::space_credits(
+                stats.credits + stats.credits * u32::from(ring.saturating_sub(1)) / 4,
+            ),
             cargo,
             expires: step + WRECK_LIFE_STEPS,
             tech: ship.class.is_boss().then(|| ship.class.faction().tech()),

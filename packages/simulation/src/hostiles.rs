@@ -1228,7 +1228,8 @@ impl ShipGearKind {
             Self::Missiles => 2_800,
             Self::Shield => 2_600,
         };
-        base * (level as u32 + 1)
+        // On the space credit scale (Wave 13).
+        crate::endgame::economy::space_credits(base * (level as u32 + 1))
     }
 
     /// Wire code.

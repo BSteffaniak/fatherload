@@ -747,6 +747,14 @@ pub struct StratumRun {
     pub crafted: u32,
     /// Every new thing met in it (minutes since it began, kind, name), in order (Wave 8).
     pub events: Vec<(f64, NoveltyKind, String)>,
+    /// The bot's purse when it left (credits; Wave 13 endgame: the late purse a rig carries
+    /// into space is the last stratum's).
+    pub purse: f64,
+    /// What one everyday mining trip from the stratum's base earned on leaving (credits, after
+    /// fuel) and how long it took (minutes): the income the space economy's late curve is
+    /// matched against.
+    pub trip_credits: f64,
+    pub trip_minutes: f64,
 }
 
 impl StratumRun {
@@ -1273,6 +1281,7 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
         let mut crafted = 0_u32;
         let mut everyday = 0.0_f64;
         let mut stalled = 0_u32;
+        let mut last_trip = (0.0_f64, 0.0_f64);
         // A part from the workshop pays only part of a tier's price (resources for the rest),
         // when a recipe for the line is known by this Descent's outposts.
         let part_for = |kind: UpgradeKind| {
@@ -1474,6 +1483,7 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
                 run.credits * sale - refuel - jump_credits
             };
             rig.credits = (rig.credits + gain).max(0.0);
+            last_trip = (gain.max(0.0), run.seconds / 60.0);
             if gain <= 0.0 {
                 stalled += 1;
                 if stalled > 40 {
@@ -1623,6 +1633,9 @@ pub fn run_descent(registry: &dyn StratumRegistry, config: &DescentConfig) -> De
             purchases,
             crafted,
             events,
+            purse: rig.credits,
+            trip_credits: last_trip.0,
+            trip_minutes: last_trip.1,
         });
     }
     DescentRun {
@@ -2333,5 +2346,31 @@ mod tests {
             sections: vec![descent_section(&run)],
         };
         println!("{}", report.to_markdown());
+    }
+}
+
+#[cfg(test)]
+mod purse_probe {
+    #[test]
+    #[ignore = "probe"]
+    fn print_purse() {
+        use super::*;
+        let config = DescentConfig {
+            strata_limit: None,
+            calibrate: false,
+            tick_rate_hz: 60,
+        };
+        let run = run_descent(&RegistryStrata::default_world(), &config);
+        for s in &run.strata {
+            eprintln!(
+                "{} d{} h{:.1} purse {:.0} trip {:.0} in {:.1} min",
+                s.stratum.name,
+                s.stratum.descent,
+                s.end_hours,
+                s.purse,
+                s.trip_credits,
+                s.trip_minutes
+            );
+        }
     }
 }

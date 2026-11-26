@@ -212,7 +212,8 @@ fn halcyons_first_board_is_a_scan_a_quota_and_a_delivery() {
         assert!(board[2].is_some(), "seed {seed}");
         for mission in board.iter().flatten() {
             assert!(
-                mission.reward >= 600 && mission.reward < 6_000,
+                mission.reward >= crate::endgame::economy::space_credits(600)
+                    && mission.reward < crate::endgame::economy::space_credits(6_000),
                 "{mission:?}"
             );
             assert!(!mission.ready());

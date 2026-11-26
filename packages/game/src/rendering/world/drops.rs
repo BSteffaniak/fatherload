@@ -68,6 +68,15 @@ fn shine(item: ItemKind) -> (Color, u8) {
                 fatherload_simulation::terrain::MineralKind::Mythril => LAVENDER,
                 fatherload_simulation::terrain::MineralKind::Skystone => SKY,
                 fatherload_simulation::terrain::MineralKind::CloudSilver => BONE,
+                // Space materials (Wave 13 endgame).
+                fatherload_simulation::terrain::MineralKind::MeteoricIron => RUST,
+                fatherload_simulation::terrain::MineralKind::Kamacite => STEEL_LIGHT,
+                fatherload_simulation::terrain::MineralKind::VolatileIce => FOG,
+                fatherload_simulation::terrain::MineralKind::CobaltBloom => VIOLET,
+                fatherload_simulation::terrain::MineralKind::StarPlatinum => CREAM,
+                fatherload_simulation::terrain::MineralKind::Iridium => STEEL,
+                fatherload_simulation::terrain::MineralKind::Voidglass => PLUM,
+                fatherload_simulation::terrain::MineralKind::CometDust => MINT,
             };
             // Cheap ore barely glows; jackpots shine.
             let strength = u8::try_from((value / 6).clamp(18, 80)).unwrap_or(80);

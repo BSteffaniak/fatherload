@@ -444,8 +444,8 @@ pub const ROCK_QUERY_TILES: i64 = 480;
 /// Seconds a unit of comet dust takes to gather in a tail, and the most a comet gives the crew.
 pub const COMET_GATHER_SECONDS: f32 = 2.5;
 pub const COMET_HARVEST_CAP: u16 = 6;
-/// What a comet's tail gives (a stand-in until Wave 13 adds space items).
-pub const COMET_MINERAL: MineralKind = MineralKind::Mythril;
+/// What a comet's tail gives (Wave 13 endgame: comet dust, a space material).
+pub const COMET_MINERAL: MineralKind = crate::endgame::materials::COMET_MATERIAL;
 
 /// A rock of a belt (in [`FlightBody::extra`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -473,19 +473,11 @@ pub struct CometKey {
     pub index: u8,
 }
 
-/// The cargo an asteroid's ore becomes (Wave 13's space items replace these
-/// stand-ins when a track adds them; the mapping is the one place to change).
+/// The cargo an asteroid's ore becomes: its own space material (Wave 13 endgame,
+/// [`crate::endgame::materials::belt_material`]; Wave 12 mined home minerals as stand-ins).
 #[must_use]
 pub const fn asteroid_mineral(ore: AsteroidOre) -> MineralKind {
-    match ore {
-        AsteroidOre::Iron => MineralKind::Iron,
-        AsteroidOre::Nickel => MineralKind::Silver,
-        AsteroidOre::Ice => MineralKind::Skystone,
-        AsteroidOre::Cobalt => MineralKind::Ruby,
-        AsteroidOre::Platinum => MineralKind::Platinum,
-        AsteroidOre::Iridium => MineralKind::Diamond,
-        AsteroidOre::Voidglass => MineralKind::Uranium,
-    }
+    crate::endgame::materials::belt_material(ore)
 }
 
 /// Seconds a unit of ore takes to drill at `drill_level` (1-based) in contact.

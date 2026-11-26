@@ -645,7 +645,8 @@ impl WorldState {
             return Err(StationRefusal::Stripped);
         }
         let roll = station_hash(self.world_seed(), profile.id, SALT_SALVAGE);
-        let credits = 400 + u32::try_from(roll % 600).unwrap_or(0);
+        let credits =
+            crate::endgame::economy::space_credits(400 + u32::try_from(roll % 600).unwrap_or(0));
         let room = self
             .hold_capacity_of(player_id)
             .saturating_sub(self.stations.hold_used(player_id));
