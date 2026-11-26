@@ -72,6 +72,9 @@ fn the_palette_opens_only_in_a_test_mode_world() {
     let _ = press(&mut game, backtick());
     assert!(!game.shell.console.open);
     assert!(game.shell.gameplay_input_enabled(0));
+    // The pause menu opens it too (a phone whose top row has no room for CMD), in test mode only.
+    assert!(PauseOption::for_session(None, true).contains(&PauseOption::CommandPalette));
+    assert!(!PauseOption::for_session(None, false).contains(&PauseOption::CommandPalette));
 }
 
 #[test]

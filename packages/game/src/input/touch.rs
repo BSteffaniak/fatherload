@@ -397,7 +397,7 @@ const HUD_CORNER_PANELS: (f32, f32, f32) = (184.0, 128.0, 78.0);
 const ROTATE_BUTTON_RADIUS: f32 = 0.42;
 /// Radius of the small buttons along the top edge, in button widths.
 const TOP_BUTTON_RADIUS: f32 = 0.3;
-/// Most buttons a dropped top row holds before it wraps to a second row.
+/// Most buttons a dropped top row holds (past it, CMD leaves the row for the pause menu).
 const DROPPED_ROW_MAX: usize = 5;
 /// Radius of a tools-fan item, in button widths.
 const FAN_RADIUS: f32 = 0.42;
@@ -719,15 +719,19 @@ impl TouchLayout {
         } else {
             0.0
         };
-        // A dropped row keeps to the stick's side within the span of `DROPPED_ROW_MAX`
-        // buttons: more (a test-mode world's ATLAS and CMD on top of the rest, Wave 14) sit
-        // closer and a little smaller, clear of the thumb cluster.
-        #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
-        let (pitch, radius) = if dropped && controls.len() > DROPPED_ROW_MAX {
-            let pitch = pitch * (DROPPED_ROW_MAX as f32 - 1.0) / (controls.len() as f32 - 1.0);
-            (pitch, radius.min(pitch * 0.46))
+        // A dropped row keeps to the stick's side: past `DROPPED_ROW_MAX` buttons (a test-mode
+        // world's ATLAS and CMD on top of the rest, Wave 14) CMD stays off it, clear of the
+        // thumb cluster (the pause menu's Command Palette opens the palette there).
+        let crowded: Vec<TouchControl>;
+        let controls = if dropped && controls.len() > DROPPED_ROW_MAX {
+            crowded = controls
+                .iter()
+                .copied()
+                .filter(|control| *control != TouchControl::Console)
+                .collect();
+            crowded.as_slice()
         } else {
-            (pitch, radius)
+            controls
         };
         let margin = self.button * 0.2 + radius;
         #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]

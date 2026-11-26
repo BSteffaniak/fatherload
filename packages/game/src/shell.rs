@@ -285,6 +285,9 @@ pub enum PauseOption {
     TestToolkit,
     /// Test mode (Wave 14): open this seat's Atlas, the travel browser with previews.
     Atlas,
+    /// Test mode (Wave 14 integration): open the command palette for the menu seat (the
+    /// backtick key's; a phone whose top row is full reaches it here).
+    CommandPalette,
 }
 
 impl PauseOption {
@@ -359,6 +362,7 @@ impl PauseOption {
             Self::WarpToStory => "Warp to the Story",
             Self::TestToolkit => "God-Mode Toolkit",
             Self::Atlas => "Atlas (travel anywhere)",
+            Self::CommandPalette => "Command Palette (`)",
         }
     }
 }
@@ -3626,6 +3630,11 @@ impl ShellState {
                 seat.modal = Some(ModalScreen::Atlas);
                 seat.atlas.reopen();
                 self.run_mode = RunMode::Playing;
+            }
+            PauseOption::CommandPalette => {
+                // Play resumes and the palette opens for the menu seat (Wave 14 integration).
+                self.run_mode = RunMode::Playing;
+                self.console.open_for(self.menu_seat);
             }
             PauseOption::WarpToStory => {
                 requests.push(ShellRequest::Action {

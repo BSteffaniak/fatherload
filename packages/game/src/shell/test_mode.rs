@@ -33,8 +33,9 @@ impl PauseOption {
                     Self::GrantStarDrive,
                     Self::WarpToStory,
                     Self::TestToolkit,
-                    // Wave 14: the travel browser.
+                    // Wave 14: the travel browser and the command palette.
                     Self::Atlas,
+                    Self::CommandPalette,
                 ],
             );
         }
