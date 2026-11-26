@@ -246,6 +246,13 @@ fn arena(planet: &PlanetGround) -> (i32, i32) {
     (x, planet.surface_row(x) - 1)
 }
 
+/// On the Tether's plaza, between the Ring Warden's home and the column, so both show.
+fn tether_arena(planet: &PlanetGround) -> (i32, i32) {
+    let tether = i32::try_from(ring::tether_column(planet)).unwrap_or(0);
+    let x = tether - 9;
+    (x, planet.surface_row(x) - 1)
+}
+
 /// On the locked world's day side.
 fn day_side(planet: &PlanetGround) -> (i32, i32) {
     let x = 160;
@@ -537,7 +544,7 @@ pub const EXOTIC_SCENES: &[Scene] = &[
     Scene {
         name: "exotic_ring_tether",
         summary: "The Tether: the builders' column rising from its plaza, the Ring Warden awake, its beam row glowing",
-        setup: |stage| at_place(stage, ExoticStyle::Ring, arena, None, true, 150),
+        setup: |stage| at_place(stage, ExoticStyle::Ring, tether_arena, None, true, 150),
     },
     Scene {
         name: "exotic_ring_conduits",
