@@ -69,6 +69,9 @@ impl SeatUi {
         // (Wave 11 carryover), then the map.
         let next = if super::archivist::can_ask(world, player) {
             ModalScreen::Archivist
+        } else if super::galaxy::has_galaxy_page(world) {
+            // The builders' road (Wave 13 story).
+            ModalScreen::GalaxyJournal
         } else {
             ModalScreen::Map
         };

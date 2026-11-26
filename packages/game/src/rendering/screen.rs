@@ -49,6 +49,17 @@ pub(super) struct UiFrame<'a, 'w> {
     pub player: &'w Player,
 }
 
+/// The seat's skip buttons for an ending, in words.
+pub(super) fn finale_skip_words(shell: &ShellState, view: &ViewSnapshot<'_>) -> String {
+    let device = shell.prompt_device(view.seat_index);
+    let confirm =
+        crate::input::prompts::inline_text(crate::input::prompts::Prompt::Confirm, device)
+            .unwrap_or_else(|| "Confirm".to_owned());
+    let pause = crate::input::prompts::inline_text(crate::input::prompts::Prompt::Pause, device)
+        .unwrap_or_else(|| "Pause".to_owned());
+    format!("{confirm} or {pause}")
+}
+
 /// A view's rect in UI canvas art pixels.
 pub(super) fn view_rect(view: &ViewSnapshot<'_>) -> Rectangle {
     ui_kit::canvas().viewport_rect(view.viewport)
@@ -145,6 +156,45 @@ pub(super) fn draw_view_hud(
         {
             return;
         }
+    }
+    // The galaxy story's ending (Wave 13): the same, from the finale's choice.
+    if view
+        .galaxy_finale
+        .is_some_and(|finale| finale.phase.playing())
+    {
+        let skip = finale_skip_words(shell, view);
+        super::galaxy_hud::draw_finale(draw, view, rect, &skip);
+        if view
+            .galaxy_finale
+            .is_some_and(|finale| finale.phase.covers_screen())
+        {
+            return;
+        }
+    }
+    // The galaxy story's goal on a world's ground (Wave 13), top middle.
+    if view.player.flight.away()
+        || matches!(
+            view.place,
+            fatherload_simulation::place::Place::OnBody(
+                fatherload_simulation::place::BodyId::Space(_)
+            )
+        )
+    {
+        let middle = (rect.x + rect.width * 0.5) as i32;
+        let wide = rect.width > 520.0;
+        let y = if wide {
+            rect.y as i32 + 4
+        } else {
+            rect.y as i32 + 70
+        };
+        let _ = super::galaxy_hud::draw_goal_strip(
+            draw,
+            view,
+            snapshot.world,
+            middle,
+            y,
+            (rect.width as i32 - 16).min(if wide { 300 } else { 400 }),
+        );
     }
 
     // Stats: hull, fuel, cargo, block hopper.
@@ -1500,6 +1550,8 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
         ModalScreen::NavChart => super::space_view::draw_nav_chart(draw, ui),
         ModalScreen::Station => super::station_hub::draw_station_hub(draw, ui),
+        ModalScreen::GalaxyJournal => super::galaxy_hud::draw_galaxy_journal(draw, ui),
+        ModalScreen::GalaxyChoice => super::galaxy_hud::draw_galaxy_choice(draw, ui),
     }
 }
 

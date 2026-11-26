@@ -125,7 +125,10 @@ pub fn body_things(
         .iter()
         .any(|pilot| pilot.player_id == view.player_id);
     let millis = snapshot.tick.saturating_mul(1_000) / u64::from(snapshot.tick_rate.hz().max(1));
-    ground_things(scene, (!on_foot).then_some(view.player_id), seconds, millis)
+    let mut things = ground_things(scene, (!on_foot).then_some(view.player_id), seconds, millis);
+    // The galaxy story's waymarks on this world (Wave 13 story).
+    things.extend(super::galaxy_hud::waymark_things(snapshot.world, scene));
+    things
 }
 
 /// A seat on a generated body: its round ground under the craft, the galaxy above.

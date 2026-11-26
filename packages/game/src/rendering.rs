@@ -34,6 +34,7 @@ mod expedition_card;
 mod expedition_hud;
 pub mod far_strange_hud;
 pub mod frontier_hud;
+pub mod galaxy_hud;
 #[cfg(not(target_os = "emscripten"))]
 mod gallery;
 mod garage;
@@ -768,8 +769,18 @@ impl GameRenderer {
                 density,
                 self.live.get(view.seat_index).is_none(),
             );
+            // The galaxy story's Harbour round its far star (Wave 13 story).
+            galaxy_hud::draw_harbour(draw, snapshot, view, &frame);
             let _canvas = UiCanvasScope::begin(draw);
             space_view::draw_space_hud(draw, shell, snapshot, view, &frame);
+            // The galaxy story's ending over the seat's view (Wave 13 story).
+            if view
+                .galaxy_finale
+                .is_some_and(|finale| finale.phase.playing())
+            {
+                let skip = screen::finale_skip_words(shell, view);
+                galaxy_hud::draw_finale(draw, view, screen::view_rect(view), &skip);
+            }
         } else {
             self.render_world(draw, shell, snapshot, view);
         }
@@ -795,6 +806,9 @@ impl GameRenderer {
             if view
                 .ending
                 .is_some_and(|ending| ending.phase.covers_screen())
+                || view
+                    .galaxy_finale
+                    .is_some_and(|finale| finale.phase.covers_screen())
             {
                 if split {
                     end_view_clip();

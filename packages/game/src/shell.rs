@@ -33,6 +33,7 @@ mod crew;
 mod descent;
 pub mod expedition;
 pub mod flight;
+pub mod galaxy;
 mod garage;
 pub mod homes;
 pub mod hopper;
@@ -200,6 +201,13 @@ pub enum ModalScreen {
     /// A friendly alien's talk panel (Wave 12, `shell/aliens.rs`): their words through the
     /// seat's understanding, and the pages of their trade, lessons, chapters and homes.
     AlienTalk,
+    /// The builders' road (Wave 13 story, `shell/galaxy.rs`): the galaxy story's journal, its
+    /// chapters, logs, the discovery log and the crew's stats. After the star charts (and the
+    /// "Ask Index" page) in the page cycle once the story has begun; the nav chart's tab opens it
+    /// in space.
+    GalaxyJournal,
+    /// The finale's choice at the Harbour's heart (Wave 13 story, `shell/galaxy.rs`).
+    GalaxyChoice,
 }
 
 impl ModalScreen {
@@ -261,6 +269,9 @@ pub enum PauseOption {
     PourTestPools,
     /// Test mode (Wave 11): fit this seat's rig with the Star Drive and open space.
     GrantStarDrive,
+    /// Test mode (Wave 13 story): move this seat's rig to where the galaxy story's current
+    /// goal is done.
+    WarpToStory,
 }
 
 impl PauseOption {
@@ -332,6 +343,7 @@ impl PauseOption {
             Self::ClearFieldZones => "Clear Field Zones",
             Self::PourTestPools => "Pour Test Pools",
             Self::GrantStarDrive => "Grant Star Drive",
+            Self::WarpToStory => "Warp to the Story",
         }
     }
 }
@@ -1464,6 +1476,8 @@ pub struct SeatUi {
     pub alien: aliens::SeatAlien,
     /// The docked station's hub page (Wave 12).
     pub station: station::SeatStation,
+    /// The galaxy story: the seat's own view of the ending, the choice's offer (Wave 13).
+    pub galaxy: galaxy::SeatGalaxy,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1518,6 +1532,7 @@ impl SeatUi {
             story_ending_pending: false,
             alien: aliens::SeatAlien::new(),
             station: station::SeatStation::new(),
+            galaxy: galaxy::SeatGalaxy::new(),
         }
     }
 
@@ -1600,11 +1615,27 @@ impl SeatUi {
                 }
             }
         }
+        // The galaxy story's ending (Wave 13): the same, from the finale's choice.
+        if let Some(elapsed) = ctx.world.galaxy_finale_elapsed() {
+            let phase = self.galaxy.finale.phase(elapsed);
+            if phase.playing() {
+                let skip =
+                    input.confirm || input.interact || input.back || input.cancel || input.pause;
+                if skip && self.galaxy.finale.skip(elapsed) {
+                    cues.push(SoundCue::Ui);
+                }
+                if phase.covers_screen() || skip {
+                    return false;
+                }
+            }
+        }
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
         }
         // Tomb runs (WP-TOMBS): the relic pick and the run summary open by themselves.
         self.watch_tomb(ctx, cues);
+        // The finale's choice opens by itself at the Harbour's gate (Wave 13 story).
+        self.watch_galaxy_choice(&ctx);
         if input.inventory && self.modal != Some(ModalScreen::Inventory) {
             // The inventory's hopper rows start at the top.
             self.selected_menu_item = 0;
@@ -1932,6 +1963,14 @@ impl SeatUi {
             self.handle_alien_talk(input, ctx, cues, requests);
             return true;
         }
+        if modal == ModalScreen::GalaxyJournal {
+            self.handle_galaxy_journal(input, ctx, cues, requests);
+            return true;
+        }
+        if modal == ModalScreen::GalaxyChoice {
+            self.handle_galaxy_choice(input, ctx, cues, requests);
+            return true;
+        }
         if modal == ModalScreen::Ending {
             self.handle_ending(input, cues);
             return true;
@@ -2168,7 +2207,9 @@ impl SeatUi {
             | ModalScreen::NavChart
             | ModalScreen::Station
             | ModalScreen::Archivist
-            | ModalScreen::AlienTalk => None,
+            | ModalScreen::AlienTalk
+            | ModalScreen::GalaxyJournal
+            | ModalScreen::GalaxyChoice => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 2
@@ -3422,6 +3463,7 @@ impl ShellState {
         }
     }
 
+    #[allow(clippy::too_many_lines, reason = "one arm per pause entry")]
     fn handle_pause_menu(
         &mut self,
         input: PlayerInput,
@@ -3474,6 +3516,16 @@ impl ShellState {
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
             PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
                 self.field_zone_action(options[self.selected_pause_item], requests);
+            }
+            PauseOption::WarpToStory => {
+                requests.push(ShellRequest::Action {
+                    seat: self.menu_seat,
+                    command: PlayerCommand::TestMode(
+                        fatherload_simulation::TestModeAction::WarpToStory,
+                    ),
+                });
+                self.run_mode = RunMode::Playing;
+                "Warped to the road's current goal.".clone_into(&mut self.message);
             }
             PauseOption::GrantStarDrive => {
                 requests.push(ShellRequest::Action {

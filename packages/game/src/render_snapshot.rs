@@ -620,6 +620,9 @@ pub struct ViewSnapshot<'w> {
     /// The seat's ending sequence (set by the game loop from the seat's skips; `None` before
     /// the Heart woke).
     pub ending: Option<crate::rendering::heart_hud::EndingSeat>,
+    /// The seat's galaxy story ending (Wave 13: set by the game loop from the seat's skips;
+    /// `None` before the finale's choice).
+    pub galaxy_finale: Option<crate::rendering::galaxy_hud::FinaleSeat>,
     /// The gravity well bending the seat's view (Wave 10): its point and horizon reach in
     /// world pixels and how hard it bends (`0..=1`), for the lensing pass.
     pub lens: Option<(f32, f32, f32, f32)>,
@@ -1699,6 +1702,7 @@ fn view_snapshot(
         hollow,
         heart,
         ending: None,
+        galaxy_finale: None,
         lens,
         place: fatherload_simulation::place::Place::HOME,
         place_scene: None,

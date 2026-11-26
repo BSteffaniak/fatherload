@@ -173,7 +173,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::LeaveSession | PauseOption::ExitToDesktop => &menu_icons::DOOR,
         PauseOption::Options => &menu_icons::GEAR,
         PauseOption::CopySeed => &menu_icons::KEY,
-        PauseOption::WarpToLayer => &menu_icons::ROCKET,
+        PauseOption::WarpToLayer | PauseOption::WarpToStory => &menu_icons::ROCKET,
         PauseOption::ToggleInvulnerable => &icons::HULL,
         PauseOption::ToggleInfiniteFuel | PauseOption::GrantStarDrive => &icons::FUEL,
         PauseOption::ToggleNoClip | PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {

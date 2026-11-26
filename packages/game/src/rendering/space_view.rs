@@ -1829,7 +1829,7 @@ pub(super) fn draw_space_hud(
     let faded = |colour: Color| with_alpha(colour, (f32::from(colour.a) * seen) as u8);
     // The fight (Wave 12 hostiles): the deflector and rack under the meters, the encounter's
     // and a boss's banners low in the view.
-    let top = super::hostiles_view::draw_hostile_hud(draw, snapshot, view, &mut layout, top);
+    let mut top = super::hostiles_view::draw_hostile_hud(draw, snapshot, view, &mut layout, top);
     if fighting {
         super::space_systems_view::draw_hud(
             draw,
@@ -1839,6 +1839,21 @@ pub(super) fn draw_space_hud(
             &mut layout,
             low.max(top),
         );
+    }
+    // The galaxy story's goal under the plate's stack, clear of the panels (Wave 13 story).
+    if let Some(width) =
+        super::galaxy_hud::goal_strip_width(snapshot.world, (rect.width as i32 - 16).min(360))
+    {
+        let slot = layout.banner(top, width as f32, 26.0);
+        let strip = super::galaxy_hud::draw_goal_strip(
+            draw,
+            view,
+            snapshot.world,
+            (slot.x + slot.width * 0.5) as i32,
+            slot.y as i32,
+            width,
+        );
+        top = top.max(slot.y + strip as f32 + GAP);
     }
     if let (Some(panel), Some((checks, ready))) = (layout.docking, docking.as_ref()) {
         draw_docking_guide(draw, panel, checks, *ready);

@@ -111,6 +111,13 @@ impl WorldState {
         Some(plan::plan_for(seed, anchor))
     }
 
+    /// World time since the finale's choice (the ending plays from it), if it was made.
+    #[must_use]
+    pub fn galaxy_finale_elapsed(&self) -> Option<u64> {
+        let chosen = self.galaxy_story.finale_millis?;
+        Some(self.world_millis().saturating_sub(chosen))
+    }
+
     /// The Harbour, once the crew knows where it is (the lamp-key found: from the long dark on).
     #[must_use]
     pub fn galaxy_harbour(&self) -> Option<Harbour> {
@@ -1024,6 +1031,13 @@ impl WorldState {
     }
 
     // --- Test mode -----------------------------------------------------------------------------
+
+    /// Moves `player_id` to where the current story goal is done, now (scenes, tools and tests
+    /// outside the tick; the test-mode warp's own move). Returns whether it moved.
+    #[doc(hidden)]
+    pub fn stage_story_warp(&mut self, player_id: PlayerId) -> bool {
+        self.warp_to_story(player_id) == PlayerScopedCommandOutcome::Applied
+    }
 
     /// Test mode: moves `player_id` to where the current story goal is done (beside the stop's
     /// world or its star, over the world's relic, the Harbour's gate).

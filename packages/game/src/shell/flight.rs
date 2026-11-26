@@ -91,7 +91,8 @@ pub fn nav_rows_for(
         })));
     }
     let elsewhere = |system: SystemRef| galaxy_sector_of(flight.pos) != system.sector;
-    if nav && matches!(waypoint, Some(NavTarget::System(system)) if elsewhere(system)) {
+    // A body of another system warps there too (Wave 13 story: the road's waypoints name worlds).
+    if nav && waypoint.is_some_and(|target| elsewhere(target.system())) {
         rows.push(NavRow::Warp);
     }
     if waypoint.is_some() {
@@ -191,6 +192,11 @@ impl SeatUi {
         let rows = nav_rows(ctx.world, player);
         self.move_selection(input, rows.len().saturating_sub(1));
         self.selected_menu_item = self.selected_menu_item.min(rows.len().saturating_sub(1));
+        // The builders' road's journal is the chart's next page (Wave 13 story).
+        if input.tab_next && super::galaxy::has_galaxy_page(ctx.world) {
+            self.open_galaxy_journal(ctx.world, cues);
+            return;
+        }
         if !input.confirm {
             return;
         }

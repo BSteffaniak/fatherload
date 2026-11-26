@@ -78,8 +78,14 @@ impl SeatUi {
             self.open_modal(ModalScreen::StarCharts);
             return;
         }
+        // The builders' road comes next once the galaxy story has begun (Wave 13).
+        let next = if super::galaxy::has_galaxy_page(ctx.world) {
+            ModalScreen::GalaxyJournal
+        } else {
+            ModalScreen::Map
+        };
         if input.tab_next {
-            self.open_modal(ModalScreen::Map);
+            self.open_modal(next);
             return;
         }
         if !input.confirm {
@@ -98,7 +104,7 @@ impl SeatUi {
                 self.message = format!("You ask Index: {}", question.asked());
                 cues.push(SoundCue::Ui);
             }
-            Some(ArchivistRow::TurnPage) | None => self.open_modal(ModalScreen::Map),
+            Some(ArchivistRow::TurnPage) | None => self.open_modal(next),
         }
     }
 }

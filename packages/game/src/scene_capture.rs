@@ -463,8 +463,8 @@ mod descent_scenes;
 mod distortion_scenes;
 mod drop_scenes;
 mod drowned_scenes;
-mod exotic_scenes;
 mod endgame_scenes;
+mod exotic_scenes;
 mod expedition_scenes;
 mod explosive_scenes;
 mod far_strange_scenes;
@@ -472,6 +472,7 @@ mod field_scenes;
 mod flight_scenes;
 mod fluid_scenes;
 mod frontier_scenes;
+mod galaxy_scenes;
 mod garrison_scenes;
 mod heart_scenes;
 mod hollow_scenes;
@@ -662,6 +663,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(flight_scenes::FLIGHT_SCENES)
         .chain(systems_scenes::SYSTEMS_SCENES)
         .chain(hostile_scenes::HOSTILE_SCENES)
+        .chain(galaxy_scenes::GALAXY_SCENES)
         .chain(space_scenes::SPACE_SCENES)
         .chain(bodylife_scenes::BODYLIFE_SCENES)
         .chain(wilds_scenes::WILDS_SCENES)

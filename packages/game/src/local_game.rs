@@ -464,7 +464,19 @@ impl LocalGame {
         let mut anchors = self.view_anchors.borrow_mut();
         anchors.clear();
         let ending_elapsed = self.runtime.world().ending_elapsed();
+        let finale_elapsed = self.runtime.world().galaxy_finale_elapsed();
+        let finale_choice = self.runtime.world().galaxy_story().choice;
         for view in &mut snapshot.views {
+            // The seat's own galaxy story ending (Wave 13): from the choice and its skips.
+            view.galaxy_finale = finale_elapsed.zip(finale_choice).map(|(elapsed, choice)| {
+                let seat_view = self.shell.seat(view.seat_index).galaxy.finale;
+                crate::rendering::galaxy_hud::FinaleSeat {
+                    phase: seat_view.phase(elapsed),
+                    elapsed,
+                    view: seat_view,
+                    choice,
+                }
+            });
             if anchors.len() <= view.seat_index {
                 anchors.resize(view.seat_index + 1, None);
             }
@@ -619,6 +631,7 @@ impl LocalGame {
         self.announce_aliens(&players);
         self.announce_stations(&players);
         self.announce_hostiles(&players);
+        self.announce_galaxy(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -2061,6 +2074,52 @@ impl LocalGame {
 
     /// Space combat for local seats (Wave 12 hostiles): who found them and what they want, the
     /// fight's turns, salvage, a boss's arrival and defeat, raids on a body.
+    /// The galaxy story for local seats (Wave 13 story). The crew shares one road, so a
+    /// chapter's card, a log of the road and the Warden go up on every local seat; a line about
+    /// what someone did goes to that seat (or everyone, for the crew's own news: the next goal,
+    /// the archivist, a hold, the choice).
+    fn announce_galaxy(&mut self, players: &[PlayerId]) {
+        use crate::shell::galaxy::event_words;
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut moments: Vec<(usize, crate::shell::StoryMomentKind, String, String)> = Vec::new();
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Galaxy {
+                what,
+                player_id,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let words = event_words(self.runtime.world(), what, detail);
+            if let Some((kind, title, text)) = words.card {
+                for seat in 0..players.len() {
+                    moments.push((seat, kind, title.clone(), text.clone()));
+                }
+            }
+            if let Some(message) = words.message {
+                if words.everyone || player_id.is_none() {
+                    for seat in 0..players.len() {
+                        messages.push((seat, message.clone()));
+                    }
+                } else if let Some(seat) = player_id.and_then(seat_of) {
+                    messages.push((seat, message));
+                }
+            }
+        }
+        // The last card of a tick stays up (a chapter's close, then the next one's start).
+        for (seat, kind, title, text) in moments {
+            self.shell.story_moment(seat, kind, title, text);
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
     fn announce_hostiles(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::hostiles::{
             Faction, HostileEvent as E, ShipClass, ShipGearKind,

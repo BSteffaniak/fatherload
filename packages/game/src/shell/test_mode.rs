@@ -31,6 +31,7 @@ impl PauseOption {
                     Self::ClearFieldZones,
                     Self::PourTestPools,
                     Self::GrantStarDrive,
+                    Self::WarpToStory,
                 ],
             );
         }

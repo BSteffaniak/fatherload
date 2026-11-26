@@ -247,6 +247,10 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         StoryMomentKind::BuilderEcho => ("A BUILDER ECHO", TEAL, PanelStyle::Accent),
         StoryMomentKind::HeartPlace => ("THE HEART", GOLD, PanelStyle::Accent),
         StoryMomentKind::DescentReached => ("A NEW DESCENT", GOLD, PanelStyle::Accent),
+        StoryMomentKind::RoadChapter => ("THE BUILDERS' ROAD", GOLD, PanelStyle::Accent),
+        StoryMomentKind::RoadLog => ("A LOG OF THE ROAD", AMBER, PanelStyle::Accent),
+        StoryMomentKind::RoadFound => ("ON THE ROAD", SKY_LIGHT, PanelStyle::Accent),
+        StoryMomentKind::RoadDiscovery => ("A DISCOVERY", LIME, PanelStyle::Standard),
     };
     let mut lines = ui_kit::wrap(&moment.text, width - 22, TextStyle::Body);
     lines.truncate(match moment.kind {
@@ -258,7 +262,11 @@ pub(super) fn draw_story_moment(draw: &mut RaylibDrawHandle<'_>, moment: &StoryM
         | StoryMomentKind::Remembered
         | StoryMomentKind::DeepLore
         | StoryMomentKind::StrangePlace
-        | StoryMomentKind::HeartPlace => 8,
+        | StoryMomentKind::HeartPlace
+        | StoryMomentKind::RoadChapter
+        | StoryMomentKind::RoadLog
+        | StoryMomentKind::RoadFound
+        | StoryMomentKind::RoadDiscovery => 8,
         _ => 6,
     });
     let heading_y = 6;

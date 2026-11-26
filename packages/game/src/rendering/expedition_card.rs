@@ -118,6 +118,13 @@ pub(super) fn decorate(
         StoryMomentKind::DescentReached => {
             descent_reached(draw, (x, y, width, height), age, color);
         }
+        // The builders' road (Wave 13 story): its waymarks lighting across the card.
+        StoryMomentKind::RoadChapter
+        | StoryMomentKind::RoadLog
+        | StoryMomentKind::RoadFound
+        | StoryMomentKind::RoadDiscovery => {
+            super::galaxy_hud::road_card(draw, (x, y, width, height), age, color);
+        }
         StoryMomentKind::Begun
         | StoryMomentKind::Climax
         | StoryMomentKind::Ended

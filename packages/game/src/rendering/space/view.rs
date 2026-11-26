@@ -713,6 +713,9 @@ pub enum GroundThingKind {
         frame: u8,
         left: bool,
     },
+    /// A builder waymark of the galaxy story (Wave 13): the chapter's relic (a lit pylon, or
+    /// a vault door glowing in the rock when `buried`), or a lead's ruin mark (`relic` false).
+    Waymark { relic: bool, buried: bool },
 }
 
 /// What a frontier world shows on its round ground (Wave 12 planets-b): every one a pure

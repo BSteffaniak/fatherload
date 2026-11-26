@@ -52,6 +52,14 @@ pub enum StoryMomentKind {
     HeartPlace,
     /// A new Descent reached (Wave 10 story): the chapter's name and what waits there.
     DescentReached,
+    /// A chapter of the builders' road begun (Wave 13 story), or the Warden met.
+    RoadChapter,
+    /// A space log of the road found.
+    RoadLog,
+    /// A chapter of the road done (its outro), or the Warden calmed.
+    RoadFound,
+    /// A procedural lead finished: a discovery of the endless sky.
+    RoadDiscovery,
 }
 
 /// A card across the seat's view telling a moment of a story.
