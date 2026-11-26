@@ -251,6 +251,19 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 }
             }
         }
+        // Likewise the galaxy story's chapter card (Wave 13 integration): a space scene's sky
+        // opens the road as it is staged, and its card would cover every other track's scene.
+        if !scene.name.starts_with("galaxy_") {
+            for ui in &mut stage.game.shell.seats {
+                if ui
+                    .story_moment
+                    .as_ref()
+                    .is_some_and(|moment| moment.kind == crate::shell::StoryMomentKind::RoadChapter)
+                {
+                    ui.story_moment = None;
+                }
+            }
+        }
         let (report, gallery, ui_sheet, prompt_sheet, rig_sheet, touch_view, mut space) = (
             stage.report,
             stage.gallery,
