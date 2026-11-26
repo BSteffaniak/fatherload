@@ -15,7 +15,7 @@
 //!
 //! **Effects** ([`WeatherNow`]) at full strength are the kind's, scaled by the spell's
 //! intensity: wind (with gusts) that carries an airborne rig and pilot, visibility (the view's
-//! fog; creatures' noticing range, `TODO-SEAM w12-aliens`), light, a temperature change (the
+//! fog; every creature's line-of-sight noticing range scales by it), light, a temperature change (the
 //! climate reads it), hull and suit damage for whatever stands under the open sky, and air
 //! the pilot cannot breathe.
 

@@ -29,17 +29,15 @@
 //! `SectionKey::Stations` section). Everything is integer-priced and hash-seeded: the same seed
 //! gives the same stations, boards, prices and patrons on every peer.
 //!
-//! # Seams (for the Wave 12 integrator)
+//! # The galaxy round them (wired on the Wave 12 integration)
 //!
-//! * TODO-SEAM(w12-aliens): [`profile::AlienKin`] stands in for the aliens track's species;
-//!   alien-run stations name their kin with [`profile::AlienKin::name`].
-//! * TODO-SEAM(w12-hostiles): faction missions append to [`bounty::MissionKind`]; the board
-//!   asks [`bounty::faction_offers`] (empty today) for them.
-//! * TODO-SEAM(w12-planets-a / planets-b): [`hazard::hazards_of`] reads a body's physical
-//!   parameters; the theme tracks' own hazard tags replace it.
-//! * TODO-SEAM(w12-systems): asteroid mining from flight credits a mine quota through
-//!   [`crate::WorldState::credit_asteroid_ore`]; the per-body economy can replace
-//!   [`market::economy_percent`].
+//! * Alien-run stations are run by the aliens track's species ([`profile::AlienKin::species`]).
+//! * The boards post the hostile factions' targets ([`bounty::MissionKind::Bounty`]); the
+//!   shipyard sells their counters (the game's hub lists the hostiles' ship gear).
+//! * [`hazard::hazards_of`] joins a body's physical tags with its planet theme's own; a theme
+//!   that applies its hazards zone by zone reads the planet gear through [`hazard::gear_tier`].
+//! * Belt ore mined from flight credits a mine quota ([`crate::WorldState::credit_asteroid_ore`]).
+//! * Still open (Wave 13): a per-system economy folding into [`market::economy_percent`].
 
 pub mod balance;
 pub mod bar;

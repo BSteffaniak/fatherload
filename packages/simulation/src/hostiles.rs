@@ -40,7 +40,7 @@
 //! * **Bounties** ([`bounty_targets`], [`crate::WorldState::post_bounty`]): named elite ships the
 //!   stations' boards post (the mission-target API for the stations track).
 //! * **Ground raids** ([`raid`]): now and then a faction's dropship sets troopers down near a
-//!   rig (or an alien town or a base: TODO-SEAM) on a body; they are creatures with the usual
+//!   rig or by an alien town a rig is near, on a body; they are creatures with the usual
 //!   body rules.
 //!
 //! # Determinism

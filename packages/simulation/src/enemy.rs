@@ -5970,7 +5970,7 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             add(ItemKind::Material(StrategicResourceKind::CoreShard), 4);
         }
         // The wild worlds (Wave 12 planets-a): small game gives little, the megafauna and
-        // hunters give ore; harmless fauna give nothing (TODO-SEAM w12-aliens: hides and
+        // hunters give ore; harmless fauna give nothing (Wave 13 may add hides and
         // shells for alien traders).
         EnemyKind::Glimmerfin
         | EnemyKind::Rimeskipper

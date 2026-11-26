@@ -75,8 +75,9 @@ const ICICLE_LIFE_MILLIS: u64 = 4_000;
 pub const WILD_SITE_MARGIN: i32 = 6;
 /// The enemy tier (health and damage, [`crate::enemy::tier_scale`]) of a wild world's surface;
 /// each stratum down adds one, up to [`WILD_MAX_TIER`]. The stars open after the Heart, so the
-/// wild worlds hit like the deep Descents (whose tiers end at 11), not like the topsoil.
-/// TODO-SEAM w12-systems/w12-hostiles: a body's danger (its distance from home) may move this.
+/// wild worlds hit like the deep Descents (whose tiers end at 11), not like the topsoil. A
+/// body two sectors or more from home adds one more (the galaxy's danger rises outward, as the
+/// hostile factions' rings do; Wave 12 integration).
 pub const WILD_BASE_TIER: u8 = 8;
 pub const WILD_MAX_TIER: u8 = 11;
 /// A hazard event repeats at most this often while it lasts.
@@ -140,9 +141,17 @@ impl WorldState {
         } else {
             planet.stratum_index(tile.x, tile.y).min(2) + 1
         };
+        // Two sectors or more from home, one more (the galaxy's danger rises outward).
+        let far = self
+            .body_life_here()
+            .and_then(|life| life.id)
+            .map_or(0, |id| {
+                u8::from(crate::bodylife::sectors_from_home(id.sector) >= 2)
+            });
         Some(
             WILD_BASE_TIER
                 .saturating_add(u8::try_from(stratum).unwrap_or(0))
+                .saturating_add(far)
                 .min(WILD_MAX_TIER),
         )
     }

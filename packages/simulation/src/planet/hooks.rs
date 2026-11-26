@@ -40,8 +40,10 @@ pub const SECRET_VAULT: (i32, i32) = (9, 5);
 /// Rows of rock over a secret vault, under the crust.
 pub const SECRET_COVER_ROWS: i32 = 6;
 
-/// A creature a theme's worlds spawn (data for the fauna and aliens tracks: TODO-SEAM
-/// w12-aliens spawns them through the enemy body rules in the planet's local frame).
+/// A creature a theme's worlds spawn.
+///
+/// The wild and frontier themes list theirs (the id is the creature's `EnemyKind` code); their
+/// own spawners place them through the enemy body rules in the planet's local frame.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CreatureSpawn {
     /// The creature's id (prefixed by its track's range).

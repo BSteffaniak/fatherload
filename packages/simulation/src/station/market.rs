@@ -10,8 +10,8 @@
 //! [`SHIFT_FADE_MILLIS`] of world time. So a good run between a maker and a needer pays well,
 //! once, and then the stations have to recover.
 //!
-//! TODO-SEAM(w12-systems): a per-body or per-system economy (shortages, booms) can fold its
-//! figure into [`economy_percent`].
+//! Wave 13: a per-system economy (shortages, booms) can fold its figure into
+//! [`economy_percent`] (the bodies' own prices already move the aliens' trade).
 
 #![allow(
     clippy::cast_possible_truncation,

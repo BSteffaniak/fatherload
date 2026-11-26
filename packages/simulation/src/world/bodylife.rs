@@ -365,7 +365,8 @@ impl WorldState {
     }
 
     /// Sells `player_id`'s minerals and artifacts at `market` (a settlement's or a station's
-    /// counter on a body: TODO-SEAM w12-aliens / w12-stations call it from their counters).
+    /// counter on a body; the aliens price through the body's prices instead, and Wave 13's
+    /// settlements open their counters here).
     /// Credits are universal; the home world's premiums and rebates do not apply.
     pub fn sell_cargo_at_market(
         &mut self,

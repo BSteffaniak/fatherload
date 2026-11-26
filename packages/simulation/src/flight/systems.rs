@@ -444,7 +444,7 @@ pub const ROCK_QUERY_TILES: i64 = 480;
 /// Seconds a unit of comet dust takes to gather in a tail, and the most a comet gives the crew.
 pub const COMET_GATHER_SECONDS: f32 = 2.5;
 pub const COMET_HARVEST_CAP: u16 = 6;
-/// What a comet's tail gives (TODO-SEAM(w12-planets): a space item when one exists).
+/// What a comet's tail gives (a stand-in until Wave 13 adds space items).
 pub const COMET_MINERAL: MineralKind = MineralKind::Mythril;
 
 /// A rock of a belt (in [`FlightBody::extra`]).
@@ -473,7 +473,7 @@ pub struct CometKey {
     pub index: u8,
 }
 
-/// The cargo an asteroid's ore becomes (TODO-SEAM(w12-planets): space items replace these
+/// The cargo an asteroid's ore becomes (Wave 13's space items replace these
 /// stand-ins when a track adds them; the mapping is the one place to change).
 #[must_use]
 pub const fn asteroid_mineral(ore: AsteroidOre) -> MineralKind {

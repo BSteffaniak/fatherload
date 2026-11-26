@@ -144,8 +144,9 @@ pub const fn style_of_ground(ground: &PlanetGround) -> Option<FrontierStyle> {
 /// moon or crater rock below 1,500 tiles scales down from 800 in proportion. The first three
 /// strata share these rows; the fourth runs on below them to the core chamber.
 ///
-/// TODO-SEAM w12-integrator: the space generator rolls its own `SpaceBody::strata_rows`;
-/// `PlanetParams` does not carry it yet, so the ground derives the depth from the radius.
+/// The ground's depth is this pure function of the radius (as the wild worlds' is of theirs):
+/// `PlanetParams` carries no depth, so the space generator's rolled `SpaceBody::strata_rows`
+/// stays a figure of the space report, not the ground's (Wave 12 integration).
 #[must_use]
 pub const fn strata_rows(radius: u32) -> i32 {
     #[allow(clippy::cast_possible_wrap, reason = "at most 10,000")]
@@ -318,7 +319,8 @@ pub const PLANET_GEAR_MAX_TIER: u8 = 6;
 /// flat stretch of surface the generator keeps clear (an oasis rim, a basalt plateau, a
 /// crystal-free meadow).
 ///
-/// TODO-SEAM w12-aliens: the aliens track builds its town on this site.
+/// The aliens build their town on it when a species settled the body
+/// ([`crate::planet::PlanetThemeHooks::settlement_site`], Wave 12 integration).
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct SettlementSite {
     /// The first strip column of the flat ground.

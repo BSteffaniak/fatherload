@@ -18,8 +18,9 @@
 //! Selling ([`crate::WorldState::sell_cargo_at_market`]) pays the rig's minerals and artifacts
 //! at the market's prices. The home world's market (its depot, the canonical market and its
 //! premiums) never applies on a body: the home depot's commands are refused away from home.
-//! The aliens and stations tracks open counters on a [`LocalMarket`] (TODO-SEAM w12-aliens,
-//! w12-stations: settlements and stations name their market with [`LocalMarket::new`]).
+//! The aliens' trade halls price ore by the body's [`BodyPrices`] (Wave 12 integration,
+//! `alien::trade::body_price_permille`); a settlement's own [`LocalMarket`] counter (its
+//! boards' wanted and glut days) is ready for Wave 13's settlements to open.
 
 #![allow(
     clippy::cast_possible_truncation,

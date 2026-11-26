@@ -133,8 +133,8 @@ impl WorldState {
     }
 
     /// Whether `tile` of a frontier world is safe from its hunters (`None` on any other
-    /// ground): its surface is no refuge, only its settlement (the aliens' town, TODO-SEAM
-    /// w12-aliens), claimed bases and placed infrastructure are.
+    /// ground): its surface is no refuge, only its settlement (where a settled body's alien
+    /// town stands), claimed bases and placed infrastructure are.
     pub(in crate::world) fn frontier_safe_zone(&self, tile: TilePosition) -> Option<bool> {
         let ground = self.terrain.planet_ground()?;
         style_of_ground(ground)?;
