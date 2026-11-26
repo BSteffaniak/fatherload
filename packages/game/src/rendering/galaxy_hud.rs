@@ -664,7 +664,25 @@ pub(super) fn draw_finale(
         FinalePhase::Lead => {
             let since = finale.elapsed as f32 / 1_000.0;
             draw_lead(draw, rect, finale.choice, since);
-            corner_hint(draw, rect, &format!("{skip}: skip"));
+            // The flight HUD is still up under the lead: its prompt row has the corner, so
+            // the hint sits on a plate above it.
+            let text = format!("{skip}: skip");
+            let width = ui_kit::text_width(&text, TextStyle::Body) + 12;
+            let plate = Rectangle::new(
+                rect.x + rect.width - width as f32 - 6.0,
+                rect.y + rect.height - 40.0,
+                width as f32,
+                16.0,
+            );
+            ui_kit::panel(draw, plate, PanelStyle::Standard);
+            ui_kit::text(
+                draw,
+                &text,
+                plate.x as i32 + 6,
+                plate.y as i32 + 3,
+                TextStyle::Body,
+                CREAM,
+            );
         }
         FinalePhase::Credits => {
             draw.draw_rectangle(
@@ -703,7 +721,8 @@ fn corner_hint(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, text: &str) {
         draw,
         text,
         (rect.x + rect.width) as i32 - width - 8,
-        (rect.y + rect.height) as i32 - 14,
+        // Above the flight HUD's prompt row, which shows dimmed under the epilogue.
+        (rect.y + rect.height) as i32 - 30,
         TextStyle::Body,
         FOG,
     );

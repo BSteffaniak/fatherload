@@ -11573,6 +11573,37 @@ done by kind, logs, fragments).
   reach understanding 600 in a test); their systems still hold leads like any other.
 * A relic under a dug shaft is drawn as a vault door in the rock: the ground is not carved.
 
+### Review fixes (Wave 13 story review)
+
+* **The ground's compass.** A relic or ruin stands at a hashed column of a strip thousands of
+  columns round, with nothing pointing at it: in play it was found only by luck (the bot test
+  warps onto it). `WorldState::galaxy_site_bearing(player)` (`SiteBearing`: columns to go,
+  positive to the right of an upright actor, the shorter way round; rows to go, positive down)
+  reads the story's relic on the actor's world, else the nearest open lead's ruin mark; the
+  goal line leads with it ("40 columns right to the foundry door, then dig down", "Dig 12 rows
+  down to ...", "At ...", with a hold's own reach), and shows it as "Discovery log" after the
+  road. The ground goal line now fits between the HUD's side panels (it ran under both).
+  Scene `galaxy_foundry_compass`.
+* **The road opens on lift-off.** It began on the very tick the Heart woke, and its first card
+  replaced the Descent's own last card. After the Heart wakes (`cable_lit_millis` set) the
+  story now begins when a rig of the crew first lifts off (flight away or on another place);
+  a sky opened another way (test mode's grant) opens it at once.
+* **Leads have three tellings per kind** (lost ship, mayday, ruins, survey, a people's
+  request: a song-stone, a letter home, seed stock), picked from the lead's hash; steps are
+  unchanged, so a saved discovery log reads the same leads.
+* The finale's skip hint sits on a plate above the flight HUD's prompt row (they overlapped
+  during the lead card); two doc comments the track split are back on their functions.
+* New tests: `a_distress_call_springs_a_real_ambush_and_pays_once_survived_and_docked` (a real
+  fight at the beacon, then a real dock), `a_ruin_lead_is_landed_on_and_dug_to` (the compass
+  points at it, the drill digs to it), `a_hold_lands_real_raiders_by_the_site_and_counts_only_while_someone_holds_it`,
+  `after_the_heart_wakes_the_road_opens_when_the_crew_first_lifts_off`.
+* Still weak (left for the integrator / later): the road's machine, dead, crystal, tidally
+  locked, ring and gas giant stops stand on placeholder grounds until planets-c/d land (the
+  Silent Foundry's "machine world" is sandy rock today); the `galaxy_hold` scene stages its
+  raid outside the tick and its troopers do not show in the shot (the real hold's raid is
+  tested); no Harbour music; the Warden's twelve hit circles include near-duplicates from the
+  fitter (harmless).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
