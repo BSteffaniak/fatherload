@@ -219,7 +219,10 @@ impl LiveSpace {
 
     /// Everything round `at` (see the type docs).
     #[must_use]
-    #[allow(clippy::too_many_lines, reason = "one block per kind of thing in a system")]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one block per kind of thing in a system"
+    )]
     pub fn gather(seed: u64, at: WorldPos) -> Self {
         let space = Space::shared(seed);
         let centre = SpaceTile::of_pos(at);
