@@ -26,7 +26,7 @@ mod tests;
 pub mod weather;
 
 use crate::{
-    planet::{PlanetGround, PlanetParams, PlanetThemeHooks},
+    planet::{PlanetGround, PlanetParams, PlanetThemeHooks, hooks::LockedSides},
     space::{Atmosphere, SpaceBody, SpaceBodyId, SpaceSector},
 };
 
@@ -70,6 +70,26 @@ pub struct BodyReading {
     pub exposed: bool,
 }
 
+/// The mean a tidally locked body of a theme with [`LockedSides`] holds its terminator to
+/// (the body's own `mean_c` anywhere else).
+fn locked_mean_c(hooks: &dyn PlanetThemeHooks, tidally_locked: bool, mean_c: i16) -> i16 {
+    match hooks.locked_sides() {
+        Some(LockedSides {
+            terminator_c: (low, high),
+            ..
+        }) if tidally_locked => mean_c.clamp(low, high),
+        _ => mean_c,
+    }
+}
+
+/// The least side swing of a tidally locked body of a theme with [`LockedSides`] (0 else).
+fn locked_swing_c(hooks: &dyn PlanetThemeHooks, tidally_locked: bool) -> i16 {
+    hooks
+        .locked_sides()
+        .filter(|_| tidally_locked)
+        .map_or(0, |sides| sides.swing_c)
+}
+
 /// Galactic sectors (Chebyshev) from home to `sector`.
 #[must_use]
 pub fn sectors_from_home(sector: SpaceSector) -> u32 {
@@ -95,12 +115,13 @@ impl BodyLife {
                 params.seed,
             ),
             climate: BodyClimate {
-                mean_c: body.temperature_c,
+                mean_c: locked_mean_c(hooks, body.tidally_locked(), body.temperature_c),
                 atmosphere: body.atmosphere,
                 gravity_milli: params.gravity_milli,
                 depth_rows,
                 tidally_locked: body.tidally_locked(),
                 core_bias_c: hooks.climate().core_bias_c,
+                side_swing_c: locked_swing_c(hooks, body.tidally_locked()),
             },
             prices: BodyPrices::new(
                 params.seed,
@@ -117,21 +138,24 @@ impl BodyLife {
         let ground = PlanetGround::new(params);
         let hooks = ground.hooks();
         let (mean_c, atmosphere) = lone_climate(params);
+        // A theme built on a locked body's two sides keeps them on a lone world too.
+        let locked = hooks.locked_sides().is_some();
         Self {
             id: None,
             params,
             clock: BodyClock::new(
-                LONE_PLANET_DAY_SECONDS,
+                if locked { 0 } else { LONE_PLANET_DAY_SECONDS },
                 ground.grid().surface_columns(),
                 params.seed,
             ),
             climate: BodyClimate {
-                mean_c,
+                mean_c: locked_mean_c(hooks, locked, mean_c),
                 atmosphere,
                 gravity_milli: params.gravity_milli,
                 depth_rows: ground.core_chamber_top().max(1),
-                tidally_locked: false,
+                tidally_locked: locked,
                 core_bias_c: hooks.climate().core_bias_c,
+                side_swing_c: locked_swing_c(hooks, locked),
             },
             prices: BodyPrices::new(
                 params.seed,

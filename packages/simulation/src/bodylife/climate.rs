@@ -47,6 +47,10 @@ pub struct BodyClimate {
     pub tidally_locked: bool,
     /// The theme's own heat underground (°C added at the core; themes tune it).
     pub core_bias_c: i16,
+    /// On a tidally locked body, the least swing (°C) from the terminator to noon and
+    /// midnight (`0`: the air's; a theme built on its two sides sets it, see
+    /// [`crate::planet::hooks::LockedSides`]).
+    pub side_swing_c: i16,
 }
 
 /// How far day and night swing from the mean in `atmosphere` (°C, half the full swing).
@@ -106,7 +110,7 @@ impl BodyClimate {
     pub fn temperature_at(&self, depth: i32, elevation: f64, weather_c: i32) -> i32 {
         let mut swing = day_swing_c(self.atmosphere);
         if self.tidally_locked {
-            swing = swing * 3 / 2;
+            swing = (swing * 3 / 2).max(i32::from(self.side_swing_c));
         }
         // The swing in whole °C (elevation is -1..=1).
         #[allow(clippy::cast_possible_truncation, reason = "at most a few hundred °C")]

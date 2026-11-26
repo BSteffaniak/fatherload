@@ -30,7 +30,7 @@ use crate::{
     enemy::EnemyKind,
     planet::{
         PlanetGround, PlanetThemeId,
-        hooks::{CreatureSpawn, MusicBed, PlanetThemeHooks, SecretSite, ThemeClimate},
+        hooks::{CreatureSpawn, LockedSides, MusicBed, PlanetThemeHooks, SecretSite, ThemeClimate},
         world::ThemeWorld,
     },
     station::hazard::PlanetHazard as GearHazard,
@@ -297,6 +297,16 @@ impl PlanetThemeHooks for ExoticHooks {
         ThemeClimate {
             core_bias_c: self.core_bias_c,
         }
+    }
+
+    fn locked_sides(&self) -> Option<LockedSides> {
+        // The locked world's two halves: a mild terminator, a scorching noon and a midnight
+        // cold enough for nitrogen snow (the climate the HUD reads and the rig's radiator and
+        // de-icer answer, under the sun-and-shadow rule's own bite).
+        (self.style == ExoticStyle::Locked).then_some(LockedSides {
+            terminator_c: (0, 20),
+            swing_c: 140,
+        })
     }
 
     fn hazard_tags(&self) -> &'static [(GearHazard, u8)] {

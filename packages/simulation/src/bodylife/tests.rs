@@ -109,6 +109,7 @@ fn a_tidally_locked_body_keeps_an_eternal_day_and_night_side() {
         depth_rows: 2_000,
         tidally_locked: true,
         core_bias_c: 0,
+        side_swing_c: 0,
     };
     let spinning = BodyClimate {
         tidally_locked: false,
@@ -238,6 +239,7 @@ fn temperature_air_and_pressure_follow_the_star_the_air_and_the_depth() {
         depth_rows: 360,
         tidally_locked: false,
         core_bias_c: 0,
+        side_swing_c: 0,
     };
     let thick = BodyClimate {
         atmosphere: Atmosphere::Thick,

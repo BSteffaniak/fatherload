@@ -76,6 +76,20 @@ pub struct ThemeClimate {
     pub core_bias_c: i16,
 }
 
+/// A tidally locked theme's sides (Wave 13 planets-d review).
+///
+/// On a tidally locked body the
+/// climate holds its terminator to `terminator_c` (the body's mean clamped into it) and swings
+/// at least `swing_c` toward the sub-stellar noon and the anti-stellar midnight, so a world
+/// built on its two halves reads (and bites) hot by day and frozen by night.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct LockedSides {
+    /// The coolest and warmest the terminator stands (°C).
+    pub terminator_c: (i16, i16),
+    /// The least swing (°C) from the terminator to noon and to midnight.
+    pub swing_c: i16,
+}
+
 /// Hazards a theme's ground carries (read by the bodylife world rules).
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct ThemeHazards {
@@ -219,6 +233,12 @@ pub trait PlanetThemeHooks: Sync {
     /// The theme's climate on top of the body's numbers.
     fn climate(&self) -> ThemeClimate {
         ThemeClimate::default()
+    }
+
+    /// How the climate holds a tidally locked body of this theme apart (`None`: the body's
+    /// own numbers, the air's swing).
+    fn locked_sides(&self) -> Option<LockedSides> {
+        None
     }
 
     /// Hazards of its ground and air.

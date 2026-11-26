@@ -631,3 +631,38 @@ fn real_space_bodies_of_each_tag_ground_as_their_world_and_the_report_lists_them
         assert!(report.contains(name), "the space report names {name}");
     }
 }
+
+#[test]
+fn the_locked_worlds_climate_scorches_by_day_freezes_by_night_and_is_mild_in_the_twilight() {
+    use crate::bodylife::{
+        BodyLife,
+        climate::{COLD_START_C, HEAT_START_C},
+    };
+    // A lone locked world keeps its sides (no spinning day), and the climate the HUD reads
+    // and the rig's radiator and de-icer answer agrees with the sun-and-shadow rule.
+    let ground = ground(ExoticStyle::Locked, 2_000);
+    let width = i64::from(ground.strip_width());
+    let life = BodyLife::of_planet(*ground.params());
+    assert!(life.clock.tidally_locked());
+    let at = |life: &BodyLife, column: i64| {
+        life.climate
+            .temperature_at(0, life.clock.elevation(0, column), 0)
+    };
+    // Whatever its star's heat, a locked body's terminator stays mild (the space body's mean
+    // is held to the theme's band) while noon scorches and midnight freezes.
+    for mean_c in [0, 20] {
+        let mut life = life.clone();
+        life.climate.mean_c = mean_c;
+        let (noon, dusk, midnight) = (at(&life, 0), at(&life, width / 4), at(&life, width / 2));
+        assert!(noon > HEAT_START_C, "noon {noon}");
+        assert!(midnight < COLD_START_C, "midnight {midnight}");
+        assert!((-20..=40).contains(&dusk), "terminator {dusk}");
+    }
+    // Other themes keep a lone world's spinning day.
+    let rocky = BodyLife::of_planet(PlanetParams::new(
+        SEED,
+        2_000,
+        crate::planet::PlanetThemeId::ROCKY,
+    ));
+    assert!(!rocky.clock.tidally_locked());
+}
