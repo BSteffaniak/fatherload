@@ -80,6 +80,19 @@ pub fn atan2(y: f32, x: f32) -> f32 {
     if y < 0.0 { -quadrant } else { quadrant }
 }
 
+/// `sqrt(x² + y²)` with plain IEEE arithmetic: the platform's `hypot` is a maths-library call
+/// whose last bits differ between targets (Wave 12 systems: flight and the polar crossing use
+/// this instead).
+#[must_use]
+#[allow(
+    clippy::suboptimal_flops,
+    clippy::imprecise_flops,
+    reason = "plain IEEE arithmetic: the same bits on every peer"
+)]
+pub fn hypot(x: f32, y: f32) -> f32 {
+    (x * x + y * y).sqrt()
+}
+
 /// `angle` wrapped into `-pi..pi`.
 #[must_use]
 pub fn wrap_angle(angle: f32) -> f32 {

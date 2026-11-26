@@ -267,6 +267,8 @@ pub enum SectionKey {
     /// Space flight's shared state (Wave 11): waypoints, the crew's waypoint, systems found
     /// and scanner pings (each rig's flight is per tick).
     Flight,
+    /// Space's things (Wave 12 systems): asteroids mined, comet dust gathered, wormholes flown.
+    SpaceSystems,
 }
 
 impl SectionKey {
@@ -286,7 +288,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 32] = [
+    pub const SHARED: [Self; 33] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -325,6 +327,8 @@ impl SectionKey {
         Self::Heart,
         // Space flight (Wave 11 flight).
         Self::Flight,
+        // Space's things (Wave 12 systems).
+        Self::SpaceSystems,
     ];
 }
 
@@ -365,6 +369,7 @@ pub enum SectionPayload {
     Garrison(Box<crate::garrison::Garrison>),
     Heart(Box<crate::heart::Heart>),
     Flight(Box<crate::flight::FlightShared>),
+    SpaceSystems(Box<crate::flight::systems::SystemsShared>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -595,6 +600,7 @@ impl WorldState {
             places: _,
             place_pass: _,
             flight,
+            space_systems,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -705,6 +711,9 @@ impl WorldState {
             SectionKey::Garrison => SectionPayload::Garrison(Box::new(garrison.clone())),
             SectionKey::Heart => SectionPayload::Heart(Box::new(heart.clone())),
             SectionKey::Flight => SectionPayload::Flight(Box::new(flight.clone())),
+            SectionKey::SpaceSystems => {
+                SectionPayload::SpaceSystems(Box::new(space_systems.clone()))
+            }
         })
     }
 
@@ -900,6 +909,9 @@ impl WorldState {
             }
             (SectionKey::Flight, SectionPayload::Flight(flight)) => {
                 self.flight = *flight;
+            }
+            (SectionKey::SpaceSystems, SectionPayload::SpaceSystems(systems)) => {
+                self.space_systems = *systems;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

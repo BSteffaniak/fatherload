@@ -268,6 +268,10 @@ impl WorldState {
         if !self.flight.is_empty() {
             hash.write_serialized(&self.flight);
         }
+        // Absent until the crew mines a rock, gathers comet dust or flies a wormhole (Wave 12).
+        if !self.space_systems.is_empty() {
+            hash.write_serialized(&self.space_systems);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

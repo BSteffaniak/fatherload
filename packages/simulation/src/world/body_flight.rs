@@ -115,7 +115,7 @@ impl WorldState {
             return;
         };
         let flight = player.flight;
-        if !flight.away() || matches!(flight.drive, StarDrive::Warp(_)) {
+        if !flight.away() || matches!(flight.drive, StarDrive::Warp(_) | StarDrive::Transit(_)) {
             return;
         }
         let Some(body) = flight.place.body() else {

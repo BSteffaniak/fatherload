@@ -23,6 +23,7 @@ mod heart;
 mod hollow;
 mod old_deep;
 mod story_finale;
+mod systems;
 
 use super::{
     analysis,
@@ -534,6 +535,12 @@ patches! {
     // The story finale (wave 10 story): a Descent reached, and the cable lit.
     StoryDescentCall => "story_descent_call",
     StoryCableLit => "story_cable_lit",
+    // Space's things (wave 12 systems).
+    SystemsFlareWarning => "systems_flare_warning",
+    SystemsFlareBurst => "systems_flare_burst",
+    SystemsHoleWarning => "systems_hole_warning",
+    SystemsTransit => "systems_transit",
+    SystemsOreCrunch => "systems_ore_crunch",
 }
 
 /// Playback metadata of a patch.
@@ -1022,6 +1029,22 @@ impl Patch {
                 .jitter(0.0, 0.0)
                 .ducking(0.5)
                 .priority(8),
+            // Space's things (wave 12 systems): warnings carry, the tunnel hushes the mix.
+            Self::SystemsFlareWarning | Self::SystemsHoleWarning => PatchInfo::new(Alarm)
+                .instances(1)
+                .send(0.3)
+                .jitter(0.0, 0.3)
+                .priority(6),
+            Self::SystemsFlareBurst | Self::SystemsTransit => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.02, 0.5)
+                .ducking(0.25)
+                .priority(5),
+            Self::SystemsOreCrunch => PatchInfo::new(Impact)
+                .instances(3)
+                .send(0.2)
+                .jitter(0.06, 1.0),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -1782,6 +1805,11 @@ impl Patch {
             Self::StarDriveLoop => heart::star_drive_loop(rng),
             Self::StoryDescentCall => story_finale::story_descent_call(rng),
             Self::StoryCableLit => story_finale::story_cable_lit(rng),
+            Self::SystemsFlareWarning => systems::flare_warning(rng),
+            Self::SystemsFlareBurst => systems::flare_burst(rng),
+            Self::SystemsHoleWarning => systems::hole_warning(rng),
+            Self::SystemsTransit => systems::transit(rng),
+            Self::SystemsOreCrunch => systems::ore_crunch(rng),
         }
     }
 }

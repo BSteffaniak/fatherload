@@ -900,6 +900,16 @@ pub enum SoundCue {
     StoryDescentCall,
     /// The ending: the Heart wakes and the cable lights to the Moon (wave 10 story).
     StoryCableLit,
+    /// A star's flare coming (wave 12 systems).
+    SystemsFlareWarning,
+    /// A flare striking the rig in the open.
+    SystemsFlareBurst,
+    /// A black hole's pull beating the thrusters.
+    SystemsHoleWarning,
+    /// A wormhole's tunnel.
+    SystemsTransit,
+    /// Ore broken off an asteroid (or comet dust gathered) in flight.
+    SystemsOreCrunch,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

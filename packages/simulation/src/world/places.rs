@@ -1181,7 +1181,7 @@ impl WorldState {
                 let (x, y, reach) = (cx * TILE_SIZE, cy * TILE_SIZE, radius * TILE_SIZE);
                 world.entities.revisions(
                     Some((x - reach, y - reach, x + reach, y + reach)),
-                    |ex, ey| (ex - x).hypot(ey - y) <= reach,
+                    |ex, ey| crate::field::trig::hypot(ex - x, ey - y) <= reach,
                 )
             }
             _ => world.entities.revisions(None, |_, _| true),

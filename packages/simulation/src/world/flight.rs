@@ -212,7 +212,7 @@ impl WorldState {
                             match warp_check(&flight, attitude, &bodies, system.star, aboard) {
                                 Ok(cost) => {
                                     let arrival = warp_arrival(flight.pos, system.star);
-                                    let distance = flight.pos.distance(arrival);
+                                    let distance = flight.pos.span(arrival);
                                     if !infinite_fuel {
                                         fuel = (fuel - cost).max(0.0);
                                     }
@@ -256,7 +256,7 @@ impl WorldState {
                 } else {
                     let well = bodies.iter().any(|body| {
                         body.body.system != run.target
-                            && pos.distance(body.centre) - body.radius < WARP_CLEARANCE * 0.5
+                            && pos.span(body.centre) - body.radius < WARP_CLEARANCE * 0.5
                     });
                     let bearing = nav::bearing(run.origin, run.arrival);
                     let turned =
@@ -270,9 +270,21 @@ impl WorldState {
                     }
                 }
             }
+            StarDrive::Transit(transit) => {
+                // Through a wormhole (Wave 12 systems): a closed form of time, like the warp.
+                if Self::step_transit(&mut flight, transit, now) {
+                    output.push_event(GameplayEventKind::SpaceSystems {
+                        what: crate::flight::systems::SystemsEvent::WormholeExited,
+                        player_id,
+                        detail: 0,
+                    });
+                }
+            }
             StarDrive::Off | StarDrive::Cruise { .. } => {}
         }
-        let bodies = self.space_bodies_near(flight.pos);
+        // Wave 12 systems: black holes, wormhole mouths and belt rocks are flight bodies too.
+        let bodies = self.flight_bodies_near(flight.pos, flight.speed());
+        let marks_before = flight.marks;
         let Some(player) = self.players.get(&player_id) else {
             return;
         };
@@ -295,6 +307,7 @@ impl WorldState {
             shield: gear.flight.reentry_shield,
             auto_land: gear.flight.auto_land > 0,
             fuel: if infinite_fuel { f32::MAX } else { fuel },
+            now_millis: now,
         };
         let outcome = physics::step_flight(
             &mut flight,
@@ -321,6 +334,10 @@ impl WorldState {
         }
         if outcome.hull_damage > 0.0 && self.damage_player(player_id, outcome.hull_damage) {
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
+        }
+        // Wave 12 systems: what space's things did (a horizon, a mouth, flares, rocks, ...).
+        if self.after_flight_step(player_id, controls, &bodies, &outcome, marks_before, output) {
+            return;
         }
         if outcome.reached_home {
             self.return_home(player_id, output);
@@ -358,9 +375,14 @@ impl WorldState {
                 }
                 continue;
             }
-            // Life support.
+            let place = player.flight.place;
+            // Life support, on the rig's own clock (a black hole slows it; Wave 12).
+            let scale = self.dilate(player_id, seconds);
             let capacity = self.air_capacity_of(player_id);
-            let bodies = match player.flight.place {
+            let Some(player) = self.players.get(&player_id) else {
+                continue;
+            };
+            let bodies = match place {
                 FlightPlace::Landed(_) => self.space_bodies_near(player.flight.pos),
                 _ => Vec::new(),
             };
@@ -381,7 +403,7 @@ impl WorldState {
                     .mul_add(seconds, flight.air)
                     .min(capacity);
             } else {
-                flight.air = (flight.air - seconds).max(0.0);
+                flight.air = seconds.mul_add(-scale, flight.air).max(0.0);
             }
             if flight.air > capacity * AIR_REARM_SHARE {
                 flight.alerts &= !0b111;
@@ -431,6 +453,8 @@ impl WorldState {
             air: capacity,
             exit_column: column,
             alerts: 0,
+            lag_seconds: player.flight.lag_seconds,
+            ..RigFlight::default()
         };
         player.x = park.0;
         player.y = park.1;
@@ -447,12 +471,39 @@ impl WorldState {
         let Some(line) = self.space_line_row() else {
             return;
         };
+        let Some(player) = self.players.get(&player_id) else {
+            return;
+        };
+        // Wave 12 systems: home under the point of the round home world the rig approached
+        // (the arc from the departure's column), not only the column it left from.
+        let column = self
+            .home_column_under(player.flight.pos)
+            .unwrap_or(player.flight.exit_column);
+        self.return_home_at(
+            player_id,
+            space::home_centre(),
+            column,
+            line + RETURN_BELOW_ROWS,
+            output,
+        );
+    }
+
+    /// Hands `player_id`'s rig back to the home sky at tile `(column, row)`, turned and moving
+    /// as it came in toward `centre` (that body's up becomes the sky's up).
+    pub(super) fn return_home_at(
+        &mut self,
+        player_id: PlayerId,
+        centre: crate::position::WorldPos,
+        column: i32,
+        row: i32,
+        output: &mut TickOutput,
+    ) {
         let frame = self.frame();
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
         let flight = player.flight;
-        let (dx, dy) = space::home_centre().delta(flight.pos);
+        let (dx, dy) = centre.delta(flight.pos);
         // The home world's "up" where the rig came in becomes the sky's up.
         let up = physics::up_angle(dx, dy);
         let (sin, cos) = crate::field::trig::sin_cos(-up);
@@ -461,7 +512,7 @@ impl WorldState {
             flight.velocity_x.mul_add(sin, flight.velocity_y * cos),
         );
         let cap = super::AUTHORITATIVE_ABSOLUTE_MAX_SPEED;
-        let (x, y) = frame.centre_of(flight.exit_column, line + RETURN_BELOW_ROWS);
+        let (x, y) = frame.centre_of(column, row);
         player.x = x;
         player.y = y;
         player.x_remainder = 0.0;
@@ -476,6 +527,7 @@ impl WorldState {
         player.flight = RigFlight {
             exit_column: flight.exit_column,
             air: flight.air,
+            lag_seconds: flight.lag_seconds,
             ..RigFlight::default()
         };
         output.push_event(flight_event(FlightEvent::ReturnedHome, player_id, 0));
@@ -484,7 +536,7 @@ impl WorldState {
     /// The emergency beacon: `player_id`'s rig is towed home (where the rescue crew drops it)
     /// for [`crate::flight::beacon_fee`], with at least half a hull and half a tank. Never an
     /// unwinnable countdown.
-    fn emergency_beacon(&mut self, player_id: PlayerId, output: &mut TickOutput) {
+    pub(super) fn emergency_beacon(&mut self, player_id: PlayerId, output: &mut TickOutput) {
         let frame = self.frame();
         let (home_x, home_y) = self
             .rescue_home(player_id)
@@ -599,7 +651,9 @@ impl WorldState {
                         output.push_event(flight_event(FlightEvent::CruiseDropped, player_id, 0));
                         StarDrive::Off
                     }
-                    StarDrive::Warp(_) => return PlayerScopedCommandOutcome::IgnoredUnavailable,
+                    StarDrive::Warp(_) | StarDrive::Transit(_) => {
+                        return PlayerScopedCommandOutcome::IgnoredUnavailable;
+                    }
                 };
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.flight.drive = next;
@@ -621,7 +675,7 @@ impl WorldState {
                     .map(NavTarget::system)
                     .and_then(|system| self.space().system(system));
                 let result = target.ok_or(WarpRefusal::NoTarget).and_then(|system| {
-                    if flight.pos.distance(system.star) < WARP_ARRIVAL * 1.2 {
+                    if flight.pos.span(system.star) < WARP_ARRIVAL * 1.2 {
                         return Err(WarpRefusal::NoTarget);
                     }
                     let bodies = self.space_bodies_near(flight.pos);
@@ -674,7 +728,7 @@ impl WorldState {
                     .find(|body| body.body == station)
                     .map_or((0.0, -1.0), |body| {
                         let (dx, dy) = body.centre.delta(flight.pos);
-                        let r = dx.hypot(dy).max(1.0);
+                        let r = crate::field::trig::hypot(dx, dy).max(1.0);
                         (dx / r, dy / r)
                     });
             if let Some(player) = self.players.get_mut(&player_id) {
@@ -687,7 +741,7 @@ impl WorldState {
         }
         let port = bodies.iter().find_map(|body| {
             let port = body.port()?;
-            (flight.pos.distance(port) <= DOCK_RANGE
+            (flight.pos.span(port) <= DOCK_RANGE
                 && flight.speed() <= DOCK_SPEED
                 && wrap_angle(orientation - body.dock_orientation()).abs() <= DOCK_ALIGN
                 && !flight.drive.engaged())
@@ -757,6 +811,7 @@ impl WorldState {
                         FlightGearKind::Gyro => gear.attitude.gyro_stabiliser = 1,
                         FlightGearKind::HorizonHold => gear.attitude.horizon_hold = 1,
                         FlightGearKind::AutoLand => gear.flight.auto_land = 1,
+                        FlightGearKind::MiningBeam => gear.flight.mining_beam = 1,
                     }
                     true
                 }
@@ -803,7 +858,7 @@ impl WorldState {
         let found: Vec<SystemRef> = space
             .systems_near(centre, reach.max(1))
             .into_iter()
-            .filter(|system| centre.distance(system.star) <= range)
+            .filter(|system| centre.span(system.star) <= range)
             .map(|system| system.system)
             .collect();
         let mut new = 0_u32;
@@ -843,7 +898,7 @@ pub fn warp_arrival(
     star: crate::position::WorldPos,
 ) -> crate::position::WorldPos {
     let (dx, dy) = from.delta_f64(star);
-    let distance = dx.hypot(dy).max(1.0);
+    let distance = crate::polar::trig::hypot(dx, dy).max(1.0);
     let keep = (distance - f64::from(WARP_ARRIVAL)).max(0.0) / distance;
     space::advance(from, dx * keep, dy * keep)
 }
@@ -860,7 +915,9 @@ pub fn warp_check(
     star: crate::position::WorldPos,
     fuel: f32,
 ) -> Result<f32, WarpRefusal> {
-    if !matches!(flight.place, FlightPlace::Space) || matches!(flight.drive, StarDrive::Warp(_)) {
+    if !matches!(flight.place, FlightPlace::Space)
+        || matches!(flight.drive, StarDrive::Warp(_) | StarDrive::Transit(_))
+    {
         return Err(WarpRefusal::NotFree);
     }
     if wrap_angle(attitude.orientation - nav::bearing(flight.pos, star)).abs() > WARP_ALIGN {
@@ -869,12 +926,12 @@ pub fn warp_check(
     let clear = bodies
         .iter()
         .filter(|body| body.kind != BodyKind::Station)
-        .all(|body| flight.pos.distance(body.centre) - body.radius >= WARP_CLEARANCE);
+        .all(|body| flight.pos.span(body.centre) - body.radius >= WARP_CLEARANCE);
     if !clear {
         return Err(WarpRefusal::GravityWell);
     }
     let arrival = warp_arrival(flight.pos, star);
-    let cost = warp_fuel(f64::from(flight.pos.distance(arrival)));
+    let cost = warp_fuel(f64::from(flight.pos.span(arrival)));
     if fuel < cost {
         return Err(WarpRefusal::Fuel);
     }

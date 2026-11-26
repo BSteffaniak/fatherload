@@ -166,6 +166,7 @@ mod pilot_weather;
 pub(crate) mod places;
 #[cfg(test)]
 mod places_tests;
+mod space_systems;
 pub use body_flight::{
     BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
 };
@@ -597,6 +598,10 @@ pub struct WorldState {
     /// ([`crate::Player::flight`]).
     #[serde(default)]
     flight: crate::flight::FlightShared,
+    /// What the crew did to space's things (Wave 12 systems, see
+    /// [`crate::flight::systems`]): asteroids mined, comet dust gathered, wormholes flown.
+    #[serde(default)]
+    space_systems: crate::flight::systems::SystemsShared,
 }
 
 impl WorldState {

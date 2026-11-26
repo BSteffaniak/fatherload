@@ -48,7 +48,8 @@ fn motion_of(snapshot: &RenderSnapshot<'_>, view: &ViewSnapshot<'_>) -> FlightMo
                 * 0.4,
             heading,
         },
-        StarDrive::Warp(_) => FlightMotion::Warp {
+        // A wormhole's tunnel (Wave 12 systems) reads like a short, full warp.
+        StarDrive::Warp(_) | StarDrive::Transit(_) => FlightMotion::Warp {
             charge: 1.0,
             heading,
         },

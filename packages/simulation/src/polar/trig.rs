@@ -132,6 +132,64 @@ pub fn atan2(y: f64, x: f64) -> f64 {
     }
 }
 
+/// `sqrt(x² + y²)` with plain IEEE arithmetic.
+///
+/// The platform's `hypot` is a maths-library call whose last bits differ between targets
+/// (Wave 12 systems). Exact for every finite input a
+/// space distance meets (no overflow below about 1e150).
+#[must_use]
+#[allow(
+    clippy::suboptimal_flops,
+    clippy::imprecise_flops,
+    reason = "plain IEEE arithmetic: the same bits on every peer"
+)]
+pub fn hypot(x: f64, y: f64) -> f64 {
+    (x * x + y * y).sqrt()
+}
+
+/// The natural logarithm of `x > 0` (0 for anything else) with plain IEEE arithmetic.
+///
+/// The exponent from the bits, then `2 atanh((m - 1) / (m + 1))` on the mantissa in `[sqrt(1/2),
+/// sqrt(2))` (Wave 12 systems: the nav HUD's ETA).
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    reason = "IEEE exponent bits"
+)]
+pub fn ln(x: f64) -> f64 {
+    if !(x.is_finite() && x > 0.0) {
+        return 0.0;
+    }
+    let mut value = x;
+    let mut exponent = 0_i32;
+    // Subnormals: scale into the normal range first.
+    if value < f64::MIN_POSITIVE {
+        value *= 2f64.powi(64);
+        exponent -= 64;
+    }
+    let bits = value.to_bits();
+    exponent += ((bits >> 52) & 0x7FF) as i32 - 1_023;
+    let mut mantissa = f64::from_bits((bits & 0x000F_FFFF_FFFF_FFFF) | 0x3FF0_0000_0000_0000);
+    if mantissa > std::f64::consts::SQRT_2 {
+        mantissa *= 0.5;
+        exponent += 1;
+    }
+    let t = (mantissa - 1.0) / (mantissa + 1.0);
+    let t2 = t * t;
+    // atanh series: t + t³/3 + t⁵/5 + ... (|t| < 0.172: 12 terms reach 1e-17).
+    let mut sum = 0.0_f64;
+    let mut term = t;
+    let mut k = 1.0_f64;
+    for _ in 0..12 {
+        sum += term / k;
+        term *= t2;
+        k += 2.0;
+    }
+    f64::from(exponent).mul_add(std::f64::consts::LN_2, 2.0 * sum)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +218,24 @@ mod tests {
                 assert!((ours - y.atan2(x)).abs() < 4e-15, "atan2({y}, {x})");
             }
         }
+    }
+
+    #[test]
+    #[allow(clippy::while_float, reason = "a sweep of values")]
+    fn hypot_and_ln_track_the_platform_functions() {
+        let mut x = 1e-6_f64;
+        while x < 1e14 {
+            let ours = ln(x);
+            assert!(
+                (ours - x.ln()).abs() < 1e-13 * x.ln().abs().max(1.0),
+                "ln {x}"
+            );
+            let other = x.mul_add(0.37, 3.0);
+            let h = hypot(x, other);
+            let platform = x.hypot(other);
+            assert!((h - platform).abs() <= platform * 4e-16, "hypot {x}");
+            x *= 1.37;
+        }
+        assert!(ln(0.0).abs() < f64::EPSILON && ln(-1.0).abs() < f64::EPSILON);
     }
 }

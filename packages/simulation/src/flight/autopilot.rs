@@ -98,7 +98,7 @@ pub fn steer(
     };
     let flight = rig.flight;
     let attitude = rig.attitude;
-    let distance = flight.pos.distance(target);
+    let distance = flight.pos.span(target);
     let (dx, dy) = flight.pos.delta(target);
     let (dir_x, dir_y) = (dx / distance.max(1.0), dy / distance.max(1.0));
     let heading = heading.unwrap_or_else(|| nav::bearing(flight.pos, target));
@@ -391,7 +391,7 @@ impl SpaceBot {
             let land_radius = space::tiles(ground.land_radius_tiles() as f32);
             let flight = rig.flight;
             let (dx, dy) = body.centre.delta(flight.pos);
-            let r = dx.hypot(dy).max(1.0);
+            let r = crate::field::trig::hypot(dx, dy).max(1.0);
             let (ux, uy) = (dx / r, dy / r);
             let up = nav::bearing(body.centre, flight.pos);
             let altitude = r - land_radius;
@@ -541,8 +541,8 @@ impl SpaceBot {
         let dock_heading = station.dock_orientation();
         let (up, _) = axes(dock_heading);
         let lineup = port.offset(-up.0 * space::tiles(25.0), -up.1 * space::tiles(25.0));
-        let to_lineup = flight.pos.distance(lineup);
-        let to_port = flight.pos.distance(port);
+        let to_lineup = flight.pos.span(lineup);
+        let to_port = flight.pos.span(port);
         let final_leg = to_lineup < space::tiles(4.0) || to_port < space::tiles(25.0);
         let target = if final_leg { port } else { lineup };
         let heading = (to_port < space::tiles(60.0)).then_some(dock_heading);

@@ -594,6 +594,8 @@ fn draw_body(
             }
         }
         BodyKind::Station => draw_station(draw, frame, body, at, radius, ticks),
+        // Wave 12 systems: the space renderer draws holes, mouths, rocks and comets.
+        BodyKind::BlackHole | BodyKind::Wormhole | BodyKind::Asteroid | BodyKind::Comet => {}
     }
 }
 
@@ -885,7 +887,7 @@ fn draw_own_rig(
                 with_alpha(ICE, (80.0 + 150.0 * share) as u8),
             );
         }
-        StarDrive::Off | StarDrive::Warp(_) => {}
+        StarDrive::Off | StarDrive::Warp(_) | StarDrive::Transit(_) => {}
     }
     if let Some(presentation) = snapshot
         .players
@@ -1066,6 +1068,14 @@ fn drive_line(snapshot: &RenderSnapshot<'_>, flight: &RigFlight) -> (String, Col
             let share = snapshot.space.millis.saturating_sub(run.start) as f32
                 / run.duration_millis.max(1) as f32;
             (format!("WARP  {:.0}%", (share * 100.0).min(100.0)), ICE)
+        }
+        StarDrive::Transit(transit) => {
+            let share = snapshot.space.millis.saturating_sub(transit.run.start) as f32
+                / transit.run.duration_millis.max(1) as f32;
+            (
+                format!("WORMHOLE TRANSIT  {:.0}%", (share * 100.0).min(100.0)),
+                ICE,
+            )
         }
     }
 }
@@ -1313,7 +1323,7 @@ pub(super) fn draw_space_hud(
         StarDrive::Cruise { .. } | StarDrive::Spool { .. } => {
             hints.push(hint(Prompt::Anchor, "drop cruise"));
         }
-        StarDrive::Warp(_) => {}
+        StarDrive::Warp(_) | StarDrive::Transit(_) => {}
     }
     hints.extend([hint(Prompt::Map, "nav chart"), hint(Prompt::Scan, "ping")]);
     if nav && matches!(waypoint, Some(NavTarget::System(_))) && !flight.drive.engaged() {

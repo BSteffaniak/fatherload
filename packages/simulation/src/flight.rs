@@ -73,6 +73,7 @@ pub mod autopilot;
 pub mod nav;
 pub mod physics;
 pub mod space;
+pub mod systems;
 #[cfg(test)]
 mod tests;
 
@@ -250,8 +251,24 @@ pub struct RigFlight {
     /// The home column the rig left from (it comes home over it).
     pub exit_column: i32,
     /// Warnings already raised on this tank of air (bits: [`AIR_WARNINGS`] in order, then
-    /// heat).
+    /// heat; Wave 12 systems: bits 4-6 a black hole's [`systems::HoleWarning`]s, bit 7 a
+    /// flare's warning).
     pub alerts: u8,
+    /// Seconds the rig's own clock has fallen behind the crew's near black holes (Wave 12
+    /// systems: time dilation; the HUD shows it).
+    #[serde(default)]
+    pub lag_seconds: f32,
+    /// Progress (0-1) of the unit of ore being drilled or beamed out of an asteroid (Wave 12).
+    #[serde(default)]
+    pub mining: f32,
+    /// Progress (0-1) of the unit of dust being gathered in a comet's tail (Wave 12).
+    #[serde(default)]
+    pub gathering: f32,
+    /// Wave 12 systems' edge marks: bit 0 inside a nebula, bit 1 the parking hold holds
+    /// ([`physics::MARK_HOLDING`]), bit 2 a full hold announced, bit 3 a star's radiance
+    /// announced.
+    #[serde(default)]
+    pub marks: u8,
 }
 
 impl RigFlight {
@@ -264,7 +281,7 @@ impl RigFlight {
     /// Speed in space (px/s).
     #[must_use]
     pub fn speed(&self) -> f32 {
-        self.velocity_x.hypot(self.velocity_y)
+        crate::field::trig::hypot(self.velocity_x, self.velocity_y)
     }
 }
 
@@ -281,6 +298,18 @@ pub enum StarDrive {
     Spool { target: SystemRef, since: u64 },
     /// In warp.
     Warp(WarpRun),
+    /// Through a wormhole (Wave 12 systems): a short tunnel crossing to the paired mouth as a
+    /// pure function of time, like the warp.
+    Transit(TransitRun),
+}
+
+/// A wormhole transit: the run to the far mouth and the heading the rig leaves it along.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct TransitRun {
+    pub run: WarpRun,
+    /// Unit heading out of the far mouth (the one the rig came in with).
+    pub heading_x: f32,
+    pub heading_y: f32,
 }
 
 impl StarDrive {
@@ -315,6 +344,10 @@ pub struct FlightGear {
     /// Auto-land fitted (0 or 1); it works only while the seat switches it on.
     #[serde(default)]
     pub auto_land: u8,
+    /// The Mining Beam fitted (0 or 1; Wave 12 systems): the trigger mines asteroids from the
+    /// nose ([`systems::beam_target`]).
+    #[serde(default)]
+    pub mining_beam: u8,
 }
 
 impl FlightGear {
@@ -323,6 +356,7 @@ impl FlightGear {
         nav_suite: NAV_SUITE_MAX,
         reentry_shield: REENTRY_SHIELD_MAX,
         auto_land: 1,
+        mining_beam: 1,
     };
 }
 
@@ -339,15 +373,18 @@ pub enum FlightGearKind {
     Gyro,
     HorizonHold,
     AutoLand,
+    /// Wave 12 systems: mines asteroids from the nose.
+    MiningBeam,
 }
 
 impl FlightGearKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::NavSuite,
         Self::ReentryShield,
         Self::Gyro,
         Self::HorizonHold,
         Self::AutoLand,
+        Self::MiningBeam,
     ];
 
     /// Shop name.
@@ -359,6 +396,7 @@ impl FlightGearKind {
             Self::Gyro => "Gyro Stabiliser",
             Self::HorizonHold => "Horizon Hold",
             Self::AutoLand => "Auto-Land",
+            Self::MiningBeam => "Mining Beam",
         }
     }
 
@@ -368,7 +406,7 @@ impl FlightGearKind {
         match self {
             Self::NavSuite => NAV_SUITE_MAX,
             Self::ReentryShield => REENTRY_SHIELD_MAX,
-            Self::Gyro | Self::HorizonHold | Self::AutoLand => 1,
+            Self::Gyro | Self::HorizonHold | Self::AutoLand | Self::MiningBeam => 1,
         }
     }
 
@@ -381,6 +419,7 @@ impl FlightGearKind {
             Self::Gyro => gear.attitude.gyro_stabiliser,
             Self::HorizonHold => gear.attitude.horizon_hold,
             Self::AutoLand => gear.flight.auto_land,
+            Self::MiningBeam => gear.flight.mining_beam,
         }
     }
 
@@ -393,6 +432,7 @@ impl FlightGearKind {
             Self::Gyro => 1_800,
             Self::HorizonHold => 2_200,
             Self::AutoLand => 2_800,
+            Self::MiningBeam => 3_400,
         };
         base * (level as u32 + 1)
     }

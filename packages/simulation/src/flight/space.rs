@@ -28,7 +28,10 @@ use crate::{
     terrain::TILE_SIZE,
 };
 
-use super::BodyRef;
+use super::{
+    BodyRef,
+    systems::{BodyExtra, CometFacts, CometKey, HoleFacts, MouthFacts, StarFacts},
+};
 
 /// Tiles across a galactic sector (the space generator's sector).
 pub const GALAXY_SECTOR_TILES: i64 = crate::space::SPACE_SECTOR_TILES;
@@ -47,6 +50,18 @@ pub const FIRST_BODY_INDEX: u8 = 2;
 pub const HOME_INDEX: u8 = FIRST_BODY_INDEX + crate::space::HOME_WORLD_BODY.body;
 /// The Moon's body index (seen from space; its ground is the home world's sky).
 pub const MOON_INDEX: u8 = FIRST_BODY_INDEX + crate::space::MOON_BODY.body;
+/// The Moon (Wave 12 systems: coming down to it lands on it).
+pub const MOON_BODY_REF: BodyRef = BodyRef {
+    system: HOME_SYSTEM,
+    index: MOON_INDEX,
+};
+/// The body index of a black hole, a wormhole mouth, a belt's rock and a comet (Wave 12
+/// systems; their [`BodyRef::system`] carries their own id and sector).
+pub const HOLE_INDEX: u8 = 250;
+pub const MOUTH_INDEX: u8 = 251;
+pub const ROCK_INDEX: u8 = 252;
+/// A system's first comet's body index (the rest follow, up to [`HOLE_INDEX`]).
+pub const COMET_INDEX: u8 = 230;
 /// The home world.
 pub const HOME_BODY: BodyRef = BodyRef {
     system: HOME_SYSTEM,
@@ -92,6 +107,14 @@ pub enum BodyKind {
     /// The home world (handed back to its ground and sky on approach).
     Home,
     Station,
+    /// Wave 12 systems: a black hole (its radius the event horizon).
+    BlackHole,
+    /// Wave 12 systems: a wormhole's mouth (fly in to cross to its pair).
+    Wormhole,
+    /// Wave 12 systems: a belt's rock (solid, mineable from flight).
+    Asteroid,
+    /// Wave 12 systems: a comet's nucleus (its tail holds dust).
+    Comet,
 }
 
 /// One body, as flight sees it.
@@ -114,6 +137,9 @@ pub struct FlightBody {
     pub port_angle: f32,
     /// A star's class (also the class of the system a body belongs to).
     pub class: StarClass,
+    /// What else it does (Wave 12 systems: stars' heat and flares, black holes, wormhole
+    /// mouths, rocks and comets).
+    pub extra: super::systems::BodyExtra,
 }
 
 impl FlightBody {
@@ -295,6 +321,7 @@ pub const fn hash64(seed: u64, salt: u64, x: i64, y: i64) -> u64 {
 }
 
 const SALT_PORT: u64 = 0xF117_0003;
+const SALT_MOUTH: u64 = 0xF117_0004;
 
 /// The generated galaxy as flight sees it (see the module docs).
 #[derive(Clone, Debug)]
@@ -556,6 +583,12 @@ impl SpaceQuery for GeneratedSpace {
                 corona_heat: corona,
                 port_angle: 0.0,
                 class: found.class,
+                extra: BodyExtra::Star(StarFacts {
+                    heat_radius: tiles(star.heat_radius as f32),
+                    light: star.light,
+                    flare_period_s: star.flare_period_s,
+                    flare_phase_s: star.flare_phase_s,
+                }),
             });
         }
         for body in &found.bodies {
@@ -604,6 +637,7 @@ impl SpaceQuery for GeneratedSpace {
                 corona_heat: 0.0,
                 port_angle: 0.0,
                 class: found.class,
+                extra: BodyExtra::None,
             });
         }
         for station in &found.stations {
@@ -637,9 +671,154 @@ impl SpaceQuery for GeneratedSpace {
                 corona_heat: 0.0,
                 port_angle,
                 class: found.class,
+                extra: BodyExtra::None,
+            });
+        }
+        // Comets (Wave 12 systems): a solid nucleus and a tail to gather dust in.
+        for (index, comet) in found.comets.iter().enumerate() {
+            let Some(slot) = u8::try_from(index)
+                .ok()
+                .and_then(|index| COMET_INDEX.checked_add(index))
+                .filter(|slot| *slot < HOLE_INDEX)
+            else {
+                continue;
+            };
+            bodies.push(FlightBody {
+                body: BodyRef {
+                    system: system.system,
+                    index: slot,
+                },
+                kind: BodyKind::Comet,
+                centre: comet.centre.pos(),
+                radius: tiles(f32::from(comet.nucleus_radius)),
+                surface_gravity: 0.0,
+                atmosphere: 0.0,
+                approach: 0.0,
+                corona_heat: 0.0,
+                port_angle: 0.0,
+                class: found.class,
+                extra: BodyExtra::Comet(CometFacts {
+                    key: CometKey {
+                        system: system.system,
+                        index: slot - COMET_INDEX,
+                    },
+                    tail_end: comet.tail_end.pos(),
+                    tail_width: tiles(comet.tail_width as f32),
+                }),
             });
         }
         bodies
+    }
+
+    fn bodies_near(&self, pos: WorldPos) -> Vec<FlightBody> {
+        let mut bodies: Vec<FlightBody> = self
+            .systems_near(pos, 1)
+            .iter()
+            .flat_map(|system| self.bodies_of(system))
+            .collect();
+        bodies.extend(self.interstellar_near(pos));
+        bodies
+    }
+}
+
+impl GeneratedSpace {
+    /// The black holes and wormhole mouths of the 3 x 3 galactic sectors round `pos` as flight
+    /// bodies (Wave 12 systems).
+    #[must_use]
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "radii of a few tens of thousands of tiles"
+    )]
+    pub fn interstellar_near(&self, pos: WorldPos) -> Vec<FlightBody> {
+        let (sx, sy) = galaxy_sector_of(pos);
+        let mut bodies = Vec::new();
+        for gy in sy.saturating_sub(1)..=sy.saturating_add(1) {
+            for gx in sx.saturating_sub(1)..=sx.saturating_add(1) {
+                let Some(coords) = Self::space_sector((gx, gy)) else {
+                    continue;
+                };
+                let sector = self.space.sector(coords);
+                for hole in &sector.black_holes {
+                    let radius = tiles(hole.horizon as f32);
+                    let lensing = tiles(hole.lensing_radius as f32);
+                    bodies.push(FlightBody {
+                        body: BodyRef {
+                            system: SystemRef {
+                                id: hole.id,
+                                sector: (gx, gy),
+                            },
+                            index: HOLE_INDEX,
+                        },
+                        kind: BodyKind::BlackHole,
+                        centre: hole.centre.pos(),
+                        radius,
+                        surface_gravity: hole.gravity_milli_g as f32 / 1_000.0 * FLIGHT_G_PX,
+                        atmosphere: 0.0,
+                        approach: lensing,
+                        corona_heat: 0.0,
+                        port_angle: 0.0,
+                        class: StarClass::default(),
+                        extra: BodyExtra::Hole(HoleFacts {
+                            lensing,
+                            time_dilation: f32::from(hole.time_dilation) / 1_000.0,
+                        }),
+                    });
+                }
+                for mouth in &sector.wormholes {
+                    let radius = tiles(mouth.radius as f32);
+                    let exit_radius = self
+                        .space
+                        .sector(mouth.exit_sector)
+                        .wormholes
+                        .first()
+                        .map_or(radius, |far| tiles(far.radius as f32));
+                    bodies.push(FlightBody {
+                        body: BodyRef {
+                            system: SystemRef {
+                                id: hash64(0, SALT_MOUTH, gx, gy),
+                                sector: (gx, gy),
+                            },
+                            index: MOUTH_INDEX,
+                        },
+                        kind: BodyKind::Wormhole,
+                        centre: mouth.centre.pos(),
+                        radius,
+                        surface_gravity: 0.0,
+                        atmosphere: 0.0,
+                        approach: radius * 4.0,
+                        corona_heat: 0.0,
+                        port_angle: 0.0,
+                        class: StarClass::default(),
+                        extra: BodyExtra::Mouth(MouthFacts {
+                            exit: mouth.exit.pos(),
+                            exit_radius,
+                            sector: (gx, gy),
+                            exit_sector: (
+                                i64::from(mouth.exit_sector.x),
+                                i64::from(mouth.exit_sector.y),
+                            ),
+                        }),
+                    });
+                }
+            }
+        }
+        bodies
+    }
+
+    /// The belt rocks within `reach_tiles` of `pos` that the crew has not mined out, as flight
+    /// bodies (Wave 12 systems).
+    #[must_use]
+    pub fn rocks_near(
+        &self,
+        pos: WorldPos,
+        reach_tiles: i64,
+        mined: &super::systems::SystemsShared,
+    ) -> Vec<FlightBody> {
+        self.space
+            .asteroids_near(pos, reach_tiles)
+            .iter()
+            .filter_map(|rock| super::systems::rock_body(rock, mined.mined_from(rock.id)))
+            .collect()
     }
 }
 
@@ -654,7 +833,7 @@ pub fn gravity_at(bodies: &[FlightBody], pos: WorldPos) -> ((f32, f32), Option<u
             continue;
         }
         let (dx, dy) = pos.delta(body.centre);
-        let distance = dx.hypot(dy);
+        let distance = crate::field::trig::hypot(dx, dy);
         let pull = body.gravity_at(distance);
         if pull <= 0.0 || distance <= 0.0 {
             continue;
@@ -674,7 +853,11 @@ pub fn gravity_at(bodies: &[FlightBody], pos: WorldPos) -> ((f32, f32), Option<u
 pub fn nearest_surface(bodies: &[FlightBody], pos: WorldPos) -> (f32, Option<usize>) {
     let mut best = (f32::INFINITY, None);
     for (index, body) in bodies.iter().enumerate() {
-        let gap = pos.distance(body.centre) - body.radius;
+        // Rocks and comets do not pace the cruise (they bump it out instead; Wave 12).
+        if matches!(body.kind, BodyKind::Asteroid | BodyKind::Comet) {
+            continue;
+        }
+        let gap = pos.span(body.centre) - body.radius;
         if gap < best.0 {
             best = (gap, Some(index));
         }

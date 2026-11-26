@@ -442,6 +442,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Flight {
             what, player_id, ..
         } => (800 + what.code() as u32, Some(player_id)),
+        // Space's things (wave 12 systems): 860-879.
+        GameplayEventKind::SpaceSystems {
+            what, player_id, ..
+        } => (860 + what.code() as u32, Some(player_id)),
     }
 }
 

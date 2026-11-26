@@ -1348,6 +1348,14 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         detail: u32,
     },
+    // Space's things (Wave 12 systems; netcode codes 860-879).
+    /// A star, black hole, wormhole, nebula, asteroid or comet did something to `player_id`'s
+    /// rig; `detail` is the event's number (seconds to a flare, an ore, a fee, ...).
+    SpaceSystems {
+        what: crate::flight::systems::SystemsEvent,
+        player_id: PlayerId,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.

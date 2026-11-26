@@ -107,6 +107,7 @@ fn launch(
             air: capacity * 0.8,
             exit_column: 120,
             alerts: 0,
+            ..RigFlight::default()
         };
     }
 }

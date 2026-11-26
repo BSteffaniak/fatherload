@@ -201,6 +201,7 @@ impl WorldState {
             place_pass: _,
             // Space positions are space coordinates, not the home frame's (Wave 11).
             flight: _,
+            space_systems: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

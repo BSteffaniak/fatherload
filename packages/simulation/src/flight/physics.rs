@@ -21,6 +21,7 @@ use super::{
     SHIELD_SAFE_SHARE, SPACE_FUEL_PER_SECOND, SPACE_THRUST, STRAFE_SHARE, StarDrive,
     TANGENTIAL_HEAT_SHARE, TIP_SPIN, WarpRun,
     space::{BodyKind, FlightBody, GALAXY_SECTOR_TILES, advance, gravity_at, nearest_surface},
+    systems::{self, ROCK_DAMAGE_MAX, ROCK_DAMAGE_SCALE, ROCK_SAFE_SPEED},
 };
 
 /// Longest internal integration step (240 Hz, as the attitude's).
@@ -66,6 +67,20 @@ pub const AUTO_LAND_SPEED: f32 = 150.0;
 pub const NO_DOWN_GRAVITY: f32 = 2.0;
 /// A star's surface burns the hull this much a second (it pushes the rig back out).
 pub const STAR_SURFACE_DAMAGE: f32 = 40.0;
+/// The parking hold (Wave 12 systems).
+///
+/// An idle rig in open space where gravity is under [`PARK_HOLD_MAX_GRAVITY`] (px/s², about a quarter g) and slower than
+/// [`PARK_HOLD_SPEED`] holds station on its translation thrusters (its turn stays the
+/// player's): it never drifts back home from the departure point. Any thrust lets go.
+pub const PARK_HOLD_MAX_GRAVITY: f32 = 110.0;
+pub const PARK_HOLD_SPEED: f32 = 30.0;
+/// How fast a holding rig's drift dies away (per second).
+pub const PARK_HOLD_DAMPING: f32 = 3.0;
+/// The Moon hands a rig over to the home sky over it this far above its surface (px): its
+/// approach sphere only zooms the view in (Wave 12 systems: no snap home on a fly-by).
+pub const MOON_LAND_HEIGHT: f32 = 60.0 * TILE_SIZE;
+/// Bit of [`RigFlight::marks`] while the parking hold holds.
+pub const MARK_HOLDING: u8 = 1 << 1;
 
 /// The seat's controls for one tick of flight.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -95,6 +110,8 @@ pub struct FlightRig {
     pub auto_land: bool,
     /// Fuel aboard at the start of the tick.
     pub fuel: f32,
+    /// The world's millisecond at the end of the tick (stars' flares, Wave 12 systems).
+    pub now_millis: u64,
 }
 
 /// What one tick of flight did.
@@ -106,6 +123,18 @@ pub struct FlightOutcome {
     pub events: Vec<(FlightEvent, u32)>,
     /// The rig flew into the home world's approach sphere (hand it back to the home sky).
     pub reached_home: bool,
+    /// The rig came down to the Moon (hand it back to the home sky over the Moon; Wave 12).
+    pub reached_moon: bool,
+    /// The black hole (index in the body list) whose horizon the rig crossed (Wave 12).
+    pub swallowed: Option<usize>,
+    /// The wormhole mouth (index in the body list) the rig flew into (Wave 12).
+    pub mouth: Option<usize>,
+    /// The parking hold held the rig this tick (Wave 12).
+    pub holding: bool,
+    /// A bump against a rock dented the hull this much (Wave 12).
+    pub rock_damage: f32,
+    /// Heat a second from stars' radiance and flares at the end of the tick (Wave 12).
+    pub star_heat: f32,
 }
 
 impl FlightOutcome {
@@ -236,7 +265,7 @@ pub fn step_flight(
     for _ in 0..steps {
         let has_fuel = rig.fuel - outcome.fuel_burned > 0.0;
         let ((gx, gy), strongest) = gravity_at(bodies, flight.pos);
-        let g_strength = gx.hypot(gy);
+        let g_strength = crate::field::trig::hypot(gx, gy);
         let down_body = strongest.map(|index| &bodies[index]);
         let local_up = down_body.map(|body| {
             let (dx, dy) = body.centre.delta(flight.pos);
@@ -246,7 +275,7 @@ pub fn step_flight(
         // Auto-land: low over a landable surface, descending, fitted and switched on.
         let (height, radial_in) = down_body.map_or((f32::INFINITY, 0.0), |body| {
             let (dx, dy) = body.centre.delta(flight.pos);
-            let r = dx.hypot(dy).max(1.0);
+            let r = crate::field::trig::hypot(dx, dy).max(1.0);
             let v_out = flight.velocity_y.mul_add(dy, flight.velocity_x * dx) / r;
             (r - body.radius - RIG_CONTACT, -v_out)
         });
@@ -281,7 +310,7 @@ pub fn step_flight(
             .mul_add(dt, outcome.fuel_burned);
         let (up, right) = axes(attitude.orientation);
         match flight.drive {
-            StarDrive::Warp(_) => continue,
+            StarDrive::Warp(_) | StarDrive::Transit(_) => continue,
             StarDrive::Cruise { speed } => {
                 let (gap, _) = nearest_surface(bodies, flight.pos);
                 let limit = cruise_limit(gap);
@@ -303,7 +332,7 @@ pub fn step_flight(
                 // Into a body's approach sphere, or braked to a crawl: the thrusters take over.
                 let inside = bodies
                     .iter()
-                    .any(|body| flight.pos.distance(body.centre) < body.approach);
+                    .any(|body| flight.pos.span(body.centre) < body.approach);
                 if inside || (input.forward < 0.0 && speed <= CRUISE_MIN_SPEED) {
                     flight.drive = StarDrive::Off;
                     let speed = flight.speed();
@@ -344,7 +373,7 @@ pub fn step_flight(
                     // The last few metres: hold the descent to a safe speed.
                     if let Some(body) = down_body {
                         let (dx, dy) = body.centre.delta(flight.pos);
-                        let r = dx.hypot(dy).max(1.0);
+                        let r = crate::field::trig::hypot(dx, dy).max(1.0);
                         let brake = ((radial_in - AUTO_LAND_SPEED) / dt).min(push);
                         ax = (dx / r).mul_add(brake, ax);
                         ay = (dy / r).mul_add(brake, ay);
@@ -352,10 +381,35 @@ pub fn step_flight(
                             SPACE_FUEL_PER_SECOND.mul_add(dt, outcome.fuel_burned);
                     }
                 }
+                // The parking hold: idle, slow, in open space with little pull.
+                let idle = input.forward == 0.0 && input.strafe == 0.0 && !spooling;
+                let open = matches!(flight.place, FlightPlace::Space)
+                    || down_body.is_none_or(|body| !body.landable() && body.kind != BodyKind::Home);
+                let holding_before = flight.marks & MARK_HOLDING != 0;
+                let slow = flight.speed()
+                    < if holding_before {
+                        PARK_HOLD_SPEED * 2.0
+                    } else {
+                        PARK_HOLD_SPEED
+                    };
+                if idle && open && slow && g_strength < PARK_HOLD_MAX_GRAVITY && !landed {
+                    let keep = crate::field::trig::exp_neg(PARK_HOLD_DAMPING * dt);
+                    flight.velocity_x *= keep;
+                    flight.velocity_y *= keep;
+                    flight.marks |= MARK_HOLDING;
+                    outcome.holding = true;
+                    flight.pos = flight
+                        .pos
+                        .offset(flight.velocity_x * dt, flight.velocity_y * dt);
+                    contact(flight, attitude, bodies, dt, &mut outcome);
+                    heat(flight, bodies, shield, rig.now_millis, dt, &mut outcome);
+                    continue;
+                }
+                flight.marks &= !MARK_HOLDING;
                 if landed {
                     let Some(body) = down_body else { continue };
                     let (dx, dy) = body.centre.delta(flight.pos);
-                    let r = dx.hypot(dy).max(1.0);
+                    let r = crate::field::trig::hypot(dx, dy).max(1.0);
                     let lift = (ay + gy).mul_add(dy, (ax + gx) * dx) / r;
                     if lift <= 0.0 {
                         flight.velocity_x = 0.0;
@@ -378,7 +432,13 @@ pub fn step_flight(
             }
         }
         contact(flight, attitude, bodies, dt, &mut outcome);
-        heat(flight, bodies, shield, dt, &mut outcome);
+        heat(flight, bodies, shield, rig.now_millis, dt, &mut outcome);
+        if outcome.swallowed.is_some() || outcome.mouth.is_some() {
+            break;
+        }
+    }
+    if !outcome.holding {
+        flight.marks &= !MARK_HOLDING;
     }
     update_place(flight, bodies, &mut outcome);
     outcome
@@ -392,10 +452,22 @@ fn contact(
     dt: f32,
     outcome: &mut FlightOutcome,
 ) {
-    for body in bodies {
+    for (index, body) in bodies.iter().enumerate() {
         let (dx, dy) = body.centre.delta(flight.pos);
-        let r = dx.hypot(dy);
+        let r = crate::field::trig::hypot(dx, dy);
         let floor = body.radius + RIG_CONTACT;
+        // A wormhole's mouth swallows the rig's centre, not its hull's edge; a black hole's
+        // horizon likewise (Wave 12 systems).
+        if matches!(body.kind, BodyKind::Wormhole | BodyKind::BlackHole) {
+            if r < body.radius {
+                if body.kind == BodyKind::Wormhole {
+                    outcome.mouth.get_or_insert(index);
+                } else {
+                    outcome.swallowed.get_or_insert(index);
+                }
+            }
+            continue;
+        }
         if r >= floor || r <= 0.0 {
             continue;
         }
@@ -459,6 +531,30 @@ fn contact(
                     flight.velocity_y = ty;
                 }
             }
+            BodyKind::Asteroid | BodyKind::Comet => {
+                // A rock (or a comet's nucleus) is solid: the rig rests against it, or bounces
+                // off a hard bump with a dent; a cruise or warp drops out.
+                if v_out < 0.0 {
+                    let impact = -v_out;
+                    if impact > ROCK_SAFE_SPEED {
+                        let damage =
+                            ((impact - ROCK_SAFE_SPEED) * ROCK_DAMAGE_SCALE).min(ROCK_DAMAGE_MAX);
+                        outcome.hull_damage += damage;
+                        outcome.rock_damage += damage;
+                        let back = impact * BOUNCE_KEEP;
+                        flight.velocity_x = nx.mul_add(back, tx * 0.6);
+                        flight.velocity_y = ny.mul_add(back, ty * 0.6);
+                    } else {
+                        flight.velocity_x = tx;
+                        flight.velocity_y = ty;
+                    }
+                }
+                if flight.drive.engaged() {
+                    flight.drive = StarDrive::Off;
+                    outcome.push(FlightEvent::CruiseDropped, 0);
+                }
+            }
+            BodyKind::BlackHole | BodyKind::Wormhole => {}
         }
     }
 }
@@ -468,16 +564,22 @@ fn heat(
     flight: &mut RigFlight,
     bodies: &[FlightBody],
     shield: f32,
+    now: u64,
     dt: f32,
     outcome: &mut FlightOutcome,
 ) {
-    let mut rate = 0.0_f32;
+    // A star's radiance past its heat radius and its flares (Wave 12 systems); the re-entry
+    // shield turns them aside too.
+    let (flare, _) = systems::flare_heat(bodies, flight.pos, now);
+    let star = (systems::radiant_heat(bodies, flight.pos) + flare) / (1.0 + shield);
+    outcome.star_heat = star;
+    let mut rate = star;
     for body in bodies {
         if body.atmosphere <= 0.0 {
             continue;
         }
         let (dx, dy) = body.centre.delta(flight.pos);
-        let r = dx.hypot(dy);
+        let r = crate::field::trig::hypot(dx, dy);
         let top = body.radius + body.atmosphere;
         if r >= top || r <= 0.0 {
             continue;
@@ -514,7 +616,7 @@ fn update_place(flight: &mut RigFlight, bodies: &[FlightBody], outcome: &mut Fli
                 flight.place = FlightPlace::Space;
                 return;
             };
-            let r = flight.pos.distance(found.centre);
+            let r = flight.pos.span(found.centre);
             if r > found.radius + RIG_CONTACT + 2.0 {
                 flight.place = FlightPlace::Approach(body);
                 outcome.push(FlightEvent::TookOff, 0);
@@ -524,13 +626,20 @@ fn update_place(flight: &mut RigFlight, bodies: &[FlightBody], outcome: &mut Fli
             // The smallest approach sphere the rig is inside (a station near a world wins).
             let inside = bodies
                 .iter()
-                .filter(|body| flight.pos.distance(body.centre) < body.approach)
+                .filter(|body| flight.pos.span(body.centre) < body.approach)
                 .min_by(|a, b| a.approach.total_cmp(&b.approach));
             let next = inside.map_or(FlightPlace::Space, |body| FlightPlace::Approach(body.body));
             if let Some(body) = inside
                 && body.kind == BodyKind::Home
             {
-                outcome.reached_home = true;
+                if body.body == super::space::MOON_BODY_REF {
+                    // The Moon's sphere only zooms in: coming down to it lands on it.
+                    if flight.pos.span(body.centre) < body.radius + MOON_LAND_HEIGHT {
+                        outcome.reached_moon = true;
+                    }
+                } else {
+                    outcome.reached_home = true;
+                }
             }
             if next != flight.place {
                 if matches!(next, FlightPlace::Approach(_)) {

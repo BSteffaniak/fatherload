@@ -342,7 +342,7 @@ impl PolarGrid {
     /// itself reads as column 0 at the bottom of the core.
     #[must_use]
     pub fn from_cartesian(&self, x: f64, y: f64) -> (f64, f64) {
-        let r = x.hypot(y);
+        let r = trig::hypot(x, y);
         // Angle clockwise from up (-y): atan2(x, -y).
         let mut angle = trig::atan2(x, -y);
         if angle < 0.0 {

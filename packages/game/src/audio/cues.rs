@@ -344,6 +344,11 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::HeartMetalSplash => Patch::HeartMetalSplash,
         SoundCue::StoryDescentCall => Patch::StoryDescentCall,
         SoundCue::StoryCableLit => Patch::StoryCableLit,
+        SoundCue::SystemsFlareWarning => Patch::SystemsFlareWarning,
+        SoundCue::SystemsFlareBurst => Patch::SystemsFlareBurst,
+        SoundCue::SystemsHoleWarning => Patch::SystemsHoleWarning,
+        SoundCue::SystemsTransit => Patch::SystemsTransit,
+        SoundCue::SystemsOreCrunch => Patch::SystemsOreCrunch,
     }
 }
 
@@ -679,6 +684,29 @@ pub const fn flight_cue(what: fatherload_simulation::flight::FlightEvent) -> Sou
         E::Undocked => SoundCue::HatchOpen,
         E::ScannerPing => SoundCue::Scanner,
         E::NavUpdated => SoundCue::UiMove,
+    }
+}
+
+/// What space's things sound like (Wave 12 systems; exhaustive: a new event needs an answer).
+#[must_use]
+pub const fn systems_cue(what: fatherload_simulation::flight::systems::SystemsEvent) -> SoundCue {
+    use fatherload_simulation::flight::systems::SystemsEvent as E;
+    match what {
+        E::StarHeat => SoundCue::StormSiren,
+        E::FlareWarning => SoundCue::SystemsFlareWarning,
+        E::FlareStruck => SoundCue::SystemsFlareBurst,
+        E::FlareSheltered => SoundCue::Ui,
+        E::HoleWell | E::NebulaEntered => SoundCue::GravityHum,
+        E::HoleStrain | E::HoleNoReturn => SoundCue::SystemsHoleWarning,
+        E::HoleRescued => SoundCue::Rescue,
+        E::WormholeEntered => SoundCue::SystemsTransit,
+        E::WormholeExited => SoundCue::SkyBand,
+        E::NebulaLeft | E::AsteroidDepleted => SoundCue::UiMove,
+        E::OreMined | E::CometDust => SoundCue::SystemsOreCrunch,
+        E::HoldFull => SoundCue::UiError,
+        E::RockBump => SoundCue::ImpactRock,
+        E::ParkingHold => SoundCue::HatchClose,
+        E::MoonApproach => SoundCue::MoonLanding,
     }
 }
 
@@ -1212,6 +1240,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Planet { what, .. } => planet_cue(*what),
         // Space flight (Wave 11).
         GameplayEventKind::Flight { what, .. } => Some(flight_cue(*what)),
+        // Space's things (Wave 12 systems).
+        GameplayEventKind::SpaceSystems { what, .. } => Some(systems_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1563,7 +1593,8 @@ mod tests {
             | GameplayEventKind::Story { .. }
             | GameplayEventKind::PlaceChanged { .. }
             | GameplayEventKind::Planet { .. }
-            | GameplayEventKind::Flight { .. } => {}
+            | GameplayEventKind::Flight { .. }
+            | GameplayEventKind::SpaceSystems { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2017,6 +2048,13 @@ mod tests {
         }
         for what in fatherload_simulation::flight::FlightEvent::ALL {
             events.push(GameplayEventKind::Flight {
+                what,
+                player_id,
+                detail: 0,
+            });
+        }
+        for what in fatherload_simulation::flight::systems::SystemsEvent::ALL {
+            events.push(GameplayEventKind::SpaceSystems {
                 what,
                 player_id,
                 detail: 0,
@@ -2723,6 +2761,11 @@ mod tests {
             SoundCue::HeartMetalSplash,
             SoundCue::StoryDescentCall,
             SoundCue::StoryCableLit,
+            SoundCue::SystemsFlareWarning,
+            SoundCue::SystemsFlareBurst,
+            SoundCue::SystemsHoleWarning,
+            SoundCue::SystemsTransit,
+            SoundCue::SystemsOreCrunch,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

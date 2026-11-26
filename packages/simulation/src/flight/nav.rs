@@ -77,9 +77,10 @@ pub fn in_nebula(space: &dyn SpaceQuery, pos: WorldPos) -> bool {
     // The space generator's fog (interstellar nebulae and nebula stars' clouds), or a nebula
     // star's neighbourhood.
     space.fog_at(pos) >= NEBULA_FOG_PERMILLE
-        || space.systems_near(pos, 1).iter().any(|system| {
-            system.class == StarClass::Nebula && pos.distance(system.star) < NEBULA_REACH
-        })
+        || space
+            .systems_near(pos, 1)
+            .iter()
+            .any(|system| system.class == StarClass::Nebula && pos.span(system.star) < NEBULA_REACH)
 }
 
 /// Fog (per mille) from which the scanner's range halves.
@@ -110,10 +111,10 @@ pub fn eta_seconds(distance: f64, warp: bool) -> f32 {
         let half = distance * 0.5;
         let top = f64::from(CRUISE_MAX_SPEED) * tau;
         if half <= top {
-            2.0 * tau * (half / edge).ln()
+            2.0 * tau * crate::polar::trig::ln(half / edge)
         } else {
             2.0f64.mul_add(
-                tau * (top / edge).ln(),
+                tau * crate::polar::trig::ln(top / edge),
                 2.0f64.mul_add(-top, distance) / f64::from(CRUISE_MAX_SPEED),
             )
         }

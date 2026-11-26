@@ -146,6 +146,8 @@ impl WorldState {
             place_pass: _,
             // A leaving player's waypoint and ping go with them; the crew's finds stay (Wave 11).
             flight,
+            // The crew's mined rocks, comets and wormholes stay (Wave 12).
+            space_systems: _,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).

@@ -282,7 +282,17 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   answers), `Archivist::asked`, `SupplyEffects::baited_homes` (Beast Bait's predators go
 ///   home again), Heart's Edge's residents (a fourth deep settlement) in NPC entities, and the
 ///   Heart's longer fight (more fields in the `Heart` section).
-pub const PROTOCOL_VERSION: u8 = 19;
+///
+/// 20 (expansion wave 12; one bump per track, collapsed by the integrator):
+///
+/// * Systems (Wave 12 systems: what space's things do): `RigFlight::{lag_seconds, mining,
+///   gathering, marks}` (per tick), `StarDrive::Transit` (a wormhole's tunnel),
+///   `FlightGear::mining_beam` and `FlightGearKind::MiningBeam`, the flight bodies' kinds
+///   `BlackHole`, `Wormhole`, `Asteroid` and `Comet`, the `space_systems` world field and
+///   `SectionKey::SpaceSystems` section (asteroids mined, comet dust gathered, wormholes
+///   flown), and the systems events 860-879 (`GameplayEventKind::SpaceSystems` with
+///   `flight::systems::SystemsEvent`).
+pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.
 ///

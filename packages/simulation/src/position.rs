@@ -191,6 +191,16 @@ impl WorldPos {
         (dx as f32, dy as f32)
     }
 
+    /// Distance to `other`, in pixels, with plain IEEE arithmetic (no platform `hypot`): the
+    /// same bits on every peer. Flight, the polar crossing and the space systems use this
+    /// (Wave 12 systems); [`Self::distance`] stays as the home world always measured it.
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation, reason = "a pixel distance as f32")]
+    pub fn span(self, other: Self) -> f32 {
+        let (dx, dy) = self.delta_f64(other);
+        crate::polar::trig::hypot(dx, dy) as f32
+    }
+
     /// Distance to `other`, in pixels.
     #[must_use]
     #[allow(clippy::cast_possible_truncation, reason = "a pixel distance as f32")]

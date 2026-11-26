@@ -29,6 +29,7 @@ fn rig() -> FlightRig {
         shield: 0,
         auto_land: false,
         fuel: 10_000.0,
+        now_millis: 0,
     }
 }
 
@@ -48,6 +49,7 @@ fn planet(index: u8, centre: WorldPos, radius_tiles: f32, air_tiles: f32) -> Fli
         corona_heat: 0.0,
         port_angle: 0.0,
         class: StarClass::Yellow,
+        extra: crate::flight::systems::BodyExtra::None,
     }
 }
 
