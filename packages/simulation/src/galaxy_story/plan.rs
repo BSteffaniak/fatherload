@@ -21,9 +21,10 @@
 //! `relic_rows` under its surface (the theme world's own surface: a theme registered by a
 //! later track moves the relic onto its ground with it).
 //!
-//! TODO-SEAM(w13-planets-c, w13-planets-d): a theme world with its own builder landmark (the
-//! machine world's foundry, the dead world's ruins, the crystal world's spires) can name the
-//! relic's column through [`RelicSite`]; until then the hashed column stands.
+//! A theme world with its own builders' outpost (Wave 13 integration: the fungal, machine and
+//! dead worlds' glyph obelisks, the gas giant's aerostat, the locked world's observatory, the
+//! ring world's station) holds the relic there instead ([`RelicSite::base`] names the
+//! outpost's floor); other worlds keep the hashed column.
 
 use std::{
     collections::BTreeMap,
@@ -62,8 +63,23 @@ const SALT_RELIC: u64 = 0x6A1A_0001;
 pub struct RelicSite {
     /// Strip column (`0..surface_columns`).
     pub column: u32,
-    /// Rows under the surface (0: standing on it).
+    /// Rows under its base (0: standing on it).
     pub rows: u16,
+    /// The row it stands on when that is not the ground's surface at its column: a builder
+    /// outpost's floor (a sky city's deck over a gas giant's clouds, an obelisk's plinth).
+    /// `None`: the surface.
+    pub base: Option<i32>,
+}
+
+impl RelicSite {
+    /// The site's row on `ground`: `rows` under its base.
+    #[must_use]
+    pub fn row_on(self, ground: &crate::planet::PlanetGround) -> i32 {
+        let column = i32::try_from(self.column).unwrap_or(0);
+        self.base
+            .unwrap_or_else(|| crate::planet::BodyGround::surface_row(ground, column))
+            + i32::from(self.rows)
+    }
 }
 
 /// One chapter's stop.
@@ -275,7 +291,38 @@ fn relic_at(seed: u64, id: SpaceBodyId, columns: u32, chapter: u8, rows: u16) ->
     RelicSite {
         column: u32::try_from(roll % u64::from(columns.max(1))).unwrap_or(0),
         rows,
+        base: None,
     }
+}
+
+/// Columns from an outland world's obelisk to where its relic stands on the plinth (clear of
+/// the obelisk itself).
+const OBELISK_SIDE_COLUMNS: i64 = 4;
+
+/// The relic of world `id` at its builders' outpost, if the world has one (Wave 13
+/// integration: the fungal, machine and dead worlds' glyph obelisks over their sealed caches,
+/// the gas giant's aerostat, the locked world's observatory and the ring world's station). A
+/// relic stands (or lies `rows` under) the obelisk's plinth beside it, or the outpost's floor at
+/// its beacon.
+pub(crate) fn outpost_relic(seed: u64, id: SpaceBodyId, rows: u16) -> Option<RelicSite> {
+    let params = crate::place::planet_params_for(seed, id)?;
+    let ground = crate::planet::PlanetGround::new(params);
+    let width = i64::from(ground.strip_width().max(1));
+    let (column, base) =
+        if let Some(outpost) = crate::planet::outlands::builder_outposts(&ground).first() {
+            (
+                i64::from(outpost.glyph.0) + OBELISK_SIDE_COLUMNS,
+                outpost.site.floor,
+            )
+        } else {
+            let outpost = crate::exotic::builder_outpost(&ground)?;
+            (i64::from(outpost.column), outpost.floor)
+        };
+    Some(RelicSite {
+        column: u32::try_from(column.rem_euclid(width)).unwrap_or(0),
+        rows,
+        base: Some(base),
+    })
 }
 
 /// The space generator's reference of flight's `system` (a lair names a flight reference).
@@ -447,7 +494,10 @@ fn stop_with_world(
         system,
         body,
         theme: found.as_ref().map(|(_, found)| found.theme),
-        relic: found.map(|(id, found)| relic_at(seed, id, found.surface_columns, chapter, rows)),
+        relic: found.map(|(id, found)| {
+            outpost_relic(seed, id, rows)
+                .unwrap_or_else(|| relic_at(seed, id, found.surface_columns, chapter, rows))
+        }),
         point: None,
     }
 }

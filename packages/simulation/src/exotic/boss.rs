@@ -42,9 +42,9 @@ use crate::{
     terrain::TilePosition,
 };
 
-/// The bosses of the exotic themes, for the endgame's hunt list (TODO-SEAM w13-endgame: the
-/// hunt reads this list and [`crate::WorldState::exotic_boss_beaten`] for each body it
-/// names).
+/// The bosses of the exotic themes (the endgame's hunt list, [`crate::endgame::hunt`], lists
+/// them; a boss's fall records itself there, and [`crate::WorldState::exotic_boss_beaten`]
+/// reads a loaded body's seal).
 pub const THEME_BOSSES: [(ExoticStyle, EnemyKind, &str); 3] = [
     (
         ExoticStyle::GasGiant,

@@ -88,8 +88,8 @@ impl WorldState {
         ship_effects(&gear, self.endgame.careers.get(&player_id))
     }
 
-    /// Records a theme boss beaten (TODO-SEAM(w13-planets-c/d): the theme tracks call this
-    /// when theirs falls; `theme` is its planet theme's id). Returns whether it was new.
+    /// Records a theme boss beaten (`theme` is its planet theme's id; the outland and exotic
+    /// worlds' boss fights call this when theirs falls). Returns whether it was new.
     pub fn record_theme_boss(
         &mut self,
         theme: u16,
@@ -191,9 +191,9 @@ impl WorldState {
             logs: self.expedition.found,
             logs_total: count(crate::expedition::LOGS.len()),
             cable_lit: self.expedition.cable_lit,
-            // TODO-SEAM(w13-story): the galaxy story's chapters done and in all.
-            story_done: 0,
-            story_total: 0,
+            // The galaxy story's chapters done and in all (Wave 13 integration).
+            story_done: self.galaxy_story.chapters_done(),
+            story_total: crate::galaxy_story::CHAPTER_COUNT,
             catalogued: career.map_or(0, |career| count(career.catalogue.count_ones() as usize)),
             lines_maxed: count(
                 ShipLine::ALL

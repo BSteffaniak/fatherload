@@ -170,8 +170,8 @@ impl WorldState {
     /// Whether the outland boss of this body is beaten (its lair's seal spent): `None` off an
     /// outland planet or before the lair's ground is loaded.
     ///
-    /// TODO-SEAM w13-endgame: the hunt list can ask a loaded body here, and records the
-    /// [`OutlandsEvent::BossDefeated`] event for bodies not loaded.
+    /// The crew-wide record, for bodies not loaded too, is the endgame's hunt list
+    /// ([`crate::endgame::hunt`]), written when the boss falls.
     #[must_use]
     pub fn outland_boss_beaten_here(&self) -> Option<bool> {
         let (planet, _) = self.outland_world()?;

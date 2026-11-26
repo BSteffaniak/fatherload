@@ -922,6 +922,20 @@ fn a_boss_struck_while_open_takes_more_and_beaten_its_seal_becomes_its_trophy() 
             TileKind::Exotic(boss::trophy(style))
         );
         assert_eq!(world.exotic_boss_beaten(), Some(true));
+        // The endgame's hunt list has it down (Wave 13 integration).
+        let quarry = crate::endgame::hunt::Quarry::Theme(style.theme().0);
+        assert!(world.quarry_beaten(quarry), "{style:?}");
+        assert!(
+            kinds.iter().any(|kind| matches!(
+                kind,
+                GameplayEventKind::Endgame {
+                    what: crate::endgame::EndgameEvent::QuarryDown,
+                    detail,
+                    ..
+                } if *detail == quarry.code()
+            )),
+            "{style:?}"
+        );
         // It never wakes again.
         run_for(&mut world, 3_000);
         assert!(boss_entity(&world, style.boss()).is_none(), "{style:?}");

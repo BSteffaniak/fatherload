@@ -601,6 +601,8 @@ impl WorldState {
         }
         let _ = planet;
         output.push_event(outland_event(OutlandsEvent::BossDefeated, by, seal));
+        // The endgame's hunt list (Wave 13 integration).
+        self.record_theme_boss(lair.boss.theme.0, by, output);
     }
 
     /// An outland creature died at `tile`: a theme boss's fall wins its lair.

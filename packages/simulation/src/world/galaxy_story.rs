@@ -234,7 +234,7 @@ impl WorldState {
         let width = ground.strip_width();
         let bearing = |site: RelicSite, story: bool| {
             let column = i32::try_from(site.column).ok()?;
-            let row = ground.surface_row(column) + i32::from(site.rows);
+            let row = site.row_on(ground);
             let mut columns = (column - here.x).rem_euclid(width.max(1));
             if columns > width / 2 {
                 columns -= width;
@@ -954,8 +954,7 @@ impl WorldState {
     fn site_row(&self, site: RelicSite) -> Option<(i32, i32, i32)> {
         let ground = self.terrain.planet_ground()?;
         let column = i32::try_from(site.column).ok()?;
-        let surface = ground.surface_row(column);
-        Some((column, surface + i32::from(site.rows), ground.strip_width()))
+        Some((column, site.row_on(ground), ground.strip_width()))
     }
 
     /// Who stands at `site` (within reach of its column and row).
@@ -1117,8 +1116,8 @@ impl WorldState {
         let space = self.space();
         if let (Goal::Land | Goal::FindRelic | Goal::Hold { .. }, Some(body)) = (goal, stop.body) {
             let column = stop.relic.map_or(0, |site| site.column);
-            let rows = stop.relic.map_or(0, |site| site.rows);
-            self.warp_onto_body(player_id, body, column, rows)
+            let base = stop.relic.and_then(|site| site.base);
+            self.warp_onto_body(player_id, body, column, base)
         } else {
             {
                 let point = match goal {
@@ -1167,22 +1166,21 @@ impl WorldState {
         PlayerScopedCommandOutcome::Applied
     }
 
-    /// Test mode: `player_id` set down on `body` over strip `column`, `rows` under its surface
-    /// (in a pocket dug for it: the warp does not dig, it stands the rig on the surface above).
+    /// Test mode: `player_id` set down on `body` over strip `column`, standing on `base` (an
+    /// outpost's floor) or else the surface (the warp does not dig: a buried relic is dug to).
     fn warp_onto_body(
         &mut self,
         player_id: PlayerId,
         body: SpaceBodyId,
         column: u32,
-        rows: u16,
+        base: Option<i32>,
     ) -> PlayerScopedCommandOutcome {
         let Some(params) = crate::place::planet_params_for(self.world_seed(), body) else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
         let ground = crate::planet::PlanetGround::new(params);
         let column = i32::try_from(column).unwrap_or(0);
-        let surface = ground.surface_row(column);
-        let _ = rows;
+        let surface = base.unwrap_or_else(|| ground.surface_row(column));
         let place = Place::OnBody(BodyId::Space(body));
         let outcome = self.warp_to_place(player_id, place);
         if outcome != PlayerScopedCommandOutcome::Applied {

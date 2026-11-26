@@ -48,7 +48,7 @@ const HZ: u32 = 30;
 
 /// A Deep Descent world in test mode whose crew woke the Heart: space open, the Star Drive, a
 /// well-kept rig with the station's ship gear and the Descents' hazard gear.
-fn world_with(players: &[PlayerId]) -> WorldState {
+pub(super) fn world_with(players: &[PlayerId]) -> WorldState {
     let mut world = WorldState::new_game_with_settings(
         players[0],
         &WorldSettings {
@@ -106,7 +106,7 @@ fn tick(
     tick_for(world, PLAYER, controls, command)
 }
 
-fn run(world: &mut WorldState, ticks: u32) -> Vec<GameplayEventKind> {
+pub(super) fn run(world: &mut WorldState, ticks: u32) -> Vec<GameplayEventKind> {
     let mut events = Vec::new();
     for _ in 0..ticks {
         events.extend(tick(world, ControlState::default(), None));
@@ -124,15 +124,15 @@ fn act_as(
     events
 }
 
-fn act(world: &mut WorldState, command: PlayerCommand) -> Vec<GameplayEventKind> {
+pub(super) fn act(world: &mut WorldState, command: PlayerCommand) -> Vec<GameplayEventKind> {
     act_as(world, PLAYER, command)
 }
 
-fn seconds(seconds: f32) -> u32 {
+pub(super) fn seconds(seconds: f32) -> u32 {
     (seconds * HZ as f32).round() as u32
 }
 
-fn galaxy(events: &[GameplayEventKind]) -> Vec<(GalaxyEvent, u32)> {
+pub(super) fn galaxy(events: &[GameplayEventKind]) -> Vec<(GalaxyEvent, u32)> {
     events
         .iter()
         .filter_map(|event| match event {
@@ -158,7 +158,7 @@ fn warp_to_story(world: &mut WorldState, player: PlayerId) -> Vec<GameplayEventK
     events
 }
 
-fn goal(world: &WorldState) -> Option<Goal> {
+pub(super) fn goal(world: &WorldState) -> Option<Goal> {
     world.galaxy_story().current_goal().map(|goal| goal.goal)
 }
 
@@ -371,7 +371,7 @@ fn dig_down(world: &mut WorldState, id: SpaceBodyKey, rows: f64) -> Vec<Gameplay
 
 /// One goal of the story done the way a player does it (warps between places).
 #[allow(clippy::too_many_lines, reason = "one arm per kind of goal")]
-fn do_goal(world: &mut WorldState, goal: Goal) -> Vec<GameplayEventKind> {
+pub(super) fn do_goal(world: &mut WorldState, goal: Goal) -> Vec<GameplayEventKind> {
     let mut events = Vec::new();
     match goal {
         Goal::ReachSystem | Goal::ReachHarbour | Goal::Land => {
@@ -872,7 +872,7 @@ fn a_lead_is_picked_up_and_finished_in_its_system() {
 }
 
 /// The rig into free flight at `at`, still.
-fn launch(world: &mut WorldState, at: SpaceTile) {
+pub(super) fn launch(world: &mut WorldState, at: SpaceTile) {
     let capacity = world.air_capacity_of(PLAYER);
     let rig = world.player_mut(PLAYER).expect("rig");
     rig.flight = RigFlight {

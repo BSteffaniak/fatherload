@@ -184,7 +184,9 @@ fn beside_relic(world: &mut WorldState, player: PlayerId, off: i32) {
     };
     let ground = fatherload_simulation::planet::PlanetGround::new(params);
     let column = i32::try_from(site.column).unwrap_or(0) + off;
-    let surface = fatherload_simulation::planet::BodyGround::surface_row(&ground, column);
+    let surface = site
+        .base
+        .unwrap_or_else(|| fatherload_simulation::planet::BodyGround::surface_row(&ground, column));
     let at = fatherload_simulation::world::strip_position(
         f64::from(column) + 0.5,
         f64::from(surface - 1),

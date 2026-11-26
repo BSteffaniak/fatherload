@@ -392,6 +392,7 @@ fn build(
             let site = RelicSite {
                 column: u32::try_from((detail >> 24) % u64::from(columns.max(1))).unwrap_or(0),
                 rows: u16::try_from((detail >> 40) % 3).unwrap_or(0) * 10,
+                base: None,
             };
             (
                 format!("Ruins on {}", system.body_name(body.body)),

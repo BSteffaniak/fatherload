@@ -1,9 +1,11 @@
 //! The hunt list (Wave 13 endgame): every boss of the galaxy in one list.
 //!
 //! The three faction bosses (Wave 12 hostiles: the Gilded Maw, the Swarm Queen, the Arbiter,
-//! each in a lair the nav chart can point at) and the theme worlds' bosses, which the theme
-//! tracks register in [`THEME_BOSSES`] (TODO-SEAM(w13-planets-c/d, w12 theme worlds): append
-//! an entry per theme boss and call [`crate::WorldState::record_theme_boss`] when it falls).
+//! each in a lair the nav chart can point at) and the theme worlds' bosses, registered in
+//! [`THEME_BOSSES`] (Wave 13 integration: the fungal, machine and dead worlds' from
+//! [`crate::planet::outlands::THEME_BOSSES`], the gas giant's, locked and ring worlds' from
+//! [`crate::exotic::boss::THEME_BOSSES`]); each records itself through
+//! [`crate::WorldState::record_theme_boss`] when it falls.
 //! The list, the completion screen and the achievements read the same registry, so a theme
 //! boss counts the moment it is registered.
 
@@ -21,8 +23,56 @@ pub struct ThemeBoss {
     pub name: &'static str,
 }
 
-/// The theme bosses (TODO-SEAM: empty until the theme tracks register theirs).
-pub const THEME_BOSSES: &[ThemeBoss] = &[];
+/// The theme bosses, by planet theme (append only: a theme track appends its boss here).
+pub const THEME_BOSSES: &[ThemeBoss] = &[
+    // Wave 13 planets-c: the outland worlds.
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::FUNGAL.0,
+        world: Theme::Fungal,
+        name: "The Sporemother",
+    },
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::MACHINE.0,
+        world: Theme::MachineWorld,
+        name: "The Reactor Warden",
+    },
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::DEAD.0,
+        world: Theme::DeadWorld,
+        name: "The Ashen Sovereign",
+    },
+    // Wave 13 planets-d: the exotic worlds.
+    ThemeBoss {
+        theme: crate::exotic::GAS_GIANT.0,
+        world: Theme::GasGiant,
+        name: "The Thunderhead",
+    },
+    ThemeBoss {
+        theme: crate::exotic::LOCKED_WORLD.0,
+        world: Theme::TidallyLocked,
+        name: "The Gloamwarden",
+    },
+    ThemeBoss {
+        theme: crate::exotic::RING_WORLD.0,
+        world: Theme::RingWorld,
+        name: "The Ring Warden",
+    },
+];
+
+/// The hunt list's theme boss of an enemy kind (the theme it rules), if it is one.
+#[must_use]
+pub fn theme_boss_of(kind: crate::enemy::EnemyKind) -> Option<u16> {
+    crate::planet::outlands::THEME_BOSSES
+        .iter()
+        .find(|boss| boss.kind == kind)
+        .map(|boss| boss.theme.0)
+        .or_else(|| {
+            crate::exotic::boss::THEME_BOSSES
+                .iter()
+                .find(|(_, boss, _)| *boss == kind)
+                .map(|(style, ..)| style.theme().0)
+        })
+}
 
 /// One entry of the hunt list.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]

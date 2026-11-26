@@ -296,6 +296,8 @@ impl WorldState {
             by,
             arena.seal,
         ));
+        // The endgame's hunt list (Wave 13 integration).
+        self.record_theme_boss(style.theme().0, by, output);
     }
 
     /// The boss's arena: it wakes when a rig steps in while the seal stands, sleeps (healed)

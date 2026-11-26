@@ -9,7 +9,7 @@
 //! | Species met | every friendly species |
 //! | Tongues | every species' tongue spoken fluently |
 //! | Bosses | every Descent gate boss, every faction boss and every registered theme boss |
-//! | Story | the Fathers' eighty logs, the Heart woken, and the galaxy story's chapters (TODO-SEAM(w13-story)) |
+//! | Story | the Fathers' eighty logs, the Heart woken, and the galaxy story's ten chapters |
 //! | Codex | every space material catalogued (mined at least once) |
 //! | Ship | every ship line at tier 5, the Starwright ship and the Heartline Drive |
 //! | Megastructure and homes | the Halcyon Gate's eight parts and an estate with every wing |
@@ -61,8 +61,7 @@ pub struct CompletionFacts {
     pub logs: u8,
     pub logs_total: u8,
     pub cable_lit: bool,
-    /// The galaxy story's chapters done and in all (TODO-SEAM(w13-story): 0 of 0 until the
-    /// story track registers them).
+    /// The galaxy story's chapters done and in all.
     pub story_done: u8,
     pub story_total: u8,
     pub catalogued: u8,

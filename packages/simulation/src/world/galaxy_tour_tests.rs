@@ -92,7 +92,7 @@ fn world() -> WorldState {
     world
 }
 
-fn tick(
+pub(super) fn tick(
     world: &mut WorldState,
     controls: ControlState,
     command: Option<PlayerCommand>,
@@ -110,7 +110,7 @@ fn tick(
         .collect()
 }
 
-fn run(world: &mut WorldState, ticks: u32) -> Vec<GameplayEventKind> {
+pub(super) fn run(world: &mut WorldState, ticks: u32) -> Vec<GameplayEventKind> {
     let mut events = Vec::new();
     for _ in 0..ticks {
         events.extend(tick(world, ControlState::default(), None));
@@ -118,7 +118,7 @@ fn run(world: &mut WorldState, ticks: u32) -> Vec<GameplayEventKind> {
     events
 }
 
-fn act(world: &mut WorldState, command: PlayerCommand) -> Vec<GameplayEventKind> {
+pub(super) fn act(world: &mut WorldState, command: PlayerCommand) -> Vec<GameplayEventKind> {
     let mut events = tick(world, ControlState::default(), Some(command));
     events.extend(run(world, 1));
     events
@@ -151,13 +151,13 @@ fn hostile_events(events: &[GameplayEventKind]) -> Vec<(HostileEvent, u32)> {
         .collect()
 }
 
-fn alien_saw(events: &[GameplayEventKind], what: AlienEvent) -> bool {
+pub(super) fn alien_saw(events: &[GameplayEventKind], what: AlienEvent) -> bool {
     events
         .iter()
         .any(|event| matches!(event, GameplayEventKind::Alien { what: seen, .. } if *seen == what))
 }
 
-fn seconds(seconds: f32) -> u32 {
+pub(super) fn seconds(seconds: f32) -> u32 {
     (seconds * HZ as f32).round() as u32
 }
 
@@ -237,7 +237,7 @@ fn belt_rock(world: &WorldState) -> FlightBody {
 }
 
 /// A landable planet with space theme `theme` near home (`SpaceBodyKey`).
-fn body_of_theme(theme: Theme) -> SpaceBodyKey {
+pub(super) fn body_of_theme(theme: Theme) -> SpaceBodyKey {
     let space = crate::space::Space::shared(SEED);
     let mut best: Option<(u32, SpaceBodyKey)> = None;
     for sector in sectors(6) {
@@ -338,7 +338,13 @@ fn fight_bot(world: &WorldState, tick: u32) -> (ControlState, Option<PlayerComma
 
 /// Puts the rig on the body it is on at strip `column`, `rows_up` rows over row `row` (a test
 /// warp within the body).
-fn put_rig(world: &mut WorldState, id: SpaceBodyKey, column: f64, row: i32, rows_up: f64) {
+pub(super) fn put_rig(
+    world: &mut WorldState,
+    id: SpaceBodyKey,
+    column: f64,
+    row: i32,
+    rows_up: f64,
+) {
     world
         .move_to_place(
             PLAYER,
@@ -356,7 +362,7 @@ fn put_rig(world: &mut WorldState, id: SpaceBodyKey, column: f64, row: i32, rows
 }
 
 /// The NPC entity of resident `slot` of the town, once the rig stands beside them.
-fn beside(
+pub(super) fn beside(
     world: &mut WorldState,
     id: SpaceBodyKey,
     found: &town::AlienTown,
@@ -398,7 +404,7 @@ fn beside(
 /// Checks a landed theme world: its strata, its storm in the body's forecast, its creatures
 /// round the rig, its level settlement site. Returns the native creature met.
 #[allow(clippy::too_many_lines, reason = "one world's checks in turn")]
-fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
+pub(super) fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
     let id = body_of_theme(theme);
     let place = Place::OnBody(BodyId::Space(id));
     let _ = act(
@@ -475,6 +481,17 @@ fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
             crate::frontier::rules::weather_at(style, params.seed, millis).phase,
             crate::frontier::rules::WeatherPhase::Storm,
             "{theme:?}: the frontier storm is the forecast's"
+        );
+    } else if let Some(outland) = crate::planet::outlands::life::outland_theme(params.theme) {
+        // The outland worlds' storms are bodylife kinds with their own effects (Wave 13).
+        assert_eq!(
+            outland.storm, storm_kind,
+            "{theme:?}: the outland storm is the forecast's"
+        );
+    } else if let Some(style) = crate::exotic::style_of(params.theme) {
+        assert!(
+            crate::exotic::rules::storm_strength(style, life.seed, millis) > 0.0,
+            "{theme:?}: the exotic storm is the forecast's"
         );
     } else {
         let weather =

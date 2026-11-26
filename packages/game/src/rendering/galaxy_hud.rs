@@ -541,7 +541,6 @@ pub fn waymark_things(
     scene: &crate::render_snapshot::PlaceScene<'_>,
 ) -> Vec<super::space::view::GroundThing> {
     use super::space::view::{GroundThing, GroundThingKind};
-    use fatherload_simulation::planet::BodyGround;
     let fatherload_simulation::place::StoreKey::Body(body) = scene.store else {
         return Vec::new();
     };
@@ -549,25 +548,24 @@ pub fn waymark_things(
         return Vec::new();
     };
     let mut things = Vec::new();
-    let mut place = |column: u32, rows: u16, relic: bool| {
-        let column = i32::try_from(column).unwrap_or(0);
-        let surface = ground.surface_row(column);
+    let mut place = |site: fatherload_simulation::galaxy_story::plan::RelicSite, relic: bool| {
+        let column = i32::try_from(site.column).unwrap_or(0);
         things.push(GroundThing {
             column: f64::from(column) + 0.5,
-            row: (surface + i32::from(rows)) as f32,
+            row: site.row_on(ground) as f32,
             kind: GroundThingKind::Waymark {
                 relic,
-                buried: rows > 0,
+                buried: site.rows > 0,
             },
         });
     };
     if let Some((on, site, _)) = world.galaxy_relic()
         && on == body
     {
-        place(site.column, site.rows, true);
+        place(site, true);
     }
     for site in world.galaxy_lead_sites(body) {
-        place(site.column, site.rows, false);
+        place(site, false);
     }
     things
 }

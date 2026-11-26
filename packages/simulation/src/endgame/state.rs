@@ -261,8 +261,8 @@ pub struct EndgameState {
     pub gate_parts: u16,
     #[serde(default, with = "crate::pair_list")]
     pub gate_builders: BTreeMap<u8, PlayerId>,
-    /// Theme bosses beaten, by planet theme (TODO-SEAM(w13-planets-c/d): the theme tracks
-    /// call [`crate::WorldState::record_theme_boss`] when theirs falls).
+    /// Theme bosses beaten, by planet theme (each boss fight calls
+    /// [`crate::WorldState::record_theme_boss`] when its boss falls).
     #[serde(default)]
     pub theme_bosses: BTreeSet<u16>,
     /// Homes on alien worlds grown into estates, by (town, plot).

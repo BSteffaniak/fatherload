@@ -136,8 +136,8 @@ pub const OUTPOST_CACHE_DEPTH: i32 = 6;
 
 /// A builders' outpost on a body: a glyph-marked obelisk over a sealed cache.
 ///
-/// TODO-SEAM w13-story: the galaxy story targets these ([`builder_outposts`]): a quest step
-/// can name the body and the outpost's glyph, and the cache's old circuit is its clue.
+/// The galaxy story's relics on these worlds stand on the outpost's plinth beside the obelisk
+/// (`galaxy_story::plan`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuilderOutpost {
     /// The obelisk's ground (its centre is the obelisk).
@@ -247,8 +247,8 @@ pub struct ThemeBoss {
 
 /// Every outland theme's boss.
 ///
-/// TODO-SEAM w13-endgame: the hunt list reads this registry (theme, boss kind, name, lair,
-/// reward); a kill raises [`OutlandsEvent::BossDefeated`] with the body's store, and
+/// The endgame's hunt list ([`crate::endgame::hunt`]) lists them; a kill raises
+/// [`OutlandsEvent::BossDefeated`] and records the boss there, and
 /// `WorldState::outland_boss_beaten_here` reads a loaded body's spent seal.
 pub const THEME_BOSSES: [ThemeBoss; 3] = [
     ThemeBoss {

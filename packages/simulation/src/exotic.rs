@@ -24,7 +24,7 @@
 //!   fair and winnable; beating it opens its seal into a trophy (the terrain keeps the win).
 //! * **Sites** the other tracks build on: the settlement ([`settlement_site`]; the aliens' town
 //!   on its deck or ground), the landmark ([`landmark_site`]), a builder outpost
-//!   ([`builder_outpost`], TODO-SEAM w13-story) and one secret on a small body ([`secret`]).
+//!   ([`builder_outpost`], the galaxy story's relic sites) and one secret on a small body ([`secret`]).
 //!
 //! Generation is a pure function of the planet's params (integer noise only). The rules run in
 //! `world/exotic.rs`, the creatures in `world/enemies/exotic.rs`.
@@ -464,8 +464,8 @@ pub struct BuilderOutpost {
     pub beacon: crate::terrain::TilePosition,
 }
 
-/// The builder outpost of `ground`, if it is an exotic world (TODO-SEAM w13-story: the galaxy
-/// story targets it by body and reads its beacon tile).
+/// The builder outpost of `ground`, if it is an exotic world (the galaxy story's relics stand
+/// at its beacon: `galaxy_story::plan`).
 #[must_use]
 pub fn builder_outpost(ground: &PlanetGround) -> Option<BuilderOutpost> {
     let style = style_of_ground(ground)?;

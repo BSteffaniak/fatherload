@@ -938,6 +938,20 @@ fn each_theme_boss_wakes_calls_its_brood_falls_and_pays() {
         );
         assert!(events.contains(&OutlandsEvent::BossDefeated), "{theme:?}");
         assert_eq!(world.outland_boss_beaten_here(), Some(true));
+        // The endgame's hunt list has it down (Wave 13 integration).
+        let quarry = crate::endgame::hunt::Quarry::Theme(theme.0);
+        assert!(world.quarry_beaten(quarry), "{theme:?}");
+        assert!(
+            output.events.iter().any(|event| matches!(
+                event.kind,
+                GameplayEventKind::Endgame {
+                    what: crate::endgame::EndgameEvent::QuarryDown,
+                    detail,
+                    ..
+                } if detail == quarry.code()
+            )),
+            "{theme:?}"
+        );
         for (x, y) in lair.door {
             assert!(
                 kind(&world, x, y).is_open(),

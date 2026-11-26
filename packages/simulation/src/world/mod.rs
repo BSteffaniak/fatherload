@@ -146,6 +146,8 @@ mod bodylife;
 mod bodylife_tests;
 #[cfg(test)]
 mod galaxy_tour_tests;
+#[cfg(test)]
+mod part3_tests;
 pub use bodylife::{BodyLifeEvent, body_life_of};
 mod endgame;
 #[cfg(test)]

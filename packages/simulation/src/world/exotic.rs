@@ -139,8 +139,8 @@ impl WorldState {
     }
 
     /// Whether the theme boss of this exotic world has been beaten (its seal opened into its
-    /// trophy, or the trophy dug out). `None` off an exotic world. TODO-SEAM w13-endgame: the
-    /// hunt list reads this per body ([`crate::exotic::boss::THEME_BOSSES`]).
+    /// trophy, or the trophy dug out). `None` off an exotic world. The crew-wide record is the
+    /// endgame's hunt list ([`crate::endgame::hunt`]).
     #[must_use]
     pub fn exotic_boss_beaten(&self) -> Option<bool> {
         let (ground, _) = self.exotic_world()?;

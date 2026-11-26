@@ -6,9 +6,9 @@
 //!
 //! A theme gives its look through [`super::hooks::PlanetThemeHooks::orbital_look`], whose
 //! default reads [`ORBITAL_LOOKS`] by the theme's id: a theme track either appends
-//! `(MY_THEME, MY_LOOK)` there or overrides the hook. A theme with no look (the Wave 11
-//! placeholders) is drawn from the space generator's tag instead (the game's preset per tag),
-//! so a fungal, machine or gas-giant world keeps its own face until its theme brings one.
+//! `(MY_THEME, MY_LOOK)` there or overrides the hook. All twelve Part III themes are
+//! registered; a theme with no look (the Wave 11 placeholders) is drawn from the space
+//! generator's tag instead (the game's preset per tag).
 
 use super::theme::PlanetThemeId;
 
@@ -153,8 +153,102 @@ pub const CRYSTAL_LOOK: OrbitalLook = OrbitalLook {
     detail: 3,
 };
 
-/// The registered looks by theme id (append `(YOUR_THEME, YOUR_LOOK)` at the end; ids 9-14
-/// are the Wave 13 themes').
+/// The fungal world: plum and rose caps under a spore-pink haze, glowcap light in the folds.
+pub const FUNGAL_LOOK: OrbitalLook = OrbitalLook {
+    land: [[70, 36, 74], [150, 78, 120], [214, 150, 170]],
+    air: [220, 150, 230],
+    sea: None,
+    clouds: Some(layer([246, 190, 226], 320)),
+    caps: None,
+    lights: Some(layer([200, 170, 255], 60)),
+    glow: Some(layer([150, 255, 190], 200)),
+    bands: false,
+    ring: None,
+    detail: 3,
+};
+
+/// The machine world: plated steel in a fine grid, its seams lit teal, no weather to speak of.
+pub const MACHINE_LOOK: OrbitalLook = OrbitalLook {
+    land: [[40, 46, 58], [92, 104, 120], [160, 172, 186]],
+    air: [110, 220, 220],
+    sea: None,
+    clouds: None,
+    caps: None,
+    lights: Some(layer([90, 240, 230], 550)),
+    glow: Some(layer([255, 170, 60], 90)),
+    bands: false,
+    ring: None,
+    detail: 4,
+};
+
+/// The dead world: ash plains and grey dust, the faint embers of the Hollow Throne's ruins.
+pub const DEAD_LOOK: OrbitalLook = OrbitalLook {
+    land: [[44, 38, 40], [92, 80, 74], [150, 142, 136]],
+    air: [150, 150, 160],
+    sea: None,
+    clouds: Some(layer([170, 166, 170], 140)),
+    caps: Some(layer([200, 200, 206], 80)),
+    lights: Some(layer([255, 170, 90], 25)),
+    glow: Some(layer([120, 220, 210], 40)),
+    bands: false,
+    ring: None,
+    detail: 3,
+};
+
+/// The gas giant: amber and cream weather bands, the floating cities' lights on the night
+/// side, faint dusty rings.
+pub const GAS_GIANT_LOOK: OrbitalLook = OrbitalLook {
+    land: [[150, 92, 50], [214, 160, 90], [244, 226, 190]],
+    air: [250, 200, 140],
+    sea: None,
+    clouds: Some(layer([252, 240, 220], 200)),
+    caps: None,
+    lights: Some(layer([255, 214, 140], 60)),
+    glow: None,
+    bands: true,
+    ring: Some(RingLook {
+        colours: [[226, 200, 150], [170, 120, 80]],
+        inner_permille: 1_400,
+        outer_permille: 1_950,
+    }),
+    detail: 2,
+};
+
+/// The tidally locked world: a scorched day side of salt pans and glass, a frozen night of
+/// nitrogen ice (the caps), a thin twilight of settlements between.
+pub const LOCKED_LOOK: OrbitalLook = OrbitalLook {
+    land: [[84, 48, 36], [186, 120, 72], [244, 220, 186]],
+    air: [255, 190, 130],
+    sea: None,
+    clouds: Some(layer([236, 236, 246], 90)),
+    caps: Some(layer([200, 226, 250], 420)),
+    lights: Some(layer([255, 210, 150], 40)),
+    glow: Some(layer([255, 150, 70], 70)),
+    bands: false,
+    ring: None,
+    detail: 2,
+};
+
+/// The ring world: grey breccia and pale ring dust under its great ring of ice, the Tether's
+/// conduits lit along the ground.
+pub const RING_LOOK: OrbitalLook = OrbitalLook {
+    land: [[60, 62, 72], [118, 120, 132], [196, 200, 210]],
+    air: [180, 200, 240],
+    sea: None,
+    clouds: Some(layer([236, 240, 250], 80)),
+    caps: Some(layer([226, 236, 250], 120)),
+    lights: Some(layer([140, 220, 255], 120)),
+    glow: Some(layer([120, 200, 255], 60)),
+    bands: false,
+    ring: Some(RingLook {
+        colours: [[230, 236, 250], [150, 160, 190]],
+        inner_permille: 1_300,
+        outer_permille: 2_100,
+    }),
+    detail: 3,
+};
+
+/// The registered looks by theme id (append `(YOUR_THEME, YOUR_LOOK)` at the end).
 pub static ORBITAL_LOOKS: &[(PlanetThemeId, OrbitalLook)] = &[
     (PlanetThemeId::JUNGLE, JUNGLE_LOOK),
     (PlanetThemeId::OCEAN, OCEAN_LOOK),
@@ -162,6 +256,13 @@ pub static ORBITAL_LOOKS: &[(PlanetThemeId, OrbitalLook)] = &[
     (crate::frontier::DUNE_WORLD, DUNE_LOOK),
     (crate::frontier::VOLCANIC_WORLD, VOLCANIC_LOOK),
     (crate::frontier::CRYSTAL_WORLD, CRYSTAL_LOOK),
+    // Wave 13 integration: the outland and exotic worlds.
+    (PlanetThemeId::FUNGAL, FUNGAL_LOOK),
+    (PlanetThemeId::MACHINE, MACHINE_LOOK),
+    (PlanetThemeId::DEAD, DEAD_LOOK),
+    (crate::exotic::GAS_GIANT, GAS_GIANT_LOOK),
+    (crate::exotic::LOCKED_WORLD, LOCKED_LOOK),
+    (crate::exotic::RING_WORLD, RING_LOOK),
 ];
 
 /// The registered look of theme `id`, if it has one.
@@ -178,7 +279,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_wave_12_theme_has_a_look_and_the_placeholders_fall_back() {
+    fn every_part_iii_theme_has_a_look_and_the_placeholders_fall_back() {
         use crate::planet::hooks::hooks;
         for id in [
             PlanetThemeId::JUNGLE,
@@ -187,6 +288,12 @@ mod tests {
             crate::frontier::DUNE_WORLD,
             crate::frontier::VOLCANIC_WORLD,
             crate::frontier::CRYSTAL_WORLD,
+            PlanetThemeId::FUNGAL,
+            PlanetThemeId::MACHINE,
+            PlanetThemeId::DEAD,
+            crate::exotic::GAS_GIANT,
+            crate::exotic::LOCKED_WORLD,
+            crate::exotic::RING_WORLD,
         ] {
             let look = hooks(id).orbital_look().expect("a look");
             assert!((1..=4).contains(&look.detail));
