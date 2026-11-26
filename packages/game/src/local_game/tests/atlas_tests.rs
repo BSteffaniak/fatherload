@@ -279,11 +279,14 @@ fn map_mode_moves_a_cursor_and_the_spot_follows() {
     press_seat(&mut game, 0, pick(AtlasHit::Map(0.5, 0.9)));
     let cursor = game.shell.seat(0).atlas.map.as_ref().expect("map").cursor;
     assert!((cursor.1 - 0.9).abs() < 0.01);
+    // Map again: the galaxy (space is open on a Deep Descent world), then the list.
     press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Map)));
-    assert!(
-        game.shell.seat(0).atlas.map.is_none(),
-        "Map again: the list"
+    assert_eq!(
+        game.shell.seat(0).atlas.map.as_ref().map(|map| map.kind),
+        Some(MapKind::Galaxy)
     );
+    press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Map)));
+    assert!(game.shell.seat(0).atlas.map.is_none(), "and the list");
     press_seat(
         &mut game,
         0,

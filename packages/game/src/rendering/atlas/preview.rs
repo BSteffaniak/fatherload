@@ -48,7 +48,7 @@ use crate::{
 /// Tiles a preview shows (columns, rows).
 pub const PREVIEW_TILES: (i32, i32) = (44, 26);
 /// Rows of tiles painted per frame per preview being painted.
-const ROWS_PER_FRAME: usize = 3;
+const ROWS_PER_FRAME: usize = if cfg!(target_os = "emscripten") { 2 } else { 3 };
 /// Previews kept.
 const CACHE_SIZE: usize = 24;
 /// The depth map's texture (texels across, down).

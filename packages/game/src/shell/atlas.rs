@@ -310,6 +310,28 @@ impl SeatAtlas {
         });
     }
 
+    /// What the Map button opens next: the first map from the list (the galaxy when the seat
+    /// is out there or browsing space, else the depths of home), then the other map once space
+    /// is open, then back to the list (`None`).
+    #[must_use]
+    pub fn next_map(&self, space_open: bool) -> Option<MapKind> {
+        let first = if space_open
+            && (!self.origin.place.is_home_store() || self.category == AtlasCategory::Space)
+        {
+            MapKind::Galaxy
+        } else {
+            MapKind::Depth
+        };
+        match &self.map {
+            None => Some(first),
+            Some(map) if map.kind == first && space_open => Some(match first {
+                MapKind::Depth => MapKind::Galaxy,
+                MapKind::Galaxy => MapKind::Depth,
+            }),
+            Some(_) => None,
+        }
+    }
+
     /// Opens map mode on `kind`, its cursor over the seat (or the selection).
     fn open_map(&mut self, world: &WorldState, kind: MapKind) {
         let centre = self
@@ -673,20 +695,9 @@ impl SeatUi {
                 self.close_atlas();
             }
             AtlasButton::Map => {
-                if self.atlas.map.is_some() {
-                    self.atlas.map = None;
-                } else {
-                    // The galaxy once the seat is out there (or browsing space), else the
-                    // depths of home.
-                    let kind = if ctx.world.space_enabled()
-                        && (!self.atlas.origin.place.is_home_store()
-                            || self.atlas.category == AtlasCategory::Space)
-                    {
-                        MapKind::Galaxy
-                    } else {
-                        MapKind::Depth
-                    };
-                    self.atlas.open_map(ctx.world, kind);
+                match self.atlas.next_map(ctx.world.space_enabled()) {
+                    Some(kind) => self.atlas.open_map(ctx.world, kind),
+                    None => self.atlas.map = None,
                 }
                 cues.push(SoundCue::Ui);
             }

@@ -90,8 +90,15 @@ pub(super) fn draw_atlas(
         canvas.height as f32,
         atlas.map.is_some(),
     );
-    // The backdrop: the world dims away behind a deep blue sheet.
-    draw.draw_rectangle_rec(layout.frame, with_alpha(INK, 236));
+    // The backdrop: a deep blue sheet over the whole view (the world is not drawn under it).
+    draw.draw_rectangle_gradient_v(
+        0,
+        0,
+        layout.frame.width as i32,
+        layout.frame.height as i32,
+        INK,
+        Color::new(18, 16, 34, 255),
+    );
     pointer::record_dialog(layout.frame);
     draw_header(draw, &layout, atlas);
     draw_categories(draw, &layout, atlas);
@@ -103,7 +110,7 @@ pub(super) fn draw_atlas(
     let current = atlas.current();
     draw_preview(draw, &layout, ui, pictures, current);
     draw_card(draw, &layout, ui, world, current);
-    draw_buttons(draw, &layout, atlas);
+    draw_buttons(draw, &layout, atlas, world.space_enabled());
 }
 
 fn draw_header(draw: &mut RaylibDrawHandle<'_>, layout: &AtlasLayout, atlas: &SeatAtlas) {
@@ -760,7 +767,12 @@ fn draw_card(
     }
 }
 
-fn draw_buttons(draw: &mut RaylibDrawHandle<'_>, layout: &AtlasLayout, atlas: &SeatAtlas) {
+fn draw_buttons(
+    draw: &mut RaylibDrawHandle<'_>,
+    layout: &AtlasLayout,
+    atlas: &SeatAtlas,
+    world_space_open: bool,
+) {
     let device = prompts::menu_device();
     let has_current = atlas.current().is_some();
     for (button, area) in &layout.buttons {
@@ -791,7 +803,17 @@ fn draw_buttons(draw: &mut RaylibDrawHandle<'_>, layout: &AtlasLayout, atlas: &S
             Color::WHITE,
         );
         let label = match button {
-            AtlasButton::Map if atlas.map.is_some() => "List",
+            AtlasButton::Map => match atlas.next_map(world_space_open) {
+                Some(MapKind::Galaxy) if atlas.map.is_some() => "Galaxy",
+                Some(MapKind::Depth) if atlas.map.is_some() => "Depths",
+                Some(_) => "Map",
+                None => "List",
+            },
+            AtlasButton::Bookmark
+                if ui_kit::text_width("Bookmark", TextStyle::Bold) + 8 > area.width as i32 =>
+            {
+                "Mark"
+            }
             AtlasButton::Bookmark
                 if atlas
                     .current()

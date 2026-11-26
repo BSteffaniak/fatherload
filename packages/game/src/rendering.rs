@@ -703,7 +703,10 @@ impl GameRenderer {
         if split {
             begin_view_clip(view.viewport);
         }
-        if in_room {
+        if seat.modal == Some(crate::shell::ModalScreen::Atlas) {
+            // The Atlas covers the whole view (Wave 14): nothing under it is drawn, which
+            // keeps its previews' frame time to themselves.
+        } else if in_room {
             let area = if split {
                 let (x, y, width, height) = canvas.physical_rect(view.viewport);
                 RoomArea {
