@@ -57,6 +57,8 @@ pub struct SeatAudio {
     pub playing: bool,
     /// When the seat's toast message last changed (`SeatUi::message_tick`).
     pub message_tick: u64,
+    /// The seat has its station's Works page open (Wave 14 finish: the Works' own music).
+    pub works: bool,
 }
 
 /// One frame of input to the director.
@@ -502,6 +504,10 @@ enum SeatLoop {
     WarpBed,
     SwarmCombatMusic,
     MachineCombatMusic,
+    // The set pieces' own music (Wave 14 finish): the Works, the Halcyon Gate, the Harbour.
+    WorksMusic,
+    GateMusic,
+    HarbourMusic,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -568,6 +574,8 @@ struct Listener {
     /// The listener is in vacuum (orbit, the Moon): sound only reaches it through the hull or
     /// the suit, muffled (WP-MOON).
     vacuum: bool,
+    /// The seat has its station's Works page open (Wave 14 finish).
+    works: bool,
 }
 
 /// Low-pass cutoff of world sounds heard in vacuum (through the ground and the hull).
@@ -662,7 +670,14 @@ impl Director {
     /// Works out this frame's mixer commands.
     pub fn update(&mut self, frame: &AudioFrame<'_, '_>) -> &[MixerCommand] {
         self.commands.clear();
-        let listeners = listeners(frame.snapshot);
+        let mut listeners = listeners(frame.snapshot);
+        // The seats' pages (Wave 14 finish: the Works has its own music).
+        for listener in &mut listeners {
+            listener.works = frame
+                .seats
+                .get(listener.seat)
+                .is_some_and(|seat| seat.works);
+        }
         let mut cue_played = false;
         self.sting_hold = (self.sting_hold - frame.delta_seconds).max(0.0);
         for cue in frame.cues {
@@ -2757,14 +2772,70 @@ impl Director {
             .iter()
             .find(|flyer| flyer.player_id == listener.player_id)
             .map(|flyer| flyer.flight);
-        // Docked: the owner's music.
-        let owner = flight.and_then(|flight| match flight.place {
-            FlightPlace::Docked(body) => Some(
+        // Docked: the owner's music, unless a set piece has its own (Wave 14 finish): the
+        // Works page, and Halcyon Dock once its gate is rising.
+        let docked = flight.and_then(|flight| match flight.place {
+            FlightPlace::Docked(body) => {
                 fatherload_simulation::world::station_profile_at(snapshot.space.world, body)
-                    .map_or(StationOwner::Human, |profile| profile.owner),
-            ),
+            }
             _ => None,
         });
+        let world = snapshot.space.world;
+        let works = docked.is_some() && listener.works;
+        let gate_dock = !works
+            && docked
+                .as_ref()
+                .is_some_and(|profile| profile.halcyon && world.endgame().gate_parts != 0);
+        let gate_ride = flight.is_some_and(|flight| {
+            matches!(flight.drive, StarDrive::Transit(_))
+                && world.endgame().gate_parts_done()
+                    >= fatherload_simulation::endgame::works::GATE_PARTS
+        });
+        let harbour = !works
+            && flight.is_some_and(|flight| {
+                world.galaxy_harbour().is_some_and(|harbour| {
+                    harbour.star.within(
+                        fatherload_simulation::space::SpaceTile::of_pos(flight.pos),
+                        fatherload_simulation::galaxy_story::plan::HARBOUR_RING_TILES * 6,
+                    )
+                })
+            });
+        for (slot, patch, gain) in [
+            (
+                SeatLoop::WorksMusic,
+                Patch::F14WorksMusicLoop,
+                if works { 0.42 } else { 0.0 },
+            ),
+            (
+                SeatLoop::GateMusic,
+                Patch::F14GateMusicLoop,
+                if gate_ride {
+                    0.5
+                } else if gate_dock {
+                    0.4
+                } else {
+                    0.0
+                },
+            ),
+            (
+                SeatLoop::HarbourMusic,
+                Patch::F14HarbourMusicLoop,
+                if harbour && !fighting { 0.4 } else { 0.0 },
+            ),
+        ] {
+            self.music_command(live, listener, slot, patch, gain);
+        }
+        let owner = docked
+            .as_ref()
+            .filter(|_| !works && !gate_dock)
+            .map(|profile| profile.owner)
+            .or_else(|| {
+                // A dock with no profile still plays the people's music.
+                flight
+                    .filter(|flight| matches!(flight.place, FlightPlace::Docked(_)))
+                    .filter(|_| docked.is_none() && !works)
+                    .map(|_| StationOwner::Human)
+            });
         let species = |kin: fatherload_simulation::station::profile::AlienKin| kin.species();
         let stations = [
             (
@@ -3147,6 +3218,7 @@ fn listeners(snapshot: &RenderSnapshot<'_>) -> Vec<Listener> {
                     },
                     |scene| scene.place == fatherload_simulation::place::Place::Space,
                 ),
+                works: false,
             }
         })
         .collect()
@@ -3791,6 +3863,7 @@ mod tests {
             thrust: true,
             playing: true,
             message_tick: 0,
+            works: false,
         }];
         let mut ignitions = 0;
         let mut gains = Vec::new();
@@ -3827,6 +3900,7 @@ mod tests {
             thrust: true,
             playing: true,
             message_tick: 0,
+            works: false,
         }];
         for _ in 0..10 {
             let _ = director.update(&frame(&snapshot, &[], &held));

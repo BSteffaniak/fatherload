@@ -28,7 +28,15 @@
 use std::sync::OnceLock;
 
 /// The one constant every station figure is scaled by (see the module docs).
-pub const SPACE_CREDIT_SCALE: u32 = 20;
+///
+/// Wave 14 finish: 40 (it was 20). At 20 an hour of space work near home earned 40-55 % of an
+/// everyday Heart trip (ring 1: boards 334,000 an hour, belt mining 444,000, against the
+/// Heart's 806,000), so a credit-minded crew went home to mine and came out only for
+/// materials. At 40 the first ring's belts out-earn the Heart and its boards come close; the
+/// rings beyond pay more (see [`super::curve`] for the measured curve). Ratios inside space
+/// are unchanged, so the first-hour model still holds; the post-Heart purse is a smaller head
+/// start.
+pub const SPACE_CREDIT_SCALE: u32 = 40;
 
 /// `base` credits on the space scale.
 #[must_use]

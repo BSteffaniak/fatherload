@@ -657,6 +657,10 @@ patches! {
     // Wave 14 finish: the Wave 12 worlds' theme bosses' stings.
     F14LairWake => "f14_lair_wake",
     F14LairFall => "f14_lair_fall",
+    // Wave 14 finish: the set pieces' own music.
+    F14WorksMusicLoop => "f14_loop_works",
+    F14GateMusicLoop => "f14_loop_gate",
+    F14HarbourMusicLoop => "f14_loop_harbour",
 }
 
 /// Playback metadata of a patch.
@@ -1306,6 +1310,9 @@ impl Patch {
             Self::AaWarpEngage | Self::AaWarpArrive => PatchInfo::new(Big).send(0.25),
             Self::AaCruiseEngage | Self::AaDockChime => PatchInfo::new(Feedback).send(0.15),
             // Wave 14 finish: the lair bosses' music stings are set pieces.
+            Self::F14WorksMusicLoop | Self::F14GateMusicLoop | Self::F14HarbourMusicLoop => {
+                PatchInfo::new(Loop)
+            }
             Self::F14LairWake | Self::F14LairFall => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.45)
@@ -2178,6 +2185,9 @@ impl Patch {
             Self::AaDockChime => space_audio::dock_chime(rng),
             Self::F14LairWake => finish::lair_wake(rng),
             Self::F14LairFall => finish::lair_fall(rng),
+            Self::F14WorksMusicLoop => finish::works_music_loop(rng),
+            Self::F14GateMusicLoop => finish::gate_music_loop(rng),
+            Self::F14HarbourMusicLoop => finish::harbour_music_loop(rng),
         }
     }
 }

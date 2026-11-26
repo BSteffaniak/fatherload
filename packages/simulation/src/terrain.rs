@@ -114,16 +114,17 @@ impl MineralKind {
             Self::Skystone => 58,
             Self::CloudSilver => 150,
             // Space materials are priced on the space credit scale
-            // ([`crate::endgame::economy::SPACE_CREDIT_SCALE`]): a common belt ore a little
-            // over a Heart ore unit's classic value, the rare ones capped per rock.
-            Self::MeteoricIron => 40,
-            Self::Kamacite => 70,
-            Self::VolatileIce => 55,
-            Self::CobaltBloom => 160,
-            Self::StarPlatinum => 1_500,
-            Self::Iridium => 4_000,
-            Self::Voidglass => 10_000,
-            Self::CometDust => 5_000,
+            // ([`crate::endgame::economy::SPACE_CREDIT_SCALE`]; doubled with it in Wave 14):
+            // a common belt ore a little over twice a Heart ore unit's classic value, the rare
+            // ones capped per rock.
+            Self::MeteoricIron => 80,
+            Self::Kamacite => 140,
+            Self::VolatileIce => 110,
+            Self::CobaltBloom => 320,
+            Self::StarPlatinum => 3_000,
+            Self::Iridium => 8_000,
+            Self::Voidglass => 20_000,
+            Self::CometDust => 10_000,
         }
     }
 }

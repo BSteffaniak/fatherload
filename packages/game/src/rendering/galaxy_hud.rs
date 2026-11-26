@@ -768,19 +768,29 @@ fn draw_lead(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, choice: FinaleCho
     );
 }
 
-/// The credits roll, rising from the bottom to past the top, right of the road.
+/// Rows at the bottom of the view the credits roll keeps clear (the skip hint's corner and
+/// the prompt row under it; Wave 14 finish: the last lines ran under the hint).
+const CREDITS_FOOT: f32 = 46.0;
+
+/// The credits roll, rising from above the skip hint to past the top, right of the road.
 fn draw_credits(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, progress: f32) {
     let column = (rect.x + rect.width * 0.64) as i32;
     let gap = 16;
-    let total = finale::CREDITS.len() as i32 * gap + rect.height as i32;
+    let floor = rect.y + rect.height - CREDITS_FOOT;
+    let total = finale::CREDITS.len() as i32 * gap + (floor - rect.y) as i32;
     let offset = (progress * total as f32) as i32;
-    let mut y = (rect.y + rect.height) as i32 - offset;
+    let mut y = floor as i32 - offset;
     let fade = |y: i32| {
         let top = (y as f32 - rect.y) / 30.0;
-        let bottom = (rect.y + rect.height - y as f32) / 30.0;
+        let bottom = (floor - y as f32) / 30.0;
         (top.min(bottom).clamp(0.0, 1.0) * 255.0) as u8
     };
     for line in &finale::CREDITS {
+        // Nothing below the roll's floor: the hint's corner stays clear.
+        if y as f32 > floor {
+            y += gap;
+            continue;
+        }
         match line {
             CreditLine::Heading(text) => {
                 ui_kit::text_centred(

@@ -16,7 +16,8 @@
 )]
 
 use super::{
-    FilterMode, Noise, NoiseColor, Osc, Rng, Svf, Wave, bell, mix_into, render, segments, thump,
+    FilterMode, LOOP_SECONDS, Noise, NoiseColor, Osc, Rng, Svf, Wave, bell, burst, loop_length,
+    loop_note, mix_into, perc, render, segments, sine, thump,
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -95,5 +96,153 @@ pub(super) fn lair_fall(rng: &mut Rng) -> Vec<f32> {
         shimmer.process(dust.next()) * segments(t, &[(0.0, 0.0), (0.5, 1.0), (2.2, 0.0)]) * 0.05
     });
     mix_into(&mut out, &air, 0.85, 1.0);
+    out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The set pieces' music.
+// ---------------------------------------------------------------------------------------------
+
+/// A soft plucked tone (a tine with a quick rise and a long ring).
+fn pluck(rng: &mut Rng, note: f32, seconds: f32) -> Vec<f32> {
+    let mut osc = Osc::new(Wave::Triangle).with_phase(rng.unit());
+    let mut over = Osc::new(Wave::Sine).with_phase(rng.unit());
+    render(seconds, |t| {
+        (osc.next(note) * 0.8 + over.next(note * 2.0) * 0.25) * perc(t, 0.004, seconds * 0.8)
+    })
+}
+
+/// A breathing pad of detuned saws through a low-pass (the chord held a whole loop).
+fn pad(rng: &mut Rng, notes: &[f32], cutoff: f32, level: f32) -> Vec<f32> {
+    let mut voices: Vec<(Osc, Osc)> = notes
+        .iter()
+        .map(|_| {
+            (
+                Osc::new(Wave::Saw).with_phase(rng.unit()),
+                Osc::new(Wave::Saw).with_phase(rng.unit()),
+            )
+        })
+        .collect();
+    let mut filter = Svf::new(FilterMode::LowPass, cutoff, 0.8);
+    let notes = notes.to_vec();
+    render(loop_length(), |t| {
+        let breath = 0.75 + 0.25 * sine(t, 0.25).abs();
+        let sum: f32 = voices
+            .iter_mut()
+            .zip(&notes)
+            .map(|((a, b), note)| a.next(*note) + b.next(*note * 1.005))
+            .sum::<f32>()
+            / (notes.len() as f32 * 2.0);
+        filter.process(sum) * level * breath
+    })
+}
+
+/// The Works (the hub's late-goals page): a workshop's music in C major. A steady plucked
+/// arpeggio over a warm pad, the bay's anvil ringing on the beat, a welder's hiss now and then
+/// and the cranes' low drone: building something great, unhurried.
+pub(super) fn works_music_loop(rng: &mut Rng) -> Vec<f32> {
+    // C, then F over C, a bar each, twice.
+    let mut out = pad(rng, &[130.75, 196.0, 261.75, 329.75], 900.0, 0.05);
+    let fourth = pad(rng, &[130.75, 174.5, 261.75, 349.25], 900.0, 0.03);
+    mix_into(&mut out, &fourth, 0.0, 0.5);
+    let step = LOOP_SECONDS / 16.0;
+    let arpeggio = [
+        523.25_f32, 659.25, 784.0, 659.25, 523.25, 784.0, 1_046.5, 784.0, 698.5, 880.0, 1_046.5,
+        880.0, 698.5, 523.25, 659.25, 784.0,
+    ];
+    for (index, note) in arpeggio.into_iter().enumerate() {
+        let note = note * rng.jitter(0.001);
+        loop_note(&mut out, &pluck(rng, note, 0.6), index as f32 * step, 0.06);
+    }
+    // The anvil on beats one and three: a ringing bell over a soft thump.
+    for beat in [0.0_f32, 2.0] {
+        let ring = bell(1_318.5, 2.76, 1.2, 0.9);
+        loop_note(&mut out, &ring, beat, 0.07);
+        let knock = thump(150.0, 90.0, 0.12, 1.2);
+        loop_note(&mut out, &knock, beat, 0.12);
+    }
+    // A welder's hiss on the last beat.
+    let hiss = burst(
+        rng.next_u64(),
+        NoiseColor::White,
+        FilterMode::HighPass,
+        4_500.0,
+        0.7,
+        0.5,
+    );
+    loop_note(&mut out, &hiss, 3.2, 0.025);
+    // The cranes' drone.
+    let mut drone = Osc::new(Wave::Sine).with_phase(rng.unit());
+    let low = render(loop_length(), |t| {
+        drone.next(65.5) * (0.04 + 0.01 * sine(t, 0.5))
+    });
+    mix_into(&mut out, &low, 0.0, 1.0);
+    out
+}
+
+/// The Halcyon Gate (building it at Halcyon Dock, riding it): a grand slow choir of a pad in E
+/// major, a great bell tolling once a loop, a glassy shimmer turning over it: something very
+/// old and very large waking up.
+pub(super) fn gate_music_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut out = pad(rng, &[82.5, 164.75, 247.0, 311.25, 370.0], 1_300.0, 0.07);
+    let lift = pad(rng, &[82.5, 185.0, 277.25, 370.0, 440.0], 1_600.0, 0.04);
+    mix_into(&mut out, &lift, 0.0, 0.6);
+    // The toll: a deep bell and its octave.
+    let toll = bell(164.75, 1.41, 2.0, 3.6);
+    loop_note(&mut out, &toll, 0.0, 0.16);
+    let high = bell(659.25, 1.41, 1.2, 2.5);
+    loop_note(&mut out, &high, 2.0, 0.05);
+    // The shimmer: soft high plucks rising, a note a half-beat.
+    let step = LOOP_SECONDS / 8.0;
+    for (index, note) in [
+        1_318.5_f32,
+        1_480.0,
+        1_661.25,
+        1_975.5,
+        1_661.25,
+        1_480.0,
+        1_318.5,
+        1_244.5,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        loop_note(&mut out, &pluck(rng, note, 0.9), index as f32 * step, 0.025);
+    }
+    out
+}
+
+/// The Harbour (the world-ships moored round their red star): a lullaby in A minor. A
+/// rocking two-note bass, a slow music-box melody, the mooring bells' far chimes and the hush
+/// of a sea that is only starlight.
+pub(super) fn harbour_music_loop(rng: &mut Rng) -> Vec<f32> {
+    let mut out = pad(rng, &[110.0, 220.0, 261.75, 329.75], 700.0, 0.045);
+    let mut hush = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut band = Svf::new(FilterMode::BandPass, 500.0, 0.6);
+    let sea = render(loop_length(), |t| {
+        band.process(hush.next()) * 0.025 * (0.5 + 0.5 * sine(t, 0.25).abs())
+    });
+    mix_into(&mut out, &sea, 0.0, 1.0);
+    // The rocking bass: A, E, A, E (a beat each).
+    for (beat, note) in [110.0_f32, 82.5, 110.0, 82.5].into_iter().enumerate() {
+        loop_note(&mut out, &pluck(rng, note, 1.2), beat as f32, 0.12);
+    }
+    // The music box: A minor, falling and rising again.
+    let step = LOOP_SECONDS / 8.0;
+    for (index, note) in [
+        880.0_f32, 784.0, 659.25, 698.5, 659.25, 523.25, 587.25, 659.25,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let note = note * rng.jitter(0.001);
+        let tine = bell(note, 4.0, 0.8, 0.9);
+        loop_note(&mut out, &tine, index as f32 * step, 0.05);
+    }
+    // The mooring bells, far off.
+    for at in [1.5_f32, 3.5] {
+        let chime = bell(1_760.0, 2.0, 0.6, 1.4);
+        loop_note(&mut out, &chime, at, 0.02);
+    }
     out
 }

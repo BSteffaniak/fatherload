@@ -686,7 +686,7 @@ fn sectors_generate_quickly() {
     let start = std::time::Instant::now();
     let sectors = sectors_around_home(6);
     for coords in &sectors {
-        let _ = generate_sector(DEFAULT_WORLD_SEED, *coords);
+        let _ = generate_sector(DEFAULT_WORLD_SEED.into(), *coords);
     }
     let average = start.elapsed().as_secs_f64() * 1_000.0 / sectors.len() as f64;
     assert!(average < 3.0, "{average:.3} ms a sector");

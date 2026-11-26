@@ -168,6 +168,8 @@ fn seat_audio(input: &FrameInput, game: &LocalGame) -> Vec<SeatAudio> {
             thrust: sampled.thrust,
             playing: game.shell.gameplay_input_enabled(seat),
             message_tick: game.shell.seat(seat).message_tick,
+            works: game.shell.seat(seat).modal == Some(crate::shell::ModalScreen::Station)
+                && game.shell.seat(seat).station.page == crate::shell::station::StationPage::Works,
         })
         .collect()
 }

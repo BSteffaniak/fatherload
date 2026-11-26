@@ -215,6 +215,29 @@ pub fn log_entry(log: u8) -> Option<(String, String)> {
     ))
 }
 
+/// The one line for the leads found in a system: told by its first lead only (the others are
+/// silent), with how many there are.
+fn lead_found_words(world: &WorldState, index: usize) -> Option<String> {
+    let leads = &world.galaxy_story().leads;
+    let record = leads.get(index)?;
+    let first = leads
+        .iter()
+        .position(|other| other.system == record.system)?;
+    if first != index {
+        return None;
+    }
+    let count = leads
+        .iter()
+        .filter(|other| other.system == record.system && !other.done)
+        .count();
+    let (title, _, _) = lead_entry(world, index)?;
+    Some(if count > 1 {
+        format!("{count} new leads here ({title}, ...): see the journal.")
+    } else {
+        format!("New lead: {title}. See the journal.")
+    })
+}
+
 /// Lead `index` of the discovery log: its title, its kind and step in words, and its text.
 #[must_use]
 pub fn lead_entry(world: &WorldState, index: usize) -> Option<(String, String, String)> {
@@ -395,10 +418,10 @@ pub fn event_words(world: &WorldState, what: GalaxyEvent, detail: u32) -> Galaxy
             everyone: true,
             ..GalaxyWords::default()
         },
+        // A system's leads are found together: one short line for all of them (Wave 14 finish:
+        // a toast per lead stacked over the view on every arrival).
         GalaxyEvent::LeadFound => GalaxyWords {
-            message: lead_entry(world, usize::try_from(detail).unwrap_or(usize::MAX)).map(
-                |(title, status, _)| format!("New lead: {title} ({status}). See the journal."),
-            ),
+            message: lead_found_words(world, usize::try_from(detail).unwrap_or(usize::MAX)),
             ..GalaxyWords::default()
         },
         GalaxyEvent::LeadStep => GalaxyWords {
