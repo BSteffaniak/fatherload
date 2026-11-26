@@ -12,6 +12,7 @@
 pub mod attitude;
 pub mod balance;
 pub mod base;
+pub mod bodylife;
 pub mod cave;
 pub mod climb;
 pub mod clock;

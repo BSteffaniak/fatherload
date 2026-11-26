@@ -1175,7 +1175,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::HeartLandmarkFound { player_id, .. }
         | GameplayEventKind::PlaceChanged { player_id, .. }
         | GameplayEventKind::Flight { player_id, .. }
-        | GameplayEventKind::SpaceSystems { player_id, .. } => Some(player_id),
+        | GameplayEventKind::SpaceSystems { player_id, .. }
+        | GameplayEventKind::BodyLife { player_id, .. } => Some(player_id),
         // Building news reaches the plot's owner wherever they are.
         GameplayEventKind::ConstructionStage { owner, .. }
         | GameplayEventKind::HomeCompleted { owner, .. }

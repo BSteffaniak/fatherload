@@ -1356,6 +1356,14 @@ pub enum GameplayEventKind {
         player_id: PlayerId,
         detail: u32,
     },
+    // Living bodies (Wave 12 bodylife; netcode codes 880-899).
+    /// Something of a body's life reached `player_id` (its weather turned, dawn, dusk, a sale
+    /// at a body's market); `detail` is the event's number (the new weather id, credits).
+    BodyLife {
+        what: crate::world::BodyLifeEvent,
+        player_id: PlayerId,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.

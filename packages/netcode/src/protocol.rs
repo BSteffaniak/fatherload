@@ -292,6 +292,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `SectionKey::SpaceSystems` section (asteroids mined, comet dust gathered, wormholes
 ///   flown), and the systems events 860-879 (`GameplayEventKind::SpaceSystems` with
 ///   `flight::systems::SystemsEvent`).
+/// * Bodylife (living bodies): the body-life events 880-899 (`GameplayEventKind::BodyLife`
+///   with `world::BodyLifeEvent`: weather turned, dawn, dusk, a sale at a body's market).
+///   A body's clock, weather, climate and prices are pure functions of the world seed, the
+///   body and world time, so nothing else travels.
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

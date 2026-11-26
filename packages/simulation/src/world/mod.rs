@@ -126,6 +126,10 @@ pub use heart::CablePath;
 mod body_flight;
 #[cfg(test)]
 mod body_map_tests;
+mod bodylife;
+#[cfg(test)]
+mod bodylife_tests;
+pub use bodylife::{BodyLifeEvent, body_life_of};
 mod hollow;
 #[cfg(test)]
 mod hollow_tests;

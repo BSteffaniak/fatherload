@@ -535,18 +535,27 @@ impl WorldState {
         let settings = self.terrain.settings();
         let (mx, my) = state.middle(body);
         let sheltered = settings.generator.has_sky() && self.pilot_sheltered(mx, my);
-        let cold = if settings.generator.has_sky() && !sheltered {
-            crate::environment::environment_in(settings, self.frame(), mx, my).cold
-        } else {
-            0
-        };
-        let cold_excess = cold.saturating_sub(state.gear.cold_cover());
         let tile = self.frame().tile_at(mx, my);
+        // On a body its climate decides (Wave 12 bodylife).
+        let body_cold = self.body_cold_at(tile);
+        let cold = body_cold.unwrap_or_else(|| {
+            if settings.generator.has_sky() && !sheltered {
+                crate::environment::environment_in(settings, self.frame(), mx, my).cold
+            } else {
+                0
+            }
+        });
+        let cold_excess = cold.saturating_sub(state.gear.cold_cover());
         // Run spaces (WP-TOMBS) keep their own climate: no band heat in the vault. The heat is
         // the rig's (`heat_units_at`): band heat bit for bit on older worlds, each stratum's own
-        // on a Deep Descent world (Wave 8), in whole levels.
-        let heat_excess =
-            crate::crust::pilot_heat_danger_levels(&self.terrain, tile, state.gear.heat_cover());
+        // on a Deep Descent world (Wave 8), in whole levels; a body's climate on a body.
+        let heat_excess = self.body_heat_units_at(tile).map_or_else(
+            || crate::crust::pilot_heat_danger_levels(&self.terrain, tile, state.gear.heat_cover()),
+            |units| {
+                (units / crate::protection::HEAT_UNITS_PER_LEVEL)
+                    .saturating_sub(state.gear.heat_cover())
+            },
+        );
         let exposure = if cold_excess > 0 {
             1
         } else if heat_excess > 0 {

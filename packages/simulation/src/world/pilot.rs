@@ -282,6 +282,14 @@ impl WorldState {
         if in_cloud || beside_pocket {
             return PilotAir::Gas;
         }
+        // A body decides by its own air and weather (Wave 12 bodylife).
+        if let Some(breathable) = self.body_breathable_at(x, y) {
+            return if breathable {
+                PilotAir::Breathable
+            } else {
+                PilotAir::Thin
+            };
+        }
         // A sky decides by its breathable air (band-relative: thin from the lower archipelago,
         // vacuum in orbit and on the Moon); older worlds keep the fixed thin-air row.
         let settings = self.terrain.settings();

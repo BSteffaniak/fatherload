@@ -446,6 +446,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::SpaceSystems {
             what, player_id, ..
         } => (860 + what.code() as u32, Some(player_id)),
+        // Living bodies (wave 12 bodylife): 880-899.
+        GameplayEventKind::BodyLife {
+            what, player_id, ..
+        } => (880 + what.code() as u32, Some(player_id)),
     }
 }
 

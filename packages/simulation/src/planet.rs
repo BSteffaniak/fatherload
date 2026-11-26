@@ -29,6 +29,7 @@
 //! interface. [`crate::WorldState::new_planet_world`] (a world that *is* one planet) stays for
 //! the polar track's own tests and scenes.
 
+pub mod hooks;
 pub mod landing;
 #[cfg(test)]
 mod tests;
@@ -41,6 +42,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+pub use hooks::{PlanetThemeHooks, SecretSite, hooks};
 pub use theme::{PLANET_THEMES, PlanetPalette, PlanetStratum, PlanetTheme, PlanetThemeId, theme};
 
 use crate::{
@@ -153,6 +155,8 @@ pub struct PlanetGround {
     grid: PolarGrid,
     /// The strip's first row (the low sky over the highest hill).
     top: i32,
+    /// The body's secret (Wave 12: one on every small body, [`hooks::default_secret`]).
+    secret: Option<SecretSite>,
 }
 
 /// A splitmix64 step (stable hashing for generation).
@@ -164,7 +168,7 @@ const fn mix(mut z: u64) -> u64 {
 }
 
 #[allow(clippy::cast_sign_loss, reason = "hash inputs")]
-const fn hash3(seed: u64, purpose: u64, a: i64, b: i64) -> u64 {
+pub(crate) const fn hash3(seed: u64, purpose: u64, a: i64, b: i64) -> u64 {
     mix(mix(mix(seed ^ purpose.wrapping_mul(0xA24B_AED4_963E_E407)) ^ a as u64) ^ b as u64)
 }
 
@@ -176,9 +180,29 @@ impl PlanetGround {
             params,
             grid: params.grid(),
             top: 0,
+            secret: None,
         };
         ground.top = -ground.max_hill_rows() - SKY_ROWS;
+        ground.secret = ground.hooks().secret(&ground);
         ground
+    }
+
+    /// The theme's hooks ([`hooks::PlanetThemeHooks`]): generation goes through them.
+    #[must_use]
+    pub fn hooks(&self) -> &'static dyn PlanetThemeHooks {
+        hooks::hooks(self.params.theme)
+    }
+
+    /// The theme's data (its hooks' [`hooks::PlanetThemeHooks::data`]).
+    #[must_use]
+    pub fn data_theme(&self) -> &'static PlanetTheme {
+        self.hooks().data()
+    }
+
+    /// The body's secret, if it has one.
+    #[must_use]
+    pub const fn secret(&self) -> Option<SecretSite> {
+        self.secret
     }
 
     /// The strip's first row (see [`BodyGround::top_row`]).
@@ -209,7 +233,7 @@ impl PlanetGround {
 
     #[must_use]
     pub fn theme(&self) -> &'static PlanetTheme {
-        theme(self.params.theme)
+        self.data_theme()
     }
 
     /// Hill rows the generator may raise above the datum.
@@ -264,8 +288,18 @@ impl PlanetGround {
         a + (b - a) * s / 1_024
     }
 
-    /// Hill height (rows above the datum) at strip column `column`.
+    /// Hill height (rows above the datum) at strip column `column`: the theme's surface
+    /// shaper ([`hooks::PlanetThemeHooks::surface_rows`]), kept within the hill limit.
     fn hill(&self, column: i64) -> i32 {
+        self.hooks()
+            .surface_rows(self, column)
+            .clamp(-MAX_HILL_ROWS, self.max_hill_rows())
+    }
+
+    /// The default surface shaper: two octaves of periodic value noise (rows above the datum
+    /// at strip `column`).
+    #[must_use]
+    pub fn rolling_hills(&self, column: i64) -> i32 {
         let fine = self.periodic_noise(1, column, HILL_FINE);
         let broad = self.periodic_noise(2, column, HILL_BROAD);
         let max = i64::from(self.max_hill_rows());
@@ -277,7 +311,7 @@ impl PlanetGround {
     /// Depth (rows below the surface) where stratum `index` ends, ragged per ring tile.
     #[allow(clippy::cast_possible_truncation, reason = "bounded depths")]
     fn stratum_end(&self, index: usize, column: i64) -> i32 {
-        let strata = self.theme().strata;
+        let strata = self.hooks().strata();
         let depth = i64::from(self.core_chamber_top());
         let share: i64 = strata[..=index]
             .iter()
@@ -290,7 +324,7 @@ impl PlanetGround {
     /// The stratum (index into the theme's strata) at strip tile `(column, row)`.
     #[must_use]
     pub fn stratum_index(&self, column: i32, row: i32) -> usize {
-        let strata = self.theme().strata;
+        let strata = self.hooks().strata();
         let column = i64::from(column);
         let depth = row - self.surface_row_of(column);
         (0..strata.len())
@@ -307,7 +341,7 @@ impl PlanetGround {
         if row >= self.core_chamber_top() {
             return "Core Chamber";
         }
-        self.theme().strata[self.stratum_index(column, row)].name
+        self.hooks().strata()[self.stratum_index(column, row)].name
     }
 
     fn surface_row_of(&self, column: i64) -> i32 {
@@ -391,6 +425,12 @@ impl PlanetGround {
             return air;
         }
         let surface = self.surface_row_of(first);
+        let hooks = self.hooks();
+        // Landmarks, ruins and secrets (Wave 12 theme hooks) come before the strata.
+        let first_column = i32::try_from(first).unwrap_or(0);
+        if let Some(kind) = hooks.feature_tile(self, first_column, row, row - surface) {
+            return Self::tile_of_kind(kind);
+        }
         if row < surface {
             return air;
         }
@@ -401,15 +441,11 @@ impl PlanetGround {
         if depth < theme.crust_rows {
             return Self::tile_of_kind(theme.crust);
         }
-        let stratum = &theme.strata[self.stratum_index(i32::try_from(first).unwrap_or(0), row)];
+        let stratum = &hooks.strata()[self.stratum_index(first_column, row)];
         let roll = hash3(self.params.seed, 40, first, i64::from(row));
         let ore_roll = (roll % 10_000) as u16;
-        let mut threshold = 0_u16;
-        for (mineral, chance) in stratum.ores {
-            threshold = threshold.saturating_add(*chance);
-            if ore_roll < threshold {
-                return Self::tile_of_kind(TileKind::Ore(*mineral));
-            }
+        if let Some(ore) = hooks.ore_at(stratum, ore_roll) {
+            return Self::tile_of_kind(ore);
         }
         // Accent rock in patches (coarse noise on the ring tile).
         let patch = hash3(self.params.seed, 41, first / 4, i64::from(row / 3)) % 1_000;
@@ -478,8 +514,8 @@ impl PlanetGround {
     /// The richest ore of the theme (tests and the bot's sanity checks).
     #[must_use]
     pub fn ores(&self) -> Vec<MineralKind> {
-        self.theme()
-            .strata
+        self.hooks()
+            .strata()
             .iter()
             .flat_map(|stratum| stratum.ores.iter().map(|(mineral, _)| *mineral))
             .collect()

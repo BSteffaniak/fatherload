@@ -181,17 +181,18 @@ impl WorldState {
         let Some(ground) = self.body_ground_of(id) else {
             return;
         };
-        let breathable = self
-            .space()
-            .space()
-            .body(id)
-            .is_some_and(|body| body.atmosphere.breathable());
         let seconds = self.timing.delta_seconds;
         let frame = self.frame();
         let ids: Vec<PlayerId> = self.players.keys().copied().collect();
         for player_id in ids {
             let on_foot = self.is_on_foot(player_id);
             let capacity = self.air_capacity_of(player_id);
+            // The body's own air where the rig stands, and the weather fouling it (Wave 12
+            // bodylife).
+            let breathable = self
+                .players
+                .get(&player_id)
+                .is_some_and(|player| self.body_breathable_at(player.x, player.y).unwrap_or(false));
             let Some(player) = self.players.get_mut(&player_id) else {
                 continue;
             };

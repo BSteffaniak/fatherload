@@ -84,10 +84,27 @@ impl WorldState {
         owner: PlayerId,
         dt: f32,
     ) -> f32 {
-        if !self.terrain.settings().generator.has_descents() || self.pilot_anchored(owner) {
+        if self.pilot_anchored(owner) {
             return 0.0;
         }
         let (mx, my) = state.middle(body);
+        // A body's weather under the open sky (Wave 12 bodylife): its wind carries a pilot in
+        // the air, and its hail (or a theme's acid and ash) stings the suit.
+        let weather = self.body_weather_at(mx, my);
+        if weather.kind != crate::bodylife::WeatherId::CLEAR {
+            let mut damage = weather.suit_damage * dt;
+            if !state.grounded && weather.wind != 0.0 {
+                let push = ((weather.wind * PILOT_WIND_SHARE) * dt, 0.0);
+                self.nudge_pilot(body, state, owner, push);
+            }
+            if !self.terrain.settings().generator.has_descents() {
+                damage = crate::quantize::quantize_simulation_scalar(damage);
+                return damage;
+            }
+        }
+        if !self.terrain.settings().generator.has_descents() {
+            return 0.0;
+        }
         let mut push = (0.0_f32, 0.0_f32);
         let mut damage = 0.0;
         // Currents carry a swimmer.

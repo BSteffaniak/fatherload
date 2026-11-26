@@ -710,6 +710,38 @@ pub const fn systems_cue(what: fatherload_simulation::flight::systems::SystemsEv
     }
 }
 
+/// What a body's life sounds like (Wave 12 bodylife): its weather rolling in, its dawn and
+/// dusk, a sale at its market (exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn body_life_cue(
+    what: fatherload_simulation::world::BodyLifeEvent,
+    detail: u32,
+) -> SoundCue {
+    use fatherload_simulation::{
+        bodylife::WeatherId,
+        bodylife::weather::{WeatherParticles, weather_kind},
+        world::BodyLifeEvent as E,
+    };
+    match what {
+        E::WeatherTurned => {
+            #[allow(clippy::cast_possible_truncation, reason = "weather ids are 16-bit")]
+            let kind = weather_kind(WeatherId(detail as u16));
+            match kind.look.particles {
+                WeatherParticles::Rain => SoundCue::Thunderclap,
+                WeatherParticles::Aurora => SoundCue::WispChime,
+                WeatherParticles::None => SoundCue::UiMove,
+                WeatherParticles::Snow
+                | WeatherParticles::Dust
+                | WeatherParticles::Ash
+                | WeatherParticles::Spores => SoundCue::WindGust,
+            }
+        }
+        E::Dawn => SoundCue::Dawn,
+        E::Dusk => SoundCue::Dusk,
+        E::Sold => SoundCue::Sell,
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -1242,6 +1274,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Flight { what, .. } => Some(flight_cue(*what)),
         // Space's things (Wave 12 systems).
         GameplayEventKind::SpaceSystems { what, .. } => Some(systems_cue(*what)),
+        GameplayEventKind::BodyLife { what, detail, .. } => Some(body_life_cue(*what, *detail)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1594,7 +1627,8 @@ mod tests {
             | GameplayEventKind::PlaceChanged { .. }
             | GameplayEventKind::Planet { .. }
             | GameplayEventKind::Flight { .. }
-            | GameplayEventKind::SpaceSystems { .. } => {}
+            | GameplayEventKind::SpaceSystems { .. }
+            | GameplayEventKind::BodyLife { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },

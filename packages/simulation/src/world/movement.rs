@@ -219,6 +219,13 @@ impl WorldState {
                     self.tar_under(player.x, player.y),
                 )
             });
+        // A body's weather (Wave 12 bodylife): its wind carries an airborne rig under the open
+        // sky by the same rule as the Inner Sky's.
+        let wind = wind.or_else(|| {
+            self.players
+                .get(&player_id)
+                .and_then(|player| self.body_wind_at(player.x, player.y))
+        });
         // Wave 9: an amber sloth's touch holds the rig in amber (slow motion, slow burn).
         let ambered = self.far_strange.is_ambered(player_id, self.simulation_tick);
         // Wave 10, the Heart: dark matter's negative mass (1000 with none aboard: the classic

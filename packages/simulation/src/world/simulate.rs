@@ -429,11 +429,22 @@ impl WorldState {
             // `crate::protection`), so heat follows the strata wherever they lie. A Deep
             // Descent world reads each stratum's own heat instead (Wave 8, lava tubes hotter),
             // capped fairly in the placeholder Descents (Wave 8 progression).
-            let excess = crate::crust::heat_danger_units(
-                &self.terrain,
-                center,
-                radiator_level,
-                gear.heat_shield,
+            // On a body (Wave 12 bodylife) its climate's heat replaces the bands.
+            let excess = self.body_heat_units_at(center).map_or_else(
+                || {
+                    crate::crust::heat_danger_units(
+                        &self.terrain,
+                        center,
+                        radiator_level,
+                        gear.heat_shield,
+                    )
+                },
+                |units| {
+                    units.saturating_sub(crate::protection::heat_cooling(
+                        radiator_level,
+                        gear.heat_shield,
+                    ))
+                },
             );
             let depth_damage = if excess > 0 {
                 HEAT_DAMAGE_PER_EXCESS_UNIT * f32::from(excess) * heat_multiplier * delta_seconds
@@ -466,13 +477,16 @@ impl WorldState {
                 0.0
             };
             // Altitude cold (F6, V8 skies): the reverse of band heat, covered by the de-icer.
-            let cold = crate::environment::environment_in(
-                self.terrain.settings(),
-                self.frame(),
-                player_x,
-                player_y,
-            )
-            .cold;
+            // On a body its climate's cold replaces the sky's (Wave 12 bodylife).
+            let cold = self.body_cold_at(center).unwrap_or_else(|| {
+                crate::environment::environment_in(
+                    self.terrain.settings(),
+                    self.frame(),
+                    player_x,
+                    player_y,
+                )
+                .cold
+            });
             let cold_excess = gear.cold_excess(cold);
             let cold_damage = if cold_excess > 0 {
                 crate::environment::COLD_DAMAGE_PER_EXCESS_LEVEL
@@ -483,7 +497,10 @@ impl WorldState {
             };
             // Vacuum (WP-MOON): no pressurized hull or no life support in orbit and on the Moon.
             let vacuum_damage = self.vacuum_damage(player_id, delta_seconds);
-            let total_damage = depth_damage + lava_damage + cold_damage + vacuum_damage;
+            // A body's weather under the open sky (hail; theme tracks' acid rain and ash).
+            let weather_damage = self.body_weather_damage(player_id, delta_seconds);
+            let total_damage =
+                depth_damage + lava_damage + cold_damage + vacuum_damage + weather_damage;
             if self.damage_player(player_id, total_damage) {
                 if let Some(player) = self.players.get_mut(&player_id) {
                     player.hull = quantize_simulation_scalar(player.hull);
@@ -624,11 +641,17 @@ impl WorldState {
             // The body's own map (Wave 12 systems): what its players see is revealed on it.
             self.reveal_tiles_near_players();
             output.discoveries = self.take_discoveries();
+            // Its weather and its day (Wave 12 bodylife).
+            self.advance_body_life(&mut output);
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();
             self.recentre_ground_frame();
             return output;
+        }
+        // A lone planet world's weather and day (Wave 12 bodylife; nothing on the home world).
+        if self.planet().is_some() {
+            self.advance_body_life(&mut output);
         }
         self.advance_canonical_day_if_due(next_tick, &mut output);
         let clock_before = self.clock();
