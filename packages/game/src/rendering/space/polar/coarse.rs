@@ -25,6 +25,24 @@ use crate::rendering::terrain::tile_art;
 /// Painting time a frame may spend on the coarse map (besides the rows of a changed tile).
 pub const FRAME_BUDGET: Duration = Duration::from_millis(3);
 
+/// Whether every frame paints the whole map (scene capture: a still shows it all).
+static PAINT_WHOLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Makes every frame paint the whole coarse map (`true`: scene capture) or keep to
+/// [`FRAME_BUDGET`].
+pub fn paint_whole_frames(whole: bool) {
+    PAINT_WHOLE.store(whole, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// This frame's painting budget.
+pub fn frame_budget() -> Duration {
+    if PAINT_WHOLE.load(std::sync::atomic::Ordering::Relaxed) {
+        Duration::MAX
+    } else {
+        FRAME_BUDGET
+    }
+}
+
 /// The coarse map's texels and what is left to paint.
 #[derive(Default)]
 pub struct CoarseMap {

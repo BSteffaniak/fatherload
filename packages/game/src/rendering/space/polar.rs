@@ -36,6 +36,8 @@ use fatherload_simulation::terrain::{Terrain, TilePosition};
 mod coarse;
 mod fine;
 
+pub use coarse::paint_whole_frames;
+
 use super::{
     shaders,
     view::{GroundThing, GroundThingKind, GroundView, MAX_HALVINGS, PolarGeometry, PolarStrip},
@@ -292,7 +294,7 @@ impl PolarGround {
         let strip = ground.strip;
         let window = coarse_window(ground, strip.geometry());
         self.coarse_map
-            .sync(strip, &window, ground.row, revision, coarse::FRAME_BUDGET);
+            .sync(strip, &window, ground.row, revision, coarse::frame_budget());
         let fits = self.coarse.as_ref().is_some_and(|texture| {
             texture.width == window.size.0 && texture.height == window.size.1
         });

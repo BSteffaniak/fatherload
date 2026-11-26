@@ -210,6 +210,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
     if options.export_saves {
         return export_saves(&options.dir, &scenes);
     }
+    // A still shows the round ground's whole coarse map (play paints it over a few frames).
+    crate::rendering::space::polar::paint_whole_frames(true);
     let (width, height) = options.size;
     let (mut raylib, thread) = raylib::init()
         .size(width, height)
