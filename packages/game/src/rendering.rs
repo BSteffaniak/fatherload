@@ -426,6 +426,7 @@ impl GameRenderer {
                     .resize_with(seat + 1, space::live::LiveSpace::default);
             }
             if view.player.flight.away() {
+                self.live[seat].reset_framing();
                 self.live[seat].update(snapshot.space.seed, view.player.flight.pos);
                 // Wave 12 systems: the solid belt rocks round the rig, as they are now.
                 self.live[seat].refresh_rocks(
@@ -463,7 +464,7 @@ impl GameRenderer {
             let half_rows = view.viewport.height as f32 * density * 0.5
                 / space_seat::ground_px_per_tile(view, density);
             let framing = space_seat::headroom_drop(scene, actor, half_rows);
-            self.live[seat].ease_framing(framing);
+            self.live[seat].ease_framing(framing, raylib.get_frame_time());
             let things =
                 space_seat::body_things(snapshot, view, scene, Self::space_seconds(snapshot));
             let px_per_tile = space_seat::ground_px_per_tile(view, density);

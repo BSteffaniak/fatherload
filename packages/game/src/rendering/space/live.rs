@@ -226,23 +226,32 @@ pub struct LiveSpace {
 }
 
 impl LiveSpace {
-    /// Eases the seat's framing toward `target` (a share of the view's half height) by one
-    /// frame's step: a canopy coming into view lifts the picture over about half a second.
-    pub fn ease_framing(&mut self, (drop, zoom): (f32, f32)) {
+    /// Eases the seat's framing toward `target` (a share of the view's half height) over a
+    /// frame of `dt` seconds: a canopy coming into view lifts the picture over about half a
+    /// second whatever the frame rate.
+    pub fn ease_framing(&mut self, (drop, zoom): (f32, f32), dt: f32) {
         // The first framing on the ground takes its place at once (a landing or a load).
         if self.zoom <= 0.0 {
             self.drop = drop;
             self.zoom = zoom;
             return;
         }
+        // 8% a frame at 60 fps: the same curve at any frame rate.
+        let share = 1.0 - 0.92_f32.powf(dt.clamp(0.0, 0.25) * 60.0);
         let ease = |now: &mut f32, target: f32| {
-            *now += (target - *now) * 0.08;
+            *now += (target - *now) * share;
             if (target - *now).abs() < 0.001 {
                 *now = target;
             }
         };
         ease(&mut self.drop, drop);
         ease(&mut self.zoom, zoom);
+    }
+
+    /// Forgets the ground framing (the seat is in flight): the next landing frames at once.
+    pub const fn reset_framing(&mut self) {
+        self.drop = 0.0;
+        self.zoom = 0.0;
     }
 
     /// The framing's zoom (1 until the seat stands on round ground).
