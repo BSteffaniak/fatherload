@@ -355,6 +355,78 @@ by rasterizing, which happens outside the measured callback). Desktop `--frame-t
 `sky_space` 3.25 ms before and 1.69 ms after, most scenes 1-3 ms, `split_four_mixed` the
 heaviest at about 5.5 ms for four views.
 
+### Browser frame timing, Wave 13 (the galaxy)
+
+The dune world drove at about 38 fps in the browser with 70 ms to 2 s hitches. A profiling
+build (`--profiling-funcs` added to the link flags of `scripts/build-web.sh`) under Chrome's CPU
+profiler, with the rig driving east across the dunes, put 60 % of the frame on the draw side:
+
+* the polar ground's coarse map repainted its whole 2,048 x 1,024 window each time the camera
+  crossed a window step, generating every chunk it touched (`PolarGround::sync` 22 %, up to 2 s
+  in one frame), and
+* `PlaceRenderers::sync` painted the seat's round ground flat as well, for nobody (27 %, plus
+  the darkness grid's 11 %); the home ground was also synced for the away seat's camera.
+
+Now the coarse map (`rendering/space/polar/coarse.rs`) keeps what a moved window holds and
+paints the rest within 3 ms a frame, the rows nearest the camera first (a tile write's rows at
+once; screenshot scenes paint it whole); round places keep no flat cache; the home ground is
+synced only for seats at home. Same profile after: the frame is 83 % idle.
+
+Measured with `scripts/perf-web.cjs` (saves exported by `--export-saves`) and
+`scripts/perf-web-space.cjs` (the staged space views), Chrome on an Apple Silicon Mac under
+heavy load from other builds (load average 30-60), 1280 x 720, 8 s a scene; "driving" holds the
+right arrow (the rig drives or flies east all the while). Frames counted in 8 s (60 fps is
+about 480), mean and p95 frame work in ms, and the frames that took longer than 25 ms:
+
+| Scene | GPU still: frames, mean, p95 | GPU driving: frames, mean, p95, >25 ms | Software still: frames, mean | Software driving: frames, mean |
+|---|---|---|---|---|
+| alien_vessi_town | 481, 1.89, 2.00 | 481, 2.44, 9.80, 0 | 36, 15.85 | 222, 8.92 |
+| frontier_crystal_surface | 480, 1.72, 1.80 | 480, 3.89, 12.50, 0 | 46, 7.17 | 113, 22.98 |
+| frontier_dunes_sandstorm | 481, 1.83, 2.00 | 481, 2.84, 7.00, 0 | 36, 2.48 | 57, 37.72 |
+| frontier_dunes_surface | 480, 1.54, 1.70 | 480, 2.87, 7.70, 0 | 31, 22.24 | 52, 41.85 |
+| frontier_volcanic_eruption | 481, 1.78, 1.90 | 480, 4.69, 13.60, 0 | 96, 2.55 | 63, 50.24 |
+| space_asteroid_belt | 480, 1.14, 1.20 | 480, 1.67, 2.10, 0 | 65, 1.24 | 93, 3.35 |
+| space_boss_arbiter | 480, 1.91, 2.00 | 480, 4.15, 5.50, 0 | 36, 2.26 | 46, 164.30 |
+| space_boss_pirate_king | 480, 1.89, 2.00 | 480, 4.17, 5.50, 0 | 48, 2.34 | 57, 123.23 |
+| space_boss_swarm_queen | 480, 1.96, 2.10 | 480, 4.02, 5.00, 0 | 65, 2.18 | 64, 103.30 |
+| space_dogfight | 481, 1.91, 2.00 | 480, 4.10, 5.10, 0 | 101, 2.14 | 64, 117.58 |
+| space_flight_cruise | 480, 8.14, 10.80 | 481, 8.58, 11.70, 0 | 35, 2.40 | 60, 138.63 |
+| space_ground_raid | 481, 1.71, 1.80 | 480, 2.75, 5.60, 0 | 21, 2.46 | 97, 25.49 |
+| space_landed | 480, 1.72, 1.80 | 481, 2.01, 2.50, 0 | 76, 2.08 | 60, 13.15 |
+| space_split_places | 480, 2.33, 4.00 | 481, 4.39, 6.00, 0 | 31, 104.52 | 57, 103.64 |
+| wild_glacier_surface | 480, 2.14, 2.30 | 480, 3.33, 8.50, 0 | 37, 2.31 | 135, 17.71 |
+| wild_jungle_surface | 481, 1.83, 2.00 | 481, 3.08, 8.50, 0 | 101, 2.10 | 128, 18.15 |
+| wild_ocean_surface | 481, 1.96, 2.10 | 480, 2.44, 9.20, 0 | 139, 2.12 | 56, 109.21 |
+
+Staged space views (`?space=`, `scripts/perf-web-space.cjs`), frames in 8 s, fps and mean frame work:
+
+| View | GPU | Software |
+|---|---|---|
+| space_asteroid_belt | 480, 60.0 fps, 1.61 ms | 311, 38.8 fps, 1.52 ms |
+| space_planet_gallery | 480, 60.0 fps, 1.36 ms | 78, 9.7 fps, 1.33 ms |
+| space_black_hole | 480, 60.0 fps, 1.67 ms | 70, 8.8 fps, 1.68 ms |
+| space_moon_flyover | 480, 60.0 fps, 1.80 ms | 97, 12.2 fps, 56.02 ms |
+| space_polar_quads | 480, 60.0 fps, 3.73 ms | 82, 10.2 fps, 98.99 ms |
+| space_nebula | 480, 60.0 fps, 1.39 ms | 112, 14.1 fps, 1.37 ms |
+| space_cruise | 480, 60.0 fps, 1.39 ms | 193, 24.1 fps, 1.34 ms |
+| space_warp | 480, 60.0 fps, 1.37 ms | 208, 25.9 fps, 1.35 ms |
+| space_core_shaft | 479, 59.9 fps, 1.81 ms | 155, 19.4 fps, 21.51 ms |
+| space_planet_surface | 480, 60.0 fps, 1.46 ms | 168, 21.0 fps, 1.37 ms |
+
+Software WebGL (SwiftShader) is bound by rasterizing on the CPU, so on this machine (load
+average 30 to 130 from other builds while it ran) its frame counts measure the load more than
+the game; the frame work it shows inside the callback includes its texture uploads. Against
+the Wave 12 master's bundle, alternating runs under the same load: the dune world driving,
+median frame work 5.6-5.9 ms against 30.1-30.2 ms (the mean swings with the load: 53 / 101 ms
+against 93 / 95 ms); the ocean world 98-135 ms against 128-134 ms; the planet gallery and the
+moon flyover alike (7.1 / 9.3 fps against 7.2 / 10.1 fps; those views are untouched). The Wave
+11 software numbers (planet gallery 44 fps) were taken on a quiet machine.
+
+To profile the browser build, add `-C link-arg=--profiling-funcs` to the emscripten rustflags
+of `scripts/build-web.sh` (function names survive into the `.wasm`), and record Chrome's CPU
+profile through the DevTools protocol while the page runs (`Profiler.start` / `Profiler.stop`
+in a Playwright CDP session).
+
 ## Wave 11 regions (F11: seats in different places)
 
 Each split-screen seat (and each online client) sees its own place: a seat away from the home

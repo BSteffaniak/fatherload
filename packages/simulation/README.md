@@ -10482,6 +10482,20 @@ seats at home.
   Formats 1-15 stay covered by `every_supported_save_format_loads_plays_and_round_trips` and
   the v1-v3 fixtures.
 
+### Known limits and notes for the integrator
+
+* Free flight's things (drops, shots, a pilot's gear) are kept in the Space store's frame; a far
+  group ticks them in its own frame, but between ticks one far from the store's first group
+  keeps only `f32` precision in the store's frame (rigs are exact; space combat already uses
+  exact positions).
+* The ocean's sea still wakes a planet-wide line of cells while a shaft drains it (the step
+  is cheaper, not smaller); a level-held far sea would change what the water does (and every
+  digest of a drained sea), so it is left for a wave that may change the fluid rules.
+* `space_flight_cruise` is the heaviest browser scene (about 8 ms of frame work on the GPU, at
+  60 fps); everything else on the GPU is 1.5-4.7 ms, still or moving.
+* Old saves: a Wave 12 save that dug into a settled wild world loads that body fresh (its ground
+  now holds more towns), as Wave 12 did for re-themed Wave 11 bodies.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
