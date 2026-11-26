@@ -201,6 +201,10 @@ fn soak(minutes: u32, reload_every: u32) -> Vec<Duration> {
     let mut costs: Vec<Duration> = Vec::new();
     let mut first_sizes: Option<Sizes> = None;
     let mut most = (0_usize, 0_usize);
+    let diagnose = std::env::var("FATHERLOAD_SOAK_DIAGNOSE").is_ok();
+    let mut recent: std::collections::VecDeque<(u64, WorldState)> =
+        std::collections::VecDeque::new();
+    let mut seen_mismatches: Vec<u64> = Vec::new();
     for minute in 0..minutes {
         let leg = minute as usize;
         // Each roamer goes to its next place.
@@ -237,6 +241,15 @@ fn soak(minutes: u32, reload_every: u32) -> Vec<Duration> {
             harness.step();
             if harness.host_tick() != before {
                 costs.push(started.elapsed());
+                if diagnose {
+                    recent.push_back((harness.host_tick().0, harness.world().clone()));
+                    while recent.len() > 120 {
+                        recent.pop_front();
+                    }
+                }
+            }
+            if diagnose {
+                diagnose_mismatch(&harness, &recent, &mut seen_mismatches, minute);
             }
             // Everyone gets where its itinerary says (a bot may fly off again later: it roams).
             let world = harness.world();
@@ -356,3 +369,76 @@ fn world_soak_long() {
     assert!(mean < Duration::from_millis(20), "mean host tick {mean:?}");
     assert!(p99 < Duration::from_millis(100), "p99 host tick {p99:?}");
 }
+
+/// Diagnostics (`FATHERLOAD_SOAK_DIAGNOSE=1`): at a client's first hash mismatch, the parts of
+/// its authority that differ from the host's world at the same tick.
+fn diagnose_mismatch(
+    harness: &WorldHarness,
+    recent: &std::collections::VecDeque<(u64, WorldState)>,
+    seen: &mut Vec<u64>,
+    minute: u32,
+) {
+    seen.resize(harness.clients.len(), 0);
+    for (index, client) in harness.clients.iter().enumerate() {
+        if client.hash_mismatches <= seen[index] {
+            seen[index] = client.hash_mismatches;
+            continue;
+        }
+        seen[index] = client.hash_mismatches;
+        let (Some(authority), Some(player)) = (client.session.authority(), client.session.player())
+        else {
+            continue;
+        };
+        let tick = NetSimulationTick::tick(authority).0;
+        let Some((_, host)) = recent.iter().find(|(at, _)| *at == tick) else {
+            eprintln!("minute {minute}: client {index} mismatch at tick {tick}, no host copy");
+            continue;
+        };
+        let viewer = Some(to_sim_player(player));
+        let mine = serde_json::to_value(authority.redacted_for(viewer)).expect("json");
+        let theirs = serde_json::to_value(host.redacted_for(viewer)).expect("json");
+        eprintln!(
+            "minute {minute}: client {index} ({player:?}) mismatch at tick {tick}: hashes {:?} / {:?}",
+            authority.visible_state_hash(viewer),
+            host.visible_state_hash(viewer)
+        );
+        diff_json("", &theirs, &mine, 0);
+        panic!("diagnosed");
+    }
+}
+
+fn diff_json(path: &str, host: &serde_json::Value, client: &serde_json::Value, depth: usize) {
+    use serde_json::Value;
+    if host == client {
+        return;
+    }
+    match (host, client) {
+        (Value::Object(a), Value::Object(b)) if depth < 6 => {
+            for (key, value) in a {
+                match b.get(key) {
+                    Some(other) => diff_json(&format!("{path}.{key}"), value, other, depth + 1),
+                    None => eprintln!("  {path}.{key}: only on the host"),
+                }
+            }
+            for key in b.keys() {
+                if !a.contains_key(key) {
+                    eprintln!("  {path}.{key}: only on the client");
+                }
+            }
+        }
+        (Value::Array(a), Value::Array(b)) if depth < 6 && a.len() == b.len() => {
+            for (index, (x, y)) in a.iter().zip(b).enumerate() {
+                diff_json(&format!("{path}[{index}]"), x, y, depth + 1);
+            }
+        }
+        _ => {
+            let show = |value: &Value| {
+                let text = value.to_string();
+                text.chars().take(300).collect::<String>()
+            };
+            eprintln!("  {path}: host {} / client {}", show(host), show(client));
+        }
+    }
+}
+
+use crate::simulation::NetSimulation as NetSimulationTick;

@@ -894,7 +894,12 @@ impl WorldState {
         let Some(world) = self.places.stores.get_mut(&store) else {
             return;
         };
-        let shift = world.terrain.frame().shift_to(frame);
+        // A round body's strip wraps: positions shift only by the nearest copy of `frame` round
+        // it, as in the store's own pass (a frame relabelled by whole laps moves nothing).
+        let shift = world
+            .terrain
+            .frame()
+            .shift_to(super::planet::nearest_lap_frame_of(&world.terrain, frame));
         world.terrain.set_frame(frame);
         if shift.is_zero() {
             return;

@@ -109,19 +109,7 @@ impl WorldState {
     /// The frame a move to `next` really shifts positions by: on a planet, the nearest copy of
     /// `next` round the strip (moving by whole laps moves nothing: the strip wraps).
     pub(super) const fn nearest_lap_frame(&self, next: Frame) -> Frame {
-        let Some(planet) = self.planet() else {
-            return next;
-        };
-        let lap = planet.grid().lap_sectors();
-        let current = self.frame().sector_x;
-        let mut delta = (next.sector_x - current).rem_euclid(lap);
-        if delta > lap / 2 {
-            delta -= lap;
-        }
-        Frame {
-            sector_x: current + delta,
-            ..next
-        }
+        nearest_lap_frame_of(&self.terrain, next)
     }
 
     /// The planet rules of one tick: the body's gravity stays in place, and everything with a
@@ -185,5 +173,25 @@ impl WorldState {
         for (id, shift) in far {
             self.entities.update(id, |entity| entity.reframe(shift));
         }
+    }
+}
+
+/// The frame a move of `terrain`'s frame to `next` really shifts positions by: on a planet's
+/// strip, the nearest copy of `next` round it (whole laps move nothing). Every frame move of a
+/// store uses it, in its pass or not (Wave 13 QA: a replica applying a store frame relabelled by
+/// a lap shifted that store's creatures a whole lap away from the host's).
+pub(crate) const fn nearest_lap_frame_of(terrain: &crate::terrain::Terrain, next: Frame) -> Frame {
+    let Some(planet) = terrain.planet_ground() else {
+        return next;
+    };
+    let lap = planet.grid().lap_sectors();
+    let current = terrain.frame().sector_x;
+    let mut delta = (next.sector_x - current).rem_euclid(lap);
+    if delta > lap / 2 {
+        delta -= lap;
+    }
+    Frame {
+        sector_x: current + delta,
+        ..next
     }
 }
