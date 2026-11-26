@@ -52,6 +52,24 @@ pub struct SeatTravel {
     rolls: u32,
 }
 
+impl SeatTravel {
+    /// A seat's travel memory whose `random` picks start from the wall clock, so `random`
+    /// differs from one session to the next (the roll travels inside the action, so the
+    /// simulation stays deterministic; tests use `default`, which starts from zero).
+    #[must_use]
+    pub fn seeded() -> Self {
+        let clock = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                u32::try_from(since.as_secs() & 0xFFFF_FFFF).unwrap_or(0) ^ since.subsec_nanos()
+            });
+        Self {
+            rolls: clock,
+            ..Self::default()
+        }
+    }
+}
+
 /// Most spots the back-stack keeps.
 const MAX_BACK: usize = 32;
 

@@ -79,7 +79,7 @@ pub fn start_actions(
         player,
         online: false,
     };
-    let destination = destination(target, ctx, &mut SeatTravel::default())?;
+    let destination = destination(target, ctx, &mut SeatTravel::seeded())?;
     if world.resolve_destination(player, destination).is_none() {
         return Err(format!(
             "--start-at: nowhere to land for {target:?} in this world"

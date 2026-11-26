@@ -120,7 +120,7 @@ impl Console {
 
     fn seat_travel(&mut self, seat: usize) -> &mut SeatTravel {
         if self.travel.len() <= seat {
-            self.travel.resize_with(seat + 1, SeatTravel::default);
+            self.travel.resize_with(seat + 1, SeatTravel::seeded);
         }
         &mut self.travel[seat]
     }
