@@ -127,7 +127,8 @@ fn body_destination(
 ) -> Destination {
     let id = body_id(sector, system, body);
     let name = system.body_name(body.index);
-    let mut destination = if crate::place::planet_params_for(query.space.space_seed(), id).is_some() {
+    let mut destination = if crate::place::planet_params_for(query.space.space_seed(), id).is_some()
+    {
         on_body(kind, id, ARRIVAL_POINT, SURFACE, name)
     } else {
         free(
@@ -172,16 +173,23 @@ pub fn candidates(
                 if !theme_ok(filter, boss.world) {
                     continue;
                 }
-                let Some(id) = crate::endgame::hunt::nearest_theme_world(query.space.space_seed(), boss.world)
+                let Some(id) =
+                    crate::endgame::hunt::nearest_theme_world(query.space.space_seed(), boss.world)
                 else {
                     continue;
                 };
-                let Some(params) = crate::place::planet_params_for(query.space.space_seed(), id) else {
+                let Some(params) = crate::place::planet_params_for(query.space.space_seed(), id)
+                else {
                     continue;
                 };
                 let ground = PlanetGround::new(params);
                 let lair = crate::planet::outlands::boss_lair(&ground)
                     .map(|lair| (lair.centre, lair.middle().1))
+                    // The Wave 12 worlds' lairs under their landmarks (Wave 14 finish).
+                    .or_else(|| {
+                        crate::planet::lairs::lair_of(&ground)
+                            .map(|lair| (lair.centre, lair.middle().1))
+                    })
                     .or_else(|| {
                         crate::exotic::boss::arena(&ground)
                             .map(|arena| (i64::from(arena.centre), arena.floor - 2))
