@@ -89,6 +89,14 @@ const fn floor_middle(rect: &TileRect) -> (i32, i32) {
     (i32::midpoint(rect.min.x, rect.max.x), rect.max.y - 1)
 }
 
+/// `text` with its first letter in capitals ("trader's wagon" -> "Trader's wagon").
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_ascii_uppercase().to_string() + chars.as_str()
+    })
+}
+
 /// Fills the card's depth, Descent, stratum, hazards and creatures from where it stands.
 pub fn describe(query: &HomeQuery, destination: &mut Destination) {
     let info = &mut destination.info;
@@ -120,11 +128,10 @@ pub fn describe(query: &HomeQuery, destination: &mut Destination) {
     info.hazards = def
         .hazards
         .iter()
-        .map(|(hazard, _)| format!("{hazard:?}").to_ascii_lowercase())
+        .map(|(hazard, _)| hazard.name().to_owned())
         .collect();
     if let Some(fluid) = def.fluids.first() {
-        info.hazards
-            .push(format!("{:?}", fluid.kind).to_ascii_lowercase());
+        info.hazards.push(fluid.kind.name().to_ascii_lowercase());
     }
     if info.residents.is_empty() {
         info.residents = def
@@ -274,10 +281,10 @@ fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -
         )
         .into_iter()
         .map(|feature| {
-            let name = feature.detail.cave().map_or_else(
-                || "Large cavern".to_owned(),
-                |cave| format!("{cave:?} cave"),
-            );
+            let name = feature
+                .detail
+                .cave()
+                .map_or_else(|| "Large cavern".to_owned(), |cave| cave.name().to_owned());
             at(kind, feature.center.x, feature.center.y, name)
         })
         .collect(),
@@ -289,9 +296,10 @@ fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -
                 })
                 .into_iter()
                 .map(|feature| {
-                    let name = feature
-                        .poi_kind()
-                        .map_or_else(|| "Point of interest".to_owned(), |poi| format!("{poi:?}"));
+                    let name = feature.poi_kind().map_or_else(
+                        || "Point of interest".to_owned(),
+                        |poi| poi.name().to_owned(),
+                    );
                     let (x, y) = floor_middle(&feature.bounds);
                     at(kind, x, y, name)
                 })
@@ -349,7 +357,7 @@ fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -
                                 kind,
                                 camp.column,
                                 camp.ground_row - 1,
-                                format!("{:?} camp", camp.kind),
+                                capitalized(camp.kind.label()),
                             )
                         }),
                 );
@@ -367,7 +375,14 @@ fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -
                         kind,
                         site.door.x,
                         site.door.y,
-                        format!("{:?} tomb (tier {})", site.style, site.tier),
+                        format!(
+                            "{} (tier {})",
+                            match site.style {
+                                crate::tomb::SiteStyle::SideView => "Tomb",
+                                crate::tomb::SiteStyle::TopDown => "Crypt",
+                            },
+                            site.tier
+                        ),
                     )
                 })
                 .collect()
@@ -597,12 +612,7 @@ fn anomaly_rooms(query: &HomeQuery, layout: Option<&DescentLayout>) -> Vec<Desti
                 crate::expedition::anomaly::room_in_region(query.settings, layout, rx, ry)
             {
                 let (x, y) = floor_middle(&room.bounds);
-                found.push(at(
-                    DestinationKind::AnomalyRoom,
-                    x,
-                    y,
-                    format!("{:?} anomaly", room.kind),
-                ));
+                found.push(at(DestinationKind::AnomalyRoom, x, y, room.kind.name()));
             }
         }
     }

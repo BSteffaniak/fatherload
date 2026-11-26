@@ -422,9 +422,17 @@ impl WorldState {
                 if list.is_empty() {
                     return None;
                 }
+                // The player's travel count is mixed in, so asking for "a random planet" again
+                // with the same seed (a console's `tp planet random`) picks afresh; the preview
+                // and the travel it previews still agree (the count changes only on arrival).
+                let travels = self
+                    .travel
+                    .players
+                    .get(&player_id)
+                    .map_or(0, |travel| travel.travels);
                 let roll = crate::worldgen::noise::hash2(
                     self.world_seed().seed,
-                    0x5714_B0B0,
+                    0x5714_B0B0 ^ (u64::from(travels) << 32),
                     i32::try_from(request.kind.code()).unwrap_or(0),
                     i32::from_ne_bytes(seed.to_ne_bytes()),
                 );

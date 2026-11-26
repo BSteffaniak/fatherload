@@ -361,7 +361,8 @@ pub enum Selector {
     Next,
     /// The previous one (inward; wraps to the farthest).
     Previous,
-    /// A pseudo-random one, from this seed (the same seed picks the same candidate).
+    /// A pseudo-random one, from this seed and the player's travel count (the same seed picks
+    /// the same candidate on every peer until the player travels again).
     Random(u32),
     /// Exactly this one (a name search's, a bookmark's or the Atlas's pick).
     Exact(DestinationId),
@@ -583,7 +584,7 @@ pub struct PlayerTravel {
     /// The next / previous cycle under way.
     #[serde(default)]
     pub cursor: Option<TravelCursor>,
-    /// Travels made (deterministic random picks mix it in when asked).
+    /// Travels made (random picks mix it in, so the same seed picks afresh after a travel).
     #[serde(default)]
     pub travels: u32,
 }

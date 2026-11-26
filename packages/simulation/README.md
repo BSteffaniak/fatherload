@@ -12127,7 +12127,10 @@ normal world moves nothing.
 * **`Destination`** `{ id, name, info: PreviewInfo, inside }`: the Atlas's info card (place
   line, depth in metres, coords, Descent, stratum, space theme, system, gravity, hazards,
   residents, boss, distance from the player) and, for arenas and lairs, the "in the arena"
-  spot.
+  spot. Cards carry readable names (the generators' display names: "Supply cache", "Crystal
+  Geode", "The Rotten Room", "Crypt (tier 2)", "magma vent"; a body's card shows its strip
+  column and row 0 for the surface, never the sentinels; free-space kinds name their system
+  or "free space"; review fix).
 * **`TravelRequest`** `{ kind, filter, selector, arrival }`, all `Copy` (it rides in
   `TestModeAction`). `DestinationFilter`: `Any`, `Descent`, `Stratum`, `Metres`, `Row`,
   `Theme`, `Player`. `Selector`: `Nearest` (the player's own spot excepted), `Next`,
@@ -12168,8 +12171,9 @@ normal world moves nothing.
   travel log). The list is ordered from where the cycle **began**, so repeated "next planet"
   walks outward instead of bouncing between neighbours; a new kind or filter starts a new
   cycle. A fresh `Previous` starts at the farthest.
-* `Random(seed)`: a hash of the world seed, the kind and the seed: the same seed picks the
-  same candidate on every peer.
+* `Random(seed)`: a hash of the world seed, the kind, the seed and the player's travel count:
+  the same seed picks the same candidate on every peer, and a fresh one after each travel (so
+  `tp planet random` with a fixed seed still wanders; review fix).
 * `Exact(id)`: the listed candidate with that id (its card), else the id itself.
 * `WorldState::resolve_travel` is the pure preview of a request (the Atlas shows it before Go).
 

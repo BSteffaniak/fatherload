@@ -66,7 +66,10 @@ const fn above(centre: SpaceTile, tiles: i64) -> SpaceTile {
 }
 
 fn free(kind: DestinationKind, tile: SpaceTile, name: impl Into<String>) -> Destination {
-    Destination::new(DestinationId::new(kind, Place::Space, tile.x, tile.y), name)
+    let mut destination =
+        Destination::new(DestinationId::new(kind, Place::Space, tile.x, tile.y), name);
+    "free space".clone_into(&mut destination.info.place);
+    destination
 }
 
 fn on_body(
@@ -76,10 +79,14 @@ fn on_body(
     y: i64,
     name: impl Into<String>,
 ) -> Destination {
-    Destination::new(
+    let mut destination = Destination::new(
         DestinationId::new(kind, Place::OnBody(BodyId::Space(body)), x, y),
         name,
-    )
+    );
+    // The card shows the strip column (0 for the arrival point) and row 0 for "the surface"
+    // instead of the sentinels.
+    destination.info.coords = (x.max(0), if y == SURFACE { 0 } else { y });
+    destination
 }
 
 /// The body card's figures.
@@ -295,6 +302,7 @@ pub fn candidates(
                             format!("{} {} belt", system.name, belt.ore.name()),
                         );
                         destination.info.system = Some(system.name.clone());
+                        destination.info.place = format!("{} system", system.name);
                         found.push(destination);
                     }
                 }
@@ -307,6 +315,7 @@ pub fn candidates(
                         let mut destination =
                             free(kind, tile, format!("{} comet {}", system.name, index + 1));
                         destination.info.system = Some(system.name.clone());
+                        destination.info.place = format!("{} system", system.name);
                         found.push(destination);
                     }
                 }
@@ -318,6 +327,7 @@ pub fn candidates(
                             format!("{} nebula", system.name),
                         );
                         destination.info.system = Some(system.name.clone());
+                        destination.info.place = format!("{} system", system.name);
                         found.push(destination);
                     }
                 }

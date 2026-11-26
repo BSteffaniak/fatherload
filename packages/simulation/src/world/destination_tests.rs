@@ -439,3 +439,22 @@ fn bookmarks_and_the_back_stack_are_saved_and_replicated() {
     let _ = act(&mut world, TestModeAction::RemoveBookmark(0));
     assert!(world.player_travel(PLAYER).bookmarks.is_empty());
 }
+
+#[test]
+fn random_with_one_seed_picks_afresh_after_each_travel() {
+    let mut world = test_world(SEEDS[1]);
+    let request = TravelRequest::new(DestinationKind::Stratum, Selector::Random(0));
+    let mut picks = std::collections::BTreeSet::new();
+    for _ in 0..6 {
+        let preview = world.resolve_travel(PLAYER, &request).expect("a stratum").0;
+        assert!(arrived(&travel(&mut world, request)));
+        // The travel went where its preview said (the stratum it stands in).
+        let here = world.travel_here(PLAYER).expect("here");
+        assert!(
+            (here.y - preview.id.y).abs() <= 24,
+            "previewed {preview:?}, arrived {here:?}"
+        );
+        picks.insert(preview.id);
+    }
+    assert!(picks.len() > 2, "a fixed seed still wanders: {picks:?}");
+}
