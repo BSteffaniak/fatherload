@@ -552,7 +552,14 @@ impl WorldState {
         let (dx, dy) = star.delta_f64(from);
         let length = dx.hypot(dy).max(1.0);
         let (ux, uy) = (dx / length, dy / length);
-        let reach = f64::from(tiles(1.0)) * GATE_ARRIVAL_TILES;
+        // Clear of the star's own approach (its heat and light) by half again.
+        let star_approach = self
+            .space_bodies_near(star)
+            .iter()
+            .filter(|body| body.centre.span(star) < tiles(1.0))
+            .map(|body| f64::from(body.approach))
+            .fold(0.0, f64::max);
+        let reach = (f64::from(tiles(1.0)) * GATE_ARRIVAL_TILES).max(star_approach * 1.5);
         let turns = [(ux, uy), (-uy, ux), (uy, -ux), (-ux, -uy)];
         turns
             .into_iter()

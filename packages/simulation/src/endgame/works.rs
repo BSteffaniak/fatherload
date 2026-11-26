@@ -214,7 +214,8 @@ pub const fn gate_part_bill(index: u8) -> Materials {
 
 /// Seconds a ride through the gate takes (a streak like a warp's).
 pub const GATE_JUMP_MILLIS: u32 = 6_000;
-/// How far from the target's star the gate puts a rig (tiles).
+/// How far from the target's star the gate puts a rig at least (tiles; farther for a star whose
+/// approach reaches past it: half again its approach).
 pub const GATE_ARRIVAL_TILES: f64 = 30_000.0;
 
 /// The wings an estate on an alien world can grow, in order.
