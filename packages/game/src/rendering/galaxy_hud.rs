@@ -321,8 +321,25 @@ pub(super) fn draw_goal_strip(
     y: i32,
     max_width: i32,
 ) -> i32 {
-    // In a fight the boss's bar and warnings have the top of the screen.
+    // In a fight the boss's bar and warnings have the top of the screen: a space fight, or a
+    // world's boss awake on this ground (its name, bar and tell are centred at the top; Wave
+    // 14 finish: the strip ran over them).
     if world.hostiles().engaged(view.player_id).is_some() {
+        return 0;
+    }
+    let boss_awake = view.place_scene.as_ref().is_some_and(|scene| {
+        scene
+            .entities
+            .of_kind(fatherload_simulation::entity::EntityKind::Enemy)
+            .any(|entity| {
+                matches!(
+                    &entity.state,
+                    fatherload_simulation::entity::EntityState::Enemy(state)
+                        if state.kind.stats().elite && state.mode.hostile()
+                )
+            })
+    });
+    if boss_awake {
         return 0;
     }
     // The ground's compass first: the relic (or a lead's ruin) on this world, then the goal.
