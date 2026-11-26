@@ -12279,6 +12279,174 @@ theirs (parked players keep them). Ids are absolute tiles, so the log never refr
 * A lair's or outpost's surface arrival trusts the body's surface row (no pocket is carved on
   a body).
 
+## Wave 14 atlas: the Atlas, a travel browser with live previews and map mode (game `src/atlas.rs`, `src/atlas/{index,search,map,hit}.rs`, `src/shell/atlas.rs`, `src/rendering/atlas.rs`, `src/rendering/atlas/{layout,preview}.rs`)
+
+W14-C of the plan (§19). Everything is in the game crate and **test mode only**: the Atlas
+opens only in a test-mode world (F2, the pause menu's "Atlas", the touch ATLAS button), and
+every trip it makes is a `PlayerCommand::TestMode(..)` action, which the simulation refuses in
+a normal world (`IgnoredUnavailable`), so an online client cannot travel in a normal world
+through it. No simulation type, format, digest, protocol or event changed in this track.
+
+### Opening it
+
+* **F2** in a test-mode world opens the seat's Atlas (`PlayerInput::atlas`, F2 without Shift;
+  `Shift+F2` still adds a local seat, and in a normal world F2 adds a seat as before). The
+  test-mode pause menu lists **Atlas (travel anywhere)** (`PauseOption::Atlas`, appended), which
+  opens it on the seat driving the menu and resumes play. On a touch screen the play top row
+  gains an **ATLAS** button (`TouchControl::Atlas`, appended; `TouchContext::atlas`).
+* It is a per-seat modal (`ModalScreen::Atlas`, appended; its state `SeatUi::atlas`), so each
+  split-screen seat has its own: its category, search, map, bookmarks, recent trips and
+  back-stack. Online each client's seats act on their own rigs; the host's world decides.
+* While it is open it takes every key of its seat (it is handled before the inventory and map
+  toggles), and the world under it is not drawn (it covers the view).
+
+### What it shows
+
+* **Categories** (`AtlasCategory`): Depth (the surface, Descents I-VIII, all 41 strata; a
+  classic world's bands), Places (the home town, the Moon, villages and sky towns near the
+  seat, the eight Descent outposts, tombs near the seat, the galaxy story's current goal),
+  Bosses (the eight gate bosses at their gate chambers, the six theme bosses on the hunt list's
+  nearest world of their theme, the three faction flagships at their lairs), Settlements (the
+  deep halls, villages, an alien town on each theme's nearest world), Space (the nearest world
+  of each of the twelve themes, the home system's bodies, the 16 nearest systems, their
+  stations, belts and comets, nebulae, black holes and wormholes within three sectors), Players
+  (the other rigs, wherever they are), Bookmarks and Recent.
+* **Search** (`atlas::search`): `/` (or a tap on the box; the browser's text field on a touch
+  screen) types; every word of the query must start a word of the destination's name,
+  subtitle, kind, category, card or boss ("planet ice", "leviathan", "descent 5", "d5"); names
+  that start with the query rank first. It searches every category. While typing, W/A/S/D and
+  E are letters and the global hotkeys keep off (`ShellState::text_entry`).
+* **The live preview** (`rendering::atlas::preview`): a 44 x 26-tile picture round the target
+  painted with the real tile art (`tile_art::paint_tile`) from the deterministic world: the home
+  world's own terrain (edits included; unloaded chunks read their generated tiles, nothing is
+  streamed in), or for a planet a `Terrain::planet` of its ground at the landing column. Fluid
+  tiles are washed over it, the arrival is marked with a beacon, and a boss destination shows
+  its boss in its own sprite. Anything in space (systems, planets, stations, belts, comets,
+  nebulae, black holes, wormholes, lairs, players in flight) is drawn by the space renderer
+  itself (`SpaceRenderer::draw` into the preview, with the planet shader from orbit, the lens,
+  the starfield) from a `LiveSpace` gathered round the target, with a **galaxy minimap** in the
+  corner and, for a planet, its **landing site** in tile art.
+* **The card**: name, subtitle (Descent and stratum, theme and system), distance from the
+  seat, depth or coordinates, the stratum, gate, rewards, hazards, the stratum's rule, gravity,
+  air, temperature, residents, and the boss and creatures in their own sprites.
+* **Buttons** (`AtlasButton`): Go, Prev / Next (the previous or next destination of the same
+  kind), Random, Bookmark (toggles), Back (travels to where the seat was before its last trip),
+  Map, Close. Each shows its device's prompt.
+* **Map mode** (`atlas::map`): Map opens a depth map of all eight Descents round the seat's
+  column (each stratum's rock colour, the Descents' numerals and names, gate chambers in red
+  and outposts in green, the seat in pink), then the galaxy map three sectors round the seat
+  (systems by star colour, the larger ones named; it opens first when the seat is in space or
+  browsing Space), then back to the list. The cursor (keys and stick step and glide it, the
+  mouse moves it by hovering, a tap or click puts it there) names the spot under it (a depth
+  with its stratum, or open space, snapping to a system near the cursor); the preview follows,
+  and Go travels there.
+* **Travel always asks first**: choosing a row, a map spot, Prev/Next or Random only previews;
+  only Go (Enter / A / the Go button) sends the trip and closes the Atlas.
+
+### Controls
+
+| Action | Keyboard | Controller | Pointer / touch |
+| --- | --- | --- | --- |
+| Choose (the preview follows) | W / S, arrows, Page Up / Down, Home / End, wheel | stick / d-pad | tap or click a row |
+| Category | A / D | LB / RB, d-pad left / right | tap a category |
+| Search | `/`, type, Enter or Esc | - | tap the box |
+| Go | Enter | A | Go |
+| Previous / next of the kind | X / Q | weapon / explosive buttons | Prev / Next |
+| Random, Bookmark, Back | C, B, F | scan, bomb, detonate | the buttons |
+| Map, its cursor | M, then the movement keys | map button, then the stick | Map, then hover / tap |
+| Close | Esc / F2 | B | Close |
+
+The pointer reaches every part through the menu pointer's rows (`atlas::hit::AtlasHit`
+encodes a category, a button, the search box, a row or a map point into the row index;
+`rendering::pointer::record_area` is the map's continuous area, appended). The mouse hovering
+over the map arrives as `PlayerInput::menu_hover` (appended; touch answers "no hover: a tap
+moves the cursor"). On a touch screen the menu cluster (Back and the tab arrows) stays off the
+Atlas, which has its own buttons.
+
+### Layout (`rendering::atlas::layout`)
+
+A pure function of the seat canvas: **Wide** (a window or a large seat: categories down the
+side, the list, the preview over the card, one row of buttons), **Compact** (a quarter or a
+small window: the tabs across the top, the list beside the preview and card, two rows of
+buttons) and **Narrow** (the smallest seat beside, or a phone held upright: the preview, the
+card, then the list, each the full width). Map mode puts the map in the list's place. Tabs
+fall back to short titles ("Towns", "Crew", "Marks") where the full one does not fit.
+
+### Cost (browser: GLSL ES 100, 60 fps)
+
+* Previews are generated only while an Atlas is open, three rows a frame for the selection
+  (two in the browser) and the rest of the budget for its Prev/Next neighbours, from the middle
+  out, uploaded row by row (`update_texture_rec`); 24 are cached (least recently shown dropped
+  first), so stepping back shows one at once. Planet grounds for previews are kept for 8
+  bodies. The depth map is one 96 x 256 texture per seat, rebuilt only when its window moves;
+  the galaxy map's systems are gathered once per map.
+* Building a category's list costs ~1-13 ms in a debug build (all eight under 25 ms), once per
+  opening; the lists are cached until the Atlas closes.
+* `--frame-timing 120` at 1280x720 (release, a loaded machine): the Depth list 1.5 ms median,
+  the Space preview (planet shader, starfield, minimap) 3.4 ms, the galaxy map 2.5 ms, two
+  seats' Atlases side by side 6.2 ms.
+
+### Scenes
+
+`atlas_depth`, `atlas_stratum`, `atlas_places`, `atlas_bosses`, `atlas_settlements`,
+`atlas_space`, `atlas_space_system`, `atlas_search`, `atlas_players` (split screen),
+`atlas_bookmarks`, `atlas_recent` (after a trip, Back ready), `atlas_map_depth`,
+`atlas_map_galaxy`, `atlas_split` (two Atlases) and `atlas_touch` (try `--size 844x390` and
+`390x844`); each is staged through the seat's real inputs in a test-mode Deep Descent world.
+Scene capture paints every preview whole before the still (`preview::paint_whole`).
+
+### Tests
+
+* `rendering::atlas::layout`: no part overlaps another or leaves the canvas, with the map open
+  or not, at ten canvas sizes (whole windows at several UI scales, split-screen halves and
+  quarters, the smallest seat canvas, phones both ways); the shape follows the room.
+* `rendering::atlas::preview::a_preview_is_made_for_every_kind_of_destination`: every kind the
+  Atlas lists (20 kinds, the map spots included) has a preview, and one tile picture of each
+  kind (home and planet ground) is painted with real art on the CPU.
+* `local_game::tests::atlas_tests`: F2 opens it only in a test-mode world (and adds no seat);
+  categories, Next, the list, search ("leviathan", "descent 5", "planet ice") and backing out
+  follow the inputs; Go travels only after the preview and Back comes home; map mode's cursor
+  and taps move the spot and the Map button cycles depth, galaxy, list; split-screen seats keep
+  their own Atlases, bookmarks and trips.
+* `atlas::{search, hit, map, index}`, `shell::atlas`: matching and ranking, the pointer
+  encoding, the maps' round trips, categories, Prev/Next of a kind, bookmarks, recent and the
+  back-stack.
+
+### Seams (TODO-SEAM for the integrator)
+
+* **The destination index (w14-index).** `atlas::index` is the Atlas's own thin stand-in for
+  `simulation::destination` (built before it landed). Wire it as follows and delete the
+  stand-in's gatherers:
+  * `index::destinations(world, player, category)` -> `WorldState::destinations` per
+    `DestinationKind` of the category (`DestinationCategory` maps 1:1 onto `AtlasCategory`); the
+    search -> `WorldState::search_destinations` (or keep `atlas::search` over the index's list).
+  * `Destination::{name, subtitle, facts, boss, creatures}` <- the index's `PreviewInfo`;
+    `AtlasTarget` (what the preview draws) <- `DestinationId { place, x, y }`: a home or Moon
+    tile -> `AtlasTarget::Home`, a body's column -> `AtlasTarget::Body`, a space tile ->
+    `AtlasTarget::Space`.
+  * `index::travel_command` -> `TestModeAction::TravelTo(TravelRequest::new(kind,
+    Selector::Exact(id)))`; map spots -> `TravelRequest::depth_metres` / an `Exact` depth id or
+    a space tile; Back -> `TestModeAction::TravelBack`; Bookmark -> `TestModeAction::Bookmark(id)`
+    / `RemoveBookmark`; Random -> `Selector::Random(seed)`; Prev/Next may use the index's
+    `Selector::{Previous, Next}` cursor. Until then the stand-in maps a home tile onto
+    `WarpToBand` (the top of its band; the surface and the Moon onto `WarpToPlace`), a body
+    onto `WarpToPlace` and space onto `WarpToPlace(Place::Space)`, the story onto
+    `WarpToStory`, so a map spot or a stratum arrives at the top of its band, not at the spot.
+  * `SeatAtlas::{bookmarks, recent, back_stack}` -> the replicated `TravelLog` (bookmarks,
+    recent, the back-stack); the shell keeps them per seat until then (not saved).
+* **The command palette (w14-console)** can open the Atlas on a destination (`tp ...?`
+  previews first): set the seat's `modal` to `ModalScreen::Atlas`, `atlas.reopen()`, then
+  select through `AtlasHit` picks or a search.
+
+### Known limits
+
+* A planet's preview is drawn from orbit by the space renderer, with its landing site as a flat
+  strip of its tile art; the polar (ring) renderer is per seat and stateful, so the preview does
+  not bend the ground.
+* The previews show the ground, the boss and the arrival, not live creatures, rigs or weather.
+* Player positions on another body preview its landing column (the stand-in does not resolve
+  a strip column; the index's `Player` ids do).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

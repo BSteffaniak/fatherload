@@ -227,6 +227,17 @@ Nearby Creatures**, **Freeze Creature AI** and the **Enemies** setting. Keys, mo
 touch all drive it (left/right or the touch arrows change a value, confirm or a tap uses a
 row); every tool acts on the menu seat's own rig and online the host's world decides.
 
+The **Atlas** (Wave 14, test mode only: `F2`, the pause menu's "Atlas" or the touch ATLAS
+button; `Shift+F2` still adds a seat there) is a full-screen travel browser per seat:
+categories (Depth, Places, Bosses, Settlements, Space, Players, Bookmarks, Recent), type-ahead
+search (`/`, then "planet ice", "leviathan", "descent 5"), a live preview of the selected place
+painted with the game's own tile art and sprites (planets and everything in space drawn by the
+space renderer from orbit, with a galaxy minimap and the landing site) beside an info card
+(depth or coordinates, Descent and stratum or theme, gravity, hazards, residents or boss,
+distance), and Go, Prev/Next (the same kind), Random, Bookmark, Back (to where you were) and
+Map (a depth map of all eight Descents, then the galaxy round you; the cursor moves the
+preview, Go travels to the spot). Travel always asks first: choosing previews, only Go goes.
+
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
 basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can
 start a dozen rows higher or lower than in another world), waves the layer boundaries, shapes
@@ -1623,6 +1634,9 @@ world generation changes):
 - Pause menu: save/load slots, options, exit confirmation
 - `F11`: borderless fullscreen toggle (the window also resizes, maximizes and uses macOS
   native fullscreen from the green button)
+- `F2` (test-mode worlds): the Atlas; inside it `W`/`S` choose, `A`/`D` change category, `/`
+  searches, `Enter` goes, `X`/`Q` previous/next of the kind, `C` random, `B` bookmark, `F` back,
+  `M` the map, `Esc` closes
 - `+` / `-`: volume hotkeys
 
 ### Controllers

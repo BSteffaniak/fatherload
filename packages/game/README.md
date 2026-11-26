@@ -481,3 +481,17 @@ gauges, comet dust, and the parking hold. Belt boulders are the flight model's r
 On a round body the map button opens the body's own map (`rendering/body_map.rs`). Five
 `systems_*` sound patches. Scenes `systems_*` (`scene_capture/systems_scenes.rs`). Details in the
 simulation README ("Wave 12 systems").
+
+## Wave 14 atlas (the test-mode travel browser)
+
+A test-mode world's seats each get an Atlas (`F2`, the pause menu, the touch ATLAS button):
+categories, type-ahead search, a live preview of the chosen place painted with the real tile
+art (`rendering/atlas/preview.rs`: 44 x 26 tiles from the world's own terrain or a planet's
+ground, a few rows a frame, 24 cached) or drawn by the space renderer from orbit with a galaxy
+minimap, an info card, Go / Prev / Next / Random / Bookmark / Back / Map, and map mode (a depth
+map of all eight Descents, then the galaxy). The destinations live in `src/atlas/` (pure, no
+raylib; a stand-in for the simulation's destination index, TODO-SEAM), the seat's state and
+input in `src/shell/atlas.rs`, the drawing and layout in `src/rendering/atlas.rs` and
+`src/rendering/atlas/layout.rs` (Wide, Compact and Narrow shapes, tested for overlap at ten
+canvas sizes). Scenes `atlas_*` (`scene_capture/atlas_scenes.rs`). Details in the simulation
+README ("Wave 14 atlas").
