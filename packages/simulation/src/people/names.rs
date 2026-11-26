@@ -38,9 +38,28 @@ pub enum Culture {
     /// the sea, liquid, bubbling names and tide-and-shell epithets. Not in [`Self::ALL`]; see
     /// [`Self::EVERY`].
     Merrow,
+    /// The Vessi (Wave 12 aliens): the ice-world singers, long hooting names sung in two
+    /// notes, and "of the" songs for family names. Not in [`Self::ALL`] or [`Self::EVERY`]
+    /// (the home world's peoples); see [`Self::ALIEN`].
+    Vessi,
+    /// The Tokkari (Wave 12 aliens): the rocky-world smiths, clicking clipped names and their
+    /// guild-and-knot family names.
+    Tokkari,
+    /// The Siphra (Wave 12 aliens): the airless moons' memory keepers, chiming names and the
+    /// memory they carry for a family name.
+    Siphra,
 }
 
 impl Culture {
+    /// The friendly alien species' cultures (Wave 12; see [`crate::alien`]).
+    pub const ALIEN: [Self; 3] = [Self::Vessi, Self::Tokkari, Self::Siphra];
+
+    /// Whether this is an alien species' culture (Wave 12).
+    #[must_use]
+    pub const fn is_alien(self) -> bool {
+        matches!(self, Self::Vessi | Self::Tokkari | Self::Siphra)
+    }
+
     pub const ALL: [Self; 8] = [
         Self::Frontier,
         Self::Highland,
@@ -91,6 +110,9 @@ impl Culture {
             Self::Cloudborn => "Cloudborn",
             Self::Lunar => "Lunar",
             Self::Merrow => "Merrow",
+            Self::Vessi => "Vessi",
+            Self::Tokkari => "Tokkari",
+            Self::Siphra => "Siphra",
         }
     }
 
@@ -108,6 +130,9 @@ impl Culture {
             Self::Cloudborn => "white stone and blue tile",
             Self::Lunar => "pressed regolith and glass",
             Self::Merrow => "coral and shell",
+            Self::Vessi => "packed ice and frozen glass",
+            Self::Tokkari => "fused stone and forge brick",
+            Self::Siphra => "grown glass and crystal",
         }
     }
 
@@ -123,6 +148,9 @@ impl Culture {
             Self::Cloudborn => &CLOUDBORN,
             Self::Lunar => &LUNAR,
             Self::Merrow => &MERROW,
+            Self::Vessi => &VESSI,
+            Self::Tokkari => &TOKKARI,
+            Self::Siphra => &SIPHRA,
         }
     }
 }
@@ -534,6 +562,100 @@ const MERROW: NameTable = NameTable {
     place_tails: &[
         " Dome", " Reach", " Hollow", "mere", " Shoal", " Spire", "fall", " Sound",
     ],
+};
+
+/// The Vessi's names (Wave 12 aliens): long vowels hooted in two notes.
+const VESSI: NameTable = NameTable {
+    given: &[
+        "Hoolu", "Vessaah", "Ulumee", "Nevvaa", "Ssoohl", "Auvel", "Hoomi", "Velluun", "Iluuh",
+        "Saaveh", "Oonu", "Mevva",
+    ],
+    she: &["Vessaah", "Ulumee", "Hoomi", "Saaveh"],
+    he: &["Hoolu", "Ssoohl", "Velluun"],
+    onsets: &["H", "V", "Ss", "N", "M", "Ul", "Au", "Oo"],
+    vowels: &["oo", "aa", "ee", "uu", "e", "u"],
+    endings: &["lu", "vel", "mee", "hl", "veh", "nu", "un"],
+    generated_percent: 50,
+    surname_heads: &[],
+    surname_tails: &[],
+    surnames: &[
+        "of the Long Dawn Song",
+        "of the Third Verse",
+        "of the Warm Chord",
+        "of the Slow Thaw",
+        "of the Low Hum",
+        "of the Bright Refrain",
+        "of the Snow Choir",
+        "of the Unfinished Song",
+    ],
+    nickname_percent: 20,
+    nicknames: &[
+        "Little Note",
+        "Hum",
+        "Echo",
+        "Frostfur",
+        "Tall One",
+        "Lantern",
+    ],
+    place_heads: &["Hoo", "Vel", "Ssei", "Ulu", "Nev", "Aum"],
+    place_tails: &["vahl", "ssuun", "hoven", "ilu", " Spire", " Hollow"],
+};
+
+/// The Tokkari's names (Wave 12 aliens): clicked and clipped.
+const TOKKARI: NameTable = NameTable {
+    given: &[
+        "Tokk", "Krisk", "Bakka", "Durr", "Gekk", "Mott", "Rikka", "Takk", "Kessk", "Bokk",
+        "Zirra", "Kett",
+    ],
+    she: &["Bakka", "Rikka", "Zirra", "Kessk"],
+    he: &["Durr", "Gekk", "Bokk"],
+    onsets: &["T", "K", "Kr", "B", "D", "G", "M", "Z"],
+    vowels: &["o", "a", "i", "e", "u"],
+    endings: &["kk", "sk", "rr", "tt", "ka", "kri"],
+    generated_percent: 45,
+    surname_heads: &[
+        "Iron", "Deep", "Knot", "Forge", "True", "Stone", "Claw", "Vein",
+    ],
+    surname_tails: &[
+        "weight", "cord", "hold", "bellow", "digger", "anvil", "tally",
+    ],
+    surnames: &["Twelveknot", "Clawfast", "Neverowed"],
+    nickname_percent: 30,
+    nicknames: &[
+        "Clacker", "Old Claw", "Stalks", "Pebble", "Rattle", "Bellows",
+    ],
+    place_heads: &["Krak", "Tor", "Bokka", "Dur", "Gakk", "Murr"],
+    place_tails: &["hold", "kar", " Deep", "tokk", " Forge", "mound"],
+};
+
+/// The Siphra's names (Wave 12 aliens): chimed, with the memory each carries.
+const SIPHRA: NameTable = NameTable {
+    given: &[
+        "Siiea", "Phrae", "Lumea", "Ossii", "Thaela", "Eaphri", "Siilo", "Vaeli", "Iroe", "Naesi",
+        "Aelu", "Phiel",
+    ],
+    she: &["Siiea", "Lumea", "Thaela", "Naesi"],
+    he: &["Ossii", "Siilo", "Phiel"],
+    onsets: &["S", "Ph", "L", "Th", "Ea", "Ae", "N", "V"],
+    vowels: &["ii", "ae", "ea", "oe", "i", "e"],
+    endings: &["ea", "phra", "lu", "sii", "ael", "oe"],
+    generated_percent: 55,
+    surname_heads: &[],
+    surname_tails: &[],
+    surnames: &[
+        "who Remembers the First Light",
+        "who Remembers the Long Ships",
+        "who Remembers the Cold Star",
+        "who Remembers the Ring",
+        "who Remembers the Quiet Years",
+        "who Remembers the Falling Moon",
+        "who Remembers the Blue Comet",
+        "who Remembers Nothing Yet",
+    ],
+    nickname_percent: 15,
+    nicknames: &["Glimmer", "Chime", "Drift", "Little Star", "Tendril"],
+    place_heads: &["Sii", "Ea", "Phrae", "Lume", "Oss", "Thae"],
+    place_tails: &["shine", "mere", " Pylons", "ea", " Drift", "whisper"],
 };
 
 const AERONAUT: NameTable = NameTable {

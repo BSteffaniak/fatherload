@@ -21,6 +21,7 @@ pub mod command;
 pub mod contract;
 pub mod cosmetics;
 
+pub mod alien;
 pub mod ancient_city;
 pub mod crew;
 pub mod crust;

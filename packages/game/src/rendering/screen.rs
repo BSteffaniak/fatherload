@@ -1152,6 +1152,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Core(tile) => super::terrain::tile_art::core_color(tile),
         TileKind::Wild(tile) => super::terrain::tile_art::wild_color(tile),
         TileKind::Frontier(tile) => super::terrain::tile_art::frontier_color(tile),
+        TileKind::Alien(tile) => super::terrain::tile_art::alien_color(tile),
     }
 }
 
@@ -1477,6 +1478,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::StarCharts => super::ancient_city_hud::draw_star_charts(draw, ui),
         ModalScreen::DescentProgress => super::expedition_hud::draw_descent_progress(draw, ui),
         ModalScreen::Archivist => super::ancient_city_hud::draw_archivist_page(draw, ui),
+        ModalScreen::AlienTalk => super::alien_hud::draw_alien_talk(draw, ui),
         ModalScreen::Ending => super::expedition_hud::draw_ending(draw, ui),
         ModalScreen::NavChart => super::space_view::draw_nav_chart(draw, ui),
         ModalScreen::Station => super::space_view::draw_station_counter(draw, ui),

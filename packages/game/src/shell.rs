@@ -24,6 +24,7 @@ use crate::{
     save,
 };
 
+pub mod aliens;
 pub mod archivist;
 pub mod arms;
 mod build;
@@ -195,6 +196,9 @@ pub enum ModalScreen {
     /// archivist. From the inventory while one rides with the seat's player, and after the star
     /// charts in the page cycle.
     Archivist,
+    /// A friendly alien's talk panel (Wave 12, `shell/aliens.rs`): their words through the
+    /// seat's understanding, and the pages of their trade, lessons, chapters and homes.
+    AlienTalk,
 }
 
 impl ModalScreen {
@@ -940,6 +944,12 @@ pub enum SoundCue {
     FrontierChime,
     /// A dune wyrm's ripple before it erupts.
     FrontierWyrmRipple,
+    // --- The friendly aliens (Wave 12) ---
+    AlienVessiVoice,
+    AlienTokkariVoice,
+    AlienSiphraVoice,
+    AlienFirstContact,
+    AlienWordLearned,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.
@@ -1364,6 +1374,8 @@ pub struct SeatUi {
     /// The story's ending pages wait to open (Wave 10 integration): the cable lit, and they
     /// open once the seat's own awakening, cutaway, credits and epilogue are done.
     pub story_ending_pending: bool,
+    /// A friendly alien's talk panel's page (Wave 12).
+    pub alien: aliens::SeatAlien,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1416,6 +1428,7 @@ impl SeatUi {
             logistics: logistics::SeatLogistics::new(),
             remembered: None,
             story_ending_pending: false,
+            alien: aliens::SeatAlien::new(),
         }
     }
 
@@ -1826,6 +1839,10 @@ impl SeatUi {
             self.handle_archivist(input, ctx, cues, requests);
             return true;
         }
+        if modal == ModalScreen::AlienTalk {
+            self.handle_alien_talk(input, ctx, cues, requests);
+            return true;
+        }
         if modal == ModalScreen::Ending {
             self.handle_ending(input, cues);
             return true;
@@ -2061,7 +2078,8 @@ impl SeatUi {
             | ModalScreen::Ending
             | ModalScreen::NavChart
             | ModalScreen::Station
-            | ModalScreen::Archivist => None,
+            | ModalScreen::Archivist
+            | ModalScreen::AlienTalk => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 2

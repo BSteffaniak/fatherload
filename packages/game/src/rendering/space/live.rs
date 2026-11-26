@@ -420,7 +420,51 @@ const fn nebula_view(nebula: &space::Nebula) -> NebulaView {
     }
 }
 
-/// Things on a body's ground for the polar renderer: rigs, pilots and drops of its store.
+/// The buildings of the alien towns on `body` (Wave 12).
+fn alien_town_things(
+    scene: &crate::render_snapshot::PlaceScene<'_>,
+    body: &crate::render_snapshot::PlaceBody,
+    things: &mut Vec<GroundThing>,
+) {
+    use super::view::GroundThingKind;
+    use fatherload_simulation::alien::{AlienBuildingKind, town};
+    let params = body.ground.params;
+    if params.folk == 0 {
+        return;
+    }
+    let towns = town::towns_of(&params);
+    for found in towns.iter() {
+        for building in &found.buildings {
+            let home = (building.kind == AlienBuildingKind::HomePlot)
+                .then(|| scene.aliens.home_at(found.id, building.index))
+                .flatten();
+            let look = crate::rendering::alien_art::BuildingLook {
+                raised: building.kind == AlienBuildingKind::Monument
+                    && scene.aliens.monuments.contains(&found.id),
+                sold: home.is_some(),
+                built: home.is_some_and(|home| home.home.is_some()),
+                index: building.index,
+            };
+            #[allow(clippy::cast_precision_loss, reason = "a strip column")]
+            let column = f64::from(building.first_column) + f64::from(building.width) * 0.5;
+            things.push(GroundThing {
+                column,
+                #[allow(clippy::cast_precision_loss, reason = "a ground row")]
+                row: found.ground_row() as f32,
+                kind: GroundThingKind::AlienBuilding {
+                    species: found.species,
+                    kind: building.kind,
+                    width: building.width,
+                    height: building.height.max(1),
+                    look,
+                },
+            });
+        }
+    }
+}
+
+/// Things on a body's ground for the polar renderer: the alien towns' buildings (Wave 12), then
+/// rigs, pilots, drops and alien residents of its store.
 #[must_use]
 pub fn ground_things(
     scene: &crate::render_snapshot::PlaceScene<'_>,
@@ -437,6 +481,10 @@ pub fn ground_things(
     };
     let _ = tile;
     let mut things = Vec::new();
+    // The alien towns of the body (Wave 12): their buildings first (behind everything).
+    if let Some(body) = &scene.body {
+        alien_town_things(scene, body, &mut things);
+    }
     for rig in &scene.rigs {
         if Some(rig.player_id) == skip_rig {
             continue;
@@ -491,6 +539,28 @@ pub fn ground_things(
                     column,
                     row,
                     kind: GroundThingKind::Frontier(super::view::FrontierMark::Ripple),
+                });
+            }
+            continue;
+        }
+        if let fatherload_simulation::entity::EntityState::Npc(state) = entity.state {
+            // An alien resident (Wave 12), unless indoors.
+            if state.inside.is_none()
+                && fatherload_simulation::alien::is_alien_town(state.character.village)
+            {
+                let x = state.x_at(scene.tick, 0.0);
+                let (column, row) = strip(x, entity.body.y);
+                let walking = (state.target_x - state.from_x).abs() > 0.5
+                    && scene.tick.get() < state.arrive.get();
+                things.push(GroundThing {
+                    column,
+                    row,
+                    kind: GroundThingKind::AlienFolk {
+                        character: state.character,
+                        facing: state.facing,
+                        stride: walking.then(|| (x.abs() * 0.5) as u16),
+                        talking: state.talking_to.is_some(),
+                    },
                 });
             }
             continue;

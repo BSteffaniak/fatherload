@@ -136,7 +136,18 @@ impl WorldState {
         }
         // Wave 11: a planet's ground params (absent for every other world).
         if let Some(planet) = self.terrain.planet_ground() {
-            hash.write_serialized(planet.params());
+            // Unsettled bodies hash as they did before the aliens' `folk` byte (Wave 12).
+            let params = planet.params();
+            if params.folk == 0 {
+                hash.write_serialized(&(
+                    params.seed,
+                    params.radius,
+                    params.gravity_milli,
+                    params.theme,
+                ));
+            } else {
+                hash.write_serialized(params);
+            }
         }
         if sees_home {
             hash.write_u64(u64::try_from(self.terrain.stored_tile_count()).unwrap_or(u64::MAX));
@@ -248,6 +259,11 @@ impl WorldState {
         // keep their hashes.
         if !self.far_strange.is_empty() {
             hash.write_serialized(&self.far_strange);
+        }
+        // Absent until someone meets an alien species (Wave 12), so older worlds keep their
+        // hashes.
+        if !self.aliens.is_empty() {
+            hash.write_serialized(&self.aliens);
         }
         // Absent until something happens in the buried city (Wave 10), so older worlds keep
         // their hashes.

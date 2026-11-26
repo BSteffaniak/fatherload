@@ -177,6 +177,11 @@ pub const fn signature_furniture(culture: super::Culture) -> crate::home::Furnit
         super::Culture::Lunar => F::MoonGlobe,
         // The merrow's aquarium line (Wave 9): its grand reef tank leads it.
         super::Culture::Merrow => F::Aquarium,
+        // The friendly aliens (Wave 12): their trade halls sell their own goods
+        // (`crate::alien::trade`); a maker's piece among people stands in for the line.
+        super::Culture::Vessi => F::Lantern,
+        super::Culture::Tokkari => F::Workbench,
+        super::Culture::Siphra => F::StarMobile,
     }
 }
 

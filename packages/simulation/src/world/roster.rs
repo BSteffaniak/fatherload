@@ -148,6 +148,9 @@ impl WorldState {
             flight,
             // The crew's mined rocks, comets and wormholes stay (Wave 12).
             space_systems: _,
+            // What a player learned of the aliens' tongues stays with their id, like people's
+            // memories of them (Wave 12): parked and returning players keep it.
+            aliens: _,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).

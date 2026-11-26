@@ -650,6 +650,11 @@ pub struct PlaceScene<'w> {
     /// The seat's player's own map of this ground (Wave 12 systems: a body's map is its own;
     /// tiles keyed round the lap, `Terrain::lap_tile`).
     pub discovered: Option<&'w fatherload_simulation::world::DiscoveredTiles>,
+    /// What players did with the friendly aliens (Wave 12): the monuments raised and the homes
+    /// bought in the body's towns.
+    pub aliens: &'w fatherload_simulation::alien::AlienState,
+    /// The world's tick (where walking residents are along their legs).
+    pub tick: fatherload_simulation::ids::SimulationTick,
 }
 
 /// A body store's place in space (see [`PlaceScene::body`]).
@@ -746,6 +751,8 @@ impl<'w> PlaceScene<'w> {
             body,
             seed: world.world_seed(),
             discovered: world.store_discovered(store, player_id),
+            aliens: world.aliens(),
+            tick: world.simulation_tick(),
         })
     }
 }
@@ -887,6 +894,9 @@ fn target_views(world: &WorldState) -> Vec<TargetView> {
 /// Everything rendering needs for one frame.
 #[derive(Clone, Debug)]
 pub struct RenderSnapshot<'w> {
+    /// The world itself, for panels that ask it questions (Wave 12: an alien's talk panel reads
+    /// the seat's understanding, prices and homes through the world's own queries).
+    pub world: &'w WorldState,
     pub tick: u64,
     /// The session tick rate (quest timers in seconds).
     pub tick_rate: TickRate,
@@ -1199,6 +1209,7 @@ impl<'w> RenderSnapshot<'w> {
                 .collect(),
             enemy_difficulty: world.enemy_difficulty(),
             bases: world.bases(),
+            world,
             people: world.people(),
             homes: world.homes(),
             tombs: world.tombs(),

@@ -20,6 +20,9 @@ use crate::{
     terrain::{MineralKind, Terrain, TilePosition},
 };
 
+#[cfg(test)]
+mod alien_tests;
+mod aliens;
 mod altitude;
 mod ancient_city;
 #[cfg(test)]
@@ -179,6 +182,9 @@ mod space_systems_tests;
 mod wilds;
 #[cfg(test)]
 mod wilds_tests;
+pub use aliens::{
+    HOME_BUILD_DAY_DIVISOR, alien_species_of, home_price as alien_home_price, trail_system,
+};
 pub use body_flight::{
     BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
 };
@@ -616,6 +622,12 @@ pub struct WorldState {
     /// [`crate::flight::systems`]): asteroids mined, comet dust gathered, wormholes flown.
     #[serde(default)]
     space_systems: crate::flight::systems::SystemsShared,
+    /// What players did with the friendly alien species (Wave 12, see [`crate::alien`]):
+    /// understanding of their tongues, first contacts, chapters, homes in their towns,
+    /// monuments raised and the builders' trail leads. The towns and their folk are pure
+    /// functions of the bodies (residents are NPC entities of the bodies' stores).
+    #[serde(default)]
+    aliens: crate::alien::AlienState,
 }
 
 impl WorldState {

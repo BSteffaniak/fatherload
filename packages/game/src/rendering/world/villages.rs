@@ -1760,6 +1760,9 @@ fn draw_decor(
         Culture::Cloudborn => SKY,
         Culture::Lunar => STEEL_LIGHT,
         Culture::Merrow => MINT,
+        Culture::Vessi => ICE,
+        Culture::Tokkari => COPPER,
+        Culture::Siphra => LAVENDER,
     };
     match decor.kind {
         DecorKind::Well => {

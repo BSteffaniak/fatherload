@@ -672,6 +672,10 @@ const fn culture_roles(culture: Culture) -> &'static [Role] {
         Culture::Lunar => &[Role::Hydroponist, Role::DomeTech, Role::Selenographer],
         // The merrow (Wave 9): pearl traders, song-keepers and archivists of the sea.
         Culture::Merrow => &[Role::Trader, Role::Storyteller, Role::Scholar],
+        // The friendly aliens (Wave 12): their towns set every resident's trade anyway.
+        Culture::Vessi => &[Role::Storyteller, Role::Healer, Role::Farmer],
+        Culture::Tokkari => &[Role::Smith, Role::Prospector, Role::Trader],
+        Culture::Siphra => &[Role::Scholar, Role::Cartographer, Role::ShrineKeeper],
     }
 }
 

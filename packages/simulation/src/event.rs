@@ -1385,6 +1385,16 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // Friendly aliens (Wave 12 aliens track; netcode codes 940-959).
+    /// Something happened between `player_id` and `species` (first contact, words learned, a
+    /// trade, a chapter, a home); `detail` is the event's number (see
+    /// [`crate::alien::AlienEvent`]).
+    Alien {
+        what: crate::alien::AlienEvent,
+        player_id: PlayerId,
+        species: crate::alien::AlienSpecies,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1475,7 +1485,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::Pilot(_)
         | PlayerCommand::Tomb(_)
         | PlayerCommand::Logistics(_)
-        | PlayerCommand::Flight(_) => {
+        | PlayerCommand::Flight(_)
+        | PlayerCommand::Alien(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

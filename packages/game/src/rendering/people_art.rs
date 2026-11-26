@@ -134,6 +134,10 @@ const fn cloth(culture: Culture) -> &'static [(Color, Color)] {
             (MINT, TEAL),
             (CREAM, SAND),
         ],
+        // The friendly aliens (Wave 12) are drawn by `alien_art`; their cloth there.
+        Culture::Vessi => &[(CREAM, BONE), (SKY_LIGHT, SKY)],
+        Culture::Tokkari => &[(CLAY, SOIL), (COPPER, RUST)],
+        Culture::Siphra => &[(MINT, TEAL), (LAVENDER, PLUM)],
     }
 }
 
@@ -151,6 +155,9 @@ const fn accent(culture: Culture, seed: u64) -> Color {
         Culture::Cloudborn => [SKY, GOLD, TEAL][pick as usize],
         Culture::Lunar => [ORANGE, SKY_LIGHT, GOLD][pick as usize],
         Culture::Merrow => [BONE, PINK, GOLD][pick as usize],
+        Culture::Vessi => [AMBER, ROSE, GOLD][pick as usize],
+        Culture::Tokkari => [RED, MINT, AMBER][pick as usize],
+        Culture::Siphra => [CREAM, GOLD, MINT][pick as usize],
     }
 }
 
@@ -551,6 +558,17 @@ pub fn draw_person_posed(
     pose: Pose,
     seconds: f32,
 ) {
+    // The friendly aliens (Wave 12): their own bodies.
+    if let Some(species) = fatherload_simulation::alien::AlienSpecies::of_culture(character.culture)
+    {
+        let art = super::alien_art::ArtPen {
+            pen,
+            light: 1.0,
+            clip: None,
+        };
+        super::alien_art::draw_alien(draw, art, character, species, pose, seconds);
+        return;
+    }
     if is_automaton(character) {
         draw_automaton(draw, pen, character, pose, seconds);
         return;
@@ -788,6 +806,8 @@ pub fn draw_person_posed(
             pen.px(draw, -half, torso_top + 3, skin);
             pen.px(draw, right - 1, torso_top + 3, skin);
         }
+        // The friendly aliens (Wave 12): drawn by `alien_art` before this.
+        Culture::Vessi | Culture::Tokkari | Culture::Siphra => {}
     }
     // The trade's garment.
     match role {
@@ -1042,6 +1062,10 @@ pub fn draw_person_posed(
 /// The figure's height in art pixels (for name tags and the portrait frame).
 #[must_use]
 pub const fn person_height(character: &Character) -> i32 {
+    if let Some(species) = fatherload_simulation::alien::AlienSpecies::of_culture(character.culture)
+    {
+        return super::alien_art::figure_height(species);
+    }
     if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
         return 27;
     }
@@ -1069,6 +1093,12 @@ pub fn draw_portrait(
     talking: bool,
     seconds: f32,
 ) {
+    // The friendly aliens (Wave 12): their own faces.
+    if let Some(species) = fatherload_simulation::alien::AlienSpecies::of_culture(character.culture)
+    {
+        super::alien_art::draw_alien_portrait(draw, pen, character, species, talking, seconds);
+        return;
+    }
     if fatherload_simulation::people::deep_folk::is_hive_folk(character.id.village) {
         draw_hive_portrait(draw, pen, character, talking, seconds);
         return;
@@ -1176,6 +1206,8 @@ pub fn draw_portrait(
                 pen.rect(draw, 19, 20 + gill, 2, 1, with_alpha(INK, 110));
             }
         }
+        // The friendly aliens (Wave 12): drawn by `alien_art` before this.
+        Culture::Vessi | Culture::Tokkari | Culture::Siphra => {}
     }
     match role {
         Role::Smith | Role::Baker | Role::Brewer => {

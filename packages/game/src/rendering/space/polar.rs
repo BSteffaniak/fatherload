@@ -1032,6 +1032,49 @@ fn draw_thing(
             );
         }
         GroundThingKind::Frontier(mark) => draw_frontier_mark(draw, mark, art, seconds),
+        GroundThingKind::AlienFolk {
+            character,
+            facing,
+            stride,
+            talking,
+        } => {
+            let Some(found) = fatherload_simulation::alien::town_by_id(character.village) else {
+                return;
+            };
+            let Some(person) = found
+                .population
+                .characters
+                .get(usize::from(character.index))
+            else {
+                return;
+            };
+            let pose = crate::rendering::people_art::Pose {
+                facing: i32::from(facing),
+                stride: stride.map(f32::from),
+                talking,
+            };
+            let pen = crate::rendering::alien_art::ArtPen::new(0.0, 0.0, art, light);
+            crate::rendering::alien_art::draw_alien(
+                draw,
+                pen,
+                person,
+                found.species,
+                pose,
+                seconds,
+            );
+        }
+        GroundThingKind::AlienBuilding {
+            species,
+            kind,
+            width,
+            height,
+            look,
+        } => {
+            let pen = crate::rendering::alien_art::ArtPen::new(0.0, 0.0, art, light);
+            crate::rendering::alien_art::draw_building(
+                draw, pen, species, kind, width, height, look, seconds,
+            );
+        }
         GroundThingKind::ParkedRig => {
             let look = crate::rendering::rig_art::RigLook {
                 player_id: fatherload_simulation::PlayerId::new(2),

@@ -484,6 +484,23 @@ pub enum GroundThingKind {
     },
     /// A frontier world's mark (Wave 12 planets-b).
     Frontier(FrontierMark),
+    /// An alien town's resident (Wave 12): the character, the way they face, whether they
+    /// walk (`stride`: art pixels walked) and talk.
+    AlienFolk {
+        character: fatherload_simulation::people::CharacterId,
+        facing: i8,
+        stride: Option<u16>,
+        talking: bool,
+    },
+    /// An alien town's building (Wave 12), drawn behind everything on the ground: `width` and
+    /// `height` in tiles.
+    AlienBuilding {
+        species: fatherload_simulation::alien::AlienSpecies,
+        kind: fatherload_simulation::alien::AlienBuildingKind,
+        width: i32,
+        height: i32,
+        look: crate::rendering::alien_art::BuildingLook,
+    },
 }
 
 /// What a frontier world shows on its round ground (Wave 12 planets-b): every one a pure

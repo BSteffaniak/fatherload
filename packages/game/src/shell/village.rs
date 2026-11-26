@@ -237,6 +237,11 @@ impl SeatVillage {
         }
     }
 
+    /// Holds the people rows while a command's answer is on its way (as `send_people` does).
+    pub const fn hold_people_rows(&mut self) {
+        self.pending_frames = PEOPLE_PENDING_FRAMES;
+    }
+
     /// Whether a people command from this seat may still be waiting for its tick.
     #[must_use]
     pub const fn people_pending(&self) -> bool {
@@ -250,7 +255,7 @@ impl SeatVillage {
 }
 
 /// Frames the world keeps ticking after a people command (a few ticks of round trip).
-const PEOPLE_PENDING_FRAMES: u8 = 20;
+pub(super) const PEOPLE_PENDING_FRAMES: u8 = 20;
 
 /// One person standing in a building's room.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -525,6 +530,15 @@ impl SeatUi {
         });
         self.selected_menu_item = 0;
         self.modal = Some(ModalScreen::VillageTalk);
+        // A friendly alien (Wave 12): their own panel, their words through the seat's
+        // understanding of their tongue.
+        if let Some(species) = super::aliens::talk_species(character.id)
+            && let Some(talk) = self.village.talk.as_mut()
+        {
+            let title = species.def().trade_title(character.role);
+            talk.about = format!("{}, {title}", species.def().name);
+            self.open_alien_talk();
+        }
         self.send_people(
             ctx,
             PeopleCommand::Talk {

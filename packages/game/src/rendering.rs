@@ -17,6 +17,8 @@ use fatherload_simulation::{
     terrain::{Terrain, TilePosition},
 };
 
+pub mod alien_art;
+pub mod alien_hud;
 pub mod ancient_city_hud;
 mod body_map;
 mod body_life;

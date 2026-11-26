@@ -138,7 +138,19 @@ impl BodyWorld {
     pub fn fingerprint(&self) -> u64 {
         if let Some(planet) = self.terrain.planet_ground() {
             let mut hash = StateHasher::new();
-            hash.write_serialized(planet.params());
+            // A body nobody settled keeps the fingerprint it had before the aliens' `folk`
+            // byte (Wave 12): saved bodies of earlier builds load unchanged.
+            let params = planet.params();
+            if params.folk == 0 {
+                hash.write_serialized(&(
+                    params.seed,
+                    params.radius,
+                    params.gravity_milli,
+                    params.theme,
+                ));
+            } else {
+                hash.write_serialized(params);
+            }
             let column = 0;
             let row = crate::planet::BodyGround::surface_row(planet, column);
             for tile in planet.chunk_tiles(ChunkPosition::of(TilePosition { x: column, y: row })) {

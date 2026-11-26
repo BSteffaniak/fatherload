@@ -269,6 +269,10 @@ pub enum SectionKey {
     Flight,
     /// Space's things (Wave 12 systems): asteroids mined, comet dust gathered, wormholes flown.
     SpaceSystems,
+    /// The friendly aliens (Wave 12): every player's understanding of each tongue, first
+    /// contacts and chapters, homes in alien towns, monuments raised and the builders' trail
+    /// leads (the residents are NPC entities of the bodies' stores).
+    Aliens,
 }
 
 impl SectionKey {
@@ -288,7 +292,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 33] = [
+    pub const SHARED: [Self; 34] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -329,6 +333,8 @@ impl SectionKey {
         Self::Flight,
         // Space's things (Wave 12 systems).
         Self::SpaceSystems,
+        // The friendly aliens (Wave 12 aliens).
+        Self::Aliens,
     ];
 }
 
@@ -370,6 +376,7 @@ pub enum SectionPayload {
     Heart(Box<crate::heart::Heart>),
     Flight(Box<crate::flight::FlightShared>),
     SpaceSystems(Box<crate::flight::systems::SystemsShared>),
+    Aliens(Box<crate::alien::AlienState>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -601,6 +608,7 @@ impl WorldState {
             place_pass: _,
             flight,
             space_systems,
+            aliens,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -714,6 +722,7 @@ impl WorldState {
             SectionKey::SpaceSystems => {
                 SectionPayload::SpaceSystems(Box::new(space_systems.clone()))
             }
+            SectionKey::Aliens => SectionPayload::Aliens(Box::new(aliens.clone())),
         })
     }
 
@@ -912,6 +921,11 @@ impl WorldState {
             }
             (SectionKey::SpaceSystems, SectionPayload::SpaceSystems(systems)) => {
                 self.space_systems = *systems;
+            }
+            (SectionKey::Aliens, SectionPayload::Aliens(aliens)) => {
+                self.aliens = *aliens;
+                // A replica learns the towns of the bodies it holds by id (Wave 12).
+                self.register_alien_towns();
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

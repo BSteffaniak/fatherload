@@ -70,6 +70,11 @@ pub struct PlanetParams {
     pub gravity_milli: u16,
     /// The theme ([`theme`]).
     pub theme: PlanetThemeId,
+    /// Who lives here (Wave 12 aliens track): `0` nobody, else an
+    /// [`crate::alien::AlienSpecies::folk`] byte. The generator flattens and paves their
+    /// towns' ground and buries their lexicon stones ([`crate::alien::town`]).
+    #[serde(default)]
+    pub folk: u8,
 }
 
 /// The weakest gravity a planet's ground plays with (standard gravities).
@@ -94,6 +99,7 @@ impl PlanetParams {
             },
             gravity_milli: Self::placeholder_gravity_milli(radius),
             theme,
+            folk: 0,
         }
     }
 
@@ -163,6 +169,9 @@ pub struct PlanetGround {
     /// The first row of the indestructible core floor (the grid's core, or a theme world's
     /// strata bottom: [`ThemeWorld::core_floor_row`]).
     core_floor: i32,
+    /// The alien towns on its ground (Wave 12 aliens track; none unless
+    /// [`PlanetParams::folk`] names a species).
+    towns: [Option<crate::alien::town::TownSite>; 3],
 }
 
 /// A splitmix64 step (stable hashing for generation).
@@ -195,10 +204,12 @@ impl PlanetGround {
             top: 0,
             secret: None,
             core_floor,
+            towns: [None; 3],
         };
         ground.top =
             -ground.max_hill_rows() - SKY_ROWS - world.map_or(0, world::ThemeWorld::extra_sky_rows);
         ground.secret = ground.hooks().secret(&ground);
+        ground.towns = crate::alien::town::sites(&ground);
         ground
     }
 
@@ -379,10 +390,28 @@ impl PlanetGround {
     }
 
     fn surface_row_of(&self, column: i64) -> i32 {
+        let raw = self.raw_surface_row(column);
+        // A theme world levels its own settlement site (where its town stands).
+        if self.params.folk == 0 || world_of(self.params.theme).is_some() {
+            return raw;
+        }
+        crate::alien::town::flattened_row(&self.towns, self.strip_width(), column, raw)
+    }
+
+    /// The surface row at `column` before any town levels it (the theme world's own surface,
+    /// or the hills alone).
+    #[must_use]
+    pub fn raw_surface_row(&self, column: i64) -> i32 {
         if let Some(world) = world_of(self.params.theme) {
             return world.surface_row(self, column);
         }
         -self.hill(column)
+    }
+
+    /// The alien town sites on this ground (Wave 12 aliens track).
+    #[must_use]
+    pub const fn town_sites(&self) -> &[Option<crate::alien::town::TownSite>; 3] {
+        &self.towns
     }
 
     /// The caves: `(centre column, centre row, half width, half height)` in strip tiles.
@@ -431,6 +460,20 @@ impl PlanetGround {
             let hh = i64::from(hh);
             dx * dx * hh * hh + dy * dy * hw * hw <= hw * hw * hh * hh
         })
+    }
+
+    /// An alien town's tile at `(column, row)` (its paving, a lexicon stone), if any.
+    fn town_tile(&self, column: i64, row: i32, surface: i32) -> Option<TileKind> {
+        if self.params.folk == 0 {
+            return None;
+        }
+        crate::alien::town::town_tile(&self.towns, self.strip_width(), column, row, surface)
+    }
+
+    /// Whether caves keep clear of `(column, row)` (under an alien town).
+    fn keeps_caves_out(&self, column: i64, row: i32) -> bool {
+        self.params.folk != 0
+            && crate::alien::town::keeps_caves_out(&self.towns, self.strip_width(), column, row)
     }
 
     pub(crate) const fn tile_of_kind(kind: TileKind) -> Tile {
@@ -489,7 +532,10 @@ impl PlanetGround {
         if row < surface {
             return air;
         }
-        if row > 4 && self.in_cave(caves, first, row) {
+        if let Some(kind) = self.town_tile(first, row, surface) {
+            return Self::tile_of_kind(kind);
+        }
+        if row > 4 && !self.keeps_caves_out(first, row) && self.in_cave(caves, first, row) {
             return air;
         }
         let depth = row - surface;

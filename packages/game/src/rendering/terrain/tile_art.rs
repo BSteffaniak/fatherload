@@ -38,6 +38,7 @@ use crate::rendering::pixel_art::{
     sprites::terrain::{VOLATILE_CRYSTAL, artifact_stamp, ore_stamp_in},
 };
 
+mod alien_art;
 mod built_art;
 mod cave_art;
 mod city_art;
@@ -56,6 +57,7 @@ mod poi_art;
 mod sky_art;
 mod wilds_art;
 
+pub use alien_art::alien_color;
 pub use built_art::{culture_colors, masonry_near};
 pub use cave_art::{cave_color, cave_glow, cave_kind_color};
 pub use city_art::city_color;
@@ -441,6 +443,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Core(tile) => return heart_art::core_color(tile),
         TileKind::Wild(tile) => return wilds_art::wild_color(tile),
         TileKind::Frontier(tile) => return frontier_art::frontier_color(tile),
+        TileKind::Alien(tile) => return alien_art::alien_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -627,7 +630,8 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Hollow(_)
         | TileKind::Warped(_)
         | TileKind::City(_)
-        | TileKind::Core(_) => base_pixel(host, strata, host, x, y),
+        | TileKind::Core(_)
+        | TileKind::Alien(_) => base_pixel(host, strata, host, x, y),
         TileKind::Wild(tile) => wilds_art::rock_pixel(tile, x, y),
         TileKind::Frontier(tile) => frontier_art::base_pixel(tile, x, y),
     }
@@ -1014,6 +1018,22 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             &mut canvas,
             terrain,
             position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+
+    // The alien towns' paving and lexicon stones (Wave 12).
+    if let TileKind::Alien(tile) = kind {
+        alien_art::paint(
+            &mut canvas,
             tile,
             &strata,
             Edges {
@@ -1532,6 +1552,7 @@ const fn grows_grass(material: TileKind) -> bool {
             | TileKind::Warped(_)
             | TileKind::City(_)
             | TileKind::Core(_)
+            | TileKind::Alien(_)
             | TileKind::Sky(
                 fatherload_simulation::sky::SkyTile::Rock(_)
                     | fatherload_simulation::sky::SkyTile::Soil

@@ -501,6 +501,8 @@ pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::
         radius: body.radius,
         gravity_milli: body.gravity_milli_g,
         theme: planet_theme_of(body.theme),
+        // Wave 12 aliens: who lives there (their towns' ground is part of the planet's).
+        folk: crate::alien::folk_of_body(seed, key, &body),
     })
 }
 

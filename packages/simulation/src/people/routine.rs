@@ -336,6 +336,26 @@ impl Settlement {
         settlement
     }
 
+    /// An alien town's routine view (Wave 12 aliens track, [`crate::alien::town`]): its
+    /// buildings as lots along its level ground, each resident living in the dwelling
+    /// `homes` gives, and everyone working outdoors by their building (no counters: the
+    /// species' keepers stand in the street where visitors meet them).
+    #[must_use]
+    pub fn alien_town(
+        id: VillageId,
+        ground_row: i32,
+        span: (i32, i32),
+        plaza: (i32, i32),
+        lots: Vec<Lot>,
+        homes: &[Option<usize>],
+        population: &Population,
+    ) -> Self {
+        let keepers = vec![None; population.characters.len()];
+        Self::assemble(
+            id, ground_row, span, plaza, lots, population, homes, &keepers, false,
+        )
+    }
+
     #[allow(clippy::too_many_arguments, reason = "one internal assembly step")]
     fn assemble(
         village: VillageId,
@@ -625,6 +645,11 @@ fn habits(character: &Character, home: Option<usize>, work: Work, village: Villa
 /// wanderers' camp ([`super::camps`]).
 #[must_use]
 pub fn settlement(settings: &WorldSettings, id: VillageId) -> Option<Arc<Settlement>> {
+    // Alien towns (Wave 12) live on space bodies, whose ground has no villages of its own:
+    // they resolve by their id alone, whatever the settings.
+    if crate::alien::is_alien_town(id) {
+        return crate::alien::town::settlement(id);
+    }
     if !settings.generator.has_villages() {
         return None;
     }

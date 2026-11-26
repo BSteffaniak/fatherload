@@ -24,6 +24,9 @@ pub const fn local_id(culture: Culture) -> &'static str {
         Culture::Cloudborn => "local-cloudborn",
         Culture::Lunar => "local-lunar",
         Culture::Merrow => "local-merrow",
+        Culture::Vessi => "local-vessi",
+        Culture::Tokkari => "local-tokkari",
+        Culture::Siphra => "local-siphra",
     }
 }
 
@@ -103,6 +106,29 @@ pub const fn local_lines(culture: Culture) -> &'static [&'static str] {
             "The Leviathan sleeps in the trench below. We leave it the first pearl of every bed, and it leaves us be.",
             "Your kind come down in sixes, {player}. Always sixes. We keep a song for each six.",
             "Fish tanks are a dry-folk joke, you know. To us an aquarium is a window you keep the sea out of.",
+        ],
+        // The friendly aliens (Wave 12): what they say of home, heard through the language
+        // filter (`crate::alien::language`).
+        Culture::Vessi => &[
+            "Every vault in {village} has its own note. At dawn the whole town sings them together.",
+            "We do not hurry, {player}. A song sung fast is only noise.",
+            "The ice under {village} is older than our oldest song. We listen to it on still nights.",
+            "Warm hands are rare out here. You may hold my lantern if you like.",
+            "Our children learn to walk on stilts of ice before they learn to sing. Both take years.",
+        ],
+        Culture::Tokkari => &[
+            "Every debt in {village} is a knot in the long cord. The cord is older than the hold.",
+            "Iron is honest, {player}. It weighs what it weighs and never lies about it.",
+            "We dig down because the sky is too big. Down is a size that makes sense.",
+            "The forge at {village} has not gone cold in nine generations. We take turns at the bellows.",
+            "A short weight is the worst thing a Tokkari can do. The second worst is a cold forge.",
+        ],
+        Culture::Siphra => &[
+            "We remember everyone who ever came to {village}. Now we remember you too, {player}.",
+            "Starlight tastes different on the far side. Sharper. Older.",
+            "Each of us carries the memories of the ones before. Some of mine are very heavy.",
+            "The pylons of {village} hold what we cannot carry. On quiet nights they hum it back.",
+            "The dark between stars frightens us. That is why we glow.",
         ],
     }
 }

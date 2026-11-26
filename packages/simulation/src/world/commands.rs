@@ -474,7 +474,9 @@ impl WorldState {
             | PlayerCommand::Tomb(_)
             | PlayerCommand::Logistics(_)
             // Space flight (Wave 11): `apply_flight_command` (`world/flight.rs`).
-            | PlayerCommand::Flight(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Flight(_)
+            // Friendly aliens (Wave 12): `alien_command` (`world/aliens.rs`).
+            | PlayerCommand::Alien(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }
@@ -593,6 +595,7 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
             _ => 0.19,
         },
         TileKind::Frontier(tile) => tile.base_chip_seconds(),
+        TileKind::Alien(tile) => tile.base_chip_seconds(),
         TileKind::Sky(tile) => match tile.hardness() {
             1 => 0.08,
             2 => 0.12,

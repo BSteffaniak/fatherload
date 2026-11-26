@@ -126,14 +126,16 @@ impl BuildingStyle {
             Culture::Highland => Self::Stone,
             Culture::Mesa => Self::Adobe,
             Culture::Scrapper => Self::Scrap,
-            Culture::Deepfolk => Self::Carved,
+            Culture::Deepfolk | Culture::Tokkari => Self::Carved,
             Culture::Aeronaut => Self::Skyrig,
             // The colony is no village (never laid out); its glass and hull read as the
             // cloister's white stone where a style is asked for.
-            Culture::Cloudborn | Culture::Lunar => Self::Cloister,
+            Culture::Cloudborn | Culture::Lunar | Culture::Vessi => Self::Cloister,
             // Merrow City's coral-and-shell halls (Wave 10 polish; Wave 9 borrowed the
             // cloister's).
-            Culture::Merrow => Self::Coral,
+            // Alien towns are never laid out as villages (`crate::alien::town` builds them in
+            // their own styles); where a style is asked for, the nearest in spirit.
+            Culture::Merrow | Culture::Siphra => Self::Coral,
         }
     }
 
@@ -596,7 +598,12 @@ fn pick_specialty(culture: Culture, rng: &mut PeopleRng) -> Specialty {
             &[(0, 4), (1, 2), (2, 1), (3, 1), (4, 3), (5, 2), (6, 3)]
         }
         // Sky towns take their specialty from their kind (`build`); this is never asked.
-        Culture::Aeronaut | Culture::Cloudborn | Culture::Lunar => &[(1, 1), (2, 1), (4, 1)],
+        Culture::Aeronaut
+        | Culture::Cloudborn
+        | Culture::Lunar
+        | Culture::Vessi
+        | Culture::Tokkari
+        | Culture::Siphra => &[(1, 1), (2, 1), (4, 1)],
     };
     match *rng.weighted(table) {
         0 => {
@@ -635,11 +642,11 @@ const fn centrepiece(culture: Culture) -> DecorKind {
         // The merrow's fountain too (Wave 9).
         Culture::Mesa | Culture::Merrow => DecorKind::Fountain,
         Culture::Riverside => DecorKind::Totem,
-        Culture::Scrapper => DecorKind::Bonfire,
+        Culture::Scrapper | Culture::Tokkari => DecorKind::Bonfire,
         Culture::Deepfolk => DecorKind::CrystalCluster,
         Culture::Aeronaut => DecorKind::WindVane,
-        Culture::Cloudborn => DecorKind::Bell,
-        Culture::Lunar => DecorKind::Lamp,
+        Culture::Cloudborn | Culture::Vessi => DecorKind::Bell,
+        Culture::Lunar | Culture::Siphra => DecorKind::Lamp,
     }
 }
 

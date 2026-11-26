@@ -290,6 +290,34 @@ impl WorldState {
     /// The emergency beacon on a body: the rig is towed home (the spawn point) for the fee,
     /// with at least half a hull and half a tank.
     pub(super) fn body_beacon(&mut self, player_id: PlayerId, output: &mut TickOutput) {
+        // A home in an alien town on this body (Wave 12): the beacon tows the rig there.
+        if let crate::place::StoreKey::Body(body) = self.active_store()
+            && let Some((x, y)) = self.alien_home_rescue_point(player_id, body)
+            && let Some(player) = self.players.get_mut(&player_id)
+        {
+            let fee = beacon_fee(player.credits);
+            player.credits -= fee;
+            player.x = x;
+            player.y = y;
+            player.velocity_x = 0.0;
+            player.velocity_y = 0.0;
+            player.x_remainder = 0.0;
+            player.attitude = RigAttitude::LEVEL;
+            player.hull = player.hull.max(player.max_hull() * 0.5);
+            player.fuel = player.fuel.max(player.fuel_capacity * 0.5);
+            let capacity = player.flight.air;
+            player.flight.air = capacity.max(1.0);
+            output.push_event(GameplayEventKind::Flight {
+                what: FlightEvent::BeaconReturn,
+                player_id,
+                detail: fee,
+            });
+            let refill = self.air_capacity_of(player_id);
+            if let Some(player) = self.players.get_mut(&player_id) {
+                player.flight.air = refill;
+            }
+            return;
+        }
         let home = self
             .home_frame()
             .world(self.player_template.x, self.player_template.y);

@@ -586,6 +586,7 @@ impl LocalGame {
         self.announce_wild_strata(&players);
         self.announce_flight(&players);
         self.announce_systems(&players);
+        self.announce_aliens(&players);
         self.announce_settlement_memories(&players);
         self.announce_night(&players);
         self.announce_quests(&players);
@@ -1848,6 +1849,79 @@ impl LocalGame {
             }
         }
         for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
+    /// The friendly aliens for local seats (Wave 12): first contact, a tongue opening up,
+    /// chapters, trades, homes and refusals, told to the seat whose player it was.
+    fn announce_aliens(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::alien::{
+            AlienEvent as E, AlienRefusal, language::Fluency, quest::chapter,
+        };
+        let seat_of = |player: PlayerId| players.iter().position(|other| *other == player);
+        let mut news: Vec<(usize, String)> = Vec::new();
+        for event in &self.frame_events {
+            let RuntimeEventKind::Gameplay(gameplay) = &event.event else {
+                continue;
+            };
+            let GameplayEventKind::Alien {
+                what,
+                player_id,
+                species,
+                detail,
+            } = gameplay.kind
+            else {
+                continue;
+            };
+            let Some(seat) = seat_of(player_id) else {
+                continue;
+            };
+            let name = species.def().name;
+            let chapter_title = || {
+                u8::try_from(detail)
+                    .ok()
+                    .and_then(|index| chapter(species, index))
+                    .map_or("", |def| def.title)
+            };
+            let message = match what {
+                E::FirstContact => format!(
+                    "FIRST CONTACT: the {name}. {} They call themselves the {}.",
+                    fatherload_simulation::alien::talk::first_contact_line(species),
+                    species.def().endonym
+                ),
+                E::FluencyRose => {
+                    let level = Fluency::ALL
+                        .get(usize::try_from(detail).unwrap_or(0))
+                        .copied()
+                        .unwrap_or_default();
+                    format!("The {name} tongue opens up: {}.", level.name())
+                }
+                E::LexiconFound => format!("A {name} lexicon stone: their writing, word by word."),
+                E::Lesson => format!("A lesson in the {name} tongue ({detail} cr)."),
+                E::Sold => format!("The {name} pay {detail} credits."),
+                E::Bought => format!("Bought from the {name} for {detail} credits."),
+                E::ChapterOffered => format!("The elder asks: \"{}\"", chapter_title()),
+                E::ChapterAccepted => format!("Taken on: \"{}\"", chapter_title()),
+                E::ChapterReached => format!("Done: \"{}\". Tell the elder.", chapter_title()),
+                E::ChapterCompleted => format!("The {name} thank you: \"{}\"", chapter_title()),
+                E::PassengerAboard => "A traveller climbs aboard.".to_owned(),
+                E::PassengerDelivered => "The traveller has arrived.".to_owned(),
+                E::MonumentRaised => format!("The {name} raise their monument!"),
+                E::HomeBought => format!("A home among the {name}: the builder starts work."),
+                E::HomeBuilt => format!("Your {name} home is finished."),
+                E::TrailLead => format!(
+                    "The {name} remember the builders: a star is charted on your nav chart."
+                ),
+                E::Rested => "Rested at home: air topped up, hull patched.".to_owned(),
+                E::Refused => AlienRefusal::from_code(detail)
+                    .map_or("Not now.", AlienRefusal::message)
+                    .to_owned(),
+                E::Learned => continue,
+            };
+            news.push((seat, message));
+        }
+        for (seat, message) in news {
             self.shell.seat_mut(seat).message = message;
         }
     }

@@ -250,6 +250,11 @@ impl WorldState {
                     // authoritative tick, so it holds for remote clients too).
                     PlayerScopedCommandOutcome::IgnoredUnavailable
                 } else if let Some(outcome) =
+                    self.alien_command(player_id, &action.command, &mut output)
+                {
+                    // Friendly aliens (Wave 12, `world/aliens.rs`): its own events.
+                    outcome
+                } else if let Some(outcome) =
                     self.flight_command(player_id, &action.command, &mut output)
                 {
                     // Space flight (Wave 11, `world/flight.rs`): its own events.
@@ -612,6 +617,12 @@ impl WorldState {
                 MineResult::Mined(TileKind::Frontier(tile)) => {
                     self.frontier_mined(player_id, target, tile, &mut output);
                 }
+                // A lexicon stone under an alien town (Wave 12): its words learned.
+                MineResult::Mined(TileKind::Alien(tile)) if tile.lexicon().is_some() => {
+                    if let Some(species) = tile.lexicon() {
+                        self.lexicon_found(player_id, species, &mut output);
+                    }
+                }
                 MineResult::Mined(TileKind::Cave(tile)) if tile.is_cache() => {
                     self.open_cave_cache(player_id, target, tile, &mut output);
                 }
@@ -640,6 +651,12 @@ impl WorldState {
             // clock, economy, Descents, people and quests run in the world pass.
             self.advance_entities(EntityPhase::Late, next_tick, &mut output);
             self.advance_pilot_pickups(&mut output);
+            // A settled body's folk (Wave 12): their people pass, first contacts and the
+            // chapters' explore and escort goals.
+            if self.has_alien_towns_here() {
+                self.advance_people(next_tick);
+                self.advance_aliens_on_body(&mut output);
+            }
             self.apply_test_mode_refills();
             // A frontier world's rules, weather, volcanoes and creatures (Wave 12).
             self.advance_frontier(next_tick, inputs, &mut output);
@@ -704,6 +721,8 @@ impl WorldState {
         self.advance_people(next_tick);
         // WP-HOME: construction in world time, site crews, garage bays.
         self.advance_homes(next_tick, &mut output);
+        // Homes in alien towns (Wave 12): handed over in world time.
+        self.advance_alien_homes(next_tick, &mut output);
         self.advance_bases(next_tick);
         // Lift rides, dives, outposts reached and the Descent gates (Part III F10).
         self.advance_logistics(next_tick, &mut output);

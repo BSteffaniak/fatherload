@@ -362,6 +362,10 @@ pub enum TileKind {
     /// crystal planets; see [`crate::frontier`]): dune sand, ruins, glass, ash, basalt,
     /// obsidian, magma, crystal, prisms and the light wells' lenses, receptors and seals.
     Frontier(crate::frontier::FrontierTile),
+    /// A tile of an alien town (Wave 12 aliens track, on settled space bodies; see
+    /// [`crate::alien`]): each species' street paving and the lexicon stones buried under
+    /// their towns.
+    Alien(crate::alien::AlienTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -477,6 +481,7 @@ impl TileKind {
             Self::Core(tile) => tile.name(),
             Self::Wild(tile) => tile.name(),
             Self::Frontier(tile) => tile.name(),
+            Self::Alien(tile) => tile.name(),
         }
     }
 
@@ -579,6 +584,7 @@ impl Tile {
             TileKind::Core(tile) => crate::heart::CORE_TILE_CODE_BASE | tile.code(),
             TileKind::Wild(tile) => crate::planet::wilds::WILD_TILE_CODE_BASE | tile.code(),
             TileKind::Frontier(tile) => crate::frontier::FRONTIER_TILE_CODE_BASE + tile.code(),
+            TileKind::Alien(tile) => crate::alien::ALIEN_TILE_CODE_BASE | tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -2366,6 +2372,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Core(tile) => tile.hardness(),
         TileKind::Wild(tile) => tile.hardness(),
         TileKind::Frontier(tile) => tile.hardness(),
+        TileKind::Alien(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2415,6 +2422,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Core(tile) => tile.durability(),
         TileKind::Wild(tile) => tile.durability(),
         TileKind::Frontier(tile) => tile.durability(),
+        TileKind::Alien(tile) => tile.durability(),
     }
 }
 

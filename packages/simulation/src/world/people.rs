@@ -111,7 +111,13 @@ impl WorldState {
     /// The person entity `npc`'s state, if it is a person.
     #[must_use]
     pub fn npc(&self, npc: EntityId) -> Option<(&crate::entity::Entity, NpcState)> {
-        let entity = self.entities.get(npc)?;
+        // Entity ids are unique across stores (F11): a person on a body (an alien town's
+        // resident, Wave 12) is found in that body's store outside the tick.
+        let entity = self.entities.get(npc).or_else(|| {
+            self.places
+                .stores()
+                .find_map(|(_, body)| body.entities().get(npc))
+        })?;
         match entity.state {
             EntityState::Npc(state) => Some((entity, state)),
             _ => None,
@@ -146,12 +152,23 @@ impl WorldState {
     /// interact prompt and the shell's talk key use the first).
     #[must_use]
     pub fn npcs_in_reach(&self, player: PlayerId) -> Vec<EntityId> {
-        let Some((x, y)) = self.people_actor_position(player) else {
+        // Outside the tick a player on a body (Wave 12: alien towns) reaches the people of
+        // its own store, measured in that store's frame.
+        let store = self.store_of(player);
+        let away = store != self.active_store();
+        let position = if away {
+            self.store_actor_position(player).map(|(x, y, _)| (x, y))
+        } else {
+            self.people_actor_position(player)
+        };
+        let Some((x, y)) = position else {
+            return Vec::new();
+        };
+        let Some(entities) = self.store_entities(store) else {
             return Vec::new();
         };
         let reach = TALK_REACH_TILES * TILE_SIZE;
-        let mut found: Vec<(u32, EntityId)> = self
-            .entities
+        let mut found: Vec<(u32, EntityId)> = entities
             .ids_in_radius(x, y, reach * 2.0)
             .into_iter()
             .filter_map(|id| self.npc(id))
@@ -200,7 +217,13 @@ impl WorldState {
         let Some((entity, state)) = self.npc(npc) else {
             return false;
         };
-        let Some((x, y)) = self.people_actor_position(player) else {
+        let away = self.store_of(player) != self.active_store();
+        let position = if away {
+            self.store_actor_position(player).map(|(x, y, _)| (x, y))
+        } else {
+            self.people_actor_position(player)
+        };
+        let Some((x, y)) = position else {
             return false;
         };
         match state.inside {
@@ -227,7 +250,8 @@ impl WorldState {
     /// Keeps people in the settlements near actors, then walks everyone one tick.
     pub(super) fn advance_people(&mut self, next_tick: SimulationTick) {
         let settings = *self.terrain.settings();
-        if !settings.generator.has_villages() {
+        // A settled body's ground (Wave 12) has no villages of its own, only its alien towns.
+        if !settings.generator.has_villages() && !self.has_alien_towns_here() {
             return;
         }
         let period = self.timing.ticks_for_millis(PEOPLE_REFRESH_MILLIS).max(1);
@@ -252,6 +276,33 @@ impl WorldState {
             .keys()
             .filter_map(|player| self.people_actor_position(*player))
             .collect();
+        // A settled body (Wave 12): its alien towns, measured round the wrapping strip.
+        let alien_towns = self.alien_towns_here();
+        if !alien_towns.is_empty() {
+            let width = self
+                .terrain
+                .planet_ground()
+                .map_or(0, crate::planet::PlanetGround::strip_width);
+            for (x, y) in &actors {
+                let (column, row) = (self.frame().col(*x), self.frame().row(*y));
+                for town in alien_towns.iter() {
+                    let near_columns = crate::alien::town::wrapped_distance(
+                        i64::from(column),
+                        town.site.centre,
+                        width,
+                    ) <= i64::from(town.site.half_width + margin);
+                    let near_rows = (row - town.ground_row()).abs() <= rows;
+                    if near_columns
+                        && near_rows
+                        && !found.contains_key(&town.id)
+                        && let Some(settlement) = people::routine::settlement(&settings, town.id)
+                    {
+                        found.insert(town.id, settlement);
+                    }
+                }
+            }
+            return found;
+        }
         for (x, y) in actors {
             #[allow(
                 clippy::cast_possible_truncation,
@@ -363,10 +414,10 @@ impl WorldState {
                 let column = settlement.place_column(stop.place);
                 let spread = i32::try_from(index % 5).unwrap_or(0) - 2;
                 let (x, inside) = match stop.place {
-                    Place::Inside(lot) => (column_px(self.frame(), column), u8::try_from(lot).ok()),
+                    Place::Inside(lot) => (self.strip_column_px(column), u8::try_from(lot).ok()),
                     Place::Outside { roam, .. } => {
                         let shift = spread * i32::from(roam.min(2));
-                        (column_px(self.frame(), column + shift), None)
+                        (self.strip_column_px(column + shift), None)
                     }
                 };
                 let state = NpcState {
@@ -441,7 +492,7 @@ impl WorldState {
                 Place::Inside(lot) => u8::try_from(lot).ok(),
                 Place::Outside { .. } => None,
             };
-            let anchor = column_px(self.frame(), settlement.place_column(stop.place));
+            let anchor = self.strip_column_px(settlement.place_column(stop.place));
             let roam = match stop.place {
                 Place::Outside { roam, .. } => f32::from(roam) * TILE_SIZE,
                 Place::Inside(_) => 0.0,
@@ -476,7 +527,7 @@ impl WorldState {
                     let door = settlement
                         .lots
                         .get(usize::from(inside))
-                        .map_or(anchor, |lot| column_px(self.frame(), lot.door_column()));
+                        .map_or(anchor, |lot| self.strip_column_px(lot.door_column()));
                     next.inside = None;
                     next.going_inside = None;
                     next.stand(door, next_tick);
@@ -827,7 +878,26 @@ impl WorldState {
                     }
                     let visit = state.memory(player_id).talks;
                     let spoken = people::talk(&character, state, &ctx);
-                    if let Some((remembered, speaker)) = resident {
+                    if let Some(species) = super::aliens::alien_species_of(&character) {
+                        // A friendly alien (Wave 12): their own talk, in their tongue (the
+                        // game shows it through the player's understanding).
+                        lines.extend(
+                            crate::alien::talk::chat_lines(
+                                &character,
+                                species,
+                                time.day,
+                                visit,
+                                continuing,
+                                &settlement.population.village_name,
+                                &player_name,
+                            )
+                            .into_iter()
+                            .map(|text| ConversationLine {
+                                speaker: Speaker::Them,
+                                text,
+                            }),
+                        );
+                    } else if let Some((remembered, speaker)) = resident {
                         // A deep settlement's resident (Wave 9): their own greeting, the
                         // day's word, then what they remember of the Fathers, in their voice.
                         if !continuing {
@@ -966,6 +1036,8 @@ impl WorldState {
             npc: npc.get(),
             first_meeting,
         });
+        // A friendly alien (Wave 12): first contact, and the day's words learned.
+        self.alien_chatted(player_id, &character, events);
         self.spread_word(player_id, &settlement, id, affinity_before);
         self.warm(player_id, npc, id, before, events);
         let _ = marked;
@@ -1288,6 +1360,8 @@ impl WorldState {
             npc: npc.get(),
             reaction,
         });
+        // A friendly alien (Wave 12): a liked gift teaches words.
+        self.alien_gifted(player_id, &character, liked, events);
         events.push(GameplayEventKind::CargoChanged { player_id });
         self.spread_word(player_id, &settlement, id, affinity_before);
         self.warm(player_id, npc, id, before, events);
@@ -1313,15 +1387,6 @@ fn outdoor_reach(body: Body, x: f32, y: f32) -> bool {
     let reach = TALK_REACH_TILES * TILE_SIZE;
     // People stand on the street (their body is at their feet); rigs hover a little above it.
     (body.x - x).abs() <= reach && (body.y - TILE_SIZE - y).abs() <= reach + TILE_SIZE
-}
-
-/// World pixel of a column's centre.
-#[allow(
-    clippy::cast_precision_loss,
-    reason = "columns fit f32 within the streamed limit"
-)]
-fn column_px(frame: crate::position::Frame, column: i32) -> f32 {
-    (frame.rel_col(column) + 0.5) * TILE_SIZE
 }
 
 /// World pixel of the top of row `row` (where feet stand on the first solid row).

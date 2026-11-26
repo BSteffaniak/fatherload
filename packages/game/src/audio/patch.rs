@@ -14,6 +14,7 @@
 
 use std::f32::consts::TAU;
 
+mod aliens;
 mod ancient_city;
 mod distortion;
 mod drowned;
@@ -570,6 +571,12 @@ patches! {
     PbDuneWindLoop => "pb_loop_dune_wind",
     PbVolcanoLoop => "pb_loop_volcano",
     PbCrystalHumLoop => "pb_loop_crystal_hum",
+    // The friendly aliens (wave 12 aliens): their voices, first contact, a word learned.
+    AlienVessiVoice => "alien_vessi_voice",
+    AlienTokkariVoice => "alien_tokkari_voice",
+    AlienSiphraVoice => "alien_siphra_voice",
+    AlienFirstContact => "alien_first_contact",
+    AlienWordLearned => "alien_word_learned",
 }
 
 /// Playback metadata of a patch.
@@ -1080,6 +1087,23 @@ impl Patch {
                 .jitter(0.04, 0.8),
             // The story finale (wave 10 story): set pieces that hush the mix.
             Self::StoryDescentCall => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.5)
+                .jitter(0.0, 0.3)
+                .ducking(0.3)
+                .priority(6),
+            // The friendly aliens (wave 12): voices, and the first-contact motif.
+            Self::AlienVessiVoice | Self::AlienTokkariVoice | Self::AlienSiphraVoice => {
+                PatchInfo::new(Feedback)
+                    .instances(2)
+                    .send(0.4)
+                    .jitter(0.05, 1.0)
+            }
+            Self::AlienWordLearned => PatchInfo::new(Interface)
+                .instances(1)
+                .send(0.3)
+                .jitter(0.02, 0.5),
+            Self::AlienFirstContact => PatchInfo::new(Big)
                 .instances(1)
                 .send(0.5)
                 .jitter(0.0, 0.3)
@@ -1902,6 +1926,11 @@ impl Patch {
             Self::PbDuneWindLoop => frontier::dune_wind_loop(rng),
             Self::PbVolcanoLoop => frontier::volcano_loop(rng),
             Self::PbCrystalHumLoop => frontier::crystal_hum_loop(rng),
+            Self::AlienVessiVoice => aliens::vessi_voice(rng),
+            Self::AlienTokkariVoice => aliens::tokkari_voice(rng),
+            Self::AlienSiphraVoice => aliens::siphra_voice(rng),
+            Self::AlienFirstContact => aliens::first_contact(rng),
+            Self::AlienWordLearned => aliens::word_learned(rng),
         }
     }
 }

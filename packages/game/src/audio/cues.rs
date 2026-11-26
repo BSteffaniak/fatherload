@@ -365,6 +365,49 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::FrontierCrystalGrow => Patch::PbCrystalGrow,
         SoundCue::FrontierChime => Patch::PbChime,
         SoundCue::FrontierWyrmRipple => Patch::PbWyrmRipple,
+        SoundCue::AlienVessiVoice => Patch::AlienVessiVoice,
+        SoundCue::AlienTokkariVoice => Patch::AlienTokkariVoice,
+        SoundCue::AlienSiphraVoice => Patch::AlienSiphraVoice,
+        SoundCue::AlienFirstContact => Patch::AlienFirstContact,
+        SoundCue::AlienWordLearned => Patch::AlienWordLearned,
+    }
+}
+
+/// The voice of an alien species (Wave 12).
+#[must_use]
+pub const fn alien_voice(species: fatherload_simulation::alien::AlienSpecies) -> SoundCue {
+    use fatherload_simulation::alien::AlienSpecies as S;
+    match species {
+        S::Vessi => SoundCue::AlienVessiVoice,
+        S::Tokkari => SoundCue::AlienTokkariVoice,
+        S::Siphra => SoundCue::AlienSiphraVoice,
+    }
+}
+
+/// What each alien event sounds like (Wave 12; exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn alien_cue(
+    what: fatherload_simulation::alien::AlienEvent,
+    species: fatherload_simulation::alien::AlienSpecies,
+) -> SoundCue {
+    use fatherload_simulation::alien::AlienEvent as E;
+    match what {
+        E::FirstContact => SoundCue::AlienFirstContact,
+        // Each word they teach you, you hear them say.
+        E::Learned | E::Lesson | E::ChapterOffered => alien_voice(species),
+        E::FluencyRose | E::LexiconFound => SoundCue::AlienWordLearned,
+        E::Sold | E::Bought => SoundCue::Sell,
+        E::ChapterAccepted => SoundCue::StoryHook,
+        E::ChapterReached => SoundCue::StoryQuill,
+        E::ChapterCompleted => SoundCue::StoryResolved,
+        E::PassengerAboard => SoundCue::HatchClose,
+        E::PassengerDelivered => SoundCue::HatchOpen,
+        E::MonumentRaised => SoundCue::MilestoneFanfare,
+        E::HomeBought => SoundCue::DeedSigned,
+        E::HomeBuilt => SoundCue::HomeFanfare,
+        E::TrailLead => SoundCue::StoryClimax,
+        E::Refused => SoundCue::UiError,
+        E::Rested => SoundCue::BedDown,
     }
 }
 
@@ -1342,6 +1385,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BodyLife { what, detail, .. } => Some(body_life_cue(*what, *detail)),
         // The wild worlds (Wave 12 planets-a).
         GameplayEventKind::Wilds { what, .. } => Some(wilds_cue(*what)),
+        GameplayEventKind::Alien { what, species, .. } => Some(alien_cue(*what, *species)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1697,7 +1741,8 @@ mod tests {
             | GameplayEventKind::SpaceSystems { .. }
             | GameplayEventKind::BodyLife { .. }
             | GameplayEventKind::Wilds { .. }
-            | GameplayEventKind::Frontier { .. } => {}
+            | GameplayEventKind::Frontier { .. }
+            | GameplayEventKind::Alien { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2914,6 +2959,11 @@ mod tests {
             SoundCue::FrontierCrystalGrow,
             SoundCue::FrontierChime,
             SoundCue::FrontierWyrmRipple,
+            SoundCue::AlienVessiVoice,
+            SoundCue::AlienTokkariVoice,
+            SoundCue::AlienSiphraVoice,
+            SoundCue::AlienFirstContact,
+            SoundCue::AlienWordLearned,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

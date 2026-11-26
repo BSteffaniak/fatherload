@@ -978,6 +978,10 @@ impl Tile {
                 Some(tile) => TileKind::Frontier(tile),
                 None => return None,
             },
+            0x2800..=0x29FF => match crate::alien::AlienTile::from_code(variant as u64) {
+                Some(tile) => TileKind::Alien(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

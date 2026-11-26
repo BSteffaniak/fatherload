@@ -102,6 +102,9 @@ pub enum PlayerCommand {
     /// A space flight action (Wave 11, see [`crate::flight::FlightCommand`]): the Star Drive,
     /// docking, the beacon, waypoints and a station's services.
     Flight(crate::flight::FlightCommand),
+    /// An action with a friendly alien species (Wave 12, see [`crate::alien::AlienCommand`]):
+    /// trade, lessons, the elders' chapters and homes in their towns.
+    Alien(crate::alien::AlienCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

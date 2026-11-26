@@ -208,6 +208,11 @@ impl Material {
             }
             // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
             // rest grinds.
+            // The alien towns (Wave 12): paving grinds, a lexicon stone gives.
+            TileKind::Alien(tile) => match tile {
+                fatherload_simulation::alien::AlienTile::LexiconStone(_) => Self::Soft,
+                _ => Self::Hard,
+            },
             TileKind::Core(tile) => match tile {
                 fatherload_simulation::heart::CoreTile::MagRail
                 | fatherload_simulation::heart::CoreTile::MagSwitch

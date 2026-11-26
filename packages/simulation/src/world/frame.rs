@@ -202,6 +202,8 @@ impl WorldState {
             // Space positions are space coordinates, not the home frame's (Wave 11).
             flight: _,
             space_systems: _,
+            // The aliens' state names towns, bodies and plots, never home positions (Wave 12).
+            aliens: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

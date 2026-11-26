@@ -458,6 +458,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Frontier {
             what, player_id, ..
         } => (920 + what.code() as u32, player_id),
+        // Friendly aliens (wave 12 aliens): 940-959.
+        GameplayEventKind::Alien {
+            what, player_id, ..
+        } => (940 + what.code() as u32, Some(player_id)),
     }
 }
 

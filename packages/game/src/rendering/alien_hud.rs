@@ -1,0 +1,416 @@
+//! The friendly aliens' talk panel (Wave 12 aliens track): the resident's portrait, how much of
+//! their tongue the seat's player understands, what they say (each word in the species' glyphs
+//! until the player has learned it), and the panel's rows.
+//!
+//! Speech is rendered per seat from the world's conversation lines through
+//! [`fatherload_simulation::alien::speech_tokens`] with the seat's own player's understanding:
+//! the same line reads as glyphs to a stranger and as plain words to a fluent speaker.
+
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "UI layout in small integer art pixels"
+)]
+
+use fatherload_simulation::{
+    alien::{
+        AlienSpecies, SpeechToken,
+        language::{FULL_UNDERSTANDING, Fluency},
+        quest::chapter,
+        speech_tokens,
+    },
+    people::{Character, ledger::Speaker},
+};
+use raylib::prelude::*;
+
+#[allow(
+    clippy::wildcard_imports,
+    reason = "art code names colours from the whole palette"
+)]
+use super::pixel_art::palette::*;
+use super::{
+    alien_art,
+    layout::{self, ItemEntry, ModalContent, Section, SectionItem, UiLayout},
+    people_art::{self, PersonPen},
+    pixel_art::sprites::menu_icons,
+    prompts::hint,
+    screen::UiFrame,
+    ui_kit::{self, PanelStyle, TextStyle},
+};
+use crate::{
+    input::prompts::Prompt,
+    shell::aliens::{AlienPage, AlienRow, ChapterRow, alien_rows, resident, row_text},
+};
+
+const HELP: &[super::prompts::Hint] = &[
+    hint(Prompt::Navigate, "choose"),
+    hint(Prompt::Confirm, "say"),
+    hint(Prompt::Back, "back"),
+];
+
+/// The colour a species writes in.
+#[must_use]
+pub const fn ink(species: AlienSpecies) -> Color {
+    match species {
+        AlienSpecies::Vessi => SKY_LIGHT,
+        AlienSpecies::Tokkari => AMBER,
+        AlienSpecies::Siphra => MINT,
+    }
+}
+
+/// Lines of speech the card shows (the newest).
+const SHOWN_LINES: usize = 3;
+
+/// One word laid out: a word in the font, or a run of glyphs.
+enum Laid<'a> {
+    Word(&'a str),
+    Glyphs(&'a [u8], &'a str),
+}
+
+/// The width (art pixels) of a laid-out token.
+fn width_of(token: &Laid<'_>) -> i32 {
+    match token {
+        Laid::Word(word) => ui_kit::text_width(word, TextStyle::Body),
+        Laid::Glyphs(glyphs, trailing) => {
+            alien_art::glyphs_width(glyphs.len(), 1.0) as i32
+                + ui_kit::text_width(trailing, TextStyle::Body)
+        }
+    }
+}
+
+/// Wraps `tokens` to `width` art pixels: lines of laid tokens.
+fn wrap(tokens: &[SpeechToken], width: i32) -> Vec<Vec<Laid<'_>>> {
+    let space = ui_kit::text_width(" ", TextStyle::Body).max(3);
+    let mut lines: Vec<Vec<Laid<'_>>> = vec![Vec::new()];
+    let mut used = 0;
+    for token in tokens {
+        let laid = match token {
+            SpeechToken::Word(word) => Laid::Word(word.as_str()),
+            SpeechToken::Glyphs { glyphs, trailing } => Laid::Glyphs(glyphs, trailing.as_str()),
+        };
+        let w = width_of(&laid);
+        if used > 0 && used + space + w > width {
+            lines.push(Vec::new());
+            used = 0;
+        }
+        if used > 0 {
+            used += space;
+        }
+        used += w;
+        if let Some(line) = lines.last_mut() {
+            line.push(laid);
+        }
+    }
+    lines
+}
+
+/// Draws laid lines from `(x, y)`; returns the height used.
+fn draw_lines(
+    draw: &mut impl RaylibDraw,
+    lines: &[Vec<Laid<'_>>],
+    x: i32,
+    y: i32,
+    species: AlienSpecies,
+    colour: Color,
+) -> i32 {
+    let space = ui_kit::text_width(" ", TextStyle::Body).max(3);
+    let line_height = TextStyle::Body.line_height().max(9);
+    for (row, line) in lines.iter().enumerate() {
+        let mut cursor = x;
+        let top = y + row as i32 * line_height;
+        for laid in line {
+            match laid {
+                Laid::Word(word) => {
+                    ui_kit::text(draw, word, cursor, top, TextStyle::Body, colour);
+                }
+                Laid::Glyphs(glyphs, trailing) => {
+                    for (index, glyph) in glyphs.iter().enumerate() {
+                        alien_art::draw_glyph(
+                            draw,
+                            (cursor + index as i32 * 6) as f32,
+                            (top + 1) as f32,
+                            1.0,
+                            species,
+                            *glyph,
+                            ink(species),
+                        );
+                    }
+                    let after = cursor + alien_art::glyphs_width(glyphs.len(), 1.0) as i32;
+                    ui_kit::text(draw, trailing, after, top, TextStyle::Body, colour);
+                }
+            }
+            cursor += width_of(laid) + space;
+        }
+    }
+    lines.len() as i32 * line_height
+}
+
+/// Draws seat `ui.seat`'s alien conversation.
+pub(super) fn draw_alien_talk(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>) {
+    let Some(talk) = &ui.seat.village.talk else {
+        return;
+    };
+    let Some((found, slot)) = resident(talk.speaker) else {
+        return;
+    };
+    let Some(character) = found.population.characters.get(slot).cloned() else {
+        return;
+    };
+    let species = found.species;
+    let world = ui.snapshot.world;
+    let player = ui.view.player_id;
+    let understanding = world.understanding(player, species);
+    let fluency = Fluency::of(understanding);
+    let page = ui.seat.alien.page;
+    let rows = alien_rows(world, Some(player), talk.speaker, page);
+    let selected = ui.seat.selected_menu_item.min(rows.len().saturating_sub(1));
+    let items: Vec<SectionItem> = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let (label, detail) = row_text(world, Some(player), &found, *row);
+            let icon = match row {
+                AlienRow::Chat => &menu_icons::PERSON,
+                AlienRow::Trade
+                | AlienRow::Buy(_)
+                | AlienRow::Sell(..)
+                | AlienRow::Gift
+                | AlienRow::GiftItem(_) => &menu_icons::GIFT,
+                AlienRow::Lesson | AlienRow::Chapter(ChapterRow::Ask) => &menu_icons::BOOK,
+                AlienRow::Chapter(_) => &menu_icons::CONTRACT,
+                AlienRow::Homes | AlienRow::Plot(_) | AlienRow::Rest(_) => &menu_icons::HOUSE,
+                AlienRow::Goodbye | AlienRow::Back => &menu_icons::BACK,
+            };
+            SectionItem::item(ItemEntry {
+                icon: Some(icon),
+                label,
+                detail: String::new(),
+                value: detail,
+                value_color: BONE,
+                coin: false,
+                selected: index == selected,
+                disabled: false,
+            })
+        })
+        .collect();
+    let log = world.aliens().log(player, species);
+    let mut tongue = vec![
+        SectionItem::meter(
+            "Understanding",
+            f32::from(understanding),
+            f32::from(FULL_UNDERSTANDING),
+            ink(species),
+            ink(species),
+        ),
+        SectionItem::stat("Their tongue", fluency.name(), ink(species)),
+    ];
+    if log.stones > 0 {
+        tongue.push(SectionItem::stat(
+            "Lexicon stones read",
+            log.stones.to_string(),
+            GOLD,
+        ));
+    }
+    let mut sections = vec![Section::new(
+        format!("{} ({})", species.def().name, species.def().endonym),
+        ink(species),
+        tongue,
+    )];
+    if let Some(active) = log.active
+        && let Some(def) = chapter(species, active.chapter)
+    {
+        let state = if active.passenger.is_some() {
+            "a traveller rides with you"
+        } else if active.reached {
+            "done: tell the elder"
+        } else {
+            "under way"
+        };
+        sections.push(Section::new(
+            "Their chapter",
+            GOLD,
+            vec![SectionItem::stat(def.title, state, GOLD)],
+        ));
+    }
+    let title = match page {
+        AlienPage::Talk => "Say",
+        AlienPage::Trade => "Trade",
+        AlienPage::Homes => "Homes for sale",
+        AlienPage::Gift => "A gift",
+    };
+    sections.push(Section::new(title, LIME, items));
+    UiLayout::screen(draw).modal_with_render_plan(
+        &talk.name,
+        &talk.about,
+        &ModalContent::new(sections).compact().prompts(HELP),
+    );
+    draw_speech_card(draw, ui, &character, species, understanding);
+    draw_portrait(draw, &character, species);
+}
+
+/// The card of what the resident said, above the panel (or below it when there is no room).
+fn draw_speech_card(
+    draw: &mut RaylibDrawHandle<'_>,
+    ui: &UiFrame<'_, '_>,
+    character: &Character,
+    species: AlienSpecies,
+    understanding: u16,
+) {
+    let Some(panel) = layout::peek_last_dialog_rect() else {
+        return;
+    };
+    let Some(talk) = &ui.seat.village.talk else {
+        return;
+    };
+    let canvas = ui_kit::canvas();
+    let width = (panel.width as i32).max(200).min(canvas.width - 16);
+    let inner = width - 16;
+    let world = ui.snapshot.world;
+    let player = ui.view.player_id;
+    let mut said: Vec<(Speaker, String)> = world
+        .people()
+        .conversation(player)
+        .filter(|conversation| conversation.npc == talk.npc)
+        .map(|conversation| {
+            let skip = conversation.lines.len().saturating_sub(SHOWN_LINES);
+            conversation
+                .lines
+                .iter()
+                .skip(skip)
+                .map(|line| (line.speaker, line.text.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    // The elder's request while a chapter is offered.
+    let log = world.aliens().log(player, species);
+    if let Some(def) = log.offered.and_then(|index| chapter(species, index)) {
+        said.push((Speaker::Them, def.ask.to_owned()));
+    } else if let Some(def) = log
+        .active
+        .and_then(|active| chapter(species, active.chapter))
+        && resident(talk.speaker)
+            .is_some_and(|(_, slot)| slot == fatherload_simulation::alien::town::ELDER)
+    {
+        said.push((Speaker::Them, def.nudge.to_owned()));
+    }
+    if said.is_empty() {
+        said.push((
+            Speaker::Note,
+            format!("{} turns toward you...", character.name.short()),
+        ));
+    }
+    let name = character.name.short().to_owned();
+    let mut blocks: Vec<(Color, Vec<SpeechToken>)> = Vec::new();
+    for (speaker, text) in &said {
+        match speaker {
+            Speaker::Them => blocks.push((CREAM, speech_tokens(text, species, understanding))),
+            Speaker::You => blocks.push((SKY_LIGHT, plain(&format!("You: {text}")))),
+            Speaker::Note => blocks.push((MIST, plain(&format!("> {text}")))),
+        }
+    }
+    let laid: Vec<(Color, Vec<Vec<Laid<'_>>>)> = blocks
+        .iter()
+        .map(|(colour, tokens)| (*colour, wrap(tokens, inner - 4)))
+        .collect();
+    let line_height = TextStyle::Body.line_height().max(9);
+    let lines: i32 = laid.iter().map(|(_, lines)| lines.len() as i32).sum();
+    let height = 22 + lines * line_height + laid.len() as i32 * 3;
+    let x = panel.x as i32 + (panel.width as i32 - width) / 2;
+    let above = panel.y as i32 - height - 4;
+    let y = if above >= 4 {
+        above
+    } else {
+        let below = (panel.y + panel.height) as i32 + 4;
+        if below + height <= canvas.height - 4 {
+            below
+        } else {
+            4
+        }
+    };
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, width as f32, height as f32),
+        PanelStyle::Accent,
+    );
+    ui_kit::text(draw, &name, x + 8, y + 6, TextStyle::Bold, ink(species));
+    let readable = if understanding >= FULL_UNDERSTANDING {
+        "every word".to_owned()
+    } else {
+        format!("you follow {}%", understanding / 10)
+    };
+    let width_readable = ui_kit::text_width(&readable, TextStyle::Body);
+    ui_kit::text(
+        draw,
+        &readable,
+        x + width - 8 - width_readable,
+        y + 6,
+        TextStyle::Body,
+        MIST,
+    );
+    let mut top = y + 18;
+    for (colour, lines) in &laid {
+        top += draw_lines(draw, lines, x + 8, top, species, *colour) + 3;
+    }
+}
+
+/// Plain words (the player's own lines and notes are never in their tongue).
+fn plain(text: &str) -> Vec<SpeechToken> {
+    text.split_whitespace()
+        .map(|word| SpeechToken::Word(word.to_owned()))
+        .collect()
+}
+
+/// The resident's portrait beside the panel.
+fn draw_portrait(draw: &mut RaylibDrawHandle<'_>, character: &Character, species: AlienSpecies) {
+    let canvas = ui_kit::canvas();
+    let Some(panel) = layout::peek_last_dialog_rect() else {
+        return;
+    };
+    let scale = if canvas.height >= 300 { 3 } else { 2 };
+    let art = people_art::PORTRAIT_SIZE * scale;
+    let card_w = art + 16;
+    let card_h = art + 30;
+    let right_x = canvas.width - card_w - 8;
+    let free_left = (panel.x + panel.width) as i32 + 8;
+    let (x, y) = if right_x >= free_left {
+        (right_x, (panel.y as i32).max(8))
+    } else if (panel.x as i32) - card_w - 8 >= 8 {
+        (8, (panel.y as i32).max(8))
+    } else {
+        return;
+    };
+    ui_kit::panel(
+        draw,
+        Rectangle::new(x as f32, y as f32, card_w as f32, card_h as f32),
+        PanelStyle::Accent,
+    );
+    ui_kit::text(
+        draw,
+        species.def().name,
+        x + 8,
+        y + 6,
+        TextStyle::Bold,
+        ink(species),
+    );
+    let well = Rectangle::new(
+        (x + 6) as f32,
+        (y + 18) as f32,
+        (art + 4) as f32,
+        (art + 4) as f32,
+    );
+    ui_kit::well(draw, well);
+    let seconds = ui_kit::seconds();
+    people_art::draw_portrait(
+        draw,
+        PersonPen {
+            x: well.x + 2.0,
+            y: well.y + 2.0,
+            pixel: scale as f32,
+        },
+        character,
+        ((seconds * 0.8) as i32) % 3 != 0,
+        seconds,
+    );
+}

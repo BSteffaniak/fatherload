@@ -45,7 +45,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Home(_)
         | PlayerCommand::Tomb(_)
         | PlayerCommand::Logistics(_)
-        | PlayerCommand::Flight(_) => None,
+        | PlayerCommand::Flight(_)
+        | PlayerCommand::Alien(_) => None,
     }
 }
 
@@ -171,9 +172,13 @@ impl WorldState {
         // The town's counters, the villages, the sky buoys and the townsfolk are the home
         // world's (F11): away on a body or in space, a rig standing where they would be in
         // its own ground's coordinates is not at them.
-        if !self.store_of(player_id).is_home()
+        // A settled body's own folk (Wave 12, alien towns) are the exception: people commands
+        // there reach them (the people rules check the reach).
+        let store = self.store_of(player_id);
+        if !store.is_home()
             && (command_service_zones(command).is_some()
-                || matches!(command, PlayerCommand::People(_)))
+                || (matches!(command, PlayerCommand::People(_))
+                    && self.alien_towns_of_store(store).is_empty()))
         {
             return false;
         }
