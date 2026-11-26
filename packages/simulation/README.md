@@ -10243,6 +10243,122 @@ troopers are gone.
   attackers within 1,000 px (a machine V held past the combat zoom's edge), keeps framed fights
   clear of the location plate, and merges off-screen arrows that point the same way.
 
+## Wave 12 integration: one living galaxy
+
+The seven Wave 12 tracks (systems, bodylife, planets-a, planets-b, aliens, stations, hostiles)
+are stacked linearly on the Wave 11 integration and their seams wired. `PROTOCOL_VERSION` is
+20 (every track's bump collapsed into one); the save format stays 15 (every new field and
+section has a serde default; `every_supported_save_format_loads_plays_and_round_trips`).
+V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` (0x0c0c_b46c_12ea_7136) are unchanged:
+no track and no seam changes home or space generation. Event codes: systems 860-878,
+bodylife 880-883, planets-a 900-919, planets-b 920-936, aliens 940-959, stations 960-975,
+hostiles 980-999.
+
+### Stacking
+
+* Registries collapsed by appending: `GameplayEventKind`, `SectionKey::SHARED` (36 sections:
+  `SpaceSystems`, `Aliens`, `Stations`, `Hostiles`), `EnemyKind::ALL` (177: planets-a's twelve,
+  planets-b's twelve, the hostiles' three troopers), `TileKind` (`Wild` 0x2000, `Frontier`
+  0x2400, `Alien` 0x2800), the audio patches (systems, planets-a, planets-b, aliens, stations,
+  hostiles, each at the end), scenes, sounds and touch contexts.
+* The frontier themes are ids 6-8 after planets-a's 3-5 (`style_of` matched literal numbers).
+* `HazardGear` holds both the stations' `ship` (ship lines, planet gear, alien tech) and the
+  hostiles' weapons, renamed `arms` (cannon, turret, missiles, deflector).
+* `GroundThingKind::Enemy` is one variant for every creature on round ground (planets-a's
+  feet offset and art scale; planets-b's buried burrower and wyrm ripple kept), the raiders'
+  own sprite first.
+* Space combat runs once a tick after every store's pass with every rig back: free flight
+  lives in the Space store since the systems track, so the home pass never saw a flying rig.
+* The hostiles' builder commits that did not pass clippy on today's toolchain are folded into
+  the commit that fixed them; the wild and frontier audio that the stacked patch order
+  reseeded (the volcanic rumble's sub-bass, its riff's gate) were made seed-proof.
+
+### Seams wired
+
+* **Theme framework.** The jungle, archipelago and glacier (`planet::wilds::hooks`) and the
+  dune, volcanic and crystal worlds (`frontier::hooks`) register `PlanetThemeHooks` in
+  `THEME_HOOKS`, beside the barren, rocky and ice placeholders: weather tables, climate (core
+  bias), creature spawn tables, music beds, hazard tags and settlement sites. A wild world names
+  its `ThemeWorld` through `hooks().world()`, so `world_of` reads the one registry. Their own
+  secrets replace the default vault (which had crept into the jungle's chunks).
+* **Weather and day.** Each theme's storm is a registered bodylife weather kind (downpour,
+  squall and blizzard 64-66; sandstorm, ash fall and glitterfrost 128-130). The wild and
+  frontier storms are the body's own forecast spells (`life::weather_at`, `rules::weather_at`;
+  the frontier telegraph is the 12 s before a run of storm spells), so the HUD badge, the
+  forecast and the theme's wind and bite agree. A wild world's night is the body's own clock at
+  the column. Bodylife's weather visibility shortens every creature's line-of-sight noticing.
+* **Heat.** A frontier zone's heat counts on a body (the hotter of the climate's and the
+  zone's): the bodylife climate had replaced it.
+* **Planet gear.** The stations' heat shielding, cold insulation, toxic-air filters and
+  high-gravity struts counter the wild and frontier hazards (`frontier::planet_gear_tier`: a
+  station tier is three frontier tiers; `WorldState::planet_gear_counters`). `hazards_of` joins
+  a body's physical tags with its theme's; on a theme world the stations' flat drain and its
+  landing warning stand back (the theme warns zone by zone), so nothing bites twice.
+* **Alien towns on theme worlds.** The aliens' site finder asks the theme first
+  (`PlanetThemeHooks::settlement_site`): a wild world widens its leveled site to fit the town
+  and holds that one town (an escort there runs to the far side), its paving and lexicon
+  stones laid over its own chunks; a frontier world's first town stands on its oasis rim,
+  plateau or meadow and its others spread round the lap on levelled ground.
+* **Alien trade** reads the body's bodylife prices (`trade::body_price_permille`); alien-run
+  stations are run by the real species (`AlienKin::species`).
+* **Bounties.** `MissionKind::Bounty` (one board roll in four away from Halcyon's starter set)
+  names one of `hostiles::bounty_targets`; taking it posts the bounty and points the waypoint
+  at the target's system; the kill pays and closes the mission; abandoning takes it down. The
+  WANTED poster shows the board's target. The hub's shipyard sells the hostiles' weapons.
+* **Lairs** are told at bars: the last patron of a bar out past the home system names a
+  faction boss's lair, and the round charts it and sets the waypoint.
+* **Nebulae and raids.** Pirates (already weighted to fog) spring their ambushes up to 40 %
+  nearer in a nebula's cover. Ground raids land by an alien town a rig is near, and troopers
+  are not held back by a town's safe ground (a player's base or home still keeps them out).
+* **Mining.** Belt ore counts toward the boards' mining quotas in its system; rare belt ores
+  run out fast (platinum 40, iridium 20, voidglass 12 units a rock).
+* **Danger by distance.** A wild world two sectors or more from home hits one tier harder.
+* **Warps.** The test-mode warp now lands a rig on a body (`Landed`), home (`Home`) or in free
+  flight (`Space`): a warp out of flight left it "away" on a body, where its rules never ran.
+
+### End-to-end tests
+
+* `world::galaxy_tour_tests::a_bot_tours_the_whole_galaxy_and_comes_home`: leave home over the
+  Moon with the player's controls; mine a belt rock; dock at Halcyon, sell, fit an engine line
+  and heat shielding, arm the ship; take a pirate bounty from a board near home and beat it
+  (the kill pays, the mission closes); land on all six theme worlds (test-mode warps between
+  systems) and check each one's strata (800+ rows on a planet), its storm in the body's
+  forecast and in the theme's own rules, its native creatures round the rig (only its own) and
+  its level settlement; meet the Tokkari (a lesson, a trade, their first chapter done); cross a
+  wormhole; fly home. The natives met on seed 0x00C0FFEE: trundlehorn, tidesnapper, woolhorn,
+  dune skipper, cinder bat, shard crab.
+* netcode `tests::world_galaxy`: a client fits out at Halcyon, lands on a volcanic world (its
+  creatures and body reading reach the client as the host has them) and meets pirates in free
+  flight while the host's rig stays home; the views match throughout.
+* game `space_seat_tests::split_screen_seats_on_a_jungle_and_a_volcanic_world_each_see_their_own`.
+
+### Balance
+
+* First trip out (`station::balance::first_trip`, from an empty purse, the starter board then
+  the next roll of each slot): the first Ship Engine tier at 45.0, 44.0, 43.5, 36.0 and 49.0
+  minutes on the five pinned seeds (13,295 / 13,252 / 16,450 / 9,941 / 13,450 credits over
+  59.5 / 56 / 67 / 41.5 / 61 minutes); bounties now appear on the second boards.
+* Encounters: the home sector and space within 9,000 tiles of a station are calm; a roll every
+  5 s of free flight finds a rig 30 per mille at ring 1 (about one encounter per 2.8 minutes of
+  open flight there), 65 at ring 2 (77 s), 135 at ring 4 (37 s), with a 60 s rest after each.
+* Open: credits are one purse, and a rig reaches space after the Heart with Descent VIII's
+  income (its commonest ore about 2,000 a unit); a player who arrives with a big purse can buy
+  the first ship lines at once. The first-hour model measures from an empty purse.
+
+### Still open (Wave 13)
+
+* The space economy's scale against a late purse (above); space items (belt ores and comet
+  dust still stand in as home minerals); a per-system economy.
+* A wild world holds one alien town; the jungle's canopy sits above the ground camera's view
+  and the planets draw as plain discs from orbit; the ocean's sea is the general fluid engine
+  (1-5 ms a tick while a shaft drains it, the planets-a review measured).
+* Gameplay events carry no store: a storm, eruption or chime event with no player attached can
+  reach a split-screen seat on another body (planets-b's note).
+* Free flight is one Space store with one frame (two rigs far apart lose precision); body maps
+  travel to every client with the body.
+* Bosses on the theme worlds, hides for alien traders, the story's quest engine for the alien
+  chapters, and station music.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
