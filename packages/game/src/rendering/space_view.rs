@@ -91,6 +91,9 @@ fn presentation_of<'a>(
 const SPACE: Color = Color::new(8, 7, 20, 255);
 /// Where the drawn rig sits in the sky (high, in open air, so it draws flying).
 const RIG_SKY_Y: f32 = -200_000.0;
+/// Where space's readouts (fog, the hold, mining gauges) start in a fight, as a share of the
+/// view's height: under the craft, which sits in the middle, so the ships ahead stay clear.
+const READOUTS_IN_A_FIGHT: f32 = 0.6;
 
 /// How space maps to the seat's view this frame.
 #[derive(Clone, Copy, Debug)]
@@ -1613,12 +1616,29 @@ pub(super) fn draw_space_hud(
     }
     // Wave 12 systems: holes, flares, dilation, fog, mining, comets, the hold.
     let reading = super::space_systems_view::read(snapshot, view);
-    top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, &mut layout, top);
+    // In a fight the ships ahead of the craft (a boss, framed whole) are at the top of the
+    // view, so the readouts step down under the craft instead of stacking under the plate
+    // (Wave 13 art-audio review: a boss dead ahead hid under "SENSORS FOGGED").
+    let fighting = super::hostiles_view::combat_share(view.space_combat.nearest) >= 0.5;
+    let low = rect.y + rect.height * READOUTS_IN_A_FIGHT;
+    if !fighting {
+        top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, &mut layout, top);
+    }
     let seen = super::space_systems_view::marker_alpha(&reading);
     let faded = |colour: Color| with_alpha(colour, (f32::from(colour.a) * seen) as u8);
     // The fight (Wave 12 hostiles): the deflector and rack under the meters, the encounter's
     // and a boss's banners low in the view.
     let top = super::hostiles_view::draw_hostile_hud(draw, snapshot, view, &mut layout, top);
+    if fighting {
+        super::space_systems_view::draw_hud(
+            draw,
+            snapshot,
+            view,
+            &reading,
+            &mut layout,
+            low.max(top),
+        );
+    }
     if let (Some(panel), Some((checks, ready))) = (layout.docking, docking.as_ref()) {
         draw_docking_guide(draw, panel, checks, *ready);
     }
