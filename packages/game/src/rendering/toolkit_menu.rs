@@ -248,7 +248,7 @@ pub(super) fn draw_test_toolkit(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_
         .collect();
     UiLayout::screen(draw).modal_with_render_plan(
         "God-Mode Toolkit",
-        "Test mode: stock your rig, set the world's progress and call up creatures.",
+        "Stock your rig, set progress, call up creatures.",
         &ModalContent::new(sections).prompts(&[
             hint(Prompt::Navigate, "select"),
             hint(Prompt::Adjust, "change"),

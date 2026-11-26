@@ -91,6 +91,11 @@ pub const TOUCH_SCENES: &[Scene] = &[
         summary: "The pause menu on a touch screen",
         setup: |stage| restage(stage, "pause_menu", TouchView::default()),
     },
+    Scene {
+        name: "touch_toolkit",
+        summary: "The God-Mode Toolkit on a touch screen: tap a row, the arrows step its value",
+        setup: |stage| restage(stage, "test_toolkit_creatures", TouchView::default()),
+    },
 ];
 
 /// Stages the scene called `name`, then hands the first seat to the touch screen showing `view`
