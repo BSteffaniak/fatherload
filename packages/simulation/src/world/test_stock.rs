@@ -219,6 +219,13 @@ impl WorldState {
             return;
         };
         fit_everything(player);
+        self.stock_joiner(player_id);
+    }
+
+    /// Stocks a rig arriving in a test-mode world: its consumables and what the world keeps for
+    /// it. Its gear is the player template's (fitted when test mode was switched on, or as a
+    /// scenario set it since).
+    pub(super) fn stock_joiner(&mut self, player_id: PlayerId) {
         self.top_up_supplies(player_id);
         if self.space_enabled() {
             self.heart.space_unlocked = true;

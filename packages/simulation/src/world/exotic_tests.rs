@@ -25,6 +25,11 @@ fn world_on(style: ExoticStyle, radius: u32, hz: u32) -> WorldState {
     let mut world = WorldState::new_planet_world(PLAYER, params, SimulationParams::new(hz));
     world.enable_test_mode();
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
+    // A stock ship: test mode's stock (Wave 14) fits the planet gear that would counter the
+    // worlds' own pulls and hazards these tests measure.
+    if let Some(rig) = world.player_mut(PLAYER) {
+        rig.hazard_gear.ship = crate::station::ShipGear::default();
+    }
     world
 }
 

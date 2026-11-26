@@ -11928,6 +11928,154 @@ Scenes: `lair_jungle_boss`, `lair_ocean_boss`, `lair_ocean_well`, `lair_glacier_
 - Hand play-testing of the whole arc (bots and screenshots only, as before).
 - The lairs' halos and lamps are drawn on round ground; the flat lone-planet view (tests and
   tools) shows the tiles only.
+## Wave 14 stock: the god-mode toolkit's stock, switches and spawn tools (`src/test_mode.rs`, `src/test_mode/stock.rs`, `src/world/test_stock.rs`)
+
+W14-A of the expansion plan's §19. A test-mode world starts **fully stocked**, keeps its
+consumables topped up, and gains progress switches and creature tools. Every tool is a
+`TestModeAction` (a replicated player action applied inside the tick: the host's world decides
+online, each seat acts on its own rig) and is refused (`IgnoredUnavailable`) outside a test-mode
+world, so a client sending one to a normal world changes nothing (the simulation checks, not
+just the UI).
+
+### Stocking (`test_mode::stock`, `world/test_stock.rs`)
+
+* **The consumable registry** `StockItem::all()` walks the registries' own `ALL` lists: plain
+  bombs, every `ExplosiveKind` with a carried item (sticky, cluster, C4, shaped, mining,
+  incendiary, EMP, flare, smoke, scare, time bubble), every rig ammunition (`AmmoKind::ALL`),
+  the pilot's rounds (`AmmoKind::PILOT`), every `DeepSupply` (the Time-Bubble Bomb is the
+  time-bubble charge), the dive charges, every carried infrastructure kit (`RecipeKind`,
+  matched exhaustively by `StockItem::kit`) and the ship's missile rack. `StockItem::stack` is
+  the stack a stocked rig carries: the kits' own limits where the game has one (supplies 9,
+  dive charges 9, pilot rounds 240, the rack by its gear) and `TEST_STACK` (99) where it has
+  none. `StockItem::slug` / `from_slug` give each a stable word (`bombs`, `sticky_bomb`,
+  `ballast_tank`, `pilot_shotgun_shell`) for the command palette.
+* **The gear** (`fit_everything`): every upgrade line maxed (`max_out_upgrades`, the rig
+  systems included), every weapon at Mk IV with the top capacitor, every ship line, planet
+  gear and alien tech (`ShipUpgrade::all`), every pilot gear item at its top tier and the
+  pilot's arms, every cosmetic, the lunar colony's one-offs, and a full tank and hull.
+* **The crew's side** (`stock_world`): every rig part in the locker, every boss tech, the Deep
+  Claim (and Drill II) on Deep Descent worlds, space open, and **every star chart** of the
+  Archive: the Orrery's three plinths and every vault plinth within `CHART_STOCK_COLUMNS`
+  (1,200) columns of the world's middle, read with the same `chart_at_site` as play.
+* **Per rig, world-kept** (`stock_player`): the deep-supply kit and dive charges, the Star
+  Drive, and the endgame career's alien marks (Mk III), both Starwright parts and the Heartline
+  Drive. A rig joining a test-mode world later is stocked as it arrives (`insert_player`).
+* `WorldState::enable_test_mode` stocks the template, every rig and the world
+  (`TestModeState::new_world`: invulnerable, infinite fuel and infinite supplies on).
+* **The audit** `WorldState::test_stock_gaps(player)` lists what a rig lacks of a full stock,
+  walking `StockItem::all`, `UpgradeKind::ALL`, `WeaponKind::ALL`, `PILOT_WEAPONS`,
+  `RigPartKind::ALL`, `PilotGearKind::ALL`, `CosmeticItem::all`, `ShipUpgrade::all`,
+  `FlightGearKind::ALL`, the attitude gear (landing legs, assists), `ShipGearKind::ALL`,
+  `BossTech::ALL`, `AlienTech::ALL`, `StarwrightPart::ALL`, `DescentKey::ALL` (an exhaustive
+  match maps each gate key to how it is held) and the chart sites. The tests fail on any gap,
+  so anything appended to those lists is stocked or the build's tests say so.
+* The game has no carried repair kits or fuel cans (repairs and refuels are services and the
+  workshops' on-the-spot recipes); the invulnerable hull and infinite fuel toggles cover them.
+
+### Infinite supplies, restocking, giving
+
+* `TestModeState::infinite_supplies` (serde default **on**, so test-mode saves from before the
+  toggle get it): the end-of-tick refill (`apply_test_mode_refills`, both the world pass and a
+  body's ground pass) tops every rig's stocked consumables back up to their stacks (never lowers
+  one). `SetInfiniteSupplies(bool)` switches it for the crew.
+* `Restock` refills the submitting rig once; `StockAll` refits it with everything (the console's
+  `give all`); `Give(StockItem, count)` sets one count, capped at its stack (`give dynamite
+  99`).
+* **Older saves upgrade cleanly**: `TestModeState::stock_revision` (serde default 0) is the
+  stocking revision a world was stocked to; `simulate_tick` restocks a world below
+  `STOCK_REVISION` (1) on its first tick, with every rig at hand, and records the revision.
+
+### Progress switches
+
+* `SetGateCleared { descent, cleared }` (0 = the Crust's Sinkhole .. 6 = the Ancients'
+  Colossus; 7 is the Heart): sets the boss's own fight state (the Deep Claim, the Star Core's
+  phase, the Mind, the Leviathan, the Serpent, the Glitch, the Colossus) and the expedition's
+  noted bit, so `descent_boss_beaten` and the gate checks read it and the expedition pass
+  reports `StoryEvent::BossBeaten` in the same tick; uncleared it resets both (and the reported
+  bit, so clearing it again is reported again). `WorldState::gate_cleared(descent)`. Deep
+  Descent worlds only.
+* `SetEndingDone(bool)`: the Heart woke (fight beaten, `Awakened`), space open, every rig with
+  the Star Drive and the expedition's `cable_lit`, **without** playing the ending (the cable's
+  lit time is set far enough back that no sequence runs, or left unset on a world too young
+  for that, and no `CableLit` moment is raised). Off: the Heart sleeps again and the cable is
+  dark; a stocked test world's space stays open. `WorldState::ending_done()`. In a body's
+  ground pass it is refused while the Heart's fight has live parts (they are home entities).
+* `SetStoryUnlocked(bool)` (`TestModeState::story_unlocked`, off by default): every expedition
+  log and echo, every anomaly inscription, the Crust's diary, the Old Deep's tablets and the
+  core's revelation, and every rig's tomb codex (relics and lore pages; later joiners too).
+  Off resets them all to a fresh story. Not covered: the galaxy story's own journal and the
+  aliens' tongues (their tracks' state).
+* `SetTimeOfDay { minutes }`: moves the **home** clock forward to that time (a held clock jumps
+  there), like a slept night. `SetDayLock(bool)`: `ClockState::held_millis` (serde default
+  none, so older clocks hash as before) holds every time-of-day reading (`WorldClock::is_held`:
+  the phase, light, sun, moon and night) while world time runs on; unlocked, the clock runs on
+  from the held time. Bodies keep their own days.
+* `SetWeather(Option<WeatherId>)` (`TestModeState::weather`): every body's weather is that
+  kind at full strength (`BodyLife::weather_with` / `reading_with`: the same forecast over a
+  table of that one kind, so it still needs air and a night-only kind shows only at night),
+  read by the HUD, the wind, visibility, climate, the turns' events and the outland storms.
+  The home world has no weather. `WorldState::forced_weather()`.
+
+### Enemy tools
+
+* `SpawnCreature(EnemyKind)`: any of `EnemyKind::ALL` (creatures and bosses) at a safe offset
+  beside the submitting rig: the first open spot to either side or above it (a gap of the rig's
+  and the creature's radii plus two tiles), else a pocket carved for it (bedrock, fixtures and
+  built tiles stay). Refused on a Peaceful world (the director clears creatures every tick).
+* `ClearNearbyEnemies`: every creature and creature shot within `CLEAR_RADIUS_TILES` (48) of
+  the rig. `SetAiFrozen(bool)` (`TestModeState::ai_frozen`): creatures and their shots are not
+  advanced (`advance_entities`); the Descent bosses' set-piece passes and space ships are not
+  frozen. Difficulty is the existing `PlayerCommand::SetEnemyDifficulty`.
+
+### Events, formats, seams
+
+* Events: `GameplayEventKind::TestStock { what: TestStockEvent, player_id, detail }`, netcode
+  codes **1120-1139** (`Stocked`, `Restocked`, `CreatureSpawned`, `EnemiesCleared`,
+  `ProgressSet`, `StorySet`, `SkySet`; `TestModeAction::stock_event`); the toggles still raise
+  `TestModeChanged`. No sound (the menu answers).
+* The `TestModeState` fields and `ClockState::held_millis` all have serde defaults: the save
+  format stays 15 and older saves load. The new `TestModeAction` variants and the event change
+  the wire: **`PROTOCOL_VERSION` 22**. No golden digest moves (nothing touches generation).
+* **For w14-console** (`give`, `gate`, `ending`, `spawn`, `time`, `weather`): call the actions
+  above; `StockItem::from_slug` names items, `EnemyKind::name` creatures, `weather_kind(id).name`
+  weathers. **For w14-index**: nothing of its own; a destination arrival may want
+  `ClearNearbyEnemies` after a warp into a lair.
+* `HazardGear::MAXED` still leaves the ship lines stock (the flight bots are tuned to it); the
+  stock fits them on top. Tests of planet hazards or flight in a test-mode world that need a
+  stock ship reset `hazard_gear.ship` (the frontier, exotic and places tests do).
+
+### Game side
+
+* The pause menu's **God-Mode Toolkit** (`PauseOption::TestToolkit`, the global
+  `ModalScreen::TestToolkit`; `shell/test_toolkit.rs`, drawn by `rendering/toolkit_menu.rs`):
+  sections Supplies (infinite supplies, restock, stock everything), Progress (story unlock,
+  gates I-VII, the ending; Deep Descent worlds), Sky (time of day, the lock, weather) and
+  Creatures (the creature to spawn, spawn, clear, freeze, enemies). Up/down select, left/right
+  change a value (the touch screen's arrow buttons, a pad's d-pad; the tab buttons step the
+  creature ten at a time), confirm or a tap toggles or acts; each row submits its action for
+  the menu seat.
+* Scenes: `test_toolkit`, `test_toolkit_creatures`, `test_toolkit_spawned`,
+  `stocked_inventory`.
+
+### Tests
+
+* `world::test_stock_tests`: a Deep Descent and a classic test world audit clean for every rig
+  (a joiner too); every stocked item is at its stack; infinite supplies refills and restock
+  refills once with the toggle off; give is per rig and capped; stock-all refits a stripped
+  rig; an older test-mode save (only the first three toggles) loads and is stocked on its first
+  tick; every toolkit action is refused in a normal world and changes nothing; each gate is
+  cleared, reported and restored; the ending switch wakes the Heart without playing the ending
+  and undoes it; the story unlock fills both codex pages and resets them; the time of day and
+  its lock hold the clock (and land on the same minute at 30, 60 and 120 Hz); forced weather
+  blows on a body; a spawned creature appears at a safe offset and clearing removes it; every
+  creature and boss kind spawns beside a rig underground; frozen AI stands still and moves
+  again; the toolkit state round-trips and replicates.
+* `test_mode::stock` unit test: the registry covers every selectable explosive, supply and
+  ammunition and its slugs are unique.
+* game `shell::test_toolkit`: every row submits its tool for the menu seat; value rows step;
+  spawning on a Peaceful world says so.
+* netcode `world_toolkit`: a client stocks, spends and restocks its own rig and spawns a
+  creature in the host's test-mode world; the same actions to a normal world are refused.
 
 ## Replication
 

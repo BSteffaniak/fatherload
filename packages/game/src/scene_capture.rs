@@ -513,6 +513,8 @@ mod wilds_scenes;
 // Wave 13 planets-c: the fungal, machine and dead worlds.
 mod lair_scenes;
 mod outlands_scenes;
+// Wave 14 stock: the god-mode toolkit.
+mod toolkit_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -688,6 +690,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(alien_scenes::ALIEN_SCENES)
         .chain(station_scenes::STATION_SCENES)
         .chain(endgame_scenes::ENDGAME_SCENES)
+        .chain(toolkit_scenes::TOOLKIT_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

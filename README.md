@@ -212,6 +212,21 @@ deep-reward milestones do not count. Test-mode worlds are marked on the HUD, the
 save slots and the title's last-save line; it works in split-screen and online (the host
 chooses it).
 
+A test-mode rig is also **fully stocked** (Wave 14): every bomb, charge, rocket, pilot round,
+infrastructure kit, deep supply and dive charge at its stack, every weapon, pilot gear item and
+cosmetic, every boss-won gate reward (the Deep Claim, Drill II and the rig systems through the
+Heart Key), the Star Drive with space open, every ship line, planet gear, alien tech mark,
+Starwright part and the Heartline Drive, and every star chart of the Archive. The pause menu's
+**God-Mode Toolkit** holds the rest: **Infinite Supplies** (on by default: spent consumables
+come back each tick), **Restock Now**, **Stock Everything**, **Unlock Story & Codex** (off by
+default, so the story can be tested fresh; switching it off resets it), each Descent's
+**Gate** cleared or sealed and **Ending: The Heart Woke**, the home clock's **Time of Day**
+and **Day/Night Lock**, **Weather on Worlds** (forced on every planet and moon), and the
+creature tools: pick any of the game's creatures and bosses, **Spawn Beside Me**, **Clear
+Nearby Creatures**, **Freeze Creature AI** and the **Enemies** setting. Keys, mouse, pad and
+touch all drive it (left/right or the touch arrows change a value, confirm or a tap uses a
+row); every tool acts on the menu seat's own rig and online the host's world decides.
+
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
 basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can
 start a dozen rows higher or lower than in another world), waves the layer boundaries, shapes

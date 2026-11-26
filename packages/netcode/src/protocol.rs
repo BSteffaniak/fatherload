@@ -362,7 +362,7 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * Integration: a relic's `RelicSite::base` (an outpost's floor; derived, never sent) and the
 ///   theme bosses recorded on the endgame's hunt list (in the `Endgame` section).
 ///
-/// Version 22 (Wave 14 finish, Part III's open items):
+/// Version 22 (Wave 14: Part III's open items and the god-mode toolkit, one bump):
 ///
 /// * The Wave 12 worlds' theme bosses: six appended `EnemyKind`s (`BrambleKing` ..
 ///   `GeodeColossus`) in entity records, `TileKind::Lair(LairTile)` tiles (kind codes
@@ -372,6 +372,13 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 /// * The space generator per world: the `space_generator` world field and each body store's
 ///   own in keyframes (`space::SpaceGenerator`; a world without one is V1), so a client builds
 ///   its galaxy and its bodies' ground by the host's generator.
+/// * Wave 14 stock, the god-mode toolkit: the appended `TestModeAction`s
+///   (`SetInfiniteSupplies`, `Restock`, `StockAll`, `Give(StockItem, u32)`, `SetStoryUnlocked`,
+///   `SetGateCleared`, `SetEndingDone`, `SetTimeOfDay`, `SetDayLock`, `SetWeather`,
+///   `SpawnCreature(EnemyKind)`, `ClearNearbyEnemies`, `SetAiFrozen`), the `TestModeState`
+///   fields (`infinite_supplies`, `story_unlocked`, `ai_frozen`, `weather`, `stock_revision`) in
+///   the `TestMode` section, `ClockState::held_millis` in the `Clock` section, and the toolkit
+///   events 1120-1139 (`GameplayEventKind::TestStock` with `test_mode::TestStockEvent`).
 pub const PROTOCOL_VERSION: u8 = 22;
 
 /// One client input frame: the controls and actions for exactly one tick.

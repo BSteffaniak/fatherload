@@ -79,6 +79,11 @@ fn rig_px(world: &WorldState, player: PlayerId) -> (f32, f32) {
 fn players_in_two_places_both_play_each_tick() {
     let mut world = deep_world(2);
     world.enable_test_mode();
+    // No Star Drive: its sky boost (stocked in test mode since Wave 14) would lift the home rig
+    // into the windy sky this test keeps it under.
+    let mut heart = world.heart().clone();
+    heart.star_drive.clear();
+    world.set_heart(heart);
     world
         .move_to_place(TWO, place_of(BODY_A), over_surface(10))
         .expect("arrives");
