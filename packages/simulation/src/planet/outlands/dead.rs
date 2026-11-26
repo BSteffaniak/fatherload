@@ -222,19 +222,19 @@ pub fn towers(ground: &PlanetGround, city: &City) -> Vec<Tower> {
     let mut index = 0;
     while x < city.first + city.width - 6 {
         let hash = oroll(ground, 82, city.first, index);
-        let width = 7 + pick(hash, 8, 7);
+        let width = 7 + pick(hash, 8, 6);
         let width = width.min(city.first + city.width - x);
         if width < 6 {
             break;
         }
-        let storeys = 1 + i32::try_from(pick(hash, 16, 4)).unwrap_or(0);
+        let storeys = 2 + i32::try_from(pick(hash, 16, 3)).unwrap_or(0);
         out.push(Tower {
             first: x,
             width,
             storeys,
-            broken_from: (pick(hash, 24, 3) == 0).then(|| x + 2 + pick(hash, 32, 3)),
+            broken_from: (pick(hash, 24, 4) == 0).then(|| x + 3 + pick(hash, 32, 3)),
         });
-        x += width + 3 + pick(hash, 40, 4);
+        x += width + 2 + pick(hash, 40, 3);
         index += 1;
     }
     out
@@ -298,6 +298,28 @@ fn tower_tile(
         return Some(outland(OutlandTile::Urn));
     }
     Some(air())
+}
+
+/// Whether strip tile `(column, row)` is inside one of a petrified city's towers (its rooms:
+/// the renderer gives them a back wall).
+#[must_use]
+pub fn in_tower(ground: &PlanetGround, column: i64, row: i32) -> bool {
+    let width = i64::from(ground.strip_width());
+    let cell = column.div_euclid(CITY_CELL);
+    for offset in [0, -1] {
+        let Some(city) = city_in_cell(ground, cell + offset) else {
+            continue;
+        };
+        let street = surface(ground, city.first + city.width / 2);
+        for tower in towers(ground, &city) {
+            let dx = wrap_delta(column, tower.first, width);
+            let up = street - row;
+            if (1..tower.width - 1).contains(&dx) && (1..tower.storeys * STOREY).contains(&up) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// The Hollow Throne's tile at `(column, row)`, if any.

@@ -16,7 +16,7 @@
 //!   **power relays**: a vault's three relays sit in its roof, under a control room. Drilling a
 //!   relay flips it and its neighbours; light all three and the vault's seals open.
 //! * **Landmark: the Reactor Spire**, half a lap from the settlement: a tower of reactor
-//!   casing 12 wide and 64 tall with a beacon crown, a door at its foot and a shaft down to the
+//!   casing 13 wide and 36 tall with a beacon crown, a door at its foot and a shaft down to the
 //!   core reactor's hall where the Reactor Warden waits ([`super::boss_lair`]).
 //! * **Settlement site**: a level plate for the Tokkari's forges.
 
@@ -109,7 +109,7 @@ pub const TERRACE_ROWS: i32 = 4;
 pub const PYLON_CELL: i64 = 64;
 /// The Reactor Spire: half width, height, its rise.
 pub const SPIRE_HALF: i64 = 6;
-pub const SPIRE_HEIGHT: i32 = 64;
+pub const SPIRE_HEIGHT: i32 = 36;
 const SPIRE_RISE: i64 = 32;
 /// Extra sky over the hills (the spire).
 const EXTRA_SKY: i32 = 72;

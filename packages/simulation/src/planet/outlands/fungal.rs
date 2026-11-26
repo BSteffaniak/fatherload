@@ -2,7 +2,7 @@
 //! below them the Mycelium Mat, the Glowcap Grottos and the Sporeheart Deep.
 //!
 //! * **Surface**: the generic hills raised into rounded puffball mounds, a giant mushroom in
-//!   most 28-column cells (a stalk two or three wide, 12-30 rows tall, a domed cap of springy
+//!   most 28-column cells (a stalk two or three wide, 7-20 rows tall, a domed cap of springy
 //!   flesh with soft gills under it; one in three glows, glowcaps hanging under its gills), and
 //!   puffballs on the ground that burst into spore clouds when drilled. A cap throws a rig
 //!   that lands on it back up (`world/outlands.rs`).
@@ -15,8 +15,8 @@
 //! * **Sporeheart Deep**: dense spore-packed rock and **spore vents** under open chimneys;
 //!   signature rule **spore vents**: each vent swells (a hiss and a glow), then blasts a column
 //!   of spores up its chimney that throws a rig high and fouls its air.
-//! * **Landmark: the Mother Cap**, half a lap from the settlement: a stalk 8 wide and 54 tall
-//!   under a cap 60 wide of glowing flesh, a door at its foot into its hollow stalk, and the
+//! * **Landmark: the Mother Cap**, half a lap from the settlement: a stalk 9 wide and 30 tall
+//!   under a cap 48 wide of glowing flesh, a door at its foot into its hollow stalk, and the
 //!   shaft down to the Sporemother's hollow ([`super::boss_lair`]).
 //! * **Settlement site**: a level clearing with no mushrooms (the Tokkari like the fungal
 //!   worlds).
@@ -110,9 +110,9 @@ pub const MUSHROOM_CELL: i64 = 28;
 const MOUND_CELL: i64 = 48;
 /// The Mother Cap: stalk half width, height, the cap's half width and height, its rise.
 pub const MOTHER_STALK_HALF: i64 = 4;
-pub const MOTHER_HEIGHT: i32 = 54;
-pub const MOTHER_CAP_HALF: i64 = 30;
-const MOTHER_CAP_HEIGHT: i32 = 14;
+pub const MOTHER_HEIGHT: i32 = 30;
+pub const MOTHER_CAP_HALF: i64 = 24;
+const MOTHER_CAP_HEIGHT: i32 = 10;
 const MOTHER_RISE: i64 = 36;
 /// Extra sky over the hills (the Mother Cap's dome).
 const EXTRA_SKY: i32 = 72;
@@ -158,15 +158,15 @@ pub fn mushroom_in_cell(ground: &PlanetGround, cell: i64) -> Option<Mushroom> {
     if kept_clear(ground, column, 12) || kept_clear(ground, column + stalk, 12) {
         return None;
     }
-    let height = 12 + i32::try_from(pick(hash, 24, 19)).unwrap_or(0);
+    let height = 7 + i32::try_from(pick(hash, 24, 14)).unwrap_or(0);
     let floor = surface(ground, column + stalk / 2);
     Some(Mushroom {
         column,
         width: stalk,
         top: floor - height,
         cap: (
-            6 + pick(hash, 32, 6),
-            3 + i32::try_from(pick(hash, 40, 3)).unwrap_or(0),
+            5 + pick(hash, 32, 6),
+            3 + i32::try_from(pick(hash, 40, 2)).unwrap_or(0),
         ),
         glowing: pick(hash, 48, 3) == 0,
     })

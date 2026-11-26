@@ -122,9 +122,9 @@ fn spot_tile(planet: &PlanetGround, spot: Spot) -> (i32, i32) {
     match spot {
         Spot::Settlement => fallback,
         Spot::Landmark => {
+            // Hovering off to one side, high enough to frame the whole structure.
             let site = world.landmark_site(planet).expect("a landmark");
-            let column = site.centre() - 18;
-            (column, planet.surface_row(column))
+            (site.centre() - 12, planet.surface_row(site.centre()) - 24)
         }
         Spot::Wilds => (site.centre() + 90..site.centre() + 2_000)
             .map(|column| (column, planet.surface_row(column)))
@@ -143,7 +143,8 @@ fn spot_tile(planet: &PlanetGround, spot: Spot) -> (i32, i32) {
             .unwrap_or(fallback),
         Spot::Stratum(stratum) => {
             let rows = match stratum {
-                0 => 20..top / 3 - 12,
+                // Just under the crust (the mat's top), right under the settlement.
+                0 => return (site.centre(), site.floor + 14),
                 1 => top / 3 + 12..top * 2 / 3 - 12,
                 _ => top * 2 / 3 + 12..top - 12,
             };
@@ -222,10 +223,20 @@ fn on_outland(
         };
         let planet = PlanetGround::new(ground.params);
         let (column, floor) = spot_tile(&planet, spot);
-        // The vent scene catches its vent mid-blast.
+        // Mid-morning at the spot (the scenes' light), the vent scene mid-blast, the gear
+        // scene with the works turning: the rhythms repeat, so each is found a whole number
+        // of their cycles after the morning.
+        let store = StoreKey::Body(ground.id);
+        let morning = world.body_life(store).map_or(millis, |life| {
+            life.clock.millis_when(millis, i64::from(column), 420)
+        });
         let millis = match spot {
-            Spot::Vent => vent_blast_time(&planet, column + 3).unwrap_or(millis),
-            _ => millis,
+            Spot::Vent => vent_blast_time(&planet, column + 3, morning).unwrap_or(morning),
+            _ if millis == GEARS_TURNING_MILLIS => {
+                let cycle = life::GEAR_CYCLE_MILLIS;
+                morning - morning % cycle + GEARS_TURNING_MILLIS % cycle
+            }
+            _ => morning,
         };
         world.set_body_millis(millis);
         launch(
@@ -244,15 +255,34 @@ fn on_outland(
             column,
             planet.surface_row(column) - floor + 1,
         );
-        let store = StoreKey::Body(ground.id);
+
         let _ = world.with_store_ground(store, |world| {
+            // Under the settlement the scene digs itself a gallery to stand in.
+            if matches!(spot, Spot::Stratum(0)) {
+                for dy in -3..0 {
+                    for dx in -9..=9 {
+                        let _ = world.terrain_mut().set_kind(
+                            fatherload_simulation::terrain::TilePosition {
+                                x: column + dx,
+                                y: floor + dy,
+                            },
+                            fatherload_simulation::terrain::TileKind::Air,
+                        );
+                    }
+                }
+            }
             for (kind, dx, dy) in creatures {
                 let (x, y) = world.frame().centre_of(column + dx, floor + dy);
                 let _ = world.spawn_enemy(*kind, x, y);
             }
         });
     });
-    stage.settle(90);
+    // Over a landmark the craft is caught a moment after it was set high (still falling).
+    stage.settle(if matches!(spot, Spot::Landmark) {
+        3
+    } else {
+        90
+    });
 }
 
 /// Coming down over the nearest `theme` world from space.
@@ -280,17 +310,16 @@ fn approach(stage: &mut SceneStage<'_>, theme: PlanetThemeId) {
     stage.settle(10);
 }
 
-/// A world time a little way into a blast of the vent at strip column `column`.
-fn vent_blast_time(planet: &PlanetGround, column: i32) -> Option<u64> {
+/// A world time a little way into a blast of the vent at strip column `column`, from `after`.
+fn vent_blast_time(planet: &PlanetGround, column: i32, after: u64) -> Option<u64> {
     let column = i64::from(column);
-    (0..life::VENT_CYCLE_MILLIS)
+    (after..after + life::VENT_CYCLE_MILLIS)
         .step_by(100)
         .find(|millis| {
             life::vent_phase(planet, column, *millis) == life::VentPhase::Blasting
                 && life::vent_phase(planet, column, millis.saturating_sub(600))
                     == life::VentPhase::Blasting
         })
-        .map(|millis| millis + 20_000 * life::VENT_CYCLE_MILLIS)
 }
 
 /// A world time when the gear works turn.
@@ -323,9 +352,9 @@ const DEAD_LIFE: &[(EnemyKind, i32, i32)] = &[
 ];
 const TOMB_LIFE: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Gravewarden, 3, -1)];
 const SHADES: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Shade, 4, -3)];
-const SPOREMOTHER: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Sporemother, 14, -1)];
-const REACTOR_WARDEN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::ReactorWarden, 14, -6)];
-const ASHEN_SOVEREIGN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::AshenSovereign, 14, -1)];
+const SPOREMOTHER: &[(EnemyKind, i32, i32)] = &[(EnemyKind::Sporemother, 8, -1)];
+const REACTOR_WARDEN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::ReactorWarden, 8, -6)];
+const ASHEN_SOVEREIGN: &[(EnemyKind, i32, i32)] = &[(EnemyKind::AshenSovereign, 8, -1)];
 
 pub const OUTLANDS_SCENES: &[Scene] = &[
     Scene {

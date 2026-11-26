@@ -52,7 +52,7 @@ type Color = raylib::prelude::Color;
 
 // The fungal world.
 const SPORE_LOAM: Ramp = ramp([NIGHT, PLUM, VIOLET, LAVENDER]);
-const MAT: Ramp = ramp([SLATE, FOG, MIST, BONE]);
+const MAT: Ramp = ramp([PLUM, LAVENDER, MIST, BONE]);
 const HYPHAE: Ramp = ramp([PLUM, VIOLET, LAVENDER, PINK]);
 const STALK: Ramp = ramp([STONE, FOG, BONE, CREAM]);
 const CAP: Ramp = ramp([MAROON, RED, ROSE, PINK]);
@@ -260,9 +260,32 @@ pub(super) fn paint_outlands_air(
     };
     let theme = planet.params().theme;
     if position.y < planet.surface_row(position.x) {
+        // A petrified tower's rooms keep a dark back wall of their old plaster and blocks.
+        let room = theme == PlanetThemeId::DEAD
+            && fatherload_simulation::planet::outlands::dead::in_tower(
+                planet,
+                i64::from(position.x),
+                position.y,
+            );
         for py in 0..TILE_ART {
             for px in 0..TILE_ART {
-                canvas.set(px, py, TRANSPARENT);
+                let (gx, gy) = (canvas.origin_x + px, canvas.origin_y + py);
+                let index = if room {
+                    let course = gy.div_euclid(5);
+                    let offset = if course.rem_euclid(2) == 0 { 0 } else { 5 };
+                    if (gx + offset).rem_euclid(10) == 9 || gy.rem_euclid(5) == 4 {
+                        index_of(INK)
+                    } else if up == Cell::Solid && py < 3 {
+                        index_of(INK)
+                    } else if noise(gx, gy, 5, 3_021) > 0.7 {
+                        index_of(NIGHT)
+                    } else {
+                        index_of(SLATE_DARK)
+                    }
+                } else {
+                    TRANSPARENT
+                };
+                canvas.set(px, py, index);
             }
         }
         return true;
@@ -379,30 +402,34 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
             }
         }
         OutlandTile::MyceliumMat => {
-            // A white felt: wavy threads over a pale ground, the odd lilac knot.
+            // A pale felt: bright wavy threads crossing over lilac shadows, the odd knot.
             let wave = (n(9, 3_111) * 6.0) as i32;
             let thread = (x + y + wave).rem_euclid(5) == 0 || (x - y + wave).rem_euclid(7) == 0;
-            if hash(x, y, 3_112).is_multiple_of(53) {
+            let shadow = n(8, 3_113) * 0.8 + n(3, 3_114) * 0.2 + dither * 0.15;
+            if hash(x, y, 3_112).is_multiple_of(61) {
                 HYPHAE[2]
             } else if thread {
                 MAT[3]
-            } else if n(4, 3_113) + dither * 0.3 > 0.72 {
+            } else if shadow > 0.74 {
                 MAT[1]
             } else {
                 MAT[2]
             }
         }
         OutlandTile::Hyphae => {
-            // Knotted lilac cords twisting through each other.
-            let (near, second, dx, dy) = worley(x, y, 5, 3_121, false);
-            if second - near < 1.2 {
-                HYPHAE[0]
-            } else if dx + dy < -1 {
-                HYPHAE[3]
-            } else if near < 3.0 {
-                HYPHAE[2]
-            } else {
+            // The mat knotted tight with lilac cords: thick twisting strands over pale felt.
+            let wave = (n(10, 3_121) * 7.0) as i32;
+            let cord = (x * 2 + y + wave).rem_euclid(7);
+            if cord == 0 {
                 HYPHAE[1]
+            } else if cord == 1 {
+                HYPHAE[2]
+            } else if cord == 2 && hash(x, y, 3_122).is_multiple_of(3) {
+                HYPHAE[3]
+            } else if n(5, 3_123) > 0.7 {
+                MAT[1]
+            } else {
+                MAT[2]
             }
         }
         OutlandTile::Stalk => {
@@ -420,9 +447,8 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
         }
         OutlandTile::CapFlesh | OutlandTile::MotherCap => {
             // Rose flesh, darker in the hollows, cream spots (the Mother Cap's glow teal).
-            let (near, _, _, _) = worley(x, y, 7, 3_141, false);
-            let spot =
-                near < 4.5 && hash(x.div_euclid(7), y.div_euclid(7), 3_142).is_multiple_of(3);
+            let (near, _, dx, dy) = worley(x, y, 9, 3_141, false);
+            let spot = near < 3.2 && hash(x - dx, y - dy, 3_142).is_multiple_of(2);
             if spot {
                 if tile == OutlandTile::MotherCap {
                     if near < 1.5 {
@@ -436,7 +462,15 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
                     CAP[3]
                 }
             } else {
-                level(CAP, n(6, 3_143) * 0.7 + dither * 0.6 + 0.15)
+                // Smooth flesh: broad soft light and shade, a fine grain.
+                let value = n(14, 3_143) * 0.8 + n(4, 3_144) * 0.2 + dither * 0.12;
+                if value > 0.72 {
+                    CAP[3]
+                } else if value < 0.32 {
+                    CAP[1]
+                } else {
+                    CAP[2]
+                }
             }
         }
         OutlandTile::Gills => {
@@ -596,7 +630,10 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
                 PLATE[3]
             } else if qx + qy < 4 {
                 PLATE[2]
-            } else if hash(x.div_euclid(8), y.div_euclid(8), 3_301).is_multiple_of(5) {
+            } else if hash(x.div_euclid(8), y.div_euclid(8), 3_301).is_multiple_of(17)
+                && n(3, 3_302) > 0.62
+            {
+                // A rust stain spreading on the odd panel.
                 index_of(RUST)
             } else {
                 PLATE[1]
@@ -617,15 +654,18 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
             }
         }
         OutlandTile::Scrapfill => {
-            // Packed scrap: mixed metal chunks, rust and the odd bright bolt.
-            let (near, second, dx, _) = worley(x, y, 5, 3_311, true);
-            let chunk = hash((x + dx).div_euclid(5), y.div_euclid(5), 3_312) % 4;
-            if second - near < 1.0 {
+            // Packed scrap: angular metal chunks, each one shade, lit on their upper edge,
+            // rust between them and the odd bright bolt.
+            let (near, second, dx, dy) = worley(x, y, 6, 3_311, true);
+            let chunk = hash(x - dx, y - dy, 3_312) % 3;
+            if second - near < 1.2 {
                 SCRAP[0]
-            } else if hash(x, y, 3_313).is_multiple_of(73) {
+            } else if hash(x, y, 3_313).is_multiple_of(97) {
                 index_of(STEEL_LIGHT)
+            } else if dy < -1 {
+                SCRAP[(chunk as usize + 1).min(3)]
             } else {
-                SCRAP[(chunk as usize).min(3)]
+                SCRAP[(chunk as usize).min(2)]
             }
         }
         OutlandTile::ConveyorWest | OutlandTile::ConveyorEast => {
@@ -823,10 +863,10 @@ fn body_pixel(tile: OutlandTile, x: i32, y: i32, px: i32, py: i32) -> Option<Pal
         OutlandTile::AshStone => {
             // Compacted ash in thin beds.
             let wave = (n(24, 3_411) * 3.0) as i32;
-            let bed = (y + wave).div_euclid(3);
-            if (y + wave).rem_euclid(3) == 0 {
-                ASH_STONE[0]
-            } else if hash(bed, x.div_euclid(9), 3_412).is_multiple_of(3) {
+            let bed = (y + wave).div_euclid(4);
+            if (y + wave).rem_euclid(4) == 0 && n(6, 3_413) > 0.35 {
+                ASH_STONE[1]
+            } else if hash(bed, x.div_euclid(13), 3_412).is_multiple_of(4) {
                 ASH_STONE[3]
             } else {
                 ASH_STONE[2]

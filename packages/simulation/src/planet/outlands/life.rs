@@ -294,7 +294,7 @@ pub const fn vent_phase(ground: &PlanetGround, column: i64, millis: u64) -> Vent
 // --- Ghost lights ------------------------------------------------------------------------------
 
 /// Columns and rows per wisp cell in the Grave Mantle.
-pub const WISP_CELL: (i64, i64) = (40, 28);
+pub const WISP_CELL: (i64, i64) = (20, 14);
 /// How long a wisp takes to cross its cell and back, across and down (milliseconds).
 const WISP_PERIODS: (u64, u64) = (23_000, 17_000);
 

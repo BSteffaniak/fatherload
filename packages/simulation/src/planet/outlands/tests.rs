@@ -71,12 +71,12 @@ fn digest(ground: &PlanetGround) -> u64 {
 /// Pins the outland worlds' generation: a body of each theme at two radii. Change only on
 /// purpose (every outland planet's ground moves with it).
 const GOLDEN_OUTLAND_DIGESTS: [(PlanetThemeId, u32, u64); 6] = [
-    (PlanetThemeId::FUNGAL, 600, 0xe365_07f9_a618_a44a),
-    (PlanetThemeId::FUNGAL, 3_000, 0xe461_f6fa_0e0e_69eb),
-    (PlanetThemeId::MACHINE, 600, 0xa79d_a782_7fd2_f8f1),
+    (PlanetThemeId::FUNGAL, 600, 0xb63c_0ecb_ce2f_fa93),
+    (PlanetThemeId::FUNGAL, 3_000, 0x6520_b06c_7b5d_dac2),
+    (PlanetThemeId::MACHINE, 600, 0xe2ce_7c06_7593_969f),
     (PlanetThemeId::MACHINE, 3_000, 0xa934_d5b4_63b7_24c6),
-    (PlanetThemeId::DEAD, 600, 0x3d02_7dfc_bfdd_454f),
-    (PlanetThemeId::DEAD, 3_000, 0xc0d7_e06b_f1ba_d795),
+    (PlanetThemeId::DEAD, 600, 0xe89f_0a88_7a08_cc16),
+    (PlanetThemeId::DEAD, 3_000, 0x990a_7402_d9b6_f101),
 ];
 
 #[test]

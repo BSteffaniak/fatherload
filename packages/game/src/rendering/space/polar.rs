@@ -913,7 +913,8 @@ fn draw_outland_mark(
             let phase = f32::from(id % 97) * 0.13;
             let pulse = 0.75 + 0.25 * (seconds * 1.3 + phase).sin();
             let centre = Vector2::new(0.0, -tile * 0.5);
-            draw.draw_circle_v(centre, tile * 0.9, fade(palette::MINT, 0.10 * pulse));
+            draw.draw_circle_v(centre, tile * 1.8, fade(palette::MINT, 0.06 * pulse));
+            draw.draw_circle_v(centre, tile * 0.9, fade(palette::MINT, 0.12 * pulse));
             draw.draw_circle_v(centre, tile * 0.55, fade(palette::MINT, 0.22 * pulse));
             draw.draw_circle_v(centre, tile * 0.3, fade(palette::ICE, 0.7 * pulse));
             // A tail of fainter motes behind it.
@@ -960,8 +961,13 @@ fn draw_outland_mark(
                 let rise = (seconds * 3.0 + f32::from(puff) / 3.0).fract();
                 draw.draw_circle_v(
                     Vector2::new(wobble, -tile * rise),
-                    tile * 0.45,
-                    fade(palette::LAVENDER, 0.28 * strength),
+                    tile * 0.5,
+                    fade(palette::LAVENDER, 0.42 * strength),
+                );
+                draw.draw_circle_v(
+                    Vector2::new(wobble * 0.5, -tile * rise),
+                    tile * 0.22,
+                    fade(palette::PINK, 0.55 * strength),
                 );
             }
         }

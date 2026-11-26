@@ -1654,12 +1654,12 @@ impl EnemyKind {
             Self::MirageMoth => 0.6,
             // The outland worlds (Wave 13): lanterns, sparks, ghost light and the bosses' cores.
             Self::Lanternfly => 3.0,
-            Self::Sporemother => 4.0,
+            Self::Sporemother => 5.5,
             Self::ArcMite => 1.2,
             Self::WardDrone => 0.8,
-            Self::ReactorWarden => 4.5,
+            Self::ReactorWarden => 5.5,
             Self::Shade => 2.0,
-            Self::AshenSovereign => 3.0,
+            Self::AshenSovereign => 5.5,
             _ => 0.0,
         }
     }
