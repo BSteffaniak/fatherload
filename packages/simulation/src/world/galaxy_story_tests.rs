@@ -887,3 +887,266 @@ fn launch(world: &mut WorldState, at: SpaceTile) {
         angular_velocity: 0.0,
     };
 }
+
+/// The first system near home (rings 1-3) with a lead whose steps match `shape`.
+fn lead_near_home(shape: impl Fn(&[LeadStep]) -> bool) -> (SystemRef, crate::galaxy_story::Lead) {
+    let space = crate::space::Space::shared(SEED);
+    (1..4)
+        .flat_map(|ring: i32| (-ring..=ring).flat_map(move |y| (-ring..=ring).map(move |x| (x, y))))
+        .flat_map(|(x, y)| {
+            let coords = crate::space::SpaceSector::new(x, y);
+            space
+                .sector(coords)
+                .systems
+                .iter()
+                .map(move |system| SystemRef {
+                    sector: coords,
+                    system: system.index,
+                })
+                .collect::<Vec<_>>()
+        })
+        .find_map(|system| {
+            leads_of(SEED, system)
+                .into_iter()
+                .find(|lead| shape(&lead.steps))
+                .map(|lead| (system, lead))
+        })
+        .expect("a lead of that shape near home")
+}
+
+/// Into `system`'s reach in free flight (its leads picked up); the lead's discovery-log index.
+fn enter_for_lead(world: &mut WorldState, system: SystemRef, lead: u8) -> usize {
+    let star = crate::space::Space::shared(SEED)
+        .system(system)
+        .expect("system")
+        .centre;
+    let _ = act(
+        world,
+        PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::Space)),
+    );
+    launch(world, star.offset(0, -40_000));
+    let _ = run(world, 20);
+    world
+        .galaxy_story()
+        .leads
+        .iter()
+        .position(|record| record.system == system && record.index == lead)
+        .expect("in the discovery log")
+}
+
+#[test]
+fn a_distress_call_springs_a_real_ambush_and_pays_once_survived_and_docked() {
+    let mut world = world_with(&[PLAYER]);
+    world.player_mut(PLAYER).expect("rig").hazard_gear.arms = crate::hostiles::ShipGear::MAXED;
+    let _ = run(&mut world, 3);
+    let (system, lead) = lead_near_home(|steps| {
+        matches!(
+            steps,
+            [
+                LeadStep::ReachPoint(_),
+                LeadStep::Survive(_),
+                LeadStep::Dock
+            ]
+        )
+    });
+    let LeadStep::ReachPoint(beacon) = lead.steps[0] else {
+        unreachable!()
+    };
+    let index = enter_for_lead(&mut world, system, lead.index);
+    // The beacon is reached and the ambush springs on this rig.
+    launch(&mut world, beacon.offset(1_000, 0));
+    let events = run(&mut world, 20);
+    assert!(galaxy(&events).contains(&(GalaxyEvent::LeadStep, index as u32)));
+    let record = world.galaxy_story().leads[index];
+    assert_eq!(record.step, 1, "on the survive step");
+    assert_eq!(record.ambushed, Some(PLAYER));
+    assert!(
+        world.hostiles().engaged(PLAYER).is_some(),
+        "a real fight at the beacon"
+    );
+    // Fight it off (the bot's controls; armour so the test is about the lead, not the dice).
+    let _ = act(
+        &mut world,
+        PlayerCommand::TestMode(TestModeAction::SetInvulnerable(true)),
+    );
+    let ships = world.hostiles().ships.len();
+    let fought = fight(&mut world, 240.0, |world| {
+        world.hostiles().engaged(PLAYER).is_none()
+    });
+    let downed = fought
+        .iter()
+        .filter(|event| {
+            matches!(event, GameplayEventKind::Hostile { what, .. }
+                if *what == crate::hostiles::HostileEvent::ShipDestroyed)
+        })
+        .count();
+    assert!(
+        downed >= 1,
+        "the ambush was fought ({downed} of {ships} ships down)"
+    );
+    let _ = act(
+        &mut world,
+        PlayerCommand::TestMode(TestModeAction::SetInvulnerable(false)),
+    );
+    let _ = run(&mut world, 20);
+    assert!(
+        world.hostiles().engaged(PLAYER).is_none(),
+        "the ambush is over"
+    );
+    assert_eq!(
+        world.galaxy_story().leads[index].step,
+        2,
+        "survived: now bring them in"
+    );
+    // Dock at the home station the way a player does: the survivors are delivered.
+    let credits = world.player(PLAYER).expect("rig").credits;
+    let galaxy_view = world.space();
+    let station = crate::station::StationId {
+        sector: crate::space::HOME_SECTOR,
+        system: 0,
+        index: 0,
+    };
+    let body = crate::station::profile::station_ref(&galaxy_view, station).expect("station");
+    let found = crate::flight::space::SpaceQuery::body(&galaxy_view, body).expect("station");
+    let port = found.port().expect("port");
+    let orientation = found.dock_orientation();
+    drop(galaxy_view);
+    launch(&mut world, SpaceTile::of_pos(port.offset(10.0, 0.0)));
+    world.player_mut(PLAYER).expect("rig").attitude = RigAttitude {
+        orientation,
+        angular_velocity: 0.0,
+    };
+    let _ = act(
+        &mut world,
+        PlayerCommand::Flight(crate::flight::FlightCommand::Use),
+    );
+    let events = run(&mut world, 20);
+    assert!(
+        galaxy(&events).contains(&(GalaxyEvent::LeadDone, index as u32)),
+        "{:?}",
+        world.rig_flight(PLAYER).map(|flight| flight.place)
+    );
+    assert!(world.player(PLAYER).expect("rig").credits >= credits + lead.credits);
+}
+
+#[test]
+fn a_ruin_lead_is_landed_on_and_dug_to() {
+    let mut world = world_with(&[PLAYER]);
+    let _ = run(&mut world, 3);
+    let (system, lead) = lead_near_home(
+        |steps| matches!(steps, [LeadStep::Land(_), LeadStep::FindSite(_, site)] if site.rows > 0),
+    );
+    let LeadStep::FindSite(body, site) = lead.steps[1] else {
+        unreachable!()
+    };
+    let index = enter_for_lead(&mut world, system, lead.index);
+    // Set down a way off the mark: landed, and the compass points at it.
+    let params = crate::place::planet_params_for(SEED, body).expect("landable");
+    let ground = crate::planet::PlanetGround::new(params);
+    let column = i32::try_from(site.column).expect("column");
+    let off = column + 30;
+    put_rig(
+        &mut world,
+        body,
+        f64::from(off),
+        crate::planet::BodyGround::surface_row(&ground, off),
+        2.0,
+    );
+    let events = run(&mut world, 20);
+    assert!(galaxy(&events).contains(&(GalaxyEvent::LeadStep, index as u32)));
+    let bearing = world.galaxy_site_bearing(PLAYER).expect("a bearing");
+    assert!(!bearing.story && bearing.buried);
+    assert!(
+        (-31..=-29).contains(&bearing.columns),
+        "the mark is 30 columns left: {bearing:?}"
+    );
+    // Over the mark, then dig down to it with the drill.
+    let surface = crate::planet::BodyGround::surface_row(&ground, column);
+    put_rig(&mut world, body, f64::from(column), surface, 2.0);
+    let _ = run(&mut world, 10);
+    let mut events = dig_down(&mut world, body, f64::from(site.rows));
+    events.extend(run(&mut world, 20));
+    assert!(
+        galaxy(&events).contains(&(GalaxyEvent::LeadDone, index as u32)),
+        "the ruin's mark reached (rig at row {:.0}, mark at {})",
+        rig_row(&world, body),
+        surface + i32::from(site.rows)
+    );
+    assert!(world.galaxy_story().fragments.contains(&lead.fragment));
+}
+
+#[test]
+fn a_hold_lands_real_raiders_by_the_site_and_counts_only_while_someone_holds_it() {
+    let mut world = world_with(&[PLAYER]);
+    // The Gathering Light's hold: the lamp-key on its world's surface, the Bloom coming.
+    let chapter = 7;
+    let def = crate::galaxy_story::chapter(chapter).expect("chapter");
+    let step = def
+        .goals
+        .iter()
+        .position(|goal| matches!(goal.goal, Goal::Hold { .. }))
+        .expect("a hold");
+    world.set_galaxy_story(GalaxyStory {
+        begun: true,
+        anchor: Some(plan::anchor_of(SEED, &[])),
+        chapter,
+        step: u8::try_from(step).expect("step"),
+        ..GalaxyStory::default()
+    });
+    let mut events = warp_to_story(&mut world, PLAYER);
+    let (body, ..) = world.galaxy_relic().expect("the relic");
+    events.extend(run(&mut world, seconds(1.0)));
+    assert!(
+        galaxy(&events)
+            .iter()
+            .any(|(what, _)| *what == GalaxyEvent::HoldBegun)
+    );
+    let raid = world
+        .hostiles()
+        .raids
+        .iter()
+        .find(|raid| raid.store == StoreKey::Body(body))
+        .cloned()
+        .expect("a raid landed on the hold's world");
+    assert!(raid.troopers.len() >= 2, "{} troopers", raid.troopers.len());
+    let entities = world
+        .store_entities(StoreKey::Body(body))
+        .expect("the world's entities");
+    let alive = raid
+        .troopers
+        .iter()
+        .filter(|id| entities.contains(EntityId(**id)))
+        .count();
+    assert!(alive >= 2, "the troopers stand on the ground ({alive})");
+    // The hold counts world time while the rig is there, and stops when it leaves.
+    let held = world.galaxy_story().held_millis;
+    assert!(held >= 500, "held {held} ms");
+    let _ = act(
+        &mut world,
+        PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::Space)),
+    );
+    let _ = run(&mut world, seconds(3.0));
+    let after = world.galaxy_story().held_millis;
+    assert!(after <= held + 600, "no hold from orbit: {held} -> {after}");
+    assert!(matches!(goal(&world), Some(Goal::Hold { .. })));
+}
+
+#[test]
+fn after_the_heart_wakes_the_road_opens_when_the_crew_first_lifts_off() {
+    let mut world = world_with(&[PLAYER]);
+    // The Heart woke (the cable lit): its own ending has the screen, the road waits.
+    let mut heart = world.heart().clone();
+    heart.cable_lit_millis = Some(world.world_millis());
+    world.set_heart(heart);
+    let events = run(&mut world, seconds(2.0));
+    assert!(galaxy(&events).is_empty(), "no road card over the ending");
+    assert!(!world.galaxy_story().begun);
+    // Up the cable and away: the first chart unrolls.
+    let mut events = act(
+        &mut world,
+        PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::Space)),
+    );
+    events.extend(run(&mut world, 3));
+    assert!(galaxy(&events).contains(&(GalaxyEvent::Begun, 0)));
+    assert!(world.galaxy_story().begun);
+}

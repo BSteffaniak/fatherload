@@ -304,7 +304,11 @@ fn point_in(system: &StarSystem, detail: u64) -> SpaceTile {
     system.centre.offset(cos * reach / one, sin * reach / one)
 }
 
-#[allow(clippy::too_many_arguments, reason = "a lead's whole make-up")]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "a lead's whole make-up, each kind's tellings in one match"
+)]
 fn build(
     seed: u64,
     reference: SystemRef,
@@ -319,6 +323,8 @@ fn build(
     let pay = |base: u32| base.saturating_mul(2 + ring.min(30)) / 2;
     let fragment = u8::try_from(detail % super::journal::FRAGMENTS.len() as u64).unwrap_or(0);
     let ship = SHIP_NAMES[usize::try_from((detail >> 8) % 12).unwrap_or(0)];
+    // Which telling of its kind the lead gets (its steps never change with it).
+    let telling = usize::try_from((detail >> 32) % 3).unwrap_or(0);
     let world = |offset: u64| {
         worlds[usize::try_from((detail >> 16).wrapping_add(offset) % worlds.len().max(1) as u64)
             .unwrap_or(0)]
@@ -326,11 +332,23 @@ fn build(
     let (title, text, steps, credits) = match kind {
         LeadKind::LostShip => (
             format!("The {ship}"),
-            format!(
-                "A transponder ticks in {}: the {ship}, a prospector's hauler, overdue for a \
-                 generation. Somebody should find out what happened.",
-                system.name
-            ),
+            match telling {
+                0 => format!(
+                    "A transponder ticks in {}: the {ship}, a prospector's hauler, overdue for \
+                     a generation. Somebody should find out what happened.",
+                    system.name
+                ),
+                1 => format!(
+                    "The {ship} left the Moon's dock with a crew of three and a hold of seed \
+                     stock, bound past {}. Her beacon still answers, slower every year.",
+                    system.name
+                ),
+                _ => format!(
+                    "Station gossip: the {ship} found something out by {} and stopped \
+                     answering calls. Her transponder still says where she is.",
+                    system.name
+                ),
+            },
             vec![LeadStep::ReachPoint(point_in(system, detail))],
             pay(900),
         ),
@@ -341,11 +359,23 @@ fn build(
             };
             (
                 format!("Mayday from the {ship}"),
-                format!(
-                    "A distress beacon in {}: the {ship}, crippled, crew alive and hiding. \
-                     Something is circling them.",
-                    system.name
-                ),
+                match telling {
+                    0 => format!(
+                        "A distress beacon in {}: the {ship}, crippled, crew alive and hiding. \
+                         Something is circling them.",
+                        system.name
+                    ),
+                    1 => format!(
+                        "\"This is the {ship}, drive cold, four aboard, {} system. They're \
+                         back. If anyone hears this, please hurry.\"",
+                        system.name
+                    ),
+                    _ => format!(
+                        "A child's voice on the emergency band in {}, reading the {ship}'s \
+                         numbers the way she was taught. Lights circle in the dark round her.",
+                        system.name
+                    ),
+                },
                 vec![
                     LeadStep::ReachPoint(point_in(system, detail | 1)),
                     LeadStep::Survive(faction),
@@ -365,11 +395,23 @@ fn build(
             };
             (
                 format!("Ruins on {}", system.body_name(body.body)),
-                format!(
-                    "Old walls show on {} from orbit, laid in courses the way the builders \
-                     laid the Crust. A mark among them still glows.",
-                    system.body_name(body.body)
-                ),
+                match telling {
+                    0 => format!(
+                        "Old walls show on {} from orbit, laid in courses the way the builders \
+                         laid the Crust. A mark among them still glows.",
+                        system.body_name(body.body)
+                    ),
+                    1 => format!(
+                        "The scanner finds a straight line on {}, longer than any river: a \
+                         builder road, buried, and a lamp-mark where it ends.",
+                        system.body_name(body.body)
+                    ),
+                    _ => format!(
+                        "Ines Calloway pencilled a ring round {} on her copy of the chart, \
+                         and one word: \"Door?\" A mark there still answers the drive.",
+                        system.body_name(body.body)
+                    ),
+                },
                 vec![LeadStep::Land(body), LeadStep::FindSite(body, site)],
                 pay(1_200),
             )
@@ -378,11 +420,25 @@ fn build(
             let count = u8::try_from(worlds.len().min(3)).unwrap_or(1);
             (
                 format!("Survey of {}", system.name),
-                format!(
-                    "The stations' cartographers pay for fresh scans of {}: {count} of its \
-                     worlds, from orbit.",
-                    system.name
-                ),
+                match telling {
+                    0 => format!(
+                        "The stations' cartographers pay for fresh scans of {}: {count} of its \
+                         worlds, from orbit.",
+                        system.name
+                    ),
+                    1 => format!(
+                        "The town's school wants real pictures of {} for its wall map: \
+                         {count} of its worlds, scanned from orbit. The teachers have pooled \
+                         their pay.",
+                        system.name
+                    ),
+                    _ => format!(
+                        "A prospectors' syndicate is weighing claims in {}. They pay for \
+                         {count} fresh scans and ask no questions about where you got the \
+                         drive.",
+                        system.name
+                    ),
+                },
                 vec![LeadStep::Scan(count)],
                 pay(700) * u32::from(count),
             )
@@ -391,13 +447,31 @@ fn build(
             let (body, species) =
                 settled[usize::try_from(detail % settled.len().max(1) as u64).unwrap_or(0)];
             (
-                format!("A song-stone for {}", system.body_name(body.body)),
-                format!(
-                    "A courier of the {} asks you to carry a song-stone to their town on {}. \
-                     They will not say what it sings.",
-                    species.def().name,
-                    system.body_name(body.body)
-                ),
+                match telling {
+                    0 => format!("A song-stone for {}", system.body_name(body.body)),
+                    1 => format!("A letter home to {}", system.body_name(body.body)),
+                    _ => format!("Seeds for {}", system.body_name(body.body)),
+                },
+                match telling {
+                    0 => format!(
+                        "A courier of the {} asks you to carry a song-stone to their town on \
+                         {}. They will not say what it sings.",
+                        species.def().name,
+                        system.body_name(body.body)
+                    ),
+                    1 => format!(
+                        "One of the {} working a station's docks has not been home in nine \
+                         years. Would you carry a letter to their town on {}?",
+                        species.def().name,
+                        system.body_name(body.body)
+                    ),
+                    _ => format!(
+                        "The {} of {} lost a season's crop to a dust storm. A station's \
+                         seed bank will give them stock, if someone flies it there.",
+                        species.def().name,
+                        system.body_name(body.body)
+                    ),
+                },
                 vec![LeadStep::Land(body), LeadStep::MeetFolk(body, species)],
                 pay(1_000),
             )
