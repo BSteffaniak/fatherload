@@ -989,3 +989,150 @@ fn world_peaceful_lair() -> WorldState {
     let _ = into_the_lair(&mut world);
     world
 }
+
+/// The bot's controls in a theme boss's lair: keep to the floor a dozen tiles off the boss,
+/// weave a few tiles back and forth (its volleys are aimed where the rig was), and shoot the
+/// nearest of the boss and its brood.
+fn lair_bot(
+    world: &WorldState,
+    lair: &crate::planet::outlands::BossLair,
+    tick: u32,
+) -> ControlState {
+    use crate::WeaponControl;
+    let rig = world.player(PLAYER).expect("rig");
+    let frame = world.frame();
+    let width = i64::from(world.planet().expect("planet").strip_width());
+    let (middle, _) = lair.middle();
+    let middle = i32::try_from(middle.rem_euclid(width)).unwrap_or(0);
+    let (mx, _) = frame.centre_of(middle, lair.floor - 1);
+    let boss = world
+        .enemies()
+        .find(|(_, state)| state.kind == lair.boss.kind)
+        .map(|(entity, _)| (entity.body.x, entity.body.y));
+    // The boss first (the railgun's slug pierces any brood in the way).
+    let target = boss.or_else(|| {
+        world
+            .enemies()
+            .filter(|(_, state)| state.kind.is_outlands() && !state.kind.is_outland_fauna())
+            .map(|(entity, _)| (entity.body.x, entity.body.y))
+            .min_by(|a, b| {
+                (a.0 - rig.x)
+                    .hypot(a.1 - rig.y)
+                    .total_cmp(&(b.0 - rig.x).hypot(b.1 - rig.y))
+            })
+    });
+    // A stand a dozen tiles off the boss on the rig's side, weaving over a 3 s beat.
+    let anchor = boss.map_or(mx, |(bx, _)| bx);
+    let side: f32 = if rig.x < anchor { -1.0 } else { 1.0 };
+    let weave: f32 = if (tick / 45).is_multiple_of(2) {
+        -1.0
+    } else {
+        1.0
+    };
+    let goal = side
+        .mul_add(12.0, weave * 3.0)
+        .mul_add(TILE_SIZE, anchor)
+        .clamp(TILE_SIZE.mul_add(-23.0, mx), TILE_SIZE.mul_add(23.0, mx));
+    let dx = goal - rig.x;
+    let horizontal = if dx.abs() > TILE_SIZE * 0.5 {
+        (dx / (TILE_SIZE * 2.0)).clamp(-1.0, 1.0)
+    } else {
+        0.0
+    };
+    let aim = target.map_or((0, -127), |(tx, ty)| {
+        let (ax, ay) = (tx - rig.x, ty - rig.y);
+        let length = ax.hypot(ay).max(1.0);
+        #[allow(clippy::cast_possible_truncation, reason = "a unit vector times 127")]
+        ((ax / length * 127.0) as i8, (ay / length * 127.0) as i8)
+    });
+    ControlState::new(horizontal, false, false).with_weapon(WeaponControl {
+        fire: target.is_some() && tick % 6 < 3,
+        auto_aim: false,
+        aim_x: aim.0,
+        aim_y: aim.1,
+    })
+}
+
+/// Fair and winnable, measured: a bot with a late-game rig (the kit a crew brings this far
+/// out: every upgrade, a railgun) fights each theme boss for real on Normal, without test
+/// mode, and wins inside five minutes with its rig whole and no repairs.
+#[test]
+fn a_bot_with_late_kit_beats_each_theme_boss_for_real() {
+    use crate::weapon::WeaponKind;
+    for theme in OUTLAND_THEMES {
+        let hz = 30;
+        let mut world = world(theme, 1_500, hz);
+        world.set_enemy_difficulty(EnemyDifficulty::Normal);
+        let lair = into_the_lair(&mut world);
+        {
+            let rig = world.player_mut(PLAYER).expect("rig");
+            crate::economy::max_out_upgrades(rig);
+            rig.weapon_rack.battery_level = crate::weapon::MAX_BATTERY_LEVEL;
+            let _ = rig.receive_weapon(WeaponKind::Railgun);
+            let _ = rig.mount_weapon(Some(WeaponKind::Railgun));
+            rig.hull = rig.max_hull();
+        }
+        let mut won = false;
+        let (mut summons, mut least_hull, mut seconds) = (0, f32::MAX, 0);
+        for tick in 0..hz * 300 {
+            let controls = lair_bot(&world, &lair, tick);
+            let events = step(&mut world, controls);
+            for what in outland_events(&events) {
+                match what {
+                    OutlandsEvent::BossSummons => summons += 1,
+                    OutlandsEvent::BossDefeated => won = true,
+                    _ => {}
+                }
+            }
+            let rig = world.player_mut(PLAYER).expect("rig");
+            least_hull = least_hull.min(rig.hull / rig.max_hull());
+            assert!(
+                rig.hull > 0.0,
+                "{theme:?}: the bot's rig was wrecked after {}s",
+                tick / hz
+            );
+            rig.fuel = rig.fuel_capacity;
+            if won {
+                seconds = tick / hz;
+                break;
+            }
+        }
+        assert!(won, "{theme:?}: the bot beat the boss inside five minutes");
+        assert_eq!(world.outland_boss_beaten_here(), Some(true));
+        // A real fight: long enough for its brood, and it hurt.
+        assert!(seconds >= 10, "{theme:?}: over in {seconds}s");
+        assert!(summons >= 1, "{theme:?}: the brood came");
+        assert!(
+            least_hull < 0.98,
+            "{theme:?}: the boss never touched the rig"
+        );
+        eprintln!("{theme:?}: won in {seconds}s, hull down to {least_hull:.2}, {summons} calls");
+    }
+}
+
+/// The home world's roaming roster (cave bats and the like) stays home: an outland world's
+/// creatures come from its own spawner only, so none wander into a fungal forest or a lair.
+#[test]
+fn the_home_roster_never_spawns_on_an_outland_world() {
+    for theme in OUTLAND_THEMES {
+        let mut world = world(theme, 1_500, 30);
+        let lair = into_the_lair(&mut world);
+        let tile = TilePosition {
+            x: lair.seal.0,
+            y: lair.floor - 2,
+        };
+        assert!(
+            world.terrain().creature_roster(tile).is_empty(),
+            "{theme:?}"
+        );
+        let _ = run(&mut world, 20);
+        assert!(
+            world.enemies().all(|(_, state)| state.kind.is_outlands()),
+            "{theme:?}: {:?}",
+            world
+                .enemies()
+                .map(|(_, state)| state.kind)
+                .collect::<Vec<_>>()
+        );
+    }
+}

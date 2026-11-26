@@ -1214,6 +1214,13 @@ impl Terrain {
         {
             return &[];
         }
+        // So do an outland world's (Wave 13 planets-c): no home cave bats in a fungal forest
+        // or a boss's lair.
+        if let Some(planet) = &self.planet
+            && crate::planet::outlands::is_outland(planet.params().theme)
+        {
+            return &[];
+        }
         if self.settings.generator.has_descents() {
             self.stratum_at(position).def().creatures
         } else {

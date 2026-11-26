@@ -688,7 +688,7 @@ fn outland_things(scene: &crate::render_snapshot::PlaceScene<'_>, millis: u64) -
                     let progress = |length: u64| {
                         // Where in the phase it is, per mille.
                         let mut start = millis;
-                        while start > 0
+                        while start >= 50
                             && life::vent_phase(ground, vent.column, start - 50) == phase
                         {
                             start -= 50;
