@@ -96,6 +96,10 @@ pub struct HazardGear {
     /// [`crate::flight::FlightGear`]).
     #[serde(default)]
     pub flight: crate::flight::FlightGear,
+    /// The ship (Wave 12 stations): ship lines, planet gear and alien tech fitted at stations'
+    /// shipyards (see [`crate::station::ShipGear`]).
+    #[serde(default)]
+    pub ship: crate::station::ShipGear,
 }
 
 impl HazardGear {
@@ -116,6 +120,20 @@ impl HazardGear {
         pressure_rating: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
         headlamp: crate::depth_progression::DEPTH_LINE_MAX_LEVEL,
         flight: crate::flight::FlightGear::MAXED,
+        // The ship lines stay stock (Wave 12): flight's timings and the bots are tuned to the
+        // stock ship; the god-mode toolkit (Wave 14) stocks them.
+        ship: crate::station::ShipGear {
+            hull: 0,
+            engine: 0,
+            drive_range: 0,
+            hold: 0,
+            life_support: 0,
+            heat_shielding: 0,
+            cold_insulation: 0,
+            toxic_filter: 0,
+            gravity_struts: 0,
+            alien: 0,
+        },
     };
 
     /// Whether the Deep Descent rig system `system` is fitted.

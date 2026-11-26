@@ -313,6 +313,11 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `SectionKey::Aliens` section (understanding, contacts, chapters, homes, monuments, trail
 ///   leads), the alien residents in NPC entities of the bodies' stores, and the alien events
 ///   940-959 (`GameplayEventKind::Alien`).
+/// * Stations (w12-stations): the appended `HazardGear::ship` (ship lines, planet gear, alien
+///   tech) in the rig's loadout, `StationService::Hub(StationAction)` in flight commands, the
+///   `Stations` world field and `SectionKey::Stations` section (holds, missions, boards,
+///   market shifts, salvage, rumours heard, bodies scanned) and the station events 960-979
+///   (`GameplayEventKind::Station`).
 pub const PROTOCOL_VERSION: u8 = 20;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -1395,6 +1395,14 @@ pub enum GameplayEventKind {
         species: crate::alien::AlienSpecies,
         detail: u32,
     },
+    // Space stations (Wave 12 stations; netcode codes 960-979).
+    /// Something happened at a station or to a mission of `player_id`'s; `detail` is the
+    /// event's number (credits, a tier, a [`crate::station::StationRefusal`] code, ...).
+    Station {
+        what: crate::station::StationEvent,
+        player_id: PlayerId,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -492,6 +492,9 @@ pub enum StationService {
     Refuel,
     Repair,
     Buy(FlightGearKind),
+    /// The station hub (Wave 12): shipyard, market, bounty board, bar, salvage (see
+    /// [`crate::station`]).
+    Hub(crate::station::StationAction),
 }
 
 /// What happened in flight (netcode `800 + code`).

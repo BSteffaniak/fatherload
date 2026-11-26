@@ -185,6 +185,8 @@ impl WorldState {
         let frame = self.frame();
         let ids: Vec<PlayerId> = self.players.keys().copied().collect();
         for player_id in ids {
+            // The world's hazard tags, countered by the ship's planet gear (Wave 12 stations).
+            self.body_hazards(player_id, id, seconds, output);
             let on_foot = self.is_on_foot(player_id);
             let capacity = self.air_capacity_of(player_id);
             // The body's own air where the rig stands, and the weather fouling it (Wave 12

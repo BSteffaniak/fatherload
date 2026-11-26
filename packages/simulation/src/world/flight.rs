@@ -14,9 +14,9 @@ use crate::{
     flight::{
         AIR_REFILL_PER_SECOND, AIR_WARNINGS, BodyKind, DOCK_ALIGN, DOCK_RANGE, DOCK_SPEED,
         FlightCommand, FlightEvent, FlightGearKind, FlightPlace, FlightShared, GeneratedSpace,
-        HEAT_WARNING, PARK_ABOVE_ROWS, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS,
-        STATION_FUEL_PRICE, STATION_REPAIR_PRICE, SpaceQuery, StarDrive, StationService, SystemRef,
-        UNDOCK_SPEED, WarpRefusal, WarpRun, air_capacity, beacon_fee,
+        HEAT_WARNING, PARK_ABOVE_ROWS, RETURN_BELOW_ROWS, RigFlight, SPACE_ENTRY_ROWS, SpaceQuery,
+        StarDrive, StationService, SystemRef, UNDOCK_SPEED, WarpRefusal, WarpRun, air_capacity,
+        beacon_fee,
         nav::{self, NavTarget, ScanPing},
         physics::{
             self, FlightInput, FlightRig, WARP_ABORT_ANGLE, WARP_ALIGN, WARP_ARRIVAL,
@@ -166,7 +166,9 @@ impl WorldState {
     pub fn air_capacity_of(&self, player_id: PlayerId) -> f32 {
         self.players.get(&player_id).map_or_else(
             || air_capacity(0),
-            |player| air_capacity(player.hazard_gear.life_support),
+            |player| {
+                air_capacity(player.hazard_gear.life_support) + player.hazard_gear.ship.extra_air()
+            },
         )
     }
 
@@ -194,6 +196,14 @@ impl WorldState {
         let heat_before = flight.heat;
         let infinite_fuel = self.test_mode.is_some_and(|state| state.infinite_fuel);
         let mut fuel = player.fuel;
+        // The ship's drive range and graviton spool (Wave 12 stations).
+        let ship = player.hazard_gear.ship;
+        let range = ship.drive_range_scale();
+        let spool_millis = if ship.has(crate::station::AlienTech::GravitonSpool) {
+            WARP_SPOOL_MILLIS / 2
+        } else {
+            WARP_SPOOL_MILLIS
+        };
         let mut events: Vec<(FlightEvent, u32)> = Vec::new();
         // The warp's spool and jump (a pure function of time).
         match flight.drive {
@@ -207,16 +217,20 @@ impl WorldState {
                         .abs()
                             <= WARP_ABORT_ANGLE =>
                     {
-                        if now.saturating_sub(since) >= WARP_SPOOL_MILLIS {
+                        if now.saturating_sub(since) >= spool_millis {
                             let bodies = space.bodies_near(flight.pos);
                             // Test mode's infinite fuel spools as the command did.
-                            let aboard = if infinite_fuel { f32::MAX } else { fuel };
+                            let aboard = if infinite_fuel {
+                                f32::MAX
+                            } else {
+                                fuel * range
+                            };
                             match warp_check(&flight, attitude, &bodies, system.star, aboard) {
                                 Ok(cost) => {
                                     let arrival = warp_arrival(flight.pos, system.star);
                                     let distance = flight.pos.span(arrival);
                                     if !infinite_fuel {
-                                        fuel = (fuel - cost).max(0.0);
+                                        fuel = (fuel - cost / range).max(0.0);
                                     }
                                     flight.drive = StarDrive::Warp(WarpRun {
                                         origin: flight.pos,
@@ -304,9 +318,17 @@ impl WorldState {
             horizon: assists.horizon && gear.attitude.horizon_hold > 0,
         };
         let rig = FlightRig {
-            engine_power: engine_power(player.engine_level) * cargo_ratio.mul_add(-0.18, 1.0),
+            engine_power: engine_power(player.engine_level)
+                * cargo_ratio.mul_add(-0.18, 1.0)
+                * gear.ship.engine_scale(),
             cargo_ratio,
-            shield: gear.flight.reentry_shield,
+            // The phase lattice shields as two tiers more (Wave 12 alien tech).
+            shield: gear.flight.reentry_shield
+                + if gear.ship.has(crate::station::AlienTech::PhaseLattice) {
+                    2
+                } else {
+                    0
+                },
             auto_land: gear.flight.auto_land > 0,
             fuel: if infinite_fuel { f32::MAX } else { fuel },
             now_millis: now,
@@ -334,7 +356,9 @@ impl WorldState {
         for (what, detail) in events {
             output.push_event(flight_event(what, player_id, detail));
         }
-        if outcome.hull_damage > 0.0 && self.damage_player(player_id, outcome.hull_damage) {
+        // The ship's hull line takes a share off (Wave 12 stations).
+        let hull_damage = outcome.hull_damage * gear.ship.damage_scale();
+        if hull_damage > 0.0 && self.damage_player(player_id, hull_damage) {
             output.push_event(GameplayEventKind::PlayerDamaged { player_id });
         }
         // Wave 12 systems: what space's things did (a horizon, a mouth, flares, rocks, ...).
@@ -468,6 +492,8 @@ impl WorldState {
                 FlightPlace::Landed(_) => self.space_bodies_near(player.flight.pos),
                 _ => Vec::new(),
             };
+            // The ship's own gear (Wave 12 stations: the symbiont weave).
+            self.ship_upkeep(player_id, seconds);
             let Some(player) = self.players.get_mut(&player_id) else {
                 return;
             };
@@ -678,6 +704,10 @@ impl WorldState {
             return Some(self.apply_flight_command(player_id, *command, output));
         }
         if !self.in_space(player_id) {
+            // The scanner on a body's ground scans the body too (Wave 12 stations).
+            if matches!(command, PlayerCommand::UseScanner) {
+                self.note_ground_scan(player_id, output);
+            }
             return None;
         }
         Some(match command {
@@ -708,7 +738,8 @@ impl WorldState {
         };
         let flight = player.flight;
         let attitude = player.attitude;
-        let fuel = player.fuel;
+        // The ship's drive range (Wave 12 stations): a warp costs its fuel over it.
+        let fuel = player.fuel * player.hazard_gear.ship.drive_range_scale();
         let infinite_fuel = self.test_mode.is_some_and(|state| state.infinite_fuel);
         match command {
             FlightCommand::SetWaypoint(target) => {
@@ -872,6 +903,16 @@ impl WorldState {
         service: StationService,
         output: &mut TickOutput,
     ) -> PlayerScopedCommandOutcome {
+        if !self.players.contains_key(&player_id) {
+            return PlayerScopedCommandOutcome::UnknownPlayer;
+        }
+        if let StationService::Hub(action) = service {
+            return self.station_hub(player_id, action, output);
+        }
+        // The station's own prices (Wave 12); a derelict has no counter.
+        let Some((fuel_price, repair_price)) = self.dock_counter(player_id, service, output) else {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        };
         let Some(player) = self.players.get_mut(&player_id) else {
             return PlayerScopedCommandOutcome::UnknownPlayer;
         };
@@ -887,15 +928,15 @@ impl WorldState {
         let applied = match service {
             StationService::Refuel => {
                 let missing = (player.fuel_capacity - player.fuel).max(0.0).ceil() as u32;
-                let units = missing.min(player.credits / STATION_FUEL_PRICE);
-                player.credits -= units * STATION_FUEL_PRICE;
+                let units = missing.min(player.credits / fuel_price.max(1));
+                player.credits -= units * fuel_price;
                 player.fuel = (player.fuel + units as f32).min(player.fuel_capacity);
                 units > 0
             }
             StationService::Repair => {
                 let missing = (player.max_hull() - player.hull).max(0.0).ceil() as u32;
-                let points = missing.min(player.credits / STATION_REPAIR_PRICE);
-                player.credits -= points * STATION_REPAIR_PRICE;
+                let points = missing.min(player.credits / repair_price.max(1));
+                player.credits -= points * repair_price;
                 player.hull = (player.hull + points as f32).min(player.max_hull());
                 points > 0
             }
@@ -918,6 +959,7 @@ impl WorldState {
                     true
                 }
             }
+            StationService::Hub(_) => false,
         };
         if !applied {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
@@ -949,9 +991,14 @@ impl WorldState {
         let tier = player.hazard_gear.flight.nav_suite;
         let space = self.space();
         let fogged = nav::in_nebula(&space, centre);
+        let lens = player
+            .hazard_gear
+            .ship
+            .has(crate::station::AlienTech::XenoLens);
         // Wave 12 systems: the fog where the rig is cuts the reach further, by its thickness.
         let range = nav::ping_range(tier, fogged)
-            * crate::flight::systems::fog_range_share(space.fog_at(centre));
+            * crate::flight::systems::fog_range_share(space.fog_at(centre))
+            * if lens { 2.0 } else { 1.0 };
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_precision_loss,
@@ -981,6 +1028,8 @@ impl WorldState {
             },
         );
         output.push_event(flight_event(FlightEvent::ScannerPing, player_id, new));
+        // Bodies near the ping are scanned (Wave 12 stations: scan missions).
+        self.note_ping_scans(player_id, centre, output);
         PlayerScopedCommandOutcome::Applied
     }
 

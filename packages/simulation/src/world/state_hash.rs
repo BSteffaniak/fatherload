@@ -288,6 +288,10 @@ impl WorldState {
         if !self.space_systems.is_empty() {
             hash.write_serialized(&self.space_systems);
         }
+        // Absent until someone used a station (Wave 12), so older worlds keep their hashes.
+        if !self.stations.is_empty() {
+            hash.write_serialized(&self.stations);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

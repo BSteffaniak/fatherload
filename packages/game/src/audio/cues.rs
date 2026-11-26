@@ -848,6 +848,28 @@ pub const fn body_life_cue(
     }
 }
 
+/// A station's sound for each of its events (exhaustive: a new event needs a sound).
+#[must_use]
+pub const fn station_cue(what: fatherload_simulation::station::StationEvent) -> SoundCue {
+    use fatherload_simulation::station::StationEvent as E;
+    match what {
+        E::ShipUpgraded | E::AlienTechFitted => SoundCue::UpgradeFanfare,
+        E::GearFitted => SoundCue::Upgrade,
+        E::GoodsBought => SoundCue::StorageStow,
+        E::GoodsSold | E::OreSold => SoundCue::Sell,
+        E::MissionAccepted => SoundCue::StoryHook,
+        E::MissionProgress => SoundCue::UiMove,
+        E::MissionReady => SoundCue::StoryResolved,
+        E::MissionPaid => SoundCue::MilestoneFanfare,
+        E::MissionAbandoned => SoundCue::UiBack,
+        E::RumourHeard => SoundCue::RumourHeard,
+        E::Salvaged => SoundCue::SalvageOpened,
+        E::Refused => SoundCue::UiError,
+        E::BodyScanned => SoundCue::Scanner,
+        E::HazardBiting => SoundCue::VacuumAlarm,
+    }
+}
+
 /// The blast each explosive kind goes off with (exhaustive: a new kind needs a sound).
 #[must_use]
 pub const fn detonation_cue(kind: ExplosiveKind) -> SoundCue {
@@ -1386,6 +1408,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         // The wild worlds (Wave 12 planets-a).
         GameplayEventKind::Wilds { what, .. } => Some(wilds_cue(*what)),
         GameplayEventKind::Alien { what, species, .. } => Some(alien_cue(*what, *species)),
+        // Space stations (Wave 12).
+        GameplayEventKind::Station { what, .. } => Some(station_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1742,7 +1766,8 @@ mod tests {
             | GameplayEventKind::BodyLife { .. }
             | GameplayEventKind::Wilds { .. }
             | GameplayEventKind::Frontier { .. }
-            | GameplayEventKind::Alien { .. } => {}
+            | GameplayEventKind::Alien { .. }
+            | GameplayEventKind::Station { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },

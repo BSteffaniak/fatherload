@@ -79,6 +79,7 @@ pub mod sky;
 pub mod skycraft;
 pub mod space;
 pub mod star_chart;
+pub mod station;
 pub mod summary;
 pub mod surface;
 pub mod terrain;

@@ -1079,6 +1079,8 @@ impl WorldState {
         self.entities.set_counters(counters.0, counters.1);
         self.places.stores.insert(store, world);
         self.restore_players(stash);
+        // Ore dug here counts toward the quotas on this body (Wave 12 stations).
+        self.credit_store_ore(store, &mut output);
         // Tile writes of this store travel tagged with it.
         output.store_terrain_ops = std::mem::take(&mut output.terrain_ops)
             .into_iter()

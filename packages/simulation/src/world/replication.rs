@@ -273,6 +273,9 @@ pub enum SectionKey {
     /// contacts and chapters, homes in alien towns, monuments raised and the builders' trail
     /// leads (the residents are NPC entities of the bodies' stores).
     Aliens,
+    /// The crew's station state (Wave 12): holds, missions, boards, market shifts, salvage,
+    /// rumours heard and bodies scanned.
+    Stations,
 }
 
 impl SectionKey {
@@ -292,7 +295,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 34] = [
+    pub const SHARED: [Self; 35] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -335,6 +338,8 @@ impl SectionKey {
         Self::SpaceSystems,
         // The friendly aliens (Wave 12 aliens).
         Self::Aliens,
+        // Space stations (Wave 12 stations).
+        Self::Stations,
     ];
 }
 
@@ -377,6 +382,7 @@ pub enum SectionPayload {
     Flight(Box<crate::flight::FlightShared>),
     SpaceSystems(Box<crate::flight::systems::SystemsShared>),
     Aliens(Box<crate::alien::AlienState>),
+    Stations(Box<crate::station::StationLedger>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -609,6 +615,7 @@ impl WorldState {
             flight,
             space_systems,
             aliens,
+            stations,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -723,6 +730,7 @@ impl WorldState {
                 SectionPayload::SpaceSystems(Box::new(space_systems.clone()))
             }
             SectionKey::Aliens => SectionPayload::Aliens(Box::new(aliens.clone())),
+            SectionKey::Stations => SectionPayload::Stations(Box::new(stations.clone())),
         })
     }
 
@@ -926,6 +934,9 @@ impl WorldState {
                 self.aliens = *aliens;
                 // A replica learns the towns of the bodies it holds by id (Wave 12).
                 self.register_alien_towns();
+            }
+            (SectionKey::Stations, SectionPayload::Stations(stations)) => {
+                self.stations = *stations;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

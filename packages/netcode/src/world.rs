@@ -462,6 +462,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Alien {
             what, player_id, ..
         } => (940 + what.code() as u32, Some(player_id)),
+        // Space stations (wave 12 stations): 960-979.
+        GameplayEventKind::Station {
+            what, player_id, ..
+        } => (960 + what.code() as u32, Some(player_id)),
     }
 }
 

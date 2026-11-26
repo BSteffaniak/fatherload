@@ -103,6 +103,10 @@ mod field_tests;
 mod fields;
 mod flight;
 #[cfg(test)]
+mod station_tests;
+mod stations;
+pub use stations::station_profile_at;
+#[cfg(test)]
 mod flight_tests;
 #[cfg(test)]
 mod fluid_tests;
@@ -628,6 +632,10 @@ pub struct WorldState {
     /// functions of the bodies (residents are NPC entities of the bodies' stores).
     #[serde(default)]
     aliens: crate::alien::AlienState,
+    /// The crew's station state (Wave 12, see [`crate::station`]): holds, missions, boards,
+    /// market shifts, salvage and rumours, bodies scanned.
+    #[serde(default)]
+    stations: crate::station::StationLedger,
 }
 
 impl WorldState {

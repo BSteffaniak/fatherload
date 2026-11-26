@@ -204,6 +204,8 @@ impl WorldState {
             space_systems: _,
             // The aliens' state names towns, bodies and plots, never home positions (Wave 12).
             aliens: _,
+            // Stations are space ids, not home positions (Wave 12).
+            stations: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

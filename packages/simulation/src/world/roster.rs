@@ -151,6 +151,8 @@ impl WorldState {
             // What a player learned of the aliens' tongues stays with their id, like people's
             // memories of them (Wave 12): parked and returning players keep it.
             aliens: _,
+            // A leaving player's hold and missions go with them (Wave 12).
+            stations,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).
@@ -158,6 +160,7 @@ impl WorldState {
             places.forget(player_id);
         }
         flight.forget(player_id);
+        stations.forget(player_id);
         garrison.forget(player_id);
         garrison_schedule.refused.remove(&player_id);
         heart.forget(player_id);
