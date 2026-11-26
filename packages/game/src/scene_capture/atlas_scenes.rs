@@ -201,6 +201,11 @@ fn open(stage: &mut SceneStage<'_>, seats: usize) {
     };
     stage.hold_seats(1, &vec![open; seats]);
     stage.settle(1);
+    // The road's first word from the archivist (space opens with the stock) is not the subject.
+    stage.shell().message.clear();
+    for ui in &mut stage.game.shell.seats {
+        ui.message.clear();
+    }
 }
 
 /// One frame with `input` on `seat` (the others idle).

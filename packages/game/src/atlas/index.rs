@@ -467,10 +467,28 @@ pub fn target_of(world: &WorldState, id: &DestinationId) -> AtlasTarget {
                 id.x
             },
         },
-        Place::Space => AtlasTarget::Space {
-            pos: SpaceTile::new(id.x, id.y).pos(),
-            reach: space_reach(id.kind),
-        },
+        Place::Space => {
+            let spot = SpaceTile::new(id.x, id.y);
+            // A star system's spot is a safe distance off its star: the preview shows the
+            // system round its star (Go still stops at the spot).
+            if matches!(id.kind, IndexKind::System | IndexKind::ArchiveSystem) {
+                let galaxy = Space::shared(world.world_seed());
+                if let Some(system) = galaxy
+                    .systems_near(spot, space::SPACE_SECTOR_TILES)
+                    .first()
+                    .and_then(|(reference, _)| galaxy.system(*reference))
+                {
+                    return AtlasTarget::Space {
+                        pos: system.centre.pos(),
+                        reach: system.extent as f32 * 0.6,
+                    };
+                }
+            }
+            AtlasTarget::Space {
+                pos: spot.pos(),
+                reach: space_reach(id.kind),
+            }
+        }
     }
 }
 
@@ -597,9 +615,27 @@ fn capitalised(text: &str) -> String {
     })
 }
 
-/// The card line under the name: the Descent and stratum, or the theme and system, or where.
+/// The card line under the name: the Descent and stratum, or the theme and system, or where
+/// (never the name again: a Descent names where it opens, a stratum its Descent).
 fn subtitle_of(found: &index_model::Destination) -> String {
     let info = &found.info;
+    match (found.id.kind, info.stratum) {
+        (IndexKind::Descent, Some(stratum)) => {
+            return format!(
+                "{} strata, opening in {}",
+                stratum.descent().strata().count(),
+                stratum.name()
+            );
+        }
+        (IndexKind::Stratum, Some(stratum)) => {
+            return format!(
+                "Descent {} - {}",
+                stratum.descent().numeral(),
+                stratum.descent().name()
+            );
+        }
+        _ => {}
+    }
     if let Some(stratum) = info.stratum {
         return format!(
             "Descent {} - {}",
@@ -623,12 +659,13 @@ fn subtitle_of(found: &index_model::Destination) -> String {
 pub fn from_index(world: &WorldState, found: &index_model::Destination) -> Destination {
     let info = &found.info;
     let kind = DestinationKind::Index(found.id.kind);
-    let mut destination = Destination::new(
-        kind,
-        found.name.clone(),
-        subtitle_of(found),
-        target_of(world, &found.id),
-    );
+    let name = match found.id.kind {
+        // The index numbers the log's entries ("recent 1", "bookmark 2").
+        IndexKind::Recent | IndexKind::Bookmark => capitalised(&found.name),
+        _ => found.name.clone(),
+    };
+    let mut destination =
+        Destination::new(kind, name, subtitle_of(found), target_of(world, &found.id));
     destination.request = Some(TravelRequest::exact(found.id));
     if let Some(metres) = info.depth_m {
         destination = destination.fact("Depth", format!("{} m", thousands(metres.into())));
@@ -699,6 +736,9 @@ pub fn from_index(world: &WorldState, found: &index_model::Destination) -> Desti
     destination.with_keywords(&extra)
 }
 
+/// Candidates of one kind a category lists (nearest first).
+pub const PER_KIND: usize = 12;
+
 /// The galaxy story's current goal (its own warp, not an index place).
 fn story_destination() -> Destination {
     Destination::new(
@@ -732,9 +772,17 @@ pub fn destinations(
         ) {
             found.sort_by_key(|candidate| (candidate.id.y, candidate.id.x));
         }
+        // The nearest few of each kind keep a category varied (64 sky islands would bury the
+        // tombs); the Descents and strata are listed whole, and the search reaches the rest.
+        let shown = if matches!(kind, IndexKind::Descent | IndexKind::Stratum) {
+            found.len()
+        } else {
+            PER_KIND
+        };
         out.extend(
             found
                 .iter()
+                .take(shown)
                 .map(|candidate| from_index(world, candidate).filed_under(category)),
         );
     }
