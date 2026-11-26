@@ -207,27 +207,15 @@ fn draw_categories(draw: &mut RaylibDrawHandle<'_>, layout: &AtlasLayout, atlas:
     }
 }
 
-/// The colour that marks a destination's kind in the list.
+/// The colour that marks a destination's kind in the list (by its category; the bosses red).
 const fn kind_colour(destination: &Destination) -> Color {
-    use crate::atlas::DestinationKind as K;
-    match destination.kind {
-        K::Surface | K::Descent | K::Stratum | K::Band | K::DepthSpot => AMBER,
-        K::HomeTown | K::Village | K::SkyTown | K::Moon | K::Outpost | K::Tomb | K::StorySite => {
-            MINT
-        }
-        K::GateBoss | K::ThemeBoss | K::FactionBoss => RED,
-        K::DeepSettlement | K::AlienTown => LIME,
-        K::Player => PINK,
-        K::StarSystem
-        | K::Planet
-        | K::SmallBody
-        | K::Station
-        | K::Belt
-        | K::Comet
-        | K::Nebula
-        | K::BlackHole
-        | K::Wormhole
-        | K::SpaceSpot => SKY_LIGHT,
+    match destination.kind.category() {
+        AtlasCategory::Depth => AMBER,
+        AtlasCategory::Places | AtlasCategory::Bookmarks | AtlasCategory::Recent => MINT,
+        AtlasCategory::Bosses => RED,
+        AtlasCategory::Settlements => LIME,
+        AtlasCategory::Players => PINK,
+        AtlasCategory::Space => SKY_LIGHT,
     }
 }
 
@@ -730,10 +718,6 @@ fn draw_card(
     }
     let distance = index::distance_text(world, &destination.target, &ui.seat.atlas.origin);
     let mut lines: Vec<(&str, String)> = vec![("Distance", distance)];
-    // Where Go lands until the index's exact travel is wired (TODO-SEAM w14-index).
-    if let Some(arrives) = index::arrival_text(world, &destination.target) {
-        lines.push(("Arrives", arrives));
-    }
     lines.extend(
         destination
             .facts
@@ -807,7 +791,7 @@ fn draw_buttons(
             AtlasButton::Previous | AtlasButton::Next | AtlasButton::Random => {
                 atlas.map.is_some() || atlas.shown.len() > 1
             }
-            AtlasButton::Back => !atlas.back_stack.is_empty(),
+            AtlasButton::Back => atlas.back_count > 0,
             AtlasButton::Map | AtlasButton::Close => true,
         };
         let state = if !enabled {

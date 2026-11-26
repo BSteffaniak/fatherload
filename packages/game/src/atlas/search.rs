@@ -44,7 +44,15 @@ pub fn score(destination: &Destination, query: &str) -> Option<u8> {
     }
 }
 
+/// `destinations` (the destination index's search results) ranked for `query`: names that
+/// start with it first, then names holding every word, then the rest, each in the index's own
+/// order (nearest first within a kind).
+pub fn rank(destinations: &mut [Destination], query: &str) {
+    destinations.sort_by_key(|destination| score(destination, query).unwrap_or(3));
+}
+
 /// The indices of `destinations` that match `query`, best first (stable within a rank).
+#[cfg(test)]
 #[must_use]
 pub fn filter(destinations: &[Destination], query: &str) -> Vec<usize> {
     let mut ranked: Vec<(u8, usize)> = destinations
@@ -60,11 +68,12 @@ pub fn filter(destinations: &[Destination], query: &str) -> Vec<usize> {
 mod tests {
     use super::*;
     use crate::atlas::index::{AtlasCategory, AtlasTarget, DestinationKind};
+    use fatherload_simulation::destination::DestinationKind as IndexKind;
     use fatherload_simulation::terrain::TilePosition;
 
     fn destination(name: &str, keywords: &str) -> Destination {
         Destination {
-            kind: DestinationKind::Stratum,
+            kind: DestinationKind::Index(IndexKind::Stratum),
             category: AtlasCategory::Depth,
             name: name.to_owned(),
             subtitle: String::new(),
@@ -73,6 +82,7 @@ mod tests {
             boss: None,
             creatures: Vec::new(),
             keywords: format!("{name} {keywords}").to_lowercase(),
+            request: None,
         }
     }
 

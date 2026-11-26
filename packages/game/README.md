@@ -490,7 +490,8 @@ art (`rendering/atlas/preview.rs`: 44 x 26 tiles from the world's own terrain or
 ground, a few rows a frame, 24 cached) or drawn by the space renderer from orbit with a galaxy
 minimap, an info card, Go / Prev / Next / Random / Bookmark / Back / Map, and map mode (a depth
 map of all eight Descents, then the galaxy). The destinations live in `src/atlas/` (pure, no
-raylib; a stand-in for the simulation's destination index, TODO-SEAM), the seat's state and
+raylib: the simulation's destination index dressed for the screen; Go sends the index's
+`TravelTo`, and the bookmarks and back-stack are the world's), the seat's state and
 input in `src/shell/atlas.rs`, the drawing and layout in `src/rendering/atlas.rs` and
 `src/rendering/atlas/layout.rs` (Wide, Compact and Narrow shapes, tested for overlap at ten
 canvas sizes). Scenes `atlas_*` (`scene_capture/atlas_scenes.rs`). Details in the simulation

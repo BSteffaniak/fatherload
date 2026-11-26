@@ -31,7 +31,7 @@ use fatherload_simulation::{
 };
 
 use crate::{
-    atlas::{AtlasTarget, Destination, index, map::MapKind},
+    atlas::{AtlasTarget, Destination, map::MapKind},
     render_snapshot::RenderSnapshot,
     rendering::{
         pixel_art::{
@@ -178,10 +178,6 @@ fn tile_view(world: &WorldState, target: &AtlasTarget) -> Option<(String, TilePo
                 true,
             ))
         }
-        AtlasTarget::Player(id) => {
-            let resolved = index::resolve_player(world, id)?;
-            tile_view(world, &resolved)
-        }
         AtlasTarget::Space { .. } | AtlasTarget::Story => None,
     }
 }
@@ -227,9 +223,7 @@ impl AtlasPreviews {
                 };
                 if !self.tiles.contains_key(&key) {
                     let ground = if body {
-                        let AtlasTarget::Body { body: id, .. } =
-                            resolve(world, &destination.target)
-                        else {
+                        let AtlasTarget::Body { body: id, .. } = destination.target else {
                             continue;
                         };
                         match self.planet(world, id) {
@@ -396,14 +390,6 @@ impl AtlasPreviews {
     }
 }
 
-/// `target` with a player resolved to where they are.
-fn resolve(world: &WorldState, target: &AtlasTarget) -> AtlasTarget {
-    match *target {
-        AtlasTarget::Player(id) => index::resolve_player(world, id).unwrap_or(*target),
-        other => other,
-    }
-}
-
 /// Where the space preview of `target` looks and how many tiles round it it shows, when the
 /// target is seen from space.
 #[must_use]
@@ -411,13 +397,13 @@ pub fn space_focus(
     world: &WorldState,
     target: &AtlasTarget,
 ) -> Option<(fatherload_simulation::position::WorldPos, f32)> {
-    match resolve(world, target) {
+    match *target {
         AtlasTarget::Space { pos, reach } => Some((pos, reach)),
         AtlasTarget::Body { body, .. } => {
             let found = Space::shared(world.world_seed()).body(body)?;
             Some((found.centre.pos(), found.radius as f32 * 1.7))
         }
-        AtlasTarget::Home(_) | AtlasTarget::Player(_) | AtlasTarget::Story => None,
+        AtlasTarget::Home(_) | AtlasTarget::Story => None,
     }
 }
 
@@ -670,9 +656,10 @@ fn lerp(a: Color, b: Color, t: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atlas::{AtlasCategory, DestinationKind, index};
+    use crate::atlas::{AtlasCategory, index, index::DestinationKind};
     use fatherload_simulation::{
         PlayerId, SimulationParams,
+        destination::{DestinationFilter, DestinationKind as IndexKind},
         worldgen::{GeneratorVersion, WorldSettings},
     };
 
@@ -696,6 +683,7 @@ mod tests {
     /// the world (home or a planet's ground, its art filled in), or the space renderer's view
     /// of it, or (the story's goal) its words.
     #[test]
+    #[allow(clippy::too_many_lines, reason = "every kind, then one picture of each painted")]
     fn a_preview_is_made_for_every_kind_of_destination() {
         let world = world();
         let me = Some(PlayerId::new(1));
@@ -710,28 +698,49 @@ mod tests {
         ));
         let kinds: std::collections::BTreeSet<DestinationKind> =
             every.iter().map(|destination| destination.kind).collect();
-        for wanted in [
-            DestinationKind::Surface,
-            DestinationKind::Descent,
-            DestinationKind::Stratum,
-            DestinationKind::DepthSpot,
-            DestinationKind::HomeTown,
-            DestinationKind::Village,
-            DestinationKind::Moon,
-            DestinationKind::Outpost,
-            DestinationKind::StorySite,
-            DestinationKind::GateBoss,
-            DestinationKind::ThemeBoss,
-            DestinationKind::FactionBoss,
-            DestinationKind::DeepSettlement,
-            DestinationKind::AlienTown,
-            DestinationKind::StarSystem,
-            DestinationKind::Planet,
-            DestinationKind::Station,
-            DestinationKind::Belt,
-            DestinationKind::Player,
-            DestinationKind::SpaceSpot,
+        // Every kind of the destination index (the bookmarks and the back-stack are empty in
+        // a fresh world), the two map spots and the story's goal.
+        // (A kind with no candidate in reach of this seed, a black hole say, has nothing to
+        // show; the core kinds must all be there.)
+        let listed: Vec<IndexKind> = IndexKind::ALL
+            .into_iter()
+            .filter(|kind| {
+                !world
+                    .destinations(PlayerId::new(1), *kind, DestinationFilter::Any)
+                    .is_empty()
+            })
+            .collect();
+        for core in [
+            IndexKind::Descent,
+            IndexKind::Stratum,
+            IndexKind::Depth,
+            IndexKind::HomeTown,
+            IndexKind::Village,
+            IndexKind::Moon,
+            IndexKind::Outpost,
+            IndexKind::Settlement,
+            IndexKind::BossArena,
+            IndexKind::Heart,
+            IndexKind::ThemeBossLair,
+            IndexKind::FactionBossLair,
+            IndexKind::AlienTown,
+            IndexKind::System,
+            IndexKind::Planet,
+            IndexKind::Station,
+            IndexKind::Player,
         ] {
+            assert!(listed.contains(&core), "the index lists a {core:?}");
+        }
+        let wanted_kinds: Vec<DestinationKind> = listed
+            .into_iter()
+            .map(DestinationKind::Index)
+            .chain([
+                DestinationKind::DepthSpot,
+                DestinationKind::SpaceSpot,
+                DestinationKind::StorySite,
+            ])
+            .collect();
+        for wanted in wanted_kinds {
             assert!(kinds.contains(&wanted), "the Atlas lists a {wanted:?}");
         }
         let mut painted_kinds = std::collections::BTreeSet::new();
@@ -754,8 +763,7 @@ mod tests {
                 continue;
             }
             let ground = if body {
-                let AtlasTarget::Body { body: id, .. } = resolve(&world, &destination.target)
-                else {
+                let AtlasTarget::Body { body: id, .. } = destination.target else {
                     continue;
                 };
                 let terrain = planets.entry(id).or_insert_with(|| {
@@ -777,16 +785,22 @@ mod tests {
                 .iter()
                 .filter(|index| **index != TRANSPARENT)
                 .count();
+            // A floating isle is mostly open sky round its ground.
+            let least = if destination.kind == DestinationKind::Index(IndexKind::SkyIsland) {
+                preview.art.len() / 32
+            } else {
+                preview.art.len() / 8
+            };
             assert!(
-                filled > preview.art.len() / 8,
+                filled > least,
                 "{} ({:?}): {filled} of {} art pixels painted",
                 destination.name,
                 destination.kind,
                 preview.art.len()
             );
         }
-        assert!(painted_kinds.contains(&DestinationKind::GateBoss));
-        assert!(painted_kinds.contains(&DestinationKind::Planet));
+        assert!(painted_kinds.contains(&DestinationKind::Index(IndexKind::BossArena)));
+        assert!(painted_kinds.contains(&DestinationKind::Index(IndexKind::Planet)));
     }
 
     #[test]

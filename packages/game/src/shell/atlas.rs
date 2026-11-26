@@ -21,32 +21,27 @@
 use std::collections::BTreeMap;
 
 use fatherload_simulation::{
-    PlayerCommand, PlayerId, TestModeAction, WorldState, place::Place, space::SpaceTile,
+    PlayerCommand, PlayerId, TestModeAction, WorldState, destination::DestinationId, place::Place,
+    space::SpaceTile,
 };
 
 use super::{ModalScreen, SeatContext, SeatUi, ShellRequest, SoundCue};
 use crate::{
     atlas::{
-        AtlasCategory, AtlasTarget, Destination, DestinationKind, Origin,
+        AtlasCategory, AtlasTarget, Destination, Origin,
         hit::{AtlasButton, AtlasHit},
         index::{self, depth_spot, space_spot},
         map::{DepthMap, GalaxyMap, MapKind},
-        search,
     },
     input::PlayerInput,
 };
 
-/// Bookmarks and recent places a seat keeps.
-pub const ATLAS_LIST_CAP: usize = 24;
 /// Longest search text.
 const MAX_SEARCH: usize = 32;
 /// How far the map cursor moves per second with a stick held all the way (map widths).
 const MAP_CURSOR_SPEED: f32 = 0.35;
 /// One map step from a menu key press (map widths).
 const MAP_STEP: f32 = 1.0 / 48.0;
-/// Frames a depth warp waits for the trip home before it is dropped (online, the host's
-/// answer takes a round trip).
-const PENDING_FRAMES: u16 = 600;
 /// The depth map's width over its height (the drawn map's own shape is close to this).
 pub const DEPTH_MAP_ASPECT: f32 = 0.75;
 
@@ -78,12 +73,13 @@ pub struct SeatAtlas {
     pub typing: bool,
     /// Map mode (`None`: the list).
     pub map: Option<AtlasMap>,
-    /// The seat's bookmarks, oldest first.
-    pub bookmarks: Vec<Destination>,
-    /// Places the seat travelled to, newest first.
-    pub recent: Vec<Destination>,
-    /// Places the seat travelled from, newest last (Back pops it).
-    pub back_stack: Vec<Destination>,
+    /// The seat's player (the index answers for it).
+    pub player: Option<PlayerId>,
+    /// The seat's bookmarks as the world keeps them (the index's travel log: saved and
+    /// replicated), oldest first.
+    pub marks: Vec<DestinationId>,
+    /// Places on the seat's back-stack in the world's travel log (Back goes to the last).
+    pub back_count: usize,
     /// Where the seat is (distances on the card).
     pub origin: Origin,
     /// A pointer pick waiting for this frame's update.
@@ -92,9 +88,6 @@ pub struct SeatAtlas {
     pub hovered: Option<(f32, f32)>,
     /// The Random button's draw (presentation only).
     random: u64,
-    /// A depth warp waiting for the rig to reach the home world's ground (sent from space or
-    /// another body, the trip goes home first), with the frames it may still wait.
-    pending: Option<(PlayerCommand, u16)>,
 }
 
 impl Default for SeatAtlas {
@@ -114,9 +107,9 @@ impl SeatAtlas {
             search: String::new(),
             typing: false,
             map: None,
-            bookmarks: Vec::new(),
-            recent: Vec::new(),
-            back_stack: Vec::new(),
+            player: None,
+            marks: Vec::new(),
+            back_count: 0,
             origin: Origin {
                 place: Place::HOME,
                 tile: None,
@@ -125,7 +118,6 @@ impl SeatAtlas {
             picked: None,
             hovered: None,
             random: 0x9E37_79B9_7F4A_7C15,
-            pending: None,
         }
     }
 
@@ -157,13 +149,33 @@ impl SeatAtlas {
             .collect()
     }
 
+    /// The index of `destination`'s spot among the seat's bookmarks (the world's), if any.
+    #[must_use]
+    pub fn bookmark_index(&self, destination: &Destination) -> Option<usize> {
+        let id = destination.id()?;
+        self.marks
+            .iter()
+            .position(|mark| (mark.place, mark.x, mark.y) == (id.place, id.x, id.y))
+    }
+
     /// Whether `destination` is bookmarked.
     #[must_use]
     pub fn bookmarked(&self, destination: &Destination) -> bool {
-        let key = destination.target.key();
-        self.bookmarks
-            .iter()
-            .any(|bookmark| bookmark.target.key() == key)
+        self.bookmark_index(destination).is_some()
+    }
+
+    /// Reads the seat's bookmarks and back-stack from the world's travel log; true when they
+    /// changed since the last read.
+    fn sync_log(&mut self, world: &WorldState, player: Option<PlayerId>) -> bool {
+        self.player = player;
+        let Some(player) = player else {
+            return false;
+        };
+        let log = world.player_travel(player);
+        let changed = self.marks != log.bookmarks || self.back_count != log.recent.len();
+        self.marks = log.bookmarks;
+        self.back_count = log.recent.len();
+        changed
     }
 
     /// A pointer pick for the next update (see `shell::pointer`).
@@ -195,17 +207,16 @@ impl SeatAtlas {
         self.map = None;
     }
 
-    /// The destinations of `category` (built on first use).
+    /// The destinations of `category` (built on first use; the bookmarks and the back-stack
+    /// are read from the world's log each time).
     fn list(
         &mut self,
         world: &WorldState,
         player: Option<PlayerId>,
         category: AtlasCategory,
     ) -> Vec<Destination> {
-        match category {
-            AtlasCategory::Bookmarks => return self.bookmarks.clone(),
-            AtlasCategory::Recent => return self.recent.clone(),
-            _ => {}
+        if matches!(category, AtlasCategory::Bookmarks | AtlasCategory::Recent) {
+            return index::destinations(world, player, category);
         }
         self.lists
             .entry(category)
@@ -220,20 +231,11 @@ impl SeatAtlas {
         self.shown = if self.search.trim().is_empty() {
             self.list(world, player, self.category)
         } else {
-            let mut every = Vec::new();
-            for category in AtlasCategory::ALL {
-                every.extend(self.list(world, player, category));
-            }
-            // A place listed under two categories shows once; a planet and the alien town
-            // its warp lands in share a spot but stay two results.
-            let mut seen = std::collections::BTreeSet::new();
-            every.retain(|destination| {
-                seen.insert((destination.target.key(), destination.name.clone()))
-            });
-            search::filter(&every, &self.search)
-                .into_iter()
-                .map(|index| every[index].clone())
-                .collect()
+            // The destination index's own search (every kind; a leading kind word narrows),
+            // ranked for the screen (names that start with the query first).
+            let mut found = index::search(world, player, &self.search);
+            crate::atlas::search::rank(&mut found, &self.search);
+            found
         };
         self.selected = keep
             .and_then(|key| {
@@ -258,40 +260,6 @@ impl SeatAtlas {
         self.shown.clear();
         self.selected = 0;
         self.refresh(world, player);
-    }
-
-    fn toggle_bookmark(&mut self) -> Option<bool> {
-        let destination = self.current()?.clone();
-        let key = destination.target.key();
-        if let Some(index) = self
-            .bookmarks
-            .iter()
-            .position(|bookmark| bookmark.target.key() == key)
-        {
-            self.bookmarks.remove(index);
-            return Some(false);
-        }
-        self.bookmarks
-            .push(destination.filed_under(AtlasCategory::Bookmarks));
-        if self.bookmarks.len() > ATLAS_LIST_CAP {
-            self.bookmarks.remove(0);
-        }
-        Some(true)
-    }
-
-    /// Records a trip from `from` to `to` (the recent list and the back-stack).
-    fn record_trip(&mut self, from: Option<Destination>, to: &Destination) {
-        let key = to.target.key();
-        self.recent.retain(|recent| recent.target.key() != key);
-        self.recent.insert(0, to.filed_under(AtlasCategory::Recent));
-        self.recent.truncate(ATLAS_LIST_CAP);
-        if let Some(from) = from {
-            self.back_stack
-                .push(from.filed_under(AtlasCategory::Recent));
-            if self.back_stack.len() > ATLAS_LIST_CAP {
-                self.back_stack.remove(0);
-            }
-        }
     }
 
     /// Moves the map cursor to `cursor` and names the spot under it.
@@ -319,7 +287,9 @@ impl SeatAtlas {
                 };
                 depth_spot(world, tile)
             }
-            MapKind::Galaxy => snap_to_body(world, map.galaxy, map.galaxy.pos_at(cursor)),
+            MapKind::Galaxy => {
+                snap_to_body(world, self.player, map.galaxy, map.galaxy.pos_at(cursor))
+            }
         });
     }
 
@@ -384,6 +354,7 @@ impl SeatAtlas {
 )]
 fn snap_to_body(
     world: &WorldState,
+    player: Option<PlayerId>,
     map: GalaxyMap,
     pos: fatherload_simulation::position::WorldPos,
 ) -> Destination {
@@ -394,9 +365,12 @@ fn snap_to_body(
         && let Some(system) = galaxy.system(*reference)
         && system.centre.distance(tile) <= reach as f64
     {
+        // The index's own candidate for the system: Go stops off its star as the list's does.
+        if let Some(listed) = index::system_named(world, player, &system.name) {
+            return listed;
+        }
         let mut spot = space_spot(world, system.centre.pos());
         spot.name.clone_from(&system.name);
-        spot.kind = DestinationKind::StarSystem;
         spot.subtitle = format!(
             "{} - {}",
             system.class.name(),
@@ -421,6 +395,7 @@ impl SeatUi {
         // A building or home's own screens close: the Atlas covers the view.
         self.modal = Some(ModalScreen::Atlas);
         self.atlas.reopen();
+        let _ = self.atlas.sync_log(ctx.world, ctx.player);
         if let Some(player) = ctx.player
             && let Some(origin) = Origin::of(ctx.world, player)
         {
@@ -452,7 +427,16 @@ impl SeatUi {
         {
             self.atlas.origin = origin;
         }
-        if self.atlas.shown.is_empty() && self.atlas.search.is_empty() {
+        // The bookmarks and back-stack are the world's: a list of them follows its changes.
+        let log_changed = self.atlas.sync_log(ctx.world, ctx.player);
+        if (self.atlas.shown.is_empty() && self.atlas.search.is_empty())
+            || (log_changed
+                && self.atlas.search.is_empty()
+                && matches!(
+                    self.atlas.category,
+                    AtlasCategory::Bookmarks | AtlasCategory::Recent
+                ))
+        {
             self.atlas.refresh(ctx.world, ctx.player);
         }
         // The mouse over the map moves its cursor (the preview follows).
@@ -675,35 +659,48 @@ impl SeatUi {
                     cues.push(SoundCue::UiMove);
                 }
             }
-            AtlasButton::Bookmark => match self.atlas.toggle_bookmark() {
-                Some(true) => {
-                    "Bookmarked.".clone_into(&mut self.message);
-                    cues.push(SoundCue::Ui);
-                }
-                Some(false) => {
+            AtlasButton::Bookmark => {
+                // The bookmarks are the world's (the index's travel log): the button asks it.
+                let Some(destination) = self.atlas.current().cloned() else {
+                    return;
+                };
+                if let Some(index) = self.atlas.bookmark_index(&destination) {
+                    self.send_travel(
+                        PlayerCommand::TestMode(TestModeAction::RemoveBookmark(
+                            u8::try_from(index).unwrap_or(u8::MAX),
+                        )),
+                        ctx,
+                        requests,
+                    );
+                    self.atlas.marks.remove(index);
                     "Bookmark removed.".clone_into(&mut self.message);
                     cues.push(SoundCue::UiBack);
-                    if self.atlas.category == AtlasCategory::Bookmarks
-                        && self.atlas.search.is_empty()
-                    {
-                        self.atlas.refresh(ctx.world, ctx.player);
-                    }
+                } else if let Some(id) = destination.id() {
+                    self.send_travel(
+                        PlayerCommand::TestMode(TestModeAction::Bookmark(id)),
+                        ctx,
+                        requests,
+                    );
+                    self.atlas.marks.push(id);
+                    "Bookmarked.".clone_into(&mut self.message);
+                    cues.push(SoundCue::Ui);
+                } else {
+                    "The story's goal moves on: it cannot be bookmarked."
+                        .clone_into(&mut self.message);
                 }
-                None => {}
-            },
+            }
             AtlasButton::Back => {
-                let Some(back) = self.atlas.back_stack.pop() else {
+                if self.atlas.back_count == 0 {
                     "Nowhere to go back to yet.".clone_into(&mut self.message);
                     return;
-                };
-                let Some(player) = ctx.player else {
-                    return;
-                };
-                let Some(command) = index::travel_command(ctx.world, &back, player) else {
-                    return;
-                };
-                self.send_travel(command, ctx, requests);
-                self.message = format!("Back to {}.", back.name);
+                }
+                self.send_travel(
+                    PlayerCommand::TestMode(TestModeAction::TravelBack),
+                    ctx,
+                    requests,
+                );
+                self.atlas.back_count -= 1;
+                "Back to where you were.".clone_into(&mut self.message);
                 cues.push(SoundCue::Ui);
                 self.close_atlas();
             }
@@ -733,38 +730,11 @@ impl SeatUi {
             "You are already there.".clone_into(&mut self.message);
             return;
         };
-        let from = here(ctx.world, player);
-        self.atlas.record_trip(from, destination);
+        // The world keeps where the rig was on its back-stack (Back, the Recent list).
         self.send_travel(command, ctx, requests);
-        self.message = index::arrival_text(ctx.world, &destination.target).map_or_else(
-            || format!("Travelling to {}.", destination.name),
-            |arrives| format!("Travelling to {}: arriving at {arrives}.", destination.name),
-        );
+        self.message = format!("Travelling to {}.", destination.name);
         cues.push(SoundCue::Ui);
         self.close_atlas();
-    }
-
-    /// Sends a waiting depth warp once the rig stands on the home world (every frame, open
-    /// or not); it is dropped when the trip home never arrives.
-    pub(super) fn flush_atlas_trip(
-        &mut self,
-        ctx: &SeatContext<'_>,
-        requests: &mut Vec<ShellRequest>,
-    ) {
-        let Some((command, frames)) = self.atlas.pending.take() else {
-            return;
-        };
-        let Some(player) = ctx.player else {
-            return;
-        };
-        if ctx.world.place_of(player) == Place::HOME {
-            requests.push(ShellRequest::Action {
-                seat: ctx.seat,
-                command,
-            });
-        } else if frames > 0 {
-            self.atlas.pending = Some((command, frames - 1));
-        }
     }
 
     fn send_travel(
@@ -778,23 +748,7 @@ impl SeatUi {
         self.village.interior = None;
         self.village.talk = None;
         self.home = super::homes::SeatHome::new();
-        // A depth warp only works on the home world's ground: from space, the Moon or another
-        // body the trip goes home first and the warp follows once the rig is there
-        // ([`SeatUi::flush_atlas_trip`]; TODO-SEAM w14-index: `TravelTo` crosses places).
-        if matches!(
-            command,
-            PlayerCommand::TestMode(TestModeAction::WarpToBand(_))
-        ) && let Some(player) = ctx.player
-            && ctx.world.place_of(player) != Place::HOME
-        {
-            self.atlas.pending = Some((command, PENDING_FRAMES));
-            requests.push(ShellRequest::Action {
-                seat: ctx.seat,
-                command: PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::HOME)),
-            });
-            return;
-        }
-        self.atlas.pending = None;
+        // The index's travel crosses places itself (home, a body, free flight): one action.
         requests.push(ShellRequest::Action {
             seat: ctx.seat,
             command,
@@ -802,32 +756,18 @@ impl SeatUi {
     }
 }
 
-/// Where `player` stands now, as a destination to come back to.
-fn here(world: &WorldState, player: PlayerId) -> Option<Destination> {
-    let target = index::resolve_player(world, player)?;
-    let mut back = match target {
-        AtlasTarget::Home(tile) => depth_spot(world, tile),
-        AtlasTarget::Space { pos, .. } => space_spot(world, pos),
-        AtlasTarget::Body { .. } | AtlasTarget::Player(_) | AtlasTarget::Story => {
-            let mut spot = space_spot(world, Origin::of(world, player)?.space);
-            spot.target = target;
-            "Where you were".clone_into(&mut spot.name);
-            spot
-        }
-    };
-    back.subtitle = format!("Left from: {}", back.subtitle);
-    Some(back)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atlas::index::Fact;
-    use fatherload_simulation::terrain::TilePosition;
+    use crate::atlas::index::{DestinationKind, Fact};
+    use fatherload_simulation::{
+        destination::{DestinationKind as IndexKind, TravelRequest},
+        terrain::TilePosition,
+    };
 
-    fn destination(name: &str, kind: DestinationKind, x: i32) -> Destination {
+    fn destination(name: &str, kind: IndexKind, x: i32) -> Destination {
         Destination {
-            kind,
+            kind: DestinationKind::Index(kind),
             category: AtlasCategory::Depth,
             name: name.to_owned(),
             subtitle: String::new(),
@@ -839,6 +779,12 @@ mod tests {
             boss: None,
             creatures: Vec::new(),
             keywords: name.to_lowercase(),
+            request: Some(TravelRequest::exact(DestinationId::new(
+                kind,
+                Place::HOME,
+                i64::from(x),
+                10,
+            ))),
         }
     }
 
@@ -846,11 +792,11 @@ mod tests {
     fn previous_and_next_cycle_through_the_same_kind() {
         let mut atlas = SeatAtlas::new();
         atlas.shown = vec![
-            destination("a", DestinationKind::Descent, 0),
-            destination("b", DestinationKind::Stratum, 1),
-            destination("c", DestinationKind::Descent, 2),
-            destination("d", DestinationKind::Stratum, 3),
-            destination("e", DestinationKind::Descent, 4),
+            destination("a", IndexKind::Descent, 0),
+            destination("b", IndexKind::Stratum, 1),
+            destination("c", IndexKind::Descent, 2),
+            destination("d", IndexKind::Stratum, 3),
+            destination("e", IndexKind::Descent, 4),
         ];
         atlas.selected = 0;
         assert_eq!(atlas.same_kind(1), Some(2));
@@ -862,22 +808,13 @@ mod tests {
     }
 
     #[test]
-    fn bookmarks_toggle_and_trips_fill_recent_and_the_back_stack() {
+    fn a_bookmark_is_the_worlds_by_spot_whatever_its_kind() {
         let mut atlas = SeatAtlas::new();
-        atlas.shown = vec![destination("a", DestinationKind::Descent, 0)];
-        assert_eq!(atlas.toggle_bookmark(), Some(true));
-        assert!(atlas.bookmarked(&atlas.shown[0].clone()));
-        assert_eq!(atlas.bookmarks[0].category, AtlasCategory::Bookmarks);
-        assert_eq!(atlas.toggle_bookmark(), Some(false));
-        assert!(atlas.bookmarks.is_empty());
-
-        let here = destination("here", DestinationKind::DepthSpot, 9);
-        atlas.record_trip(Some(here), &destination("a", DestinationKind::Descent, 0));
-        atlas.record_trip(None, &destination("b", DestinationKind::Descent, 1));
-        atlas.record_trip(None, &destination("a", DestinationKind::Descent, 0));
-        let recent: Vec<&str> = atlas.recent.iter().map(|d| d.name.as_str()).collect();
-        assert_eq!(recent, ["a", "b"], "newest first, each once");
-        assert_eq!(atlas.back_stack.len(), 1);
-        assert_eq!(atlas.back_stack[0].name, "here");
+        let stratum = destination("a", IndexKind::Stratum, 7);
+        assert!(!atlas.bookmarked(&stratum));
+        // The world keeps the spot; a bookmark listed back is of the Bookmark kind.
+        atlas.marks = vec![DestinationId::new(IndexKind::Bookmark, Place::HOME, 7, 10)];
+        assert_eq!(atlas.bookmark_index(&stratum), Some(0));
+        assert!(!atlas.bookmarked(&destination("b", IndexKind::Stratum, 8)));
     }
 }

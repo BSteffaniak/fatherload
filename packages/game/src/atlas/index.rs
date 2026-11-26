@@ -1,11 +1,14 @@
-//! The Atlas's destinations: every kind of place it can travel to, built from the world's
-//! generators (never by streaming the world in).
+//! The Atlas's destinations: every place it can travel to, as the simulation's destination
+//! index answers them (`fatherload_simulation::destination`, W14-B), never by streaming the
+//! world in.
 //!
-//! **TODO-SEAM (w14-index):** a thin local stand-in for the simulation's destination index
-//! (W14-B). The names follow the plan: [`DestinationKind`]s gathered per [`AtlasCategory`],
-//! each [`Destination`] carrying where it is ([`AtlasTarget`]) and the preview metadata the
-//! info card shows ([`Fact`]s, the boss and the creatures). [`travel_command`] maps a choice
-//! onto today's test-mode warps until the index's `TestModeAction::TravelTo` lands.
+//! Each [`Destination`] is the index's candidate (`WorldState::destinations`, per index kind
+//! of a category; `WorldState::search_destinations` for the search box) dressed for the
+//! screen: where the preview looks ([`AtlasTarget`], from the candidate's id), the info card
+//! ([`Fact`]s from its `PreviewInfo`, the boss and the creatures in their own sprites), and the
+//! one [`TravelRequest`] Go sends: `TestModeAction::TravelTo(TravelRequest::exact(id))`, so the
+//! preview shows exactly where the index lands (safe arrival, from anywhere). Map spots are
+//! exact ids too; only the galaxy story's goal keeps its own warp (`WarpToStory`).
 
 #![allow(
     clippy::cast_possible_truncation,
@@ -17,16 +20,17 @@ use std::fmt::Write as _;
 
 use fatherload_simulation::{
     PlayerCommand, PlayerId, TestModeAction, WorldState,
-    descent::{Descent, DescentBoss, Stratum},
-    endgame::hunt,
+    descent::{DescentBoss, Stratum},
+    destination::{
+        self as index_model, DestinationCategory, DestinationFilter, DestinationId,
+        DestinationKind as IndexKind, TravelRequest,
+    },
     enemy::EnemyKind,
-    hostiles::Faction,
-    people::deep_folk::{self, DeepSettlement},
     place::{BodyId, Place, SpaceBodyKey},
     position::WorldPos,
-    space::{self, BodyKind, Space, SpaceTile, Theme},
+    space::{self, Space, SpaceTile},
     terrain::TilePosition,
-    worldgen::{self, Band, HazardKind, WorldSettings, descent as gen_descent},
+    worldgen::{HazardKind, descent as gen_descent},
 };
 
 /// The Atlas's categories, down its side.
@@ -123,74 +127,65 @@ impl AtlasCategory {
     }
 }
 
-/// What a destination is (the "kind" Previous/Next cycle through).
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+impl AtlasCategory {
+    /// The Atlas category of the index's category (one to one).
+    #[must_use]
+    pub const fn of(category: DestinationCategory) -> Self {
+        match category {
+            DestinationCategory::Depth => Self::Depth,
+            DestinationCategory::Places => Self::Places,
+            DestinationCategory::Bosses => Self::Bosses,
+            DestinationCategory::Settlements => Self::Settlements,
+            DestinationCategory::Space => Self::Space,
+            DestinationCategory::Players => Self::Players,
+            DestinationCategory::Bookmarks => Self::Bookmarks,
+            DestinationCategory::Recent => Self::Recent,
+        }
+    }
+
+    /// The index's kinds listed under this category, in the index's order.
+    #[must_use]
+    pub fn kinds(self) -> Vec<IndexKind> {
+        IndexKind::ALL
+            .into_iter()
+            .filter(|kind| Self::of(kind.category()) == self)
+            .collect()
+    }
+}
+
+/// What a destination is (the "kind" Previous/Next cycle through): a kind of the destination
+/// index, or one of the Atlas's own picks.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DestinationKind {
-    Surface,
-    Descent,
-    Stratum,
-    /// A classic world's band.
-    Band,
+    /// A candidate of the destination index.
+    Index(IndexKind),
     /// A spot picked on the depth map.
     DepthSpot,
-    HomeTown,
-    Village,
-    SkyTown,
-    Moon,
-    Outpost,
-    Tomb,
-    StorySite,
-    GateBoss,
-    ThemeBoss,
-    FactionBoss,
-    DeepSettlement,
-    AlienTown,
-    StarSystem,
-    Planet,
-    SmallBody,
-    Station,
-    Belt,
-    Comet,
-    Nebula,
-    BlackHole,
-    Wormhole,
     /// A spot picked on the galaxy map.
     SpaceSpot,
-    Player,
+    /// Where the galaxy story's current goal is done.
+    StorySite,
 }
 
 impl DestinationKind {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Surface => "surface",
-            Self::Descent => "Descent",
-            Self::Stratum => "stratum",
-            Self::Band => "band",
+            Self::Index(kind) => kind.name(),
             Self::DepthSpot => "depth",
-            Self::HomeTown => "town",
-            Self::Village => "village",
-            Self::SkyTown => "sky town",
-            Self::Moon => "moon",
-            Self::Outpost => "outpost",
-            Self::Tomb => "tomb",
-            Self::StorySite => "story",
-            Self::GateBoss => "gate boss",
-            Self::ThemeBoss => "theme boss",
-            Self::FactionBoss => "faction boss",
-            Self::DeepSettlement => "deep settlement",
-            Self::AlienTown => "alien town",
-            Self::StarSystem => "star system",
-            Self::Planet => "planet",
-            Self::SmallBody => "small body",
-            Self::Station => "station",
-            Self::Belt => "asteroid belt",
-            Self::Comet => "comet",
-            Self::Nebula => "nebula",
-            Self::BlackHole => "black hole",
-            Self::Wormhole => "wormhole",
             Self::SpaceSpot => "space",
-            Self::Player => "player",
+            Self::StorySite => "story",
+        }
+    }
+
+    /// The Atlas category a kind is filed under.
+    #[must_use]
+    pub const fn category(self) -> AtlasCategory {
+        match self {
+            Self::Index(kind) => AtlasCategory::of(kind.category()),
+            Self::DepthSpot => AtlasCategory::Depth,
+            Self::SpaceSpot => AtlasCategory::Space,
+            Self::StorySite => AtlasCategory::Places,
         }
     }
 }
@@ -204,8 +199,6 @@ pub enum AtlasTarget {
     Body { body: SpaceBodyKey, column: i64 },
     /// Free flight at `pos`; `reach` is how many tiles round it the preview shows.
     Space { pos: WorldPos, reach: f32 },
-    /// Wherever that player is now.
-    Player(PlayerId),
     /// Where the galaxy story's current goal is done.
     Story,
 }
@@ -224,7 +217,6 @@ impl AtlasTarget {
                 let (x, y) = pos.tile();
                 format!("space:{x}:{y}:{reach:.0}")
             }
-            Self::Player(id) => format!("player:{id:?}"),
             Self::Story => "story".to_owned(),
         }
     }
@@ -263,19 +255,21 @@ pub struct Destination {
     pub creatures: Vec<EnemyKind>,
     /// Lower-case text the search matches against.
     pub keywords: String,
+    /// The destination index's request Go sends (`None`: the story's goal, whose warp is its
+    /// own).
+    pub request: Option<TravelRequest>,
 }
 
 impl Destination {
     fn new(
         kind: DestinationKind,
-        category: AtlasCategory,
         name: impl Into<String>,
         subtitle: impl Into<String>,
         target: AtlasTarget,
     ) -> Self {
         let mut destination = Self {
             kind,
-            category,
+            category: kind.category(),
             name: name.into(),
             subtitle: subtitle.into(),
             target,
@@ -283,6 +277,7 @@ impl Destination {
             boss: None,
             creatures: Vec::new(),
             keywords: String::new(),
+            request: None,
         };
         destination.refresh_keywords("");
         destination
@@ -317,6 +312,15 @@ impl Destination {
         Self {
             category,
             ..self.clone()
+        }
+    }
+
+    /// The index id Go travels to (`None`: the story's goal).
+    #[must_use]
+    pub fn id(&self) -> Option<DestinationId> {
+        match self.request?.selector {
+            index_model::Selector::Exact(id) => Some(id),
+            _ => None,
         }
     }
 }
@@ -387,10 +391,6 @@ pub fn distance_text(world: &WorldState, target: &AtlasTarget, origin: &Origin) 
             space_distance(origin.space, centre)
         }
         AtlasTarget::Space { pos, .. } => space_distance(origin.space, pos),
-        AtlasTarget::Player(id) => resolve_player(world, id).map_or_else(
-            || "gone".to_owned(),
-            |target| distance_text(world, &target, origin),
-        ),
         AtlasTarget::Story => "where the road leads".to_owned(),
     }
 }
@@ -404,10 +404,6 @@ fn space_distance(from: WorldPos, to: WorldPos) -> String {
     } else if sectors >= 0.1 {
         format!("{sectors:.1} sectors")
     } else {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "under a tenth of a sector of tiles"
-        )]
         let whole = tiles.round() as i64;
         format!("{} tiles", thousands(whole))
     }
@@ -427,172 +423,343 @@ pub fn thousands(value: i64) -> String {
     if value < 0 { format!("-{out}") } else { out }
 }
 
-/// Where `player` is now, as a target the preview can draw.
-#[must_use]
-pub fn resolve_player(world: &WorldState, player: PlayerId) -> Option<AtlasTarget> {
-    let rig = world.player(player)?;
-    Some(match world.place_of(player) {
-        Place::Space => AtlasTarget::Space {
-            pos: rig.flight.pos,
-            reach: 400.0,
-        },
-        // TODO-SEAM (w14-index): the index resolves a player on a body to their column there.
-        Place::OnBody(BodyId::Space(body)) => AtlasTarget::Body { body, column: 0 },
-        Place::OnBody(_) => AtlasTarget::Home(rig.tile_in(world.frame())),
-    })
+/// How many tiles round a space spot of `kind` its preview shows.
+const fn space_reach(kind: IndexKind) -> f32 {
+    match kind {
+        IndexKind::System | IndexKind::ArchiveSystem | IndexKind::Nebula => 14_000.0,
+        IndexKind::BlackHole => 12_000.0,
+        IndexKind::Belt => 9_000.0,
+        IndexKind::FactionBossLair => 4_500.0,
+        IndexKind::Planet | IndexKind::SmallBody => 6_000.0,
+        IndexKind::Comet | IndexKind::Wormhole => 3_000.0,
+        IndexKind::Station => 1_500.0,
+        _ => 900.0,
+    }
 }
 
-/// The command that takes `player`'s rig to `destination`.
-///
-/// **TODO-SEAM (w14-index):** this becomes
-/// `PlayerCommand::TestMode(TestModeAction::TravelTo(..))` with the index's safe arrival. Until
-/// then it maps onto today's warps: the top of the band a home tile lies in (the surface goes
-/// home), the Moon, a body's arrival point, free flight and the galaxy story's goal.
+/// The strip column the body's own arrival point lands on: its first alien town on a settled
+/// world, else column 0 (`WorldState::warp_to_place`, which the index's arrival-point ids use).
+fn arrival_point_column(world: &WorldState, key: SpaceBodyKey) -> i64 {
+    fatherload_simulation::place::planet_params_for(world.world_seed(), key)
+        .and_then(|params| {
+            fatherload_simulation::alien::town::towns_of(&params)
+                .first()
+                .map(|town| i64::from(town.site.centre))
+        })
+        .unwrap_or(0)
+}
+
+/// What the preview draws for the index's id: its home tile, its body column, its space spot.
+#[must_use]
+pub fn target_of(world: &WorldState, id: &DestinationId) -> AtlasTarget {
+    let tile =
+        |value: i64| i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX });
+    match id.place {
+        Place::OnBody(BodyId::Home | BodyId::Moon) => AtlasTarget::Home(TilePosition {
+            x: tile(id.x),
+            y: tile(id.y),
+        }),
+        Place::OnBody(BodyId::Space(body)) => AtlasTarget::Body {
+            body,
+            column: if id.x == index_model::space::ARRIVAL_POINT {
+                arrival_point_column(world, body)
+            } else {
+                id.x
+            },
+        },
+        Place::Space => AtlasTarget::Space {
+            pos: SpaceTile::new(id.x, id.y).pos(),
+            reach: space_reach(id.kind),
+        },
+    }
+}
+
+/// The command that takes `player`'s rig to `destination`: the destination index's
+/// `TravelTo` (the story's goal: its own warp). `None` for the player's own spot.
 #[must_use]
 pub fn travel_command(
     world: &WorldState,
     destination: &Destination,
     player: PlayerId,
 ) -> Option<PlayerCommand> {
-    let action = match destination.target {
-        AtlasTarget::Home(tile) => home_warp(world, tile),
-        AtlasTarget::Body { body, .. } => {
-            TestModeAction::WarpToPlace(Place::OnBody(BodyId::Space(body)))
-        }
-        AtlasTarget::Space { .. } => TestModeAction::WarpToPlace(Place::Space),
-        AtlasTarget::Story => TestModeAction::WarpToStory,
-        AtlasTarget::Player(id) => {
-            if id == player {
+    let action = match destination.request {
+        Some(request) => {
+            if let (Some(id), Some(here)) = (destination.id(), world.travel_here(player))
+                && id.kind == IndexKind::Player
+                && id.as_kind(IndexKind::Recent) == here
+            {
                 return None;
             }
-            let target = resolve_player(world, id)?;
-            let stand_in = Destination {
-                target,
-                ..destination.clone()
-            };
-            return travel_command(world, &stand_in, player);
+            TestModeAction::TravelTo(request)
         }
+        None if destination.target == AtlasTarget::Story => TestModeAction::WarpToStory,
+        None => return None,
     };
     Some(PlayerCommand::TestMode(action))
 }
 
-/// Today's nearest warp to home tile `tile` (see [`travel_command`]).
-fn home_warp(world: &WorldState, tile: TilePosition) -> TestModeAction {
-    let settings = *world.world_settings();
-    if let Some(moon) = worldgen::sky::moon(&settings)
-        && (tile.x - moon.center_x).abs() <= moon.half_width
-        && tile.y < 0
-    {
-        return TestModeAction::WarpToPlace(Place::OnBody(BodyId::Moon));
+/// The creature a gate's boss fight is drawn as (the set pieces have none).
+#[must_use]
+pub const fn gate_boss_creature(boss: DescentBoss) -> Option<EnemyKind> {
+    match boss {
+        DescentBoss::TheSinkhole | DescentBoss::StarCore | DescentBoss::TheHeart => None,
+        DescentBoss::MycelialMind => Some(EnemyKind::MycelialMind),
+        DescentBoss::Leviathan => Some(EnemyKind::Leviathan),
+        DescentBoss::SunSerpent => Some(EnemyKind::SunSerpent),
+        DescentBoss::TheGlitch => Some(EnemyKind::TheGlitch),
+        DescentBoss::GatekeeperColossus => Some(EnemyKind::GatekeeperColossus),
     }
-    let surface = world.terrain().surface_row(tile.x);
-    if tile.y <= surface + 2 {
-        return TestModeAction::WarpToPlace(Place::HOME);
-    }
-    let band = warp_band(&settings, tile);
-    if band == Band::Topsoil {
-        return TestModeAction::WarpToPlace(Place::HOME);
-    }
-    TestModeAction::WarpToBand(band)
 }
 
-/// The band whose warp (`WarpToBand`) lands nearest above home tile `tile`.
-///
-/// A classic world's warp goes to the top of the band the tile lies in. A Deep Descent world
-/// has 41 strata but only twelve warps (each band warps to the top of the one stratum
-/// `Stratum::of_band` names, which may lie in another Descent than the band's other strata):
-/// the warp chosen is the deepest one whose top is not below the target, so the rig always
-/// arrives above the target, as close as today's warps allow, never in a deeper Descent.
-///
-/// **TODO-SEAM (w14-index):** `TravelTo` with the index's exact arrival replaces this.
+/// `name` folded for comparing names ("The Leviathan" and "leviathan" agree).
+fn folded(name: &str) -> String {
+    name.trim_start_matches("The ")
+        .trim_start_matches("the ")
+        .to_lowercase()
+}
+
+/// The creature drawn for a boss or resident named `name` on an index card (a gate boss, a
+/// theme boss, a stratum's creature), if one has a sprite.
 #[must_use]
-pub fn warp_band(settings: &WorldSettings, tile: TilePosition) -> Band {
-    if !settings.generator.has_descents() {
-        return worldgen::band_at(settings, tile.x, tile.y);
-    }
-    Band::ALL
+pub fn creature_named(name: &str) -> Option<EnemyKind> {
+    if let Some(boss) = DescentBoss::ALL
         .into_iter()
-        .map(|band| {
-            (
-                worldgen::strata::band_solid_top_row(settings, band, tile.x),
-                band,
-            )
-        })
-        .filter(|(top, _)| *top <= tile.y)
-        .max_by_key(|(top, band)| (*top, band.index()))
-        .map_or(Band::Topsoil, |(_, band)| band)
+        .find(|boss| boss.name() == name)
+    {
+        return gate_boss_creature(boss);
+    }
+    let wanted = folded(name);
+    EnemyKind::ALL
+        .into_iter()
+        .find(|kind| folded(kind.name()) == wanted)
 }
 
-/// Where Go lands when that is not the destination itself (today's warps: the card's "Arrives"
-/// line and the trip's message); `None` when it lands right there.
-///
-/// **TODO-SEAM (w14-index):** with `TravelTo`'s exact arrival this goes away.
-#[must_use]
-pub fn arrival_text(world: &WorldState, target: &AtlasTarget) -> Option<String> {
-    match *target {
-        AtlasTarget::Home(tile) => {
-            let settings = *world.world_settings();
-            if let Some(moon) = worldgen::sky::moon(&settings)
-                && (tile.x - moon.center_x).abs() <= moon.half_width
-                && tile.y < 0
-            {
-                return None;
-            }
-            let surface = world.terrain().surface_row(tile.x);
-            if tile.y <= surface + 2 {
-                // The surface and the sky go to the home town's spawn.
-                return ((tile.x - worldgen::SPAWN_TILE_X).abs() > 24)
-                    .then(|| "the home town".to_owned());
-            }
-            Some(warp_arrival_text(world, tile))
-        }
-        AtlasTarget::Space { .. } => Some("free flight by home".to_owned()),
-        AtlasTarget::Player(id) => {
-            let resolved = resolve_player(world, id)?;
-            arrival_text(world, &resolved)
-        }
-        AtlasTarget::Body { .. } | AtlasTarget::Story => None,
+const fn hazard_name(hazard: HazardKind) -> &'static str {
+    match hazard {
+        HazardKind::Gas => "gas",
+        HazardKind::Lava => "lava",
+        HazardKind::MagmaVent => "magma vents",
+        HazardKind::Pressure => "pressure",
+        HazardKind::Explosive => "unstable rock",
     }
 }
 
-/// Where a trip to home tile `tile` arrives with today's warps (the card's "Arrives" line):
-/// the surface, or the top of a stratum.
-#[must_use]
-pub fn warp_arrival_text(world: &WorldState, tile: TilePosition) -> String {
-    let settings = *world.world_settings();
-    let surface = world.terrain().surface_row(tile.x);
-    let band = warp_band(&settings, tile);
-    if tile.y <= surface + 2 || band == Band::Topsoil {
-        return "the surface".to_owned();
+fn depth_line(row: i32) -> String {
+    format!(
+        "{} m (row {})",
+        thousands(row.into()),
+        thousands(row.into())
+    )
+}
+
+fn with_stratum_facts(mut destination: Destination, stratum: Stratum) -> Destination {
+    let def = stratum.def();
+    destination = destination.fact(
+        "Stratum",
+        format!(
+            "{} (Descent {})",
+            stratum.name(),
+            stratum.descent().numeral()
+        ),
+    );
+    let hazards: Vec<&str> = def
+        .hazards
+        .iter()
+        .filter(|(_, weight)| *weight > 0)
+        .map(|(hazard, _)| hazard_name(*hazard))
+        .collect();
+    if !hazards.is_empty() {
+        destination = destination.fact("Hazards", hazards.join(", "));
     }
-    if settings.generator.has_descents() {
-        format!("top of {}", Stratum::of_band(band).name())
+    destination = destination.fact("Rule", def.signature);
+    destination.creatures = def.creatures.iter().map(|(kind, _)| *kind).collect();
+    destination
+}
+
+/// "1 planet", "4 planets".
+#[must_use]
+pub fn planets_text(count: usize) -> String {
+    if count == 1 {
+        "1 planet".to_owned()
     } else {
-        format!("top of {}", band.name())
+        format!("{count} planets")
     }
 }
 
-/// Every destination of `category` in `world`, seen from `player` (bookmarks and recent
-/// places are the seat's own: see `shell::atlas`).
+fn gravity_text(milli_g: u32) -> String {
+    format!("{:.2} g", milli_g as f32 / 1_000.0)
+}
+
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+/// The card line under the name: the Descent and stratum, or the theme and system, or where.
+fn subtitle_of(found: &index_model::Destination) -> String {
+    let info = &found.info;
+    if let Some(stratum) = info.stratum {
+        return format!(
+            "Descent {} - {}",
+            stratum.descent().numeral(),
+            stratum.name()
+        );
+    }
+    if let Some(descent) = info.descent {
+        return format!("Descent {} - {}", descent.numeral(), descent.name());
+    }
+    match (info.theme, &info.system) {
+        (Some(theme), Some(system)) => format!("{} - {system}", capitalised(theme.name())),
+        (Some(theme), None) => capitalised(theme.name()),
+        (None, Some(system)) if info.place.is_empty() => format!("{system} system"),
+        _ => capitalised(&info.place),
+    }
+}
+
+/// The index's candidate as the Atlas shows it.
+#[must_use]
+pub fn from_index(world: &WorldState, found: &index_model::Destination) -> Destination {
+    let info = &found.info;
+    let kind = DestinationKind::Index(found.id.kind);
+    let mut destination = Destination::new(
+        kind,
+        found.name.clone(),
+        subtitle_of(found),
+        target_of(world, &found.id),
+    );
+    destination.request = Some(TravelRequest::exact(found.id));
+    if let Some(metres) = info.depth_m {
+        destination = destination.fact("Depth", format!("{} m", thousands(metres.into())));
+    }
+    if let Place::OnBody(BodyId::Space(_)) = found.id.place {
+        if !info.place.is_empty() {
+            destination = destination.fact("World", info.place.clone());
+        }
+    } else {
+        destination = destination.fact(
+            "Coordinates",
+            format!("{}, {}", thousands(found.id.x), thousands(found.id.y)),
+        );
+    }
+    if let Some(stratum) = info.stratum {
+        destination = with_stratum_facts(destination, stratum);
+    }
+    if let Some(theme) = info.theme {
+        destination = destination.fact("Theme", theme.name());
+    }
+    if let Some(gravity) = info.gravity_milli_g {
+        destination = destination.fact("Gravity", gravity_text(gravity));
+    }
+    if !info.hazards.is_empty() && info.stratum.is_none() {
+        destination = destination.fact("Hazards", info.hazards.join(", "));
+    }
+    if !info.residents.is_empty() {
+        let shown: Vec<&str> = info.residents.iter().take(4).map(String::as_str).collect();
+        destination = destination.fact("Residents", shown.join(", "));
+        if destination.creatures.is_empty() {
+            destination.creatures = info
+                .residents
+                .iter()
+                .filter_map(|name| creature_named(name))
+                .collect();
+        }
+    }
+    if let Some(boss) = &info.boss {
+        destination = destination.fact("Boss", boss.clone());
+        destination.boss = creature_named(boss);
+    }
+    let mut extra = String::new();
+    if let Some(descent) = info.descent.or_else(|| info.stratum.map(Stratum::descent)) {
+        let number = descent.index() + 1;
+        let _ = write!(
+            extra,
+            " descent {number} d{number} {} {}",
+            descent.numeral(),
+            descent.name()
+        );
+    }
+    for word in [
+        info.theme.map(|theme| theme.name().to_owned()),
+        info.system.clone(),
+        info.boss.clone(),
+        Some(info.place.clone()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        extra.push(' ');
+        extra.push_str(&word);
+    }
+    for resident in &info.residents {
+        extra.push(' ');
+        extra.push_str(resident);
+    }
+    destination.with_keywords(&extra)
+}
+
+/// The galaxy story's current goal (its own warp, not an index place).
+fn story_destination() -> Destination {
+    Destination::new(
+        DestinationKind::StorySite,
+        "The road's current goal",
+        "Where the galaxy story leads next",
+        AtlasTarget::Story,
+    )
+    .with_keywords("galaxy story quest road relic")
+}
+
+/// Every destination of `category` in `world`, seen from `player`: the destination index's
+/// candidates of the category's kinds (nearest first within each kind; Depth's Descents and
+/// strata top to bottom), the bookmarks and back-stack the world keeps for the player, and
+/// the story's goal under Places once space is open.
 #[must_use]
 pub fn destinations(
     world: &WorldState,
     player: Option<PlayerId>,
     category: AtlasCategory,
 ) -> Vec<Destination> {
-    let settings = *world.world_settings();
-    match category {
-        AtlasCategory::Depth => depth_destinations(world, &settings),
-        AtlasCategory::Places => place_destinations(world, &settings, player),
-        AtlasCategory::Bosses => boss_destinations(world, &settings),
-        AtlasCategory::Settlements => settlement_destinations(world, &settings),
-        AtlasCategory::Space => space_destinations(world),
-        AtlasCategory::Players => player_destinations(world, player),
-        AtlasCategory::Bookmarks | AtlasCategory::Recent => Vec::new(),
+    let Some(player) = player else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for kind in category.kinds() {
+        let mut found = world.destinations(player, kind, DestinationFilter::Any);
+        if matches!(
+            kind,
+            IndexKind::Descent | IndexKind::Stratum | IndexKind::Depth
+        ) {
+            found.sort_by_key(|candidate| (candidate.id.y, candidate.id.x));
+        }
+        out.extend(
+            found
+                .iter()
+                .map(|candidate| from_index(world, candidate).filed_under(category)),
+        );
     }
+    if category == AtlasCategory::Places && world.space_enabled() {
+        out.push(story_destination());
+    }
+    out
 }
 
-/// A depth on the home world picked on the depth map.
+/// Every destination whose card answers `query` ("planet ice", "leviathan", "descent 5"):
+/// the index's own search, nearest first within each kind.
+#[must_use]
+pub fn search(world: &WorldState, player: Option<PlayerId>, query: &str) -> Vec<Destination> {
+    let Some(player) = player else {
+        return Vec::new();
+    };
+    world
+        .search_destinations(player, query, index_model::MAX_CANDIDATES)
+        .iter()
+        .map(|candidate| from_index(world, candidate))
+        .collect()
+}
+
+/// A depth on the home world picked on the depth map: Go travels to exactly that tile (the
+/// index's safe arrival settles it onto the nearest floor and carves a pocket).
 #[must_use]
 pub fn depth_spot(world: &WorldState, tile: TilePosition) -> Destination {
     let settings = *world.world_settings();
@@ -617,7 +784,6 @@ pub fn depth_spot(world: &WorldState, tile: TilePosition) -> Destination {
     };
     let mut destination = Destination::new(
         DestinationKind::DepthSpot,
-        AtlasCategory::Depth,
         name,
         subtitle,
         AtlasTarget::Home(tile),
@@ -628,10 +794,16 @@ pub fn depth_spot(world: &WorldState, tile: TilePosition) -> Destination {
         let stratum = gen_descent::stratum_at(&settings, tile.x, tile.y);
         destination = with_stratum_facts(destination, stratum);
     }
+    destination.request = Some(TravelRequest::exact(DestinationId::new(
+        IndexKind::Depth,
+        Place::HOME,
+        i64::from(tile.x),
+        i64::from(tile.y),
+    )));
     destination
 }
 
-/// A free-flight spot picked on the galaxy map, with the nearest thing named.
+/// A free-flight spot picked on the galaxy map, with the nearest thing named: Go stops there.
 #[must_use]
 pub fn space_spot(world: &WorldState, pos: WorldPos) -> Destination {
     let galaxy = Space::shared(world.world_seed());
@@ -650,9 +822,8 @@ pub fn space_spot(world: &WorldState, pos: WorldPos) -> Destination {
         },
     );
     let (x, y) = pos.tile();
-    Destination::new(
+    let mut destination = Destination::new(
         DestinationKind::SpaceSpot,
-        AtlasCategory::Space,
         "Open space",
         subtitle,
         AtlasTarget::Space {
@@ -660,853 +831,32 @@ pub fn space_spot(world: &WorldState, pos: WorldPos) -> Destination {
             reach: 6_000.0,
         },
     )
-    .fact("Coordinates", format!("{}, {}", thousands(x), thousands(y)))
-}
-
-fn depth_line(row: i32) -> String {
-    format!(
-        "{} m (row {})",
-        thousands(row.into()),
-        thousands(row.into())
-    )
-}
-
-const fn hazard_name(hazard: HazardKind) -> &'static str {
-    match hazard {
-        HazardKind::Gas => "gas",
-        HazardKind::Lava => "lava",
-        HazardKind::MagmaVent => "magma vents",
-        HazardKind::Pressure => "pressure",
-        HazardKind::Explosive => "unstable rock",
-    }
-}
-
-/// The creature a gate's boss fight is drawn as (the set pieces have none).
-#[must_use]
-pub const fn gate_boss_creature(boss: DescentBoss) -> Option<EnemyKind> {
-    match boss {
-        DescentBoss::TheSinkhole | DescentBoss::StarCore | DescentBoss::TheHeart => None,
-        DescentBoss::MycelialMind => Some(EnemyKind::MycelialMind),
-        DescentBoss::Leviathan => Some(EnemyKind::Leviathan),
-        DescentBoss::SunSerpent => Some(EnemyKind::SunSerpent),
-        DescentBoss::TheGlitch => Some(EnemyKind::TheGlitch),
-        DescentBoss::GatekeeperColossus => Some(EnemyKind::GatekeeperColossus),
-    }
-}
-
-/// A theme boss's creature, by its name on the hunt list.
-fn theme_boss_creature(name: &str) -> Option<EnemyKind> {
-    [
-        EnemyKind::Sporemother,
-        EnemyKind::ReactorWarden,
-        EnemyKind::AshenSovereign,
-        EnemyKind::Thunderhead,
-        EnemyKind::Gloamwarden,
-        EnemyKind::RingWarden,
-    ]
-    .into_iter()
-    .find(|kind| {
-        let own = kind.name().trim_start_matches("The ").to_lowercase();
-        name.to_lowercase().contains(&own)
-    })
-}
-
-fn with_stratum_facts(mut destination: Destination, stratum: Stratum) -> Destination {
-    let def = stratum.def();
-    destination = destination.fact(
-        "Stratum",
-        format!(
-            "{} (Descent {})",
-            stratum.name(),
-            stratum.descent().numeral()
-        ),
-    );
-    let hazards: Vec<&str> = def
-        .hazards
-        .iter()
-        .filter(|(_, weight)| *weight > 0)
-        .map(|(hazard, _)| hazard_name(*hazard))
-        .collect();
-    if !hazards.is_empty() {
-        destination = destination.fact("Hazards", hazards.join(", "));
-    }
-    destination = destination.fact("Rule", def.signature);
-    destination.creatures = def.creatures.iter().map(|(kind, _)| *kind).collect();
-    if !destination.creatures.is_empty() {
-        let names: Vec<&str> = destination
-            .creatures
-            .iter()
-            .take(4)
-            .map(|kind| kind.name())
-            .collect();
-        destination = destination.fact("Residents", names.join(", "));
-    }
+    .fact("Coordinates", format!("{}, {}", thousands(x), thousands(y)));
+    // An open-space spot is no listed candidate: an exact id of the back-stack's kind (a bare
+    // spot) travels to the tile itself.
+    destination.request = Some(TravelRequest::exact(DestinationId::new(
+        IndexKind::Recent,
+        Place::Space,
+        x,
+        y,
+    )));
     destination
 }
 
-/// A middle column of the home world (the spawn's, where the Descents are drawn).
-const HOME_COLUMN: i32 = worldgen::SPAWN_TILE_X;
-
-#[allow(
-    clippy::too_many_lines,
-    reason = "one block per kind: the surface, Descents, strata or bands"
-)]
-fn depth_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destination> {
-    let mut out = Vec::new();
-    let surface = world.terrain().surface_row(HOME_COLUMN);
-    out.push(
-        Destination::new(
-            DestinationKind::Surface,
-            AtlasCategory::Depth,
-            "The surface",
-            "Home, at the spawn point",
-            AtlasTarget::Home(TilePosition {
-                x: HOME_COLUMN,
-                y: surface - 2,
-            }),
-        )
-        .fact("Depth", "0 m")
-        .with_keywords("top home spawn grass descent 0"),
-    );
-    if !settings.generator.has_descents() {
-        for band in Band::ALL {
-            let top = worldgen::strata::band_solid_top_row(settings, band, HOME_COLUMN);
-            out.push(
-                Destination::new(
-                    DestinationKind::Band,
-                    AtlasCategory::Depth,
-                    band.name(),
-                    "A classic band",
-                    AtlasTarget::Home(TilePosition {
-                        x: HOME_COLUMN,
-                        y: top + 1,
-                    }),
-                )
-                .fact("Depth", depth_line(top)),
-            );
-        }
-        return out;
-    }
-    let layout = gen_descent::layout(settings);
-    for descent in Descent::ALL {
-        let (top, bottom) = layout.descent_rows(descent);
-        let first = descent.first_stratum();
-        let start = gen_descent::stratum_solid_top_row(settings, &layout, first, HOME_COLUMN);
-        let number = descent.index() + 1;
-        let mut destination = Destination::new(
-            DestinationKind::Descent,
-            AtlasCategory::Depth,
-            format!("Descent {} - {}", descent.numeral(), descent.name()),
-            format!("{} strata", descent.strata().count()),
-            AtlasTarget::Home(TilePosition {
-                x: HOME_COLUMN,
-                y: start + 2,
-            }),
-        )
-        .fact(
-            "Depth",
-            format!("{} - {} m", thousands(top.into()), thousands(bottom.into())),
-        )
-        .fact("Story", descent.story_beat())
-        .with_keywords(&format!(
-            "descent {number} d{number} {} {}",
-            descent.numeral().to_lowercase(),
-            descent.name()
-        ));
-        if let Some(gate) = descent.gate() {
-            destination = destination.fact("Gate", gate.boss.name());
-            destination.boss = gate_boss_creature(gate.boss);
-        }
-        destination = with_stratum_facts(destination, first);
-        out.push(destination);
-    }
-    for stratum in Stratum::ALL {
-        let (top, bottom) = layout.rows(stratum);
-        if bottom <= top {
-            continue;
-        }
-        let descent = stratum.descent();
-        let row = gen_descent::stratum_solid_top_row(settings, &layout, stratum, HOME_COLUMN);
-        let number = descent.index() + 1;
-        let destination = Destination::new(
-            DestinationKind::Stratum,
-            AtlasCategory::Depth,
-            stratum.name(),
-            format!("Descent {} - {}", descent.numeral(), descent.name()),
-            AtlasTarget::Home(TilePosition {
-                x: HOME_COLUMN,
-                y: row + 2,
-            }),
-        )
-        .fact(
-            "Depth",
-            format!("{} - {} m", thousands(top.into()), thousands(bottom.into())),
-        )
-        .with_keywords(&format!("descent {number} d{number}"));
-        out.push(with_stratum_facts(destination, stratum));
-    }
-    out
-}
-
-#[allow(
-    clippy::too_many_lines,
-    reason = "one block per kind of place on the home world"
-)]
-fn place_destinations(
-    world: &WorldState,
-    settings: &WorldSettings,
-    player: Option<PlayerId>,
-) -> Vec<Destination> {
-    let mut out = Vec::new();
-    let surface = world.terrain().surface_row(HOME_COLUMN);
-    out.push(
-        Destination::new(
-            DestinationKind::HomeTown,
-            AtlasCategory::Places,
-            "Home town",
-            "The shops, the depot and the spawn point",
-            AtlasTarget::Home(TilePosition {
-                x: HOME_COLUMN,
-                y: surface - 2,
-            }),
-        )
-        .fact("Depth", "0 m")
-        .with_keywords("spawn shop depot garage"),
-    );
-    if let Some(moon) = worldgen::sky::moon(settings) {
-        out.push(
-            Destination::new(
-                DestinationKind::Moon,
-                AtlasCategory::Places,
-                "The Moon",
-                "Its colony, craters and crawlers",
-                AtlasTarget::Home(TilePosition {
-                    x: moon.center_x,
-                    y: moon.top_row - 3,
-                }),
-            )
-            .fact(
-                "Altitude",
-                format!("{} m up", thousands((-moon.top_row).into())),
-            )
-            .fact("Gravity", "0.17 g")
-            .with_keywords("lunar colony sky"),
-        );
-    }
-    let origin = player
-        .and_then(|player| world.player(player))
-        .map_or(HOME_COLUMN, |rig| rig.tile_in(world.frame()).x);
-    let span = 2_400;
-    let villages =
-        fatherload_simulation::village::villages_between(settings, origin - span, origin + span);
-    for village in villages.iter().take(12) {
-        let (kind, setting) = match village.setting {
-            fatherload_simulation::village::layout::VillageSetting::Surface => {
-                (DestinationKind::Village, "Surface village")
-            }
-            fatherload_simulation::village::layout::VillageSetting::Underground => {
-                (DestinationKind::Village, "Underground hall")
-            }
-            fatherload_simulation::village::layout::VillageSetting::Sky(_) => {
-                (DestinationKind::SkyTown, "Sky town")
-            }
-        };
-        let centre = i32::midpoint(village.first_column, village.last_column);
-        out.push(
-            Destination::new(
-                kind,
-                AtlasCategory::Places,
-                village.name.clone(),
-                setting,
-                AtlasTarget::Home(TilePosition {
-                    x: centre,
-                    y: village.ground_row - 2,
-                }),
-            )
-            .fact("Depth", depth_line(village.ground_row))
-            .fact("Prosperity", format!("{} of 5", village.prosperity))
-            .with_keywords("village settlement people"),
-        );
-    }
-    let sky_rect = worldgen::TileRect {
-        min: TilePosition {
-            x: origin - span,
-            y: -2_000,
-        },
-        max: TilePosition {
-            x: origin + span,
-            y: 0,
-        },
-    };
-    for town in fatherload_simulation::village::sky_towns_in(settings, &sky_rect)
-        .iter()
-        .take(6)
-    {
-        let centre = i32::midpoint(town.first_column, town.last_column);
-        out.push(
-            Destination::new(
-                DestinationKind::SkyTown,
-                AtlasCategory::Places,
-                town.name.clone(),
-                "Sky town",
-                AtlasTarget::Home(TilePosition {
-                    x: centre,
-                    y: town.ground_row - 2,
-                }),
-            )
-            .fact(
-                "Altitude",
-                format!("{} m up", thousands((-town.ground_row).into())),
-            )
-            .with_keywords("sky island cloud"),
-        );
-    }
-    if settings.generator.has_descents() {
-        let layout = fatherload_simulation::descent::fields::cached_layout(settings);
-        for descent in Descent::ALL {
-            let Some(hall) = gen_descent::landmarks::outpost(settings, &layout, descent) else {
-                continue;
-            };
-            let number = descent.index() + 1;
-            out.push(
-                with_stratum_facts(
-                    Destination::new(
-                        DestinationKind::Outpost,
-                        AtlasCategory::Places,
-                        format!("Outpost {}", descent.numeral()),
-                        format!("{} - {}", descent.name(), hall.stratum.name()),
-                        AtlasTarget::Home(TilePosition {
-                            x: i32::midpoint(hall.bounds.min.x, hall.bounds.max.x),
-                            y: hall.bounds.max.y - 2,
-                        }),
-                    )
-                    .fact("Depth", depth_line(hall.bounds.max.y)),
-                    hall.stratum,
-                )
-                .with_keywords(&format!("descent {number} lift cable station")),
-            );
-        }
-    }
-    let tomb_rect = worldgen::TileRect {
-        min: TilePosition {
-            x: origin - 600,
-            y: -400,
-        },
-        max: TilePosition {
-            x: origin + 600,
-            y: 1_400,
-        },
-    };
-    if settings.generator.has_tombs() {
-        let mut tombs = worldgen::streamed::tomb_sites::sites_touching(settings, &tomb_rect);
-        tombs.sort_by_key(|site| ((site.door.x - origin).abs(), site.door.y));
-        for site in tombs.iter().take(8) {
-            out.push(
-                Destination::new(
-                    DestinationKind::Tomb,
-                    AtlasCategory::Places,
-                    site.title(),
-                    format!("{} floors", site.floors()),
-                    AtlasTarget::Home(TilePosition {
-                        x: site.door.x,
-                        y: site.door.y,
-                    }),
-                )
-                .fact("Depth", depth_line(site.door.y))
-                .fact("Tier", site.tier.to_string())
-                .with_keywords("tomb crypt dungeon vault"),
-            );
-        }
-    }
-    if world.space_enabled() {
-        out.push(
-            Destination::new(
-                DestinationKind::StorySite,
-                AtlasCategory::Places,
-                "The road's current goal",
-                "Where the galaxy story leads next",
-                AtlasTarget::Story,
-            )
-            .with_keywords("galaxy story quest road relic"),
-        );
-    }
-    out
-}
-
-fn boss_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destination> {
-    let mut out = Vec::new();
-    if settings.generator.has_descents() {
-        let layout = fatherload_simulation::descent::fields::cached_layout(settings);
-        for descent in Descent::ALL {
-            let Some(gate) = descent.gate() else {
-                continue;
-            };
-            let chamber = gen_descent::landmarks::gate_chamber(settings, &layout, descent);
-            let number = descent.index() + 1;
-            let mut destination = Destination::new(
-                DestinationKind::GateBoss,
-                AtlasCategory::Bosses,
-                gate.boss.name(),
-                format!("Gate of Descent {} - {}", descent.numeral(), descent.name()),
-                AtlasTarget::Home(TilePosition {
-                    x: i32::midpoint(chamber.bounds.min.x, chamber.bounds.max.x),
-                    y: chamber.bounds.max.y - 2,
-                }),
-            )
-            .fact("Depth", depth_line(chamber.bounds.max.y))
-            .fact(
-                "Rewards",
-                gate.rewards
-                    .iter()
-                    .map(|key| key.name())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            )
-            .with_keywords(&format!("descent {number} gate arena"));
-            destination.boss = gate_boss_creature(gate.boss);
-            out.push(with_stratum_facts(destination, chamber.stratum));
-        }
-    }
-    if world.space_enabled() {
-        let seed = world.world_seed();
-        let galaxy = Space::shared(seed);
-        for boss in hunt::THEME_BOSSES {
-            let Some(body) = hunt::nearest_theme_world(seed, boss.world) else {
-                continue;
-            };
-            let Some(found) = galaxy.body(body) else {
-                continue;
-            };
-            let system = galaxy.system(body.system_ref());
-            let world_name = system
-                .as_ref()
-                .map_or_else(String::new, |system| system.body_name(body.body));
-            let mut destination = Destination::new(
-                DestinationKind::ThemeBoss,
-                AtlasCategory::Bosses,
-                boss.name,
-                format!("Lair on {world_name} ({})", boss.world.name()),
-                AtlasTarget::Body {
-                    body,
-                    column: arrival_column(seed, body),
-                },
-            )
-            .fact("Theme", boss.world.name())
-            .fact("Gravity", gravity_text(found.gravity_milli_g))
-            .with_keywords("planet lair theme");
-            destination.boss = theme_boss_creature(boss.name);
-            out.push(destination);
-        }
-        for faction in Faction::ALL {
-            let Some(lair) = world.boss_lair(faction) else {
-                continue;
-            };
-            let (sector_x, sector_y) = lair.system.sector;
-            out.push(
-                Destination::new(
-                    DestinationKind::FactionBoss,
-                    AtlasCategory::Bosses,
-                    format!("The {} flagship", faction.name()),
-                    format!("A lair in sector {sector_x}, {sector_y}"),
-                    AtlasTarget::Space {
-                        pos: lair.pos,
-                        reach: 900.0,
-                    },
-                )
-                .fact("Faction", faction.name())
-                .with_keywords("ship fleet lair hostile"),
-            );
-        }
-    }
-    out
-}
-
-fn settlement_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destination> {
-    let mut out = Vec::new();
-    for place in DeepSettlement::ALL {
-        let Some((ground, first, last)) = deep_folk::hall(settings, place) else {
-            continue;
-        };
-        let tile = TilePosition {
-            x: i32::midpoint(first, last),
-            y: ground - 2,
-        };
-        let stratum = gen_descent::stratum_at(settings, tile.x, ground);
-        out.push(
-            Destination::new(
-                DestinationKind::DeepSettlement,
-                AtlasCategory::Settlements,
-                place.name(),
-                format!(
-                    "Descent {} - {}",
-                    stratum.descent().numeral(),
-                    stratum.name()
-                ),
-                AtlasTarget::Home(tile),
-            )
-            .fact("Depth", depth_line(ground))
-            .fact("Residents", format!("{} folk", place.cast().len()))
-            .with_keywords("deep folk people hall"),
-        );
-    }
-    let villages = fatherload_simulation::village::villages_between(
-        settings,
-        HOME_COLUMN - 3_000,
-        HOME_COLUMN + 3_000,
-    );
-    for village in villages.iter().take(8) {
-        let centre = i32::midpoint(village.first_column, village.last_column);
-        out.push(
-            Destination::new(
-                DestinationKind::Village,
-                AtlasCategory::Settlements,
-                village.name.clone(),
-                format!(
-                    "{} - {} buildings",
-                    capitalised(village.size.name()),
-                    village.buildings.len()
-                ),
-                AtlasTarget::Home(TilePosition {
-                    x: centre,
-                    y: village.ground_row - 2,
-                }),
-            )
-            .fact("Depth", depth_line(village.ground_row))
-            .fact("Buildings", village.buildings.len().to_string())
-            .with_keywords("village people"),
-        );
-    }
-    if world.space_enabled() {
-        let seed = world.world_seed();
-        let galaxy = Space::shared(seed);
-        for theme in Theme::PLANET {
-            let Some(body) = hunt::nearest_theme_world(seed, theme) else {
-                continue;
-            };
-            let Some(params) = fatherload_simulation::place::planet_params_for(seed, body) else {
-                continue;
-            };
-            let towns = fatherload_simulation::alien::town::towns_of(&params);
-            let Some(town) = towns.first() else {
-                continue;
-            };
-            let system = galaxy
-                .system(body.system_ref())
-                .map_or_else(String::new, |system| system.body_name(body.body));
-            out.push(
-                Destination::new(
-                    DestinationKind::AlienTown,
-                    AtlasCategory::Settlements,
-                    town.name.clone(),
-                    format!("{:?} town on {system}", town.species),
-                    AtlasTarget::Body {
-                        body,
-                        column: i64::from(town.site.centre),
-                    },
-                )
-                .fact("World", format!("{system} ({})", theme.name()))
-                .fact("People", format!("{:?}", town.species))
-                .with_keywords(&format!("alien town {}", theme.name())),
-            );
-        }
-    }
-    out
-}
-
-/// "1 planet", "4 planets".
+/// The index's candidate for the star system `name` near `player` (the galaxy map snaps to
+/// it: Go stops a safe distance off its star, as the list's does).
 #[must_use]
-pub fn planets_text(count: usize) -> String {
-    if count == 1 {
-        "1 planet".to_owned()
-    } else {
-        format!("{count} planets")
-    }
-}
-
-fn gravity_text(milli_g: u16) -> String {
-    format!("{:.2} g", f32::from(milli_g) / 1_000.0)
-}
-
-fn capitalised(text: &str) -> String {
-    let mut chars = text.chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(chars).collect()
-    })
-}
-
-/// How far round home the Space category looks (tiles).
-pub const SPACE_REACH_TILES: i64 = 3 * space::SPACE_SECTOR_TILES;
-
-#[allow(
-    clippy::too_many_lines,
-    reason = "one block per kind of thing in space"
-)]
-fn space_destinations(world: &WorldState) -> Vec<Destination> {
-    let mut out = Vec::new();
-    if !world.space_enabled() {
-        return out;
-    }
-    let seed = world.world_seed();
-    let galaxy = Space::shared(seed);
-    // Worlds by theme first ("planet ice"), the nearest of each kind to home.
-    for theme in Theme::PLANET {
-        let Some(body) = hunt::nearest_theme_world(seed, theme) else {
-            continue;
-        };
-        let (Some(found), Some(system)) = (galaxy.body(body), galaxy.system(body.system_ref()))
-        else {
-            continue;
-        };
-        out.push(planet_destination(seed, &system, &found, body));
-    }
-    let home = galaxy.home_system();
-    for (index, body) in home.bodies.iter().enumerate() {
-        let Ok(index) = u8::try_from(index) else {
-            continue;
-        };
-        let key = SpaceBodyKey {
-            sector: space::HOME_SECTOR,
-            system: home.index,
-            body: index,
-        };
-        if matches!(body.kind, BodyKind::HomeWorld | BodyKind::HomeMoon) {
-            continue;
-        }
-        if body.radius < space::MIN_LANDABLE_RADIUS {
-            continue;
-        }
-        out.push(planet_destination(seed, &home, body, key));
-    }
-    let centre = home.centre;
-    for (reference, distance) in galaxy
-        .systems_near(centre, SPACE_REACH_TILES)
-        .iter()
-        .take(16)
-    {
-        let Some(system) = galaxy.system(*reference) else {
-            continue;
-        };
-        out.push(
-            Destination::new(
-                DestinationKind::StarSystem,
-                AtlasCategory::Space,
-                system.name.clone(),
-                format!(
-                    "{} - {}",
-                    capitalised(system.class.name()),
-                    planets_text(system.planet_count())
-                ),
-                AtlasTarget::Space {
-                    pos: system.centre.pos(),
-                    reach: system.extent as f32 * 0.6,
-                },
-            )
-            .fact("Star", system.class.name())
-            .fact(
-                "From home",
-                format!("{:.1} sectors", distance / space::SPACE_SECTOR_TILES as f64),
-            )
-            .with_keywords("system star sun"),
-        );
-        for station in system.stations.iter().take(2) {
-            out.push(
-                Destination::new(
-                    DestinationKind::Station,
-                    AtlasCategory::Space,
-                    format!("{} {}", system.name, capitalised(station.kind.name())),
-                    format!("Station of {}", system.name),
-                    AtlasTarget::Space {
-                        pos: station.centre.pos(),
-                        reach: f32::from(station.size) * 6.0,
-                    },
-                )
-                .fact("Kind", station.kind.name())
-                .with_keywords("station dock trade shipyard"),
-            );
-        }
-        for belt in system.belts.iter().take(1) {
-            let radius = i64::from(belt.inner.midpoint(belt.outer));
-            out.push(
-                Destination::new(
-                    DestinationKind::Belt,
-                    AtlasCategory::Space,
-                    format!("{} belt", system.name),
-                    format!("{} asteroids", capitalised(belt.ore.name())),
-                    AtlasTarget::Space {
-                        pos: system.centre.offset(radius, 0).pos(),
-                        reach: 600.0,
-                    },
-                )
-                .fact("Ore", belt.ore.name())
-                .with_keywords("asteroid belt rocks mining"),
-            );
-        }
-        for comet in system.comets.iter().take(1) {
-            out.push(
-                Destination::new(
-                    DestinationKind::Comet,
-                    AtlasCategory::Space,
-                    format!("Comet of {}", system.name),
-                    "A nucleus and its tail",
-                    AtlasTarget::Space {
-                        pos: comet.centre.pos(),
-                        reach: f32::from(comet.nucleus_radius) * 30.0,
-                    },
-                )
-                .with_keywords("comet tail ice"),
-            );
-        }
-    }
-    for sector in galaxy.sectors_near(centre, SPACE_REACH_TILES) {
-        for nebula in sector.nebulae.iter().take(1) {
-            if out.iter().any(|known| {
-                known.kind == DestinationKind::Nebula
-                    && known.target.key().contains(&format!("{}", nebula.id))
-            }) {
-                continue;
-            }
-            out.push(
-                Destination::new(
-                    DestinationKind::Nebula,
-                    AtlasCategory::Space,
-                    format!("Nebula {:04X}", nebula.id & 0xFFFF),
-                    "Fog that hides and slows",
-                    AtlasTarget::Space {
-                        pos: nebula.centre.pos(),
-                        reach: (nebula.radius as f32 * 0.4).min(200_000.0),
-                    },
-                )
-                .with_keywords("nebula fog cloud"),
-            );
-        }
-        for hole in &sector.black_holes {
-            out.push(
-                Destination::new(
-                    DestinationKind::BlackHole,
-                    AtlasCategory::Space,
-                    format!("Black hole {:04X}", hole.id & 0xFFFF),
-                    "Lensing, time dilation, no way back",
-                    AtlasTarget::Space {
-                        pos: hole.centre.pos(),
-                        reach: hole.lensing_radius as f32 * 1.4,
-                    },
-                )
-                .fact(
-                    "Pull",
-                    gravity_text(hole.gravity_milli_g.min(60_000) as u16),
-                )
-                .with_keywords("black hole singularity lens"),
-            );
-        }
-        for mouth in &sector.wormholes {
-            out.push(
-                Destination::new(
-                    DestinationKind::Wormhole,
-                    AtlasCategory::Space,
-                    format!("Wormhole {},{}", mouth.id.a.0, mouth.id.a.1),
-                    "A mouth to another region",
-                    AtlasTarget::Space {
-                        pos: mouth.centre.pos(),
-                        reach: mouth.radius as f32 * 6.0,
-                    },
-                )
-                .with_keywords("wormhole tunnel portal"),
-            );
-        }
-    }
-    // Nebulae overlap their neighbours' lists, and a theme's nearest world may circle home:
-    // keep each place once.
-    let mut listed = std::collections::BTreeSet::new();
-    out.retain(|destination| listed.insert(destination.target.key()));
-    out
-}
-
-/// The column of body `key`'s strip a warp there arrives over: its first alien town's square
-/// on a settled world, else column 0 (`WorldState::warp_to_place`), so the preview shows where
-/// Go lands.
-///
-/// **TODO-SEAM (w14-index):** the index's `resolve_travel` names the arrival instead.
-fn arrival_column(seed: fatherload_simulation::space::SpaceSeed, key: SpaceBodyKey) -> i64 {
-    fatherload_simulation::place::planet_params_for(seed, key)
-        .and_then(|params| {
-            fatherload_simulation::alien::town::towns_of(&params)
-                .first()
-                .map(|town| i64::from(town.site.centre))
-        })
-        .unwrap_or(0)
-}
-
-fn planet_destination(
-    seed: fatherload_simulation::space::SpaceSeed,
-    system: &space::StarSystem,
-    body: &space::SpaceBody,
-    key: SpaceBodyKey,
-) -> Destination {
-    let kind = if matches!(body.kind, BodyKind::Planet) {
-        DestinationKind::Planet
-    } else {
-        DestinationKind::SmallBody
-    };
-    let name = system.body_name(key.body);
-    let mut destination = Destination::new(
-        kind,
-        AtlasCategory::Space,
-        name,
-        format!(
-            "{} {} - {}",
-            capitalised(body.theme.name()),
-            body.kind.name(),
-            system.name
-        ),
-        AtlasTarget::Body {
-            body: key,
-            column: arrival_column(seed, key),
-        },
-    )
-    .fact("Theme", body.theme.name())
-    .fact("Gravity", gravity_text(body.gravity_milli_g))
-    .fact("Air", body.atmosphere.name())
-    .fact("Temperature", format!("{} C", body.temperature_c))
-    .fact("Radius", format!("{} tiles", thousands(body.radius.into())));
-    if let Some(boss) = hunt::THEME_BOSSES
-        .iter()
-        .find(|boss| boss.world == body.theme)
-    {
-        destination = destination.fact("Boss", boss.name);
-        destination.boss = theme_boss_creature(boss.name);
-    }
-    let mut keywords = String::new();
-    let _ = write!(keywords, "planet world {} moon", body.theme.name());
-    destination.with_keywords(&keywords)
-}
-
-fn player_destinations(world: &WorldState, me: Option<PlayerId>) -> Vec<Destination> {
+pub fn system_named(
+    world: &WorldState,
+    player: Option<PlayerId>,
+    name: &str,
+) -> Option<Destination> {
+    let player = player?;
     world
-        .player_ids()
-        .enumerate()
-        .filter(|(_, id)| Some(*id) != me)
-        .filter_map(|(index, id)| {
-            let target = resolve_player(world, id)?;
-            let place = match world.place_of(id) {
-                Place::Space => "In space".to_owned(),
-                Place::OnBody(BodyId::Home) => "On the home world".to_owned(),
-                Place::OnBody(BodyId::Moon) => "On the Moon".to_owned(),
-                Place::OnBody(BodyId::Space(_)) => "On another world".to_owned(),
-            };
-            let mut destination = Destination::new(
-                DestinationKind::Player,
-                AtlasCategory::Players,
-                format!("Player {}", index + 1),
-                place,
-                AtlasTarget::Player(id),
-            )
-            .with_keywords(&format!("player {} crew friend", index + 1));
-            if let AtlasTarget::Home(tile) = target {
-                destination = destination.fact("Depth", depth_line(tile.y));
-            }
-            Some(destination)
-        })
-        .collect()
+        .destinations(player, IndexKind::System, DestinationFilter::Any)
+        .iter()
+        .find(|candidate| candidate.info.system.as_deref() == Some(name) || candidate.name == name)
+        .map(|candidate| from_index(world, candidate))
 }
 
 #[cfg(test)]
@@ -1529,9 +879,21 @@ mod tests {
     }
 
     #[test]
-    fn every_gate_boss_names_its_creature_or_set_piece() {
+    fn every_index_kind_has_an_atlas_category() {
+        let mut filed: Vec<IndexKind> = AtlasCategory::ALL
+            .into_iter()
+            .flat_map(AtlasCategory::kinds)
+            .collect();
+        filed.sort();
+        let mut every = IndexKind::ALL.to_vec();
+        every.sort();
+        assert_eq!(filed, every, "each index kind is listed under one category");
+    }
+
+    #[test]
+    fn every_boss_names_its_creature_or_set_piece() {
         for boss in DescentBoss::ALL {
-            let creature = gate_boss_creature(boss);
+            let creature = creature_named(boss.name());
             assert_eq!(
                 creature.is_none(),
                 matches!(
@@ -1541,9 +903,9 @@ mod tests {
                 "{boss:?}"
             );
         }
-        for boss in hunt::THEME_BOSSES {
+        for boss in fatherload_simulation::endgame::hunt::THEME_BOSSES {
             assert!(
-                theme_boss_creature(boss.name).is_some(),
+                creature_named(boss.name).is_some(),
                 "{} has a creature",
                 boss.name
             );

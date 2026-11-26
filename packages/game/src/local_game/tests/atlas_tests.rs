@@ -2,12 +2,16 @@
 //! its categories, search and map follow the seat's inputs, Go travels (after the preview),
 //! Back comes home, and each split-screen seat drives its own.
 
-use fatherload_simulation::worldgen::{GeneratorVersion, WorldSettings};
+use fatherload_simulation::{
+    destination::DestinationKind as IndexKind,
+    worldgen::{GeneratorVersion, WorldSettings},
+};
 
 use super::*;
 use crate::atlas::{
-    AtlasCategory, DestinationKind,
+    AtlasCategory,
     hit::{AtlasButton, AtlasHit},
+    index::DestinationKind,
     map::MapKind,
 };
 
@@ -82,7 +86,7 @@ fn f2_opens_the_atlas_only_in_a_test_mode_world() {
         atlas
             .shown
             .iter()
-            .filter(|destination| destination.kind == DestinationKind::Descent)
+            .filter(|destination| destination.kind == DestinationKind::Index(IndexKind::Descent))
             .count()
             == 8,
         "all eight Descents are listed"
@@ -105,9 +109,14 @@ fn categories_search_and_the_preview_follow_the_inputs() {
     );
     let atlas = &game.shell.seat(0).atlas;
     assert_eq!(atlas.category, AtlasCategory::Bosses);
+    // The index lists the arenas nearest first: the Crust's Sinkhole leads at the surface.
     assert_eq!(
         atlas.current().map(|destination| destination.name.as_str()),
         Some("The Sinkhole")
+    );
+    assert_eq!(
+        atlas.current().map(|destination| destination.kind),
+        Some(DestinationKind::Index(IndexKind::BossArena))
     );
     // Next of the same kind, and the list's own steps.
     press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Next)));
@@ -140,12 +149,13 @@ fn categories_search_and_the_preview_follow_the_inputs() {
     }
     let atlas = &game.shell.seat(0).atlas;
     assert_eq!(atlas.search, "leviathan");
-    assert_eq!(
+    assert!(
         atlas
             .shown
             .first()
-            .map(|destination| destination.name.as_str()),
-        Some("The Leviathan")
+            .is_some_and(|destination| destination.keywords.contains("leviathan")),
+        "{:?}",
+        atlas.shown.first().map(|destination| &destination.name)
     );
     press_seat(&mut game, 0, confirm_input());
     assert!(!game.shell.seat(0).atlas.typing);
@@ -156,8 +166,8 @@ fn categories_search_and_the_preview_follow_the_inputs() {
     );
     // "descent 5" and "planet ice" find their places.
     for (query, wanted) in [
-        ("descent 5", DestinationKind::Descent),
-        ("planet ice", DestinationKind::Planet),
+        ("descent 5", DestinationKind::Index(IndexKind::Descent)),
+        ("planet ice", DestinationKind::Index(IndexKind::Planet)),
     ] {
         press_seat(&mut game, 0, pick(AtlasHit::Search));
         for _ in 0..12 {
@@ -207,7 +217,7 @@ fn go_travels_after_the_preview_and_back_comes_home() {
         .atlas
         .shown
         .iter()
-        .position(|destination| destination.name.starts_with("Descent II "))
+        .position(|destination| destination.name.starts_with("Descent II:"))
         .expect("Descent II is listed");
     press_seat(&mut game, 0, pick(AtlasHit::Row(row)));
     assert_eq!(
@@ -224,9 +234,12 @@ fn go_travels_after_the_preview_and_back_comes_home() {
         deep > start + 500,
         "the rig travelled down: {start} -> {deep}"
     );
-    let atlas = &game.shell.seat(0).atlas;
-    assert_eq!(atlas.recent.len(), 1);
-    assert_eq!(atlas.back_stack.len(), 1, "where it was is kept for Back");
+    // The world keeps where it was on the player's back-stack (saved and replicated).
+    assert_eq!(
+        game.world().player_travel(PLAYER).recent.len(),
+        1,
+        "where it was is kept for Back"
+    );
 
     // Back: the Atlas's Back button travels to where the rig was.
     press_seat(&mut game, 0, f2());
@@ -237,7 +250,7 @@ fn go_travels_after_the_preview_and_back_comes_home() {
         "back at the surface: {}",
         depth_of(&game, PLAYER)
     );
-    assert!(game.shell.seat(0).atlas.back_stack.is_empty());
+    assert!(game.world().player_travel(PLAYER).recent.is_empty());
 }
 
 #[test]
@@ -316,12 +329,15 @@ fn each_split_screen_seat_has_its_own_atlas() {
     let players = &game.shell.seat(1).atlas;
     assert_eq!(players.category, AtlasCategory::Players);
     assert_eq!(players.shown.len(), 1, "the other seat's player");
-    // Seat 2 bookmarks; seat 1's bookmarks stay empty.
-    press_seat(&mut game, 1, pick(AtlasHit::Button(AtlasButton::Bookmark)));
-    assert_eq!(game.shell.seat(1).atlas.bookmarks.len(), 1);
-    assert!(game.shell.seat(0).atlas.bookmarks.is_empty());
-    // Seat 1 travels; seat 2's rig stays.
+    // Seat 2 bookmarks; seat 1's bookmarks stay empty (the world keeps each player's).
     let second = game.seats()[1].player;
+    press_seat(&mut game, 1, pick(AtlasHit::Button(AtlasButton::Bookmark)));
+    idle(&mut game, 2);
+    assert_eq!(game.world().player_travel(second).bookmarks.len(), 1);
+    assert!(game.world().player_travel(PLAYER).bookmarks.is_empty());
+    assert_eq!(game.shell.seat(1).atlas.marks.len(), 1);
+    assert!(game.shell.seat(0).atlas.marks.is_empty());
+    // Seat 1 travels; seat 2's rig stays.
     let second_depth = depth_of(&game, second);
     press_seat(&mut game, 0, pick(AtlasHit::Row(4)));
     press_seat(&mut game, 0, pick(AtlasHit::Button(AtlasButton::Go)));
@@ -331,9 +347,9 @@ fn each_split_screen_seat_has_its_own_atlas() {
 }
 
 /// A tester's pass (review): Go on one destination of every kind the Atlas lists, one after
-/// another without coming home between, and each trip lands where its preview said: a planet,
-/// moon, theme boss or alien town on that body, a space target in free flight, a home depth
-/// in the band of its target (the fallback warp's arrival until the index's `TravelTo`).
+/// another without coming home between, and each trip lands where its preview said (the
+/// destination index's `TravelTo`): a planet, moon, lair or alien town on that body, a space
+/// target in free flight, a home target within a pocket's reach of its tile.
 #[test]
 fn go_reaches_every_kind_of_destination_one_after_another() {
     use crate::atlas::AtlasTarget;
@@ -399,23 +415,18 @@ fn go_reaches_every_kind_of_destination_one_after_another() {
                 AtlasTarget::Space { .. } => assert_eq!(place, Place::Space, "{what}"),
                 AtlasTarget::Home(tile) => {
                     assert!(place.is_home_store(), "{what}: {place:?}");
-                    if place == Place::HOME && tile.y > world.terrain().surface_row(tile.x) + 2 {
-                        let at = world.player(PLAYER).expect("rig").tile_in(world.frame());
-                        // Today's warps land at the top of the nearest stratum above the
-                        // target (never deeper; the index's TravelTo lands on it exactly).
-                        let deep = crate::atlas::index::warp_band(world.world_settings(), tile)
-                            != fatherload_simulation::worldgen::Band::Topsoil;
-                        assert!(
-                            at.y <= tile.y + 8
-                                && (!deep || at.y > world.terrain().surface_row(at.x)),
-                            "{what}: arrived at {at:?} for {tile:?}"
-                        );
-                    }
+                    let at = world.player(PLAYER).expect("rig").tile_in(world.frame());
+                    // Safe arrival settles onto a floor within 24 rows and carves its pocket
+                    // at the nearest column clear of fixtures.
+                    assert!(
+                        (at.y - tile.y).abs() <= 32 && (at.x - tile.x).abs() <= 200,
+                        "{what}: arrived at {at:?} for {tile:?}"
+                    );
                 }
-                AtlasTarget::Player(_) | AtlasTarget::Story => {}
+                AtlasTarget::Story => {}
             }
             trips += 1;
         }
     }
-    assert!(trips >= 15, "one trip per kind: {trips} ({seen:?})");
+    assert!(trips >= 25, "one trip per kind: {trips} ({seen:?})");
 }
