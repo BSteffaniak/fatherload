@@ -167,7 +167,7 @@ pub(super) fn draw_station_hub(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_,
     let capacity = world.hold_capacity_of(player_id);
     let status = format!(
         "Credits {} | Hold {hold}/{capacity} | Missions {}/3",
-        ui.player.credits,
+        crate::credits_text::grouped(ui.player.credits),
         world.station_ledger().missions_of(player_id).len()
     );
     let footer = if footer.is_empty() {
