@@ -153,6 +153,9 @@ pub struct PlayerInput {
     /// A point of an open menu under the mouse this frame without a click (the Atlas's map:
     /// its cursor follows the mouse). The app resolves it like [`Self::menu_pick`].
     pub menu_hover: Option<usize>,
+    /// Pressed: open or close the test-mode command palette (the backtick key, the touch
+    /// CMD button; Wave 14).
+    pub console: bool,
 }
 
 impl PlayerInput {
@@ -251,6 +254,7 @@ impl PlayerInput {
             anchor,
             atlas,
             menu_hover: _,
+            console,
         } = *self;
         horizontal.abs() > f32::EPSILON
             || rotate.abs() > f32::EPSILON
@@ -313,6 +317,7 @@ impl PlayerInput {
                 pointer_secondary,
                 anchor,
                 atlas,
+                console,
             ]
             .into_iter()
             .any(|pressed| pressed)
@@ -455,6 +460,7 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
         anchor: primary.anchor || secondary.anchor,
         atlas: primary.atlas || secondary.atlas,
         menu_hover: primary.menu_hover.or(secondary.menu_hover),
+        console: primary.console || secondary.console,
     }
 }
 
@@ -585,6 +591,7 @@ fn read_primary_keyboard_input_with_options(
         pointer_secondary: raylib.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_RIGHT),
         // The app resolves clicks against the menus drawn last frame.
         menu_pick: None,
+        console: raylib.is_key_pressed(KeyboardKey::KEY_GRAVE),
     }
 }
 

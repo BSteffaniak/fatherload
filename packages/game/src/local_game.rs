@@ -193,6 +193,8 @@ pub struct LocalGame {
     /// The wild strata each seat has had explained (body seed, stratum), so each stratum's
     /// rule is told once, not every time a ragged boundary is crossed (Wave 12 planets-a).
     wild_strata_told: Vec<std::collections::BTreeSet<(u64, &'static str)>>,
+    /// Actions the first seat submits on the next frame (`--start-at`, Wave 14).
+    start_actions: Vec<PlayerCommand>,
 }
 
 impl LocalGame {
@@ -220,6 +222,7 @@ impl LocalGame {
             resumed_play_seconds: None,
             dawn_witnesses: crate::night_text::DawnWitnesses::default(),
             wild_strata_told: Vec::new(),
+            start_actions: Vec::new(),
         }
     }
 
@@ -305,12 +308,34 @@ impl LocalGame {
             seat_actions.iter_mut().for_each(Vec::clear);
         }
 
+        if let Some(first) = seat_actions.first_mut() {
+            first.append(&mut self.start_actions);
+        }
         let seats = self.seats().to_vec();
         self.seat_aims
             .resize_with(seats.len(), crate::weapon_aim::SeatAim::default);
+        // Test mode's free camera (Wave 14): the first seat's stick pans the camera, not the rig.
+        let free_camera = self.shell.debug_views.shows(
+            crate::debug_views::DebugView::FreeCamera,
+            self.runtime.world().is_test_mode(),
+        ) && self.shell.gameplay_input_enabled(0);
+        if free_camera && let Some(sampled) = inputs.first() {
+            let camera = &mut self.shell.debug_views.free_camera;
+            let vertical =
+                f32::from(u8::from(sampled.drill_down)) - f32::from(u8::from(sampled.thrust));
+            camera.pan((sampled.horizontal, vertical), delta_seconds);
+            if sampled.page_down {
+                camera.zoom(true);
+            }
+            if sampled.page_up {
+                camera.zoom(false);
+            }
+        }
         for (index, seat) in seats.iter().enumerate() {
             let mut seat_frame = match inputs.get(index) {
-                Some(sampled) if self.shell.gameplay_input_enabled(index) => {
+                Some(sampled)
+                    if self.shell.gameplay_input_enabled(index) && !(free_camera && index == 0) =>
+                {
                     let player = self.runtime.world().player(seat.player);
                     let selection = &mut self.shell.seat_mut(index).explosives;
                     if selection.observe(sampled, player) {
@@ -407,10 +432,25 @@ impl LocalGame {
             self.runtime.submit(seat.seat, seat_frame);
         }
 
-        self.runtime.set_paused(!self.shell.world_should_tick());
+        // Test mode's time scale (Wave 14): a local game runs whole ticks faster or slower;
+        // online play keeps real time.
+        let scale = if self.runtime.online_role().is_none() && self.runtime.world().is_test_mode() {
+            self.shell.time_scale
+        } else {
+            crate::debug_views::TimeScale::Normal
+        };
+        self.runtime.set_paused(
+            !self.shell.world_should_tick() || scale == crate::debug_views::TimeScale::Paused,
+        );
+        let ticks_started = std::time::Instant::now();
         let frame = self
             .runtime
-            .advance(Duration::try_from_secs_f32(delta_seconds).unwrap_or_default());
+            .advance(Duration::try_from_secs_f32(scale.scaled(delta_seconds)).unwrap_or_default());
+        self.shell.frame_stats.record(
+            delta_seconds,
+            frame.ticks_run,
+            ticks_started.elapsed().as_secs_f32(),
+        );
         report.ticks_run = frame.ticks_run;
         report.world_replaced |= frame.world_replaced;
         // F7: presentation draws in the world's frame; effects kept in pixels follow its moves.
@@ -461,6 +501,12 @@ impl LocalGame {
         snapshot.pickups = self.effects.pickups();
         snapshot.apply_pose_overrides(&self.runtime.pose_overrides());
         snapshot.apply_camera_leads(&self.camera_leads);
+        if self.shell.debug_views.shows(
+            crate::debug_views::DebugView::FreeCamera,
+            self.runtime.world().is_test_mode(),
+        ) {
+            snapshot.apply_free_camera(0, self.shell.debug_views.free_camera);
+        }
         let mut anchors = self.view_anchors.borrow_mut();
         anchors.clear();
         let ending_elapsed = self.runtime.world().ending_elapsed();
@@ -2763,6 +2809,42 @@ impl LocalGame {
         self.shell.sound_cues.push(SoundCue::Milestone);
     }
 
+    /// Starts a new single-seat test-mode world (`--god`, Wave 14) from `seed` and, with
+    /// `start_at`, travels the rig there on the first tick through the same test-mode actions
+    /// the palette sends. Returns a warning when the target has no answer in this world (the
+    /// rig then starts at the spawn point).
+    pub fn start_test_world(
+        &mut self,
+        seed: u64,
+        start_at: Option<&crate::console::parse::TpTarget>,
+    ) -> FrameReport {
+        let settings = WorldSettings {
+            generator: fatherload_simulation::worldgen::GeneratorVersion::NEW_WORLD,
+            ..WorldSettings::new(seed)
+        };
+        let mut report = FrameReport::default();
+        self.new_game(
+            1,
+            &settings,
+            (true, EnemyDifficulty::Normal, DayLength::Standard),
+            &mut report,
+        );
+        if let Some(target) = start_at
+            && let Some(player) = self.local_players().first().copied()
+        {
+            match crate::console::start_at::start_actions(self.runtime.world(), player, target) {
+                Ok(actions) => {
+                    self.start_actions = actions;
+                    self.shell
+                        .console
+                        .print(format!("--start-at {target:?}: travelling"));
+                }
+                Err(error) => self.shell.message = error,
+            }
+        }
+        report
+    }
+
     /// Adds a split-screen seat for a controller that claimed one; returns its index.
     pub fn add_seat_for_controller(&mut self) -> Option<usize> {
         if self.seats().len() <= 1 || !self.shell.gameplay_visible() {
@@ -3100,6 +3182,7 @@ fn shell_context<'a>(
     ShellContext {
         world: runtime.world(),
         players,
+        online: runtime.online_role().is_some(),
         saves_exist: probe_saves
             && match save_target {
                 SaveTarget::UserFiles => save::saves_exist(),

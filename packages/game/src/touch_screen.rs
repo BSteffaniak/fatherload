@@ -319,7 +319,7 @@ pub fn touch_context(
     waiting_charges: usize,
 ) -> TouchContext {
     let seat = shell.seat(0);
-    let mode = if shell.global_overlay() || seat.modal.is_some() {
+    let mode = if shell.global_overlay() || seat.modal.is_some() || shell.console.open {
         TouchMode::Menu
     } else if seat.build.is_some() {
         TouchMode::Build
@@ -389,6 +389,7 @@ pub fn touch_context(
         pay: view.space_combat.demand.is_some(),
         // Set from the world by the callers (Wave 14: test mode).
         atlas: false,
+        console: shell.console.available,
     }
 }
 

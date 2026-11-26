@@ -220,6 +220,8 @@ pub struct TouchContext {
     /// menu is the Atlas, which has its own Back, tabs and buttons, so the menu cluster stays
     /// off it.
     pub atlas: bool,
+    /// A test-mode world (Wave 14): the CMD button shows in the top row.
+    pub console: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -352,6 +354,8 @@ pub enum TouchControl {
     Pay,
     /// Test mode (Wave 14): open the Atlas, the travel browser with previews.
     Atlas,
+    /// Test mode (Wave 14): open the command palette (the phone's keyboard comes up for it).
+    Console,
 }
 
 /// Where the controls are this frame.
@@ -393,6 +397,8 @@ const HUD_CORNER_PANELS: (f32, f32, f32) = (184.0, 128.0, 78.0);
 const ROTATE_BUTTON_RADIUS: f32 = 0.42;
 /// Radius of the small buttons along the top edge, in button widths.
 const TOP_BUTTON_RADIUS: f32 = 0.3;
+/// Most buttons a dropped top row holds before it wraps to a second row.
+const DROPPED_ROW_MAX: usize = 5;
 /// Radius of a tools-fan item, in button widths.
 const FAN_RADIUS: f32 = 0.42;
 /// Tools-fan items per row.
@@ -403,6 +409,7 @@ const STICK_RADIUS: f32 = 0.9;
 impl TouchLayout {
     /// Lays the controls out for `context` on `screen`. `tools_open` adds the kit and build fan.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per touch mode")]
     pub fn compute(
         screen: TouchScreen,
         settings: TouchSettings,
@@ -445,7 +452,11 @@ impl TouchLayout {
         }
         match context.mode {
             TouchMode::Play => {
-                layout.push_top(screen, settings.left_handed, &play_top_row(context));
+                let mut top = play_top_row(context);
+                if context.console {
+                    top.push(TouchControl::Console);
+                }
+                layout.push_top(screen, settings.left_handed, &top);
                 if context.pilot.on_foot() && context.crypt {
                     layout.push_crypt(cluster, context);
                 } else if context.pilot.on_foot() {
@@ -707,6 +718,16 @@ impl TouchLayout {
             panels.2 * screen.points_per_ui_pixel
         } else {
             0.0
+        };
+        // A dropped row keeps to the stick's side within the span of `DROPPED_ROW_MAX`
+        // buttons: more (a test-mode world's ATLAS and CMD on top of the rest, Wave 14) sit
+        // closer and a little smaller, clear of the thumb cluster.
+        #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
+        let (pitch, radius) = if dropped && controls.len() > DROPPED_ROW_MAX {
+            let pitch = pitch * (DROPPED_ROW_MAX as f32 - 1.0) / (controls.len() as f32 - 1.0);
+            (pitch, radius.min(pitch * 0.46))
+        } else {
+            (pitch, radius)
         };
         let margin = self.button * 0.2 + radius;
         #[allow(clippy::cast_precision_loss, reason = "a handful of buttons")]
@@ -1075,6 +1096,7 @@ impl TouchInput {
                 input.interact = true;
             }
             TouchControl::Pause => input.pause = true,
+            TouchControl::Console => input.console = true,
             TouchControl::Inventory => input.inventory = true,
             TouchControl::Map => input.map = true,
             TouchControl::Atlas => input.atlas = true,

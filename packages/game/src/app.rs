@@ -369,6 +369,18 @@ impl App {
                 None
             }
         };
+        // `--god` / `--start-at <target>` (Wave 14): straight into a test-mode world, in place.
+        #[cfg(not(target_os = "emscripten"))]
+        {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            match crate::console::start_at::parse_launch_flags(&args) {
+                Ok(Some(flags)) => {
+                    let _ = game.start_test_world(flags.seed, flags.start_at.as_ref());
+                }
+                Ok(None) => {}
+                Err(error) => eprintln!("{error}"),
+            }
+        }
         let renderer = GameRenderer::new(&mut raylib, &thread, game.world().terrain());
         let router = InputRouter::new(MAX_LOCAL_SEATS);
 

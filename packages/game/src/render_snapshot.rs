@@ -1417,6 +1417,20 @@ impl<'w> RenderSnapshot<'w> {
         }
     }
 
+    /// The test-mode free camera (Wave 14 debug views) on seat `seat`'s view: moved off the
+    /// craft by `camera.offset` and zoomed out by its steps (presentation only).
+    pub fn apply_free_camera(&mut self, seat: usize, camera: crate::debug_views::FreeCamera) {
+        for view in self.views.iter_mut().filter(|view| view.seat_index == seat) {
+            let (width, height) = visible_world_size(view.viewport, view.world_scale);
+            let centre = (
+                width.mul_add(0.5, view.camera.x) + camera.offset.0,
+                height.mul_add(0.5, view.camera.y) + camera.offset.1,
+            );
+            view.world_scale *= camera.scale();
+            view.camera = camera_for(view.viewport, view.world_scale, centre.0, centre.1);
+        }
+    }
+
     /// The primary seat's view, if any.
     #[must_use]
     pub fn primary_view(&self) -> Option<&ViewSnapshot<'w>> {

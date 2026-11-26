@@ -24,6 +24,7 @@ pub mod atlas;
 mod body_life;
 mod body_map;
 mod build;
+mod console_view;
 mod counters;
 mod crypt_map;
 mod descent_hud;
@@ -631,6 +632,13 @@ impl GameRenderer {
         if shell.online.show_net_debug {
             draw_net_debug(draw, shell);
         }
+        // The test-mode palette and its overlays (Wave 14).
+        let test_mode = snapshot.world.is_test_mode();
+        if shell.gameplay_visible() {
+            console_view::draw_frame_stats(draw, shell, test_mode);
+            console_view::draw_time_scale(draw, shell, test_mode);
+        }
+        console_view::draw_console(draw, shell);
 
         // Volume readout in menus (bottom-left; the HUD owns the corners while playing).
         if matches!(
@@ -1098,7 +1106,12 @@ impl GameRenderer {
                 .find(|player| player.player_id == view.player_id),
             active_drill: view.active_drill,
             lost_cargo: view.lost_cargo,
-            explored: Some(&self.explored_drawn),
+            // Test mode's map reveal (Wave 14): no fog.
+            explored: (!shell.debug_views.shows(
+                crate::debug_views::DebugView::MapReveal,
+                snapshot.world.is_test_mode(),
+            ))
+            .then_some(&self.explored_drawn),
             ticks: shell.update_ticks,
             aim_preview: view.aim_preview.as_ref(),
             critters: &snapshot.critters,
@@ -1159,6 +1172,13 @@ impl GameRenderer {
             {
                 let mut world_draw = draw.begin_mode2D(view_camera);
                 draw_world_scene(&mut world_draw, &scene);
+                console_view::draw_world_debug(
+                    &mut world_draw,
+                    snapshot,
+                    view,
+                    shell.debug_views,
+                    visible,
+                );
             }
             post_process::PostProcess::end_world();
             // The roll pass draws into a texture, so the view's scissor (in screen space)
@@ -1170,6 +1190,13 @@ impl GameRenderer {
         } else {
             let mut world_draw = draw.begin_mode2D(view_camera);
             draw_world_scene(&mut world_draw, &scene);
+            console_view::draw_world_debug(
+                &mut world_draw,
+                snapshot,
+                view,
+                shell.debug_views,
+                visible,
+            );
         }
         let _canvas = UiCanvasScope::begin(draw);
         draw_heat_warning_for_view(draw, snapshot.terrain, view);

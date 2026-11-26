@@ -269,6 +269,7 @@ const fn rim(control: TouchControl) -> Color {
         TouchControl::Cruise | TouchControl::Warp | TouchControl::Escape => palette::SKY_LIGHT,
         TouchControl::Dock => palette::LIME,
         TouchControl::Use
+        | TouchControl::Console
         | TouchControl::Pay
         | TouchControl::BuildPlace
         | TouchControl::Build
@@ -337,6 +338,7 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Missile => "MSL",
         TouchControl::Escape => "ESCAPE",
         TouchControl::Pay => "PAY",
+        TouchControl::Console => "CMD",
         TouchControl::TabPrevious | TouchControl::BuildPrevious => "<",
         TouchControl::TabNext | TouchControl::BuildNext => ">",
         TouchControl::BuildPlace => "PLACE",

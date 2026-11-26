@@ -30,6 +30,7 @@ pub mod arms;
 pub mod atlas;
 mod build;
 mod colony;
+mod console;
 mod crew;
 mod descent;
 pub mod expedition;
@@ -1347,6 +1348,8 @@ pub struct ShellContext<'w> {
     pub players: &'w [PlayerId],
     /// Whether any save exists (title "Resume").
     pub saves_exist: bool,
+    /// An online session (the palette's time scale stays real time there).
+    pub online: bool,
 }
 
 impl<'w> ShellContext<'w> {
@@ -2809,6 +2812,14 @@ pub struct ShellState {
     /// Toolkit values chosen that the world has not shown yet (Wave 14, see
     /// [`test_toolkit::ToolkitPending`]).
     pub toolkit_pending: test_toolkit::ToolkitPending,
+    /// The test-mode command palette (Wave 14, `console`).
+    pub console: crate::console::Console,
+    /// Test-mode debug views (all off by default; none show outside test mode).
+    pub debug_views: crate::debug_views::DebugViews,
+    /// The local time scale (test mode, local games only).
+    pub time_scale: crate::debug_views::TimeScale,
+    /// The last frames' rate and tick time (the FPS overlay).
+    pub frame_stats: crate::debug_views::FrameStats,
 }
 
 impl Default for ShellState {
@@ -2858,6 +2869,10 @@ impl ShellState {
             pending_test_mode: None,
             toolkit_creature: 0,
             toolkit_pending: test_toolkit::ToolkitPending::default(),
+            console: crate::console::Console::default(),
+            debug_views: crate::debug_views::DebugViews::default(),
+            time_scale: crate::debug_views::TimeScale::Normal,
+            frame_stats: crate::debug_views::FrameStats::default(),
         }
     }
 
@@ -2939,8 +2954,11 @@ impl ShellState {
     /// no global dialog is open and the seat is outdoors with nothing open.
     #[must_use]
     pub fn gameplay_input_enabled(&self, seat: usize) -> bool {
+        let seat_index = seat;
         let seat = self.seat(seat);
+        let palette = self.console.open && self.console.seat == seat_index;
         matches!(self.run_mode, RunMode::Playing)
+            && !palette
             && self.modal.is_none()
             && seat.modal.is_none()
             && !seat.inside()
@@ -2974,6 +2992,8 @@ impl ShellState {
         self.play_seconds = play_seconds;
         self.pending_test_mode = None;
         self.toolkit_pending = test_toolkit::ToolkitPending::default();
+        self.console.reset_world();
+        self.time_scale = crate::debug_views::TimeScale::Normal;
         self.message = message.into();
     }
 
@@ -3012,10 +3032,11 @@ impl ShellState {
     ) -> Vec<ShellRequest> {
         self.touch_seen |= self.prompt_device(0).is_touch();
         // A tapped or clicked row becomes "that row is selected and confirmed".
-        let inputs = self.take_menu_picks(inputs);
+        let mut inputs = self.take_menu_picks(inputs);
+        let mut requests = Vec::new();
+        self.update_console(&mut inputs, ctx, &mut requests);
         let inputs = inputs.as_slice();
         let primary = inputs.first().copied().unwrap_or_default();
-        let mut requests = Vec::new();
         self.set_seat_count(ctx.players.len().max(inputs.len()));
         self.advance_presentation_clock(delta_seconds);
         if self.message != self.message_seen {
@@ -3267,7 +3288,7 @@ impl ShellState {
                 .seats
                 .iter()
                 .any(|seat| seat.modal == Some(ModalScreen::Atlas) && seat.atlas.typing);
-        online_form || seed_field || atlas_search
+        online_form || seed_field || atlas_search || self.console.open
     }
 
     /// Shows an online screen.
@@ -4022,6 +4043,7 @@ mod tests {
             world,
             players,
             saves_exist: false,
+            online: false,
         }
     }
 

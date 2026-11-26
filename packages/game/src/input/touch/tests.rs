@@ -29,6 +29,7 @@ const PLAY: TouchContext = TouchContext {
     combat: false,
     pay: false,
     atlas: false,
+    console: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -573,6 +574,7 @@ fn contexts() -> Vec<TouchContext> {
                     pay: false,
                     // Test mode's ATLAS button (Wave 14) joins the top row.
                     atlas: bits & 8 != 0,
+                    console: bits & 1 != 0,
                 });
                 if !pilot.on_foot() && mode == TouchMode::Play {
                     // Space flight (Wave 11): the Star Drive's cluster.
@@ -594,6 +596,7 @@ fn contexts() -> Vec<TouchContext> {
                         combat: false,
                         pay: false,
                         atlas: bits & 1 != 0,
+                        console: false,
                     });
                 }
                 if pilot.on_foot() && mode == TouchMode::Play {
@@ -615,6 +618,7 @@ fn contexts() -> Vec<TouchContext> {
                         combat: false,
                         pay: false,
                         atlas: bits & 1 != 0,
+                        console: false,
                     });
                 }
             }
@@ -816,6 +820,8 @@ fn every_input_field_has_a_touch_answer() {
         anchor: _,
         // The top row's ATLAS button in a test-mode world (Wave 14).
         atlas: _,
+        // The CMD button in a test-mode world (Wave 14 palette).
+        console: _,
         // Taps on the world and on menu rows (the app resolves them) and drags on menus.
         menu_pick: _,
         build_pointer: _,
