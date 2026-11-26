@@ -660,6 +660,10 @@ fn draw_minimap(
     );
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "the card's name, mark, lines and sprites"
+)]
 fn draw_card(
     draw: &mut RaylibDrawHandle<'_>,
     layout: &AtlasLayout,
@@ -691,8 +695,14 @@ fn draw_card(
         GOLD,
     );
     if ui.seat.atlas.bookmarked(destination) {
-        draw.draw_rectangle(x + width - 7, y + 1, 6, 6, GOLD);
-        draw.draw_rectangle(x + width - 6, y + 2, 4, 4, INK);
+        // A ribbon: the bookmark's mark.
+        draw.draw_rectangle(x + width - 7, y, 6, 8, GOLD);
+        draw.draw_triangle(
+            Vector2::new((x + width - 7) as f32, (y + 8) as f32),
+            Vector2::new((x + width - 1) as f32, (y + 8) as f32),
+            Vector2::new((x + width - 4) as f32, (y + 5) as f32),
+            INK,
+        );
     }
     y += 10;
     if y + 9 <= bottom {

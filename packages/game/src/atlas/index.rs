@@ -1078,7 +1078,11 @@ fn settlement_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<
                 DestinationKind::Village,
                 AtlasCategory::Settlements,
                 village.name.clone(),
-                format!("{} village", capitalised(village.size.name())),
+                format!(
+                    "{} - {} buildings",
+                    capitalised(village.size.name()),
+                    village.buildings.len()
+                ),
                 AtlasTarget::Home(TilePosition {
                     x: centre,
                     y: village.ground_row - 2,
