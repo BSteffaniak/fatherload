@@ -140,6 +140,20 @@ fn depth_travel_lands_that_many_metres_down() {
         (row - wanted).abs() <= 3,
         "row {row}, wanted about {wanted}"
     );
+    // A depth past the world's floor lands as deep as travel goes, not nowhere.
+    let output = act(
+        &mut world,
+        TestModeAction::PaletteTravel(Destination::Depth(90_000)),
+    );
+    assert_eq!(
+        output.action_outcomes[0].outcome,
+        PlayerScopedCommandOutcome::Applied
+    );
+    idle(&mut world, 10);
+    let layout = world.travel_layout().expect("a Deep Descent world");
+    let (top, bottom) = layout.descent_rows(Descent::ALL[Descent::ALL.len() - 1]);
+    let row = row_of(&world);
+    assert!((top..=bottom).contains(&row), "the deepest Descent: {row}");
 }
 
 #[test]

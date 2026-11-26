@@ -168,7 +168,8 @@ impl WorldState {
                 let rows = rows.max(1);
                 let column = self.travel_column(player_id);
                 let ground = crate::worldgen::surface_row(&self.home_settings(), column) - 1;
-                let row = ground + rows;
+                let row = (ground + rows).min(self.deepest_travel_row());
+                let rows = row - ground;
                 let stratum = self
                     .travel_layout()
                     .map(|layout| layout.stratum_of_row(row).name().to_owned())
@@ -259,6 +260,20 @@ impl WorldState {
             .generator
             .has_descents()
             .then(|| crate::descent::fields::cached_layout(&settings))
+    }
+
+    /// The deepest row a home-world travel opens at: a depth past the world's floor lands there
+    /// (the last Descent's floor, as a boss travel does) instead of being refused.
+    fn deepest_travel_row(&self) -> i32 {
+        self.travel_layout().map_or_else(
+            || self.terrain.height() - POCKET_HEIGHT - 4,
+            |layout| {
+                Descent::ALL
+                    .last()
+                    .map_or(i32::MAX, |last| layout.descent_rows(*last).1)
+                    - ROWS_ABOVE_FLOOR
+            },
+        )
     }
 
     /// Metres (rows) `row` lies under the ground at the spawn column.
