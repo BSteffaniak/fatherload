@@ -10947,6 +10947,29 @@ stratum to 11, one more two sectors from home; `exotic_tier`). Fauna are spared 
 - Gameplay events carry no store (planets-b's note): a player-less tell (a bolt, a geyser, a
   meteor's whistle) on one body can reach a split-screen seat on another body as a cue; the
   messages are only for seats on a body and their own rig.
+- The theme secrets stand only on small bodies (radius up to 1,000), and the space generator
+  makes no small gas-giant, locked or ring bodies (the Wave 12 wild and frontier secrets share
+  this): in today's galaxy the three secrets are seen on test and future bodies only.
+  TODO-SEAM w13-integrator: tag some moons of these worlds with their parent's theme (a
+  `GOLDEN_SPACE_DIGEST` change) if the secrets should be found in play.
+
+### Review fixes (w13-planets-d-review)
+
+- **The locked world's climate has its two sides.** A tidally locked space body kept its
+  star's mean and the air's small swing, so the HUD read 103 °C on the nitrogen-snow night side
+  and 120 °C in the "mild" twilight settlement, and the generic heat channel (radiator) bit on
+  the frozen side. `PlanetThemeHooks::locked_sides` (default `None`) lets a theme hold a locked
+  body's terminator to a band and set a least side swing (`BodyClimate::side_swing_c`): the
+  locked world holds its terminator to 0-20 °C and swings 140 °C, so noon reads about 150 °C
+  (radiator and heat shielding), midnight about -130 °C (de-icer and cold insulation) and the
+  twilight mild. A lone locked world (no space body) keeps its sides too (no spinning day).
+  Test: `exotic::tests::the_locked_worlds_climate_scorches_by_day_freezes_by_night_and_is_mild_in_the_twilight`.
+- **A planet's ring reads from space**: `BeltView::ring_band` draws a ring world's (and a
+  ringed gas giant's) ring as banded sheets of ice dust under its rocks (three bands and a
+  dark gap, plain triangles), instead of a faint stipple.
+- **The cloud-tops scene** hovers just over the billows in the afternoon (it sat 30 rows up at
+  night and showed only stars).
+- The Gloamwarden paces only toward rigs on the ground (not ones away in space).
 
 ## Replication
 

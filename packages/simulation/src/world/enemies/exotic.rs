@@ -488,9 +488,9 @@ impl WorldState {
         if state.kind == EnemyKind::Gloamwarden {
             let nearest = self
                 .players
-                .values()
-                .filter(|rig| rig.hull > 0.0)
-                .map(|rig| rig.x)
+                .iter()
+                .filter(|(id, rig)| rig.hull > 0.0 && !self.in_space(**id))
+                .map(|(_, rig)| rig.x)
                 .min_by(|a, b| (a - body.x).abs().total_cmp(&(b - body.x).abs()));
             let reach = (arena.half_width - 6) as f32 * TILE_SIZE;
             let (cx, _) = self.frame().centre_of(arena.centre, arena.floor);
