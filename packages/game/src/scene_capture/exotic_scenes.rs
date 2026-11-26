@@ -266,13 +266,13 @@ fn geyser(planet: &PlanetGround) -> (i32, i32) {
                 .filter(|vent| planet.stratum_index(vent.x, vent.y) == 1 && vent.x > 40)
         })
         .unwrap_or(TilePosition { x: 100, y: 300 });
-    (vent.x + 4, vent.y)
+    (vent.x + 2, vent.y - 1)
 }
 
 /// World time while that vent blows.
 fn geyser_blowing(planet: &PlanetGround) -> u64 {
     let (x, y) = geyser(planet);
-    let vent = TilePosition { x: x - 4, y };
+    let vent = TilePosition { x: x - 2, y: y + 1 };
     (0..30_000_u64)
         .step_by(50)
         .find(|millis| rules::geyser_phase(planet, vent, *millis) == rules::GeyserPhase::Blowing)
