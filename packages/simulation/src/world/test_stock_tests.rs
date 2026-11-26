@@ -694,3 +694,27 @@ fn a_switch_flipped_from_another_place_reaches_the_whole_crew() {
         );
     }
 }
+
+#[test]
+fn the_story_unlock_reaches_the_galaxy_journal_and_every_rigs_derelict_logs() {
+    use crate::galaxy_story::journal::{FRAGMENTS, SPACE_LOGS};
+    let mut world = deep_test_world();
+    let _ = act(&mut world, PLAYER, TestModeAction::SetStoryUnlocked(true));
+    assert_eq!(world.galaxy_story().logs.len(), SPACE_LOGS.len());
+    assert_eq!(world.galaxy_story().fragments.len(), FRAGMENTS.len());
+    let lore = crate::poi::LORE.len();
+    assert_eq!(world.player(PLAYER).expect("rig").journal.logs.len(), lore);
+    // A rig joining later reads them too (the refill keeps the unlock whole).
+    world.add_player(GUEST);
+    let _ = idle(&mut world, 1);
+    assert_eq!(world.player(GUEST).expect("rig").journal.logs.len(), lore);
+    let _ = act(&mut world, PLAYER, TestModeAction::SetStoryUnlocked(false));
+    assert!(world.galaxy_story().fragments.is_empty());
+    assert!(
+        world.galaxy_story().logs.is_empty(),
+        "no chapter done, no log"
+    );
+    for player in [PLAYER, GUEST] {
+        assert!(world.player(player).expect("rig").journal.logs.is_empty());
+    }
+}

@@ -23,11 +23,16 @@ use crate::{
     entity::{EntityId, EntityKind},
     expedition::{ECHOES, LOGS, anomaly::AnomalyKind, progress::boss_bit},
     flight::FlightGearKind,
+    galaxy_story::{
+        chapters::CHAPTERS,
+        journal::{FRAGMENTS, SPACE_LOGS},
+    },
     heart::{ENDING_SHIELD_MILLIS, HeartPhase},
     hostiles::{BossTech, ShipGearKind},
     old_deep::{CorePhase, LOG_CORE_REVEAL},
     pilot::{PilotGearKind, arsenal::PILOT_WEAPONS},
     player::Player,
+    poi::{LORE, LoreId},
     rig::RigPartKind,
     service::RecipeKind,
     star_chart::{MAX_CHARTS, chart_at_site},
@@ -172,6 +177,16 @@ pub(super) fn top_up_rig(player: &mut Player) {
         {
             let _set = set_rig_count(player, item, item.stack());
         }
+    }
+}
+
+/// Every derelict log in `player`'s journal (the story unlock).
+pub(super) fn unlock_rig_logs(player: &mut Player) {
+    if player.journal.logs.len() < LORE.len() {
+        player
+            .journal
+            .logs
+            .extend((0..LORE.len()).filter_map(|id| u16::try_from(id).ok().map(LoreId)));
     }
 }
 
@@ -707,8 +722,20 @@ impl WorldState {
                 .fold(0, |bits, kind| bits | kind.bit());
             self.crust.logs = (0..u8::try_from(CRUST_LOGS.len()).unwrap_or(u8::MAX)).collect();
             self.old_deep.logs_read = (0..=LOG_CORE_REVEAL).collect();
+            // The galaxy story's journal: every space log and builders' fragment.
+            self.galaxy_story.logs = (0..SPACE_LOGS.len())
+                .filter_map(|log| u8::try_from(log).ok())
+                .collect();
+            self.galaxy_story.fragments = (0..FRAGMENTS.len())
+                .filter_map(|fragment| u8::try_from(fragment).ok())
+                .collect();
             for player_id in self.whole_crew() {
                 self.unlock_tomb_codex(player_id);
+            }
+            // The derelicts' logs are each rig's own (a rig away this pass gets them from the
+            // refill, `unlock_rig_logs`).
+            for player in self.players.values_mut() {
+                unlock_rig_logs(player);
             }
         } else {
             expedition.found = 0;
@@ -720,6 +747,17 @@ impl WorldState {
             for unlocks in self.tombs.unlocks.values_mut() {
                 unlocks.codex.clear();
                 unlocks.lore.clear();
+            }
+            // The galaxy journal keeps the logs of the chapters the crew has done; the
+            // fragments (found on leads) start over.
+            let done = usize::from(self.galaxy_story.chapter).min(CHAPTERS.len());
+            self.galaxy_story.logs = CHAPTERS[..done]
+                .iter()
+                .flat_map(|chapter| chapter.logs.iter().copied())
+                .collect();
+            self.galaxy_story.fragments.clear();
+            for player in self.players.values_mut() {
+                player.journal.logs.clear();
             }
         }
     }

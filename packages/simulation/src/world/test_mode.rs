@@ -148,6 +148,12 @@ impl WorldState {
                 self.top_up_supplies(player_id);
             }
         }
+        // The story unlock reaches a rig that joined, or was away when it was switched on.
+        if state.story_unlocked {
+            for player in self.players.values_mut() {
+                super::test_stock::unlock_rig_logs(player);
+            }
+        }
     }
 
     /// Moves `player_id`'s rig into a safe pocket carved at the top of `band`, near its column.

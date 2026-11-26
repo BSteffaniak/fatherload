@@ -12011,8 +12011,15 @@ just the UI).
 * `SetStoryUnlocked(bool)` (`TestModeState::story_unlocked`, off by default): every expedition
   log and echo, every anomaly inscription, the Crust's diary, the Old Deep's tablets and the
   core's revelation, and every rig's tomb codex (relics and lore pages; later joiners too).
-  Off resets them all to a fresh story. Not covered: the galaxy story's own journal and the
-  aliens' tongues (their tracks' state).
+  The galaxy story's journal too (every space log and builders' fragment) and every rig's
+  derelict logs (`PoiJournal::logs`; the end-of-tick refill keeps a joiner's, or a rig away
+  in another store's pass, whole). Off resets them all to a fresh story (the galaxy journal
+  keeps the logs of the chapters already done). Not covered: the aliens' tongues (the
+  endgame's state).
+* **The whole crew**: a switch flipped by a rig in another store's pass (a planet, space)
+  reaches the rigs set aside at home too (`whole_crew`: the pass's rigs plus
+  `place_pass_set_aside`): the ending's Star Drive, the Sinkhole's Drill II and the tomb
+  codex.
 * `SetTimeOfDay { minutes }`: moves the **home** clock forward to that time (a held clock jumps
   there), like a slept night. `SetDayLock(bool)`: `ClockState::held_millis` (serde default
   none, so older clocks hash as before) holds every time-of-day reading (`WorldClock::is_held`:
@@ -12062,8 +12069,13 @@ just the UI).
   change a value (the touch screen's arrow buttons, a pad's d-pad; the tab buttons step the
   creature ten at a time), confirm or a tap toggles or acts; each row submits its action for
   the menu seat.
+* **Pending choices** (`ToolkitPending`): a paused local world runs the toolkit's actions
+  only when it resumes (online they take a round trip), so the dialog keeps its gates, ending,
+  time of day, lock and enemy setting as chosen until the world shows them (cleared each frame
+  by `sync_toolkit_pending`): a gate confirmed twice is flipped back, the hour steps on from
+  the hour just picked.
 * Scenes: `test_toolkit`, `test_toolkit_creatures`, `test_toolkit_spawned`,
-  `stocked_inventory`.
+  `stocked_inventory`, `touch_toolkit`.
 
 ### Tests
 
