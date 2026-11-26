@@ -182,15 +182,20 @@ pub(super) fn draw_view_hud(
     {
         let middle = (rect.x + rect.width * 0.5) as i32;
         // Between the stats panel and the credits panel when there is room for a useful
-        // line (the credits panel is never wider than the stats one), else under them.
+        // line (the credits panel is never wider than the stats one); a narrower view puts it
+        // in the left column under the badges and trackers (`draw_view_hud_rest`), clear of
+        // the body panel and a boss's label (Wave 14 finish: at 960 points it ran under both).
         let between = rect.width as i32 - 2 * (stats_panel_width(rect.width) + 8);
-        let (y, max_width) = if between >= 220 {
-            (rect.y as i32 + 4, between.min(420))
-        } else {
-            (rect.y as i32 + 70, (rect.width as i32 - 16).min(420))
-        };
-        let _ =
-            super::galaxy_hud::draw_goal_strip(draw, view, snapshot.world, middle, y, max_width);
+        if between >= 220 {
+            let _ = super::galaxy_hud::draw_goal_strip(
+                draw,
+                view,
+                snapshot.world,
+                middle,
+                rect.y as i32 + 4,
+                between.min(420),
+            );
+        }
     }
 
     // Stats: hull, fuel, cargo, block hopper.
@@ -512,12 +517,33 @@ fn draw_view_hud_rest(
         (left, badge_y + if warned { 16 } else { 0 }, width),
     );
     // The friendly aliens' running chapters (Wave 12), their goals in plain words.
-    super::alien_hud::draw_chapter_tracker(
+    let below = super::alien_hud::draw_chapter_tracker(
         draw,
         snapshot.world,
         view.player_id,
         (left, below, width),
     );
+    // In a narrow view the galaxy story's goal line sits here, in the left column, clear of
+    // the body panel on the right (see `draw_view_hud`).
+    let on_body = view.player.flight.away()
+        || matches!(
+            view.place,
+            fatherload_simulation::place::Place::OnBody(
+                fatherload_simulation::place::BodyId::Space(_)
+            )
+        );
+    let between = rect.width as i32 - 2 * (stats_panel_width(rect.width) + 8);
+    if on_body && between < 220 {
+        let max_width = (rect.width as i32 - stats_panel_width(rect.width) - 24).min(420);
+        let _ = super::galaxy_hud::draw_goal_strip(
+            draw,
+            view,
+            snapshot.world,
+            left + max_width / 2,
+            below + 2,
+            max_width,
+        );
+    }
 
     if shell.show_details {
         let lines = [

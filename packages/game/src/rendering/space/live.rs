@@ -661,6 +661,19 @@ pub fn ground_things(
                 && scene
                     .terrain
                     .is_solid_at(scene.frame.tile_at(entity.body.x, entity.body.y));
+            // A glowing creature's halo (behind it): a boss lights its lair (Wave 14 finish).
+            let glow = state.kind.light_tiles();
+            if !buried && glow >= 2.5 {
+                let (column, row) = strip(entity.body.x, entity.body.y);
+                things.push(GroundThing {
+                    column,
+                    row,
+                    kind: GroundThingKind::Halo {
+                        radius: (glow * 1.2).min(9.0) as u8,
+                        colour: (255, 236, 200),
+                    },
+                });
+            }
             if !buried {
                 things.push(GroundThing {
                     column,

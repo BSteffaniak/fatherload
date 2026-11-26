@@ -757,6 +757,7 @@ pub(super) fn draw_world_scene(draw: &mut impl RaylibDraw, scene: &WorldScene<'_
             bombs: scene.bombs,
             explosions: scene.explosions,
             critters: scene.critters,
+            enemies: scene.enemies,
             seconds,
             beam_lights: &beam_lights,
         },

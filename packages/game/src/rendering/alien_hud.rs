@@ -503,7 +503,7 @@ pub(super) fn draw_chapter_tracker(
     world: &fatherload_simulation::WorldState,
     player: fatherload_simulation::PlayerId,
     (x, y, width): (i32, i32, i32),
-) {
+) -> i32 {
     let mut top = y;
     for species in AlienSpecies::ALL {
         let Some((title, line)) = chapter_objective(world, player, species) else {
@@ -539,4 +539,5 @@ pub(super) fn draw_chapter_tracker(
         }
         top += height + 2;
     }
+    top
 }

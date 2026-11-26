@@ -605,7 +605,15 @@ impl PolarGround {
                 + (1.0 - ground.night_light) * smoothstep(-0.14, 0.2, (phi - sun).cos());
             let depth = thing.row - geometry.surface_row as f32;
             let buried = smoothstep(1.5, 9.0, depth);
-            let light = (daylight + (0.26 - daylight) * buried).max(lamp * 0.95);
+            // A glowing creature lights itself (Wave 14 finish: a boss's core in its dark
+            // lair; the Ashen Sovereign was a shadow outside the craft's lamp).
+            let own = match thing.kind {
+                GroundThingKind::Enemy { kind, .. } => (kind.light_tiles() / 6.0).min(0.85),
+                _ => 0.0,
+            };
+            let light = (daylight + (0.26 - daylight) * buried)
+                .max(lamp * 0.95)
+                .max(own);
             // SAFETY: a matrix push balanced by the pop below.
             unsafe {
                 ffi::rlPushMatrix();
@@ -1324,6 +1332,19 @@ fn draw_thing(
             let (w, h) = (sprite.width() as f32 * art, sprite.height() as f32 * art);
             let tint = shade(Color::WHITE, light);
             sprite::draw_sprite(draw, sprite, frame, Vector2::new(-w * 0.5, -h), art, tint);
+        }
+        GroundThingKind::Halo { radius, colour } => {
+            // Rings of light, fainter outward (no flicker: a lamp burns steady).
+            let reach = f32::from(radius) * px_per_tile;
+            let (r, g, b) = colour;
+            for step in 0..7 {
+                let share = 1.0 - step as f32 / 7.0;
+                draw.draw_circle_v(
+                    Vector2::zero(),
+                    reach * share,
+                    Color::new(r, g, b, (6.0 + 8.0 * (1.0 - share)) as u8),
+                );
+            }
         }
         GroundThingKind::Enemy { kind, frame, left } => {
             let sprite = crate::rendering::world::enemy_sprite(kind);

@@ -15,31 +15,39 @@ pub const DRIFT_RAY: SpriteDef = SpriteDef {
     name: "pd_enemy_drift_ray",
     legend: &[
         ('o', INK),
-        ('l', ICE),
-        ('w', BONE),
+        ('a', SKY),
+        ('b', OCEAN),
+        ('c', ICE),
         ('d', SKY_LIGHT),
-        ('k', OCEAN),
     ],
     frames: &[
         &[
-            ".........o........", //
-            "........owo.......", //
-            ".......owlwooooo..", //
-            "ooooooowlllwwwwko.", //
-            "ddddddwlllllllllwo", //
-            "ooooooodddddddddo.", //
-            ".......ooooooooo..", //
-            "..................", //
+            ".............oo........", //
+            "............oabo.......", //
+            "...........obbbbo......", //
+            "........ooobcddabooo...", //
+            "......ooccccddddaaaao..", //
+            "...ooobcddddaaaaaaaaoo.", //
+            "..obbbbcdddacdddddaaaao", //
+            ".obbooooaaaaddddddaaoo.", //
+            "oboo....ooooaaaaoooo...", //
+            ".o..........oooo.......", //
+            ".......................", //
+            ".......................", //
         ],
         &[
-            "..................", //
-            "..................", //
-            ".......ooooooooo..", //
-            "ooooooowwwwwwwwko.", //
-            "ddddddddddddddllwo", //
-            "ooooooodddddddddo.", //
-            ".......odddooooo..", //
-            "........odo.......", //
+            ".......................", //
+            ".......................", //
+            "............oooo.......", //
+            "........oooocddaoooo...", //
+            "......ooccccddddaaaao..", //
+            "...ooobcddddaaaaaaaaoo.", //
+            "..obbbbcdddacdddddaaaao", //
+            ".obbooooaaaaddddddaaoo.", //
+            "oboo....ooobaaaabooo...", //
+            ".o.........obbbbo......", //
+            "............obbo.......", //
+            ".............oo........", //
         ],
     ],
     frame_seconds: 0.32,
@@ -151,33 +159,38 @@ pub const VAPOR_STINGER: SpriteDef = SpriteDef {
     name: "pd_enemy_vapor_stinger",
     legend: &[
         ('o', INK),
-        ('a', AMBER),
-        ('y', CREAM),
-        ('r', RUST),
-        ('n', INK),
-        ('w', ICE),
-        ('k', RED),
+        ('a', FOG),
+        ('b', RUST),
+        ('c', SOIL),
+        ('d', RED),
+        ('e', STONE_DARK),
     ],
     frames: &[
         &[
-            "...oooo...", //
-            "..owwwwo..", //
-            "..owwwwoo.", //
-            "..oooooyyo", //
-            ".oyyyyyako", //
-            ".onnanrrro", //
-            "onooyrooo.", //
-            "no..oo....", //
+            ".......oooo...", //
+            "......oaaaao..", //
+            ".....oaaaaao..", //
+            "....oaaaaaoo..", //
+            "...ooaaaaoobo.", //
+            "..ooooooccbbdo", //
+            ".oboooocccbbbo", //
+            "oeboooobccobo.", //
+            ".ooooooooo.o..", //
+            "...ooooooo....", //
+            "........o.....", //
         ],
         &[
-            "..........", //
-            "..oooo....", //
-            ".owwwwooo.", //
-            "..owwwoyyo", //
-            ".oyyyyyako", //
-            ".onnanrrro", //
-            "onooyrooo.", //
-            "no..oo....", //
+            "..............", //
+            "..............", //
+            ".....oooo.....", //
+            "....oaaaao.o..", //
+            "...oooaaaaobo.", //
+            "..oooooaccbbdo", //
+            ".oboooocccbbbo", //
+            "oeboooobccobo.", //
+            ".ooooooooo.o..", //
+            "...ooooooo....", //
+            "........o.....", //
         ],
     ],
     frame_seconds: 0.08,
@@ -373,31 +386,30 @@ pub const SUNBASKER: SpriteDef = SpriteDef {
     name: "pd_enemy_sunbasker",
     legend: &[
         ('o', INK),
-        ('g', GOLD),
-        ('w', CREAM),
-        ('r', ORANGE),
-        ('k', INK),
+        ('a', COPPER),
+        ('b', RUST),
+        ('c', GOLD),
+        ('d', CREAM),
+        ('e', AMBER),
     ],
     frames: &[
         &[
-            "..............", //
-            "..............", //
-            "....oooooooooo", //
-            "..oowwwwwwwwko", //
-            ".owwgwgwgggggw", //
-            "orrgrrrrggrrro", //
-            "rrrroooorrooo.", //
-            "ooro....oro...", //
+            "...oooo.ooooooooooo.", //
+            ".ooaabbocadadadaaaoo", //
+            "oaabbbbaeaaaaaaaaaao", //
+            "obbbooooabbaabbaooo.", //
+            ".ooo....oboooobo....", //
+            ".......obbo..obbo...", //
+            "........oo....oo....", //
         ],
         &[
-            "..............", //
-            "..............", //
-            "....oooooooooo", //
-            "..oowwwwwwwwko", //
-            ".owwgwgwgggggw", //
-            "orrggrrggrrrro", //
-            "rrorroorroooo.", //
-            "oo.orooro.....", //
+            "...oooo.ooooooooooo.", //
+            ".ooaabbocadadadaaaoo", //
+            "oaabbbbaeaaaaaaaaaao", //
+            "obbbooooabbaabbaooo.", //
+            ".ooo....oobooboo....", //
+            ".........obbbbo.....", //
+            "..........oooo......", //
         ],
     ],
     frame_seconds: 0.12,
@@ -408,27 +420,33 @@ pub const SCORCH_MITE: SpriteDef = SpriteDef {
     name: "pd_enemy_scorch_mite",
     legend: &[
         ('o', INK),
-        ('r', ORANGE),
-        ('y', GOLD),
-        ('w', CREAM),
-        ('k', MAROON),
+        ('a', STONE_DARK),
+        ('b', ORANGE),
+        ('c', GOLD),
+        ('d', STONE),
+        ('e', RED),
+        ('f', AMBER),
     ],
     frames: &[
         &[
-            "..ooo...", //
-            ".owwwo..", //
-            "..orroo.", //
-            ".orryrko", //
-            ".orrrroo", //
-            "okooookk", //
+            "...ooooo....", //
+            "..oaaaaaoo..", //
+            ".oabbcaaaao.", //
+            "oadaabbaaaeo", //
+            ".oaaaaaaaaao", //
+            ".ooaaaaaooo.", //
+            ".ooooooo....", //
+            "..o...o.....", //
         ],
         &[
-            "........", //
-            ".oooo...", //
-            "owwwroo.", //
-            ".orryrko", //
-            ".orrrroo", //
-            "okooookk", //
+            "...ooooo....", //
+            "..oaaaaaoo..", //
+            ".oabbfaaaao.", //
+            "oadaabbaaaeo", //
+            ".oaaaaaaaaao", //
+            "..oaaaaaooo.", //
+            "...ooooooo..", //
+            "....o...o...", //
         ],
     ],
     frame_seconds: 0.07,
@@ -689,37 +707,43 @@ pub const GLOAMWARDEN: SpriteDef = SpriteDef {
 /// A ringhopper: a lilac puff on long legs with one long ear (standing / mid-hop).
 pub const RINGHOPPER: SpriteDef = SpriteDef {
     name: "pd_enemy_ringhopper",
-    legend: &[
-        ('o', INK),
-        ('l', LAVENDER),
-        ('w', PINK),
-        ('p', PLUM),
-        ('k', INK),
-    ],
+    legend: &[('o', INK), ('a', VIOLET), ('b', LAVENDER)],
     frames: &[
         &[
-            ".......opo", //
-            ".......opo", //
-            "...ooooopo", //
-            "..owwwwwkw", //
-            ".owlllllpp", //
-            ".owllllpoo", //
-            "..oppppo..", //
-            "..opoopo..", //
-            ".oppoopo..", //
-            ".opo.opo..", //
+            "..............", //
+            "............o.", //
+            "..........ooao", //
+            ".........oaoao", //
+            ".........oaoao", //
+            ".........oaoao", //
+            "......oooaaaao", //
+            ".....obaaaaaoo", //
+            ".oooobaaaaaaao", //
+            "oaaaaaaaaaooo.", //
+            "oaooaaaaaao...", //
+            ".o.oaaaaaao...", //
+            "...oaaaaoao...", //
+            "...oaaaooao...", //
+            "....ooo..o....", //
+            "..............", //
         ],
         &[
-            ".......opo", //
-            "...oooowwo", //
-            "..owwwwlkw", //
-            ".owlllllpo", //
-            ".owpllppo.", //
-            "..opwppo..", //
-            ".oppoopo..", //
-            ".opo.opo..", //
-            "oppo.opo..", //
-            ".oo..opo..", //
+            ".........oaoao", //
+            ".........oaoao", //
+            ".........oaoao", //
+            "......oooaaaao", //
+            ".....obaaaaaoo", //
+            ".oooobaaaaaaao", //
+            "oaaaaaaaaaooo.", //
+            "oaooabaaaao...", //
+            ".o.oabaaaao...", //
+            "....oaaaoaao..", //
+            "...oaooo.oao..", //
+            "...oao....o...", //
+            "..oao.........", //
+            "..oao.........", //
+            "..oao.........", //
+            "...o..........", //
         ],
     ],
     frame_seconds: 0.22,
@@ -820,27 +844,42 @@ pub const TETHER_DRONE: SpriteDef = SpriteDef {
 /// A void mite: a spiny dark burr with a violet eye (its spines turn).
 pub const VOID_MITE: SpriteDef = SpriteDef {
     name: "pd_enemy_void_mite",
-    legend: &[('o', INK), ('p', PLUM), ('v', VIOLET), ('l', LAVENDER)],
+    legend: &[
+        ('o', INK),
+        ('a', PLUM),
+        ('b', NIGHT),
+        ('c', MINT),
+        ('d', BONE),
+        ('e', TEAL),
+    ],
     frames: &[
         &[
-            "po....op", //
-            "opoooopo", //
-            ".oppppo.", //
-            ".oppppo.", //
-            ".opplpo.", //
-            ".oppppo.", //
-            "opoooopo", //
-            "po....op", //
+            "...o....o...", //
+            "..oao..oao..", //
+            "..oaaooaao..", //
+            "...oaabbo...", //
+            ".ooaabccboo.", //
+            "oaaabbcdbaao", //
+            "oaabbbccbaao", //
+            ".oobbbbbboo.", //
+            "...obbbbo...", //
+            "..oaaooaao..", //
+            "..oao..oao..", //
+            "...o....o...", //
         ],
         &[
-            "...opo..", //
-            "..oopo..", //
-            ".oppppo.", //
-            "oopvppoo", //
-            "pppplppp", //
-            "ooppppoo", //
-            "..oopo..", //
-            "...opo..", //
+            "....o.......", //
+            "...oao...o..", //
+            "....oaoooao.", //
+            ".o.oaabbao..", //
+            "oaoaabeebo..", //
+            ".oaabbedbo..", //
+            "..obbbeebao.", //
+            "..obbbbbboao", //
+            "..oabbbbo.o.", //
+            ".oaoooao....", //
+            "..o...oao...", //
+            ".......o....", //
         ],
     ],
     frame_seconds: 0.14,

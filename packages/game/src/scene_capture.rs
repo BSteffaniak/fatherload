@@ -511,6 +511,7 @@ mod wave6_scenes;
 mod weapon_scenes;
 mod wilds_scenes;
 // Wave 13 planets-c: the fungal, machine and dead worlds.
+mod lair_scenes;
 mod outlands_scenes;
 
 /// One capturable scene.
@@ -681,6 +682,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(bodylife_scenes::BODYLIFE_SCENES)
         .chain(wilds_scenes::WILDS_SCENES)
         .chain(outlands_scenes::OUTLANDS_SCENES)
+        .chain(lair_scenes::LAIR_SCENES)
         .chain(frontier_scenes::FRONTIER_SCENES)
         .chain(exotic_scenes::EXOTIC_SCENES)
         .chain(alien_scenes::ALIEN_SCENES)

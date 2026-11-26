@@ -128,7 +128,50 @@ pub fn body_things(
     let mut things = ground_things(scene, (!on_foot).then_some(view.player_id), seconds, millis);
     // The galaxy story's waymarks on this world (Wave 13 story).
     things.extend(super::galaxy_hud::waymark_things(snapshot.world, scene));
+    // A Wave 12 world's lair lamps light its hall (Wave 14 finish).
+    things.extend(lair_lamp_things(scene));
     things
+}
+
+/// Soft pools of light at the builder lamps of a Wave 12 world's boss lair (pure: the lamps'
+/// places are the lair's geometry; a lamp dug out still glows a moment in memory, which reads
+/// as its afterglow).
+fn lair_lamp_things(scene: &PlaceScene<'_>) -> Vec<GroundThing> {
+    use fatherload_simulation::planet::{
+        lairs::{LairTile, lair_of},
+        outlands::LAIR_HALF_WIDTH,
+    };
+    let Some(planet) = scene.terrain.planet_ground() else {
+        return Vec::new();
+    };
+    let Some(lair) = lair_of(planet) else {
+        return Vec::new();
+    };
+    let width = i64::from(planet.strip_width());
+    let mut out = Vec::new();
+    for dx in -LAIR_HALF_WIDTH - 2..=LAIR_HALF_WIDTH + 2 {
+        for row in lair.top - 2..=lair.floor {
+            let column = (lair.centre + dx).rem_euclid(width);
+            let position = fatherload_simulation::terrain::TilePosition {
+                x: i32::try_from(column).unwrap_or(0),
+                y: row,
+            };
+            let lamp = scene.terrain.tile(position).is_some_and(|tile| {
+                tile.kind == fatherload_simulation::terrain::TileKind::Lair(LairTile::Lamp)
+            });
+            if lamp {
+                out.push(GroundThing {
+                    column: column as f64 + 0.5,
+                    row: row as f32 + 0.5,
+                    kind: super::space::view::GroundThingKind::Halo {
+                        radius: 7,
+                        colour: (255, 226, 170),
+                    },
+                });
+            }
+        }
+    }
+    out
 }
 
 /// A seat on a generated body: its round ground under the craft, the galaxy above.

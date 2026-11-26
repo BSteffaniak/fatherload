@@ -95,35 +95,39 @@ pub const LANTERNFLY: SpriteDef = SpriteDef {
     name: "pc_enemy_lanternfly",
     legend: &[
         ('o', INK),
-        ('f', FOG),
-        ('k', SKY_LIGHT),
-        ('m', MINT),
-        ('i', ICE),
-        ('n', TEAL_DARK),
-        ('e', INK),
+        ('a', FOG),
+        ('b', SLATE),
+        ('c', MINT),
+        ('d', ICE),
+        ('e', SLATE_DARK),
+        ('f', GOLD),
     ],
     frames: &[
         &[
-            ".ookkkookoo..",
-            "okkfffkkfffo.",
-            "offffkffffffo",
-            "offfiiimmffo.",
-            ".oiiiimmmmnno",
-            ".oiiiimmmmmeo",
-            "..oiimmmmooo.",
-            "...oooooo....",
-            ".............",
+            ".....oooo...", //
+            "....oaaaao..", //
+            "...oaaaaaoo.", //
+            "..oaaaaaoobo", //
+            ".oocaaaoobo.", //
+            "ocddcceeeefo", //
+            "oddddeeeeeo.", //
+            "ocddcceeoo..", //
+            "occcccoo....", //
+            ".oocoo......", //
+            "...o........", //
         ],
         &[
-            ".............",
-            ".............",
-            "....ooooo....",
-            "..ooiiimmooo.",
-            ".oiiiimmmmnno",
-            "ofiiiimmmmmeo",
-            ".ofiimmmmffo.",
-            "..ooooooooo..",
-            ".............",
+            "............", //
+            "............", //
+            "...oooo...o.", //
+            "..oaaaaooobo", //
+            ".oocaaaaabo.", //
+            "ocddcceeeefo", //
+            "oddddeeeeeo.", //
+            "ocddcceeoo..", //
+            "occcccoo....", //
+            ".oocoo......", //
+            "...o........", //
         ],
     ],
     frame_seconds: 0.12,
@@ -519,33 +523,37 @@ pub const ARC_MITE: SpriteDef = SpriteDef {
     name: "pc_enemy_arc_mite",
     legend: &[
         ('o', INK),
-        ('d', STEEL_DARK),
-        ('s', STEEL),
-        ('k', SKY),
-        ('i', ICE),
+        ('a', ICE),
+        ('b', STEEL),
+        ('c', STEEL_DARK),
+        ('d', SKY_LIGHT),
     ],
     frames: &[
         &[
-            ".....o.....",
-            "..oookoo.o.",
-            ".oksssddoko",
-            "..osddddooo",
-            ".osddikddok",
-            "okodddddo.o",
-            ".oodddddoo.",
-            ".okooooooko",
-            "..o..oko.o.",
+            "...o........", //
+            "..oao...o...", //
+            ".oaoooooao..", //
+            "..oobbccoao.", //
+            "..obbcdcco..", //
+            ".obbcdddcco.", //
+            ".occccdccco.", //
+            "..occcccco..", //
+            "..oocccco...", //
+            "..ooooooo...", //
+            "...o..oo....", //
         ],
         &[
-            "....o..o...",
-            "...oiooio..",
-            ".oosssddo.o",
-            "oiosddddooi",
-            ".osddikddoo",
-            ".oodddddo.o",
-            "oiodddddooi",
-            ".o.ooooo..o",
-            "...oiooio..",
+            "..........o.", //
+            "..o......oao", //
+            ".oaooooooao.", //
+            "oaoobbccoo..", //
+            ".oobbcdcco..", //
+            ".obbcdddcco.", //
+            ".occccdccco.", //
+            "..occcccco..", //
+            "...occccoo..", //
+            "...ooooooo..", //
+            "....oo..o...", //
         ],
     ],
     frame_seconds: 0.08,

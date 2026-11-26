@@ -2123,6 +2123,19 @@ impl LocalGame {
                 continue;
             };
             let words = event_words(self.runtime.world(), what, detail);
+            // A system's leads are news in flight; a rig set down on a world (a warp, a test
+            // scene) keeps its toast for the ground's own words (Wave 14 finish).
+            let flying = |player: PlayerId| {
+                self.runtime
+                    .world()
+                    .player(player)
+                    .is_some_and(|rig| rig.flight.away())
+            };
+            if what == fatherload_simulation::galaxy_story::GalaxyEvent::LeadFound
+                && !player_id.is_some_and(flying)
+            {
+                continue;
+            }
             if let Some((kind, title, text)) = words.card {
                 for seat in 0..players.len() {
                     moments.push((seat, kind, title.clone(), text.clone()));

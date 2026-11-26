@@ -122,6 +122,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         // The exotic worlds' lanterns, bladders, pockets, conduits and seals (Wave 13).
         TileKind::Exotic(tile) => tile.glow() as f32 / 255.0 * 3.0,
         // The Wave 12 worlds' lair lamps and relics (Wave 14 finish).
+        // ... the lamps light their halls wide.
+        TileKind::Lair(fatherload_simulation::planet::lairs::LairTile::Lamp) => 7.5,
         TileKind::Lair(tile) => tile.glow() as f32 / 255.0 * 3.0,
         _ => 0.0,
     }
@@ -350,6 +352,7 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
         bombs,
         explosions,
         critters,
+        enemies,
         seconds,
         beam_lights,
         ..
@@ -431,6 +434,21 @@ fn gather_lights(scene: &DarknessScene<'_>, rect: &TileRect) -> Vec<Light> {
             });
         }
     }
+    // Glowing creatures: a soft pool round each (a boss's lights its hall).
+    for entity in enemies {
+        let fatherload_simulation::entity::EntityState::Enemy(state) = &entity.state else {
+            continue;
+        };
+        let reach = state.kind.light_tiles();
+        if reach > 0.0 {
+            lights.push(Light {
+                x: entity.body.x,
+                y: entity.body.y,
+                radius: reach * TILE_SIZE * 1.4,
+                strength: 0.7,
+            });
+        }
+    }
     for critter in critters {
         let reach = critter.state.kind.light_radius();
         if reach > 0.0 {
@@ -484,6 +502,9 @@ pub(super) struct DarknessScene<'a> {
     pub bombs: &'a [PlacedBomb],
     pub explosions: &'a [Explosion],
     pub critters: &'a [CritterPresentation],
+    /// The creatures in view: the glowing ones light the dark round them (Wave 14 finish: a
+    /// boss's core lights its lair; a lanternfly its grotto).
+    pub enemies: &'a [fatherload_simulation::entity::Entity],
     pub seconds: f32,
     /// Extra lights `(x, y, radius)` in local pixels: the refracted headlamp's beams (Wave 8).
     pub beam_lights: &'a [(f32, f32, f32)],
