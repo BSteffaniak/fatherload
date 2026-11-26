@@ -297,7 +297,7 @@ impl GameRenderer {
     /// frame, showing the coarse map meanwhile).
     #[cfg(not(target_os = "emscripten"))]
     #[must_use]
-    pub fn space_ground_settled(&self) -> bool {
+    pub const fn space_ground_settled(&self) -> bool {
         self.space.polar.settled()
     }
 

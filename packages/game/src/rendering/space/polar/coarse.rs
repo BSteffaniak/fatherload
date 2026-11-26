@@ -54,6 +54,8 @@ pub struct CoarseMap {
     pub pixels: Vec<u8>,
     /// Per texel (row-major): painted.
     painted: Vec<bool>,
+    /// How many texels of `painted` are not (kept in step, so a frame never scans them all).
+    unpainted: usize,
     /// Window rows with texels left to paint, the nearest the camera last.
     pending: Vec<i32>,
     /// The strip revision the map shows.
@@ -68,8 +70,8 @@ pub struct CoarseMap {
 
 impl CoarseMap {
     /// Whether texels are still waiting for their paint.
-    pub fn has_pending(&self) -> bool {
-        self.painted.iter().any(|painted| !painted)
+    pub const fn has_pending(&self) -> bool {
+        self.unpainted > 0
     }
 
     /// Brings the map to `window` (the camera at strip row `camera_row`) and paints what this
@@ -111,6 +113,7 @@ impl CoarseMap {
             // A whole-ring map whose strip changed and nobody said where: everything repaints,
             // over a few frames.
             self.painted.iter_mut().for_each(|painted| *painted = false);
+            self.unpainted = self.painted.len();
             self.pending.clear();
         }
         self.revision = revision;
@@ -146,6 +149,7 @@ impl CoarseMap {
         let texels = (width.max(0) * height.max(0)) as usize;
         self.pixels = vec![0; texels * 4];
         self.painted = vec![false; texels];
+        self.unpainted = texels;
         self.pending.clear();
         self.window = Some(window.clone());
         self.upload = Upload::Everything;
@@ -181,6 +185,7 @@ impl CoarseMap {
                 .copy_from_slice(&old_pixels[from * 4..(from + length) * 4]);
             self.painted[to..to + length].copy_from_slice(&old_painted[from..from + length]);
         }
+        self.unpainted = self.painted.iter().filter(|painted| !**painted).count();
     }
 
     /// Queues every row with unpainted texels, the nearest the camera last (painted first).
@@ -203,13 +208,14 @@ impl CoarseMap {
     fn unpaint_row(&mut self, window: &Window, y: i32) {
         let width = window.size.0.max(0) as usize;
         let start = y as usize * width;
-        self.painted[start..start + width].fill(false);
+        let row = &mut self.painted[start..start + width];
+        self.unpainted += row.iter().filter(|painted| **painted).count();
+        row.fill(false);
     }
 
-    /// Paints the unpainted texels of window row `y`: one texel per tile (the mean of its art),
-    /// the sky and past the core clear.
-    /// Paints the unpainted texels of window row `y` until `deadline` (`None`: all of them);
-    /// whether the row is done.
+    /// Paints the unpainted texels of window row `y` until `deadline` (`None`: all of them):
+    /// one texel per tile (the mean of its art), the sky and past the core clear. Whether the
+    /// row is done.
     fn paint_row(
         &mut self,
         strip: &dyn PolarStrip,
@@ -253,6 +259,7 @@ impl CoarseMap {
                 }
             }
             self.painted[at] = true;
+            self.unpainted -= 1;
             let texel = if x < columns
                 && let Some(tile) = strip_tile(strip, origin + i64::from(x), row)
                 && let Some(found) = terrain.tile(tile)
@@ -345,7 +352,9 @@ mod tests {
             "{unpainted} texels left of {}",
             map.painted.len()
         );
+        assert_eq!(unpainted, map.unpainted, "the count kept in step");
         map.paint_all(strip, &moved, ground.row);
+        assert_eq!(map.unpainted, 0);
         assert!(
             map.pixels == fresh(strip, &moved, ground.row, &map),
             "shifted texels match a fresh paint"

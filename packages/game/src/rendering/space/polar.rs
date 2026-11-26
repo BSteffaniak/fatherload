@@ -197,7 +197,7 @@ impl PolarGround {
     /// Whether every cell of the fine window has its art (scene capture waits for it).
     #[cfg(not(target_os = "emscripten"))]
     #[must_use]
-    pub fn settled(&self) -> bool {
+    pub const fn settled(&self) -> bool {
         !(self.fine_art.has_pending() || self.coarse_used && self.coarse_map.has_pending())
     }
 
