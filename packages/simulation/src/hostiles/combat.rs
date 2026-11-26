@@ -101,8 +101,12 @@ pub fn hits_ship(
     if !segment_hits(from, to, (0.0, 0.0), reach) {
         return false;
     }
-    let a = to_ship_frame(angle, from.0, from.1);
-    let b = to_ship_frame(angle, to.0, to.1);
+    // Into the authored frame (two px an art pixel), where the tables are.
+    let scale = class.hull_scale();
+    let (ax, ay) = to_ship_frame(angle, from.0, from.1);
+    let (bx, by) = to_ship_frame(angle, to.0, to.1);
+    let (a, b) = ((ax / scale, ay / scale), (bx / scale, by / scale));
+    let radius = radius / scale;
     class
         .hits()
         .iter()

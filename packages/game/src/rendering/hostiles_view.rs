@@ -47,7 +47,7 @@ use crate::render_snapshot::{RenderSnapshot, ViewSnapshot};
 
 /// The view's zoom in a fight (a share of one to one): ships and the rig at true scale, the
 /// fight around them in view.
-pub const COMBAT_ZOOM: f32 = 0.55;
+pub const COMBAT_ZOOM: f32 = 0.65;
 /// Hostiles this near (px) pull the view in to [`COMBAT_ZOOM`]; it eases in from
 /// [`COMBAT_ZOOM_REACH`] + 1,200 px.
 pub const COMBAT_ZOOM_REACH: f32 = 2_200.0;
@@ -89,6 +89,9 @@ pub const fn trooper_sprite(
         _ => None,
     }
 }
+
+/// Combat steps a hull hit's flash takes to fade (an eighth of a second).
+const HIT_FLASH_STEPS: u64 = 15;
 
 /// The combat step of the snapshot (for telegraph progress and hit flashes).
 const fn step_of(snapshot: &RenderSnapshot<'_>) -> u64 {
@@ -155,7 +158,7 @@ pub(super) fn draw_hostiles(
             continue;
         };
         let turn = (wreck.id as f32 * 1.7 + ticks as f32 * 0.004) - frame.roll;
-        let art_scale = frame.scale * 2.0;
+        let art_scale = frame.scale * wreck.class.art_scale();
         if wreck.owner.is_some() {
             // A rig's own cargo pod: a small crate with its owner's light.
             let size = 10.0 * art_scale;
@@ -185,7 +188,7 @@ pub(super) fn draw_hostiles(
         // The salvage glint: a slow gold pulse (a boss's tech glows brighter).
         let pulse = ((ticks as f32 * 0.05 + wreck.id as f32).sin() * 0.5 + 0.5) * 0.6 + 0.4;
         let tech = wreck.tech.is_some();
-        let radius = if tech { 26.0 } else { 9.0 } * frame.scale * 2.0;
+        let radius = if tech { 26.0 } else { 9.0 } * frame.scale * wreck.class.art_scale();
         draw.draw_ring(
             at,
             radius,
@@ -202,6 +205,10 @@ pub(super) fn draw_hostiles(
         vx: view.player.flight.velocity_x,
         vy: view.player.flight.velocity_y,
     };
+    // How bright a hit's flash gets (the screen effects setting; it fades, never strobes).
+    let flash_strength = snapshot
+        .effects
+        .scale(fatherload_simulation::field::ScreenEffect::Exposure);
     // Ships, the warnings under them.
     for ship in &hostiles.ships {
         let reach = ship.class.reach();
@@ -212,7 +219,30 @@ pub(super) fn draw_hostiles(
             continue;
         };
         let degrees = (ship.angle - frame.roll).to_degrees();
-        let art_scale = frame.scale * 2.0;
+        let art_scale = frame.scale * ship.class.art_scale();
+        let faction = faction_colour(ship.class.faction());
+        // The faction's aura under the hull: who a ship flies for reads at a glance, against
+        // a nebula's colour too.
+        draw.draw_circle_gradient(
+            at.x as i32,
+            at.y as i32,
+            reach * frame.scale * 0.95,
+            with_alpha(faction, 90),
+            with_alpha(faction, 0),
+        );
+        // A dark rim round the silhouette, so a hull never melts into the sky behind it.
+        let rim = (art_scale * 0.6).max(1.0);
+        for (dx, dy) in [(-rim, 0.0), (rim, 0.0), (0.0, -rim), (0.0, rim)] {
+            draw_turned(
+                draw,
+                ship_sprite(ship.class),
+                ship_frame(ship, ticks),
+                Vector2::new(at.x + dx, at.y + dy),
+                art_scale,
+                degrees,
+                Color::new(10, 8, 22, 200),
+            );
+        }
         draw_turned(
             draw,
             ship_sprite(ship.class),
@@ -222,6 +252,26 @@ pub(super) fn draw_hostiles(
             degrees,
             Color::WHITE,
         );
+        // A hull hit: the hull lights up and fades over a tenth of a second (a smooth decay
+        // re-lit by the next hit: it never blinks on and off).
+        let since_hit = step.saturating_sub(ship.hit_at);
+        if ship.hit_at > 0 && since_hit < HIT_FLASH_STEPS && ship.shield <= 0.0 {
+            let fade = 1.0 - since_hit as f32 / HIT_FLASH_STEPS as f32;
+            let alpha = (fade * fade * 150.0 * flash_strength) as u8;
+            // SAFETY: a blend mode balanced within this block.
+            unsafe { raylib::ffi::BeginBlendMode(raylib::ffi::BlendMode::BLEND_ADDITIVE as i32) };
+            draw_turned(
+                draw,
+                ship_sprite(ship.class),
+                ship_frame(ship, ticks),
+                at,
+                art_scale,
+                degrees,
+                Color::new(255, 240, 220, alpha),
+            );
+            // SAFETY: closes the blend mode above.
+            unsafe { raylib::ffi::EndBlendMode() };
+        }
         // A shield taking a hit shimmers round the hull for a moment.
         let since = step.saturating_sub(ship.hit_at);
         if ship.shield > 0.0 && since < 20 && ship.hit_at > 0 {
@@ -293,7 +343,8 @@ pub const fn faction_colour(faction: Faction) -> Color {
     }
 }
 
-/// One shot, drawn along its motion.
+/// One shot, drawn along its motion: a soft glow in its colour, a bright core and (for bolts)
+/// a tapering trail, never thinner than a couple of pixels so a shot reads at a fight's zoom.
 fn draw_shot(
     draw: &mut RaylibDrawHandle<'_>,
     frame: &SpaceFrame,
@@ -302,52 +353,78 @@ fn draw_shot(
     (vx, vy): (f32, f32),
     ticks: u64,
 ) {
-    let s = frame.scale;
+    // Shots read bigger than their hit radius (the rig's own shots too): at least the size
+    // they show at three quarters of one to one.
+    let s = frame.scale.max(0.75) * 1.25;
     let speed = vx.hypot(vy).max(1.0);
     let (tx, ty) = frame.turn(vx / speed, vy / speed);
     let tail = |length: f32| Vector2::new(at.x - tx * length * s, at.y - ty * length * s);
+    let glow = |draw: &mut RaylibDrawHandle<'_>, radius: f32, colour: Color| {
+        draw.draw_circle_gradient(
+            at.x as i32,
+            at.y as i32,
+            radius * s,
+            with_alpha(colour, 110),
+            with_alpha(colour, 0),
+        );
+    };
+    let streak =
+        |draw: &mut RaylibDrawHandle<'_>, length: f32, width: f32, outer: Color, core: Color| {
+            draw.draw_line_ex(at, tail(length), width * s + 2.0, with_alpha(outer, 90));
+            draw.draw_line_ex(at, tail(length * 0.8), width * s, outer);
+            draw.draw_line_ex(at, tail(length * 0.55), (width * 0.45 * s).max(1.0), core);
+            draw.draw_circle_v(at, (width * 0.5 * s).max(1.0), core);
+        };
     match kind {
         ShotKind::Cannon => {
-            draw.draw_line_ex(at, tail(18.0), (4.0 * s).max(2.0), with_alpha(GOLD, 160));
-            draw.draw_line_ex(at, tail(12.0), (2.0 * s).max(1.0), CREAM);
+            glow(draw, 9.0, GOLD);
+            streak(draw, 20.0, 3.5, GOLD, CREAM);
         }
         ShotKind::Turret => {
-            draw.draw_line_ex(at, tail(14.0), (3.0 * s).max(1.5), with_alpha(SKY, 170));
-            draw.draw_line_ex(at, tail(9.0), (1.5 * s).max(1.0), ICE);
+            glow(draw, 8.0, SKY);
+            streak(draw, 16.0, 3.0, SKY, ICE);
         }
         ShotKind::Missile => {
-            let burn = ((ticks % 4) as f32).mul_add(2.0, 10.0);
-            draw.draw_line_ex(tail(8.0), tail(8.0 + burn), (4.0 * s).max(2.0), ORANGE);
-            draw.draw_line_ex(at, tail(10.0), (4.0 * s).max(2.0), STEEL_LIGHT);
-            draw.draw_circle_v(at, (2.0 * s).max(1.0), RED);
+            let burn = ((ticks % 4) as f32).mul_add(2.0, 12.0);
+            glow(draw, 10.0, ORANGE);
+            draw.draw_line_ex(
+                tail(8.0),
+                tail(8.0 + burn),
+                5.0 * s,
+                with_alpha(ORANGE, 200),
+            );
+            draw.draw_line_ex(tail(8.0), tail(8.0 + burn * 0.6), 2.5 * s, AMBER);
+            draw.draw_line_ex(at, tail(10.0), 4.5 * s, STEEL_LIGHT);
+            draw.draw_circle_v(at, 2.4 * s, RED);
         }
         ShotKind::Bolt => {
-            draw.draw_line_ex(at, tail(16.0), (4.0 * s).max(2.0), with_alpha(RED, 170));
-            draw.draw_line_ex(at, tail(10.0), (2.0 * s).max(1.0), AMBER);
+            glow(draw, 10.0, RED);
+            streak(draw, 18.0, 4.0, RED, AMBER);
         }
         ShotKind::Broadside => {
-            draw.draw_circle_v(at, 10.0 * s, with_alpha(ORANGE, 70));
-            draw.draw_circle_v(at, 6.0 * s, ORANGE);
-            draw.draw_circle_v(at, 3.0 * s, CREAM);
+            glow(draw, 16.0, ORANGE);
+            draw.draw_circle_v(at, 7.0 * s, ORANGE);
+            draw.draw_circle_v(at, 3.5 * s, CREAM);
         }
         ShotKind::Spit => {
-            draw.draw_circle_v(at, 8.0 * s, with_alpha(LIME, 70));
-            draw.draw_circle_v(at, 6.0 * s, LEAF);
-            draw.draw_circle_v(Vector2::new(at.x - 2.0 * s, at.y - 2.0 * s), 2.0 * s, LIME);
+            glow(draw, 13.0, LIME);
+            draw.draw_circle_v(at, 6.5 * s, LEAF);
+            draw.draw_circle_v(Vector2::new(at.x - 2.0 * s, at.y - 2.0 * s), 2.5 * s, LIME);
         }
         ShotKind::Spore => {
-            draw.draw_circle_v(at, 13.0 * s, with_alpha(PINK, 55));
-            draw.draw_circle_v(at, 9.0 * s, ROSE);
-            draw.draw_circle_v(Vector2::new(at.x - 3.0 * s, at.y - 3.0 * s), 3.0 * s, PINK);
+            glow(draw, 18.0, PINK);
+            draw.draw_circle_v(at, 9.5 * s, ROSE);
+            draw.draw_circle_v(Vector2::new(at.x - 3.0 * s, at.y - 3.0 * s), 3.5 * s, PINK);
         }
         ShotKind::Pulse => {
-            draw.draw_circle_v(at, 7.0 * s, with_alpha(MINT, 70));
-            draw.draw_circle_v(at, 4.0 * s, MINT);
-            draw.draw_circle_v(at, 2.0 * s, BONE);
+            glow(draw, 12.0, MINT);
+            draw.draw_circle_v(at, 4.5 * s, MINT);
+            draw.draw_circle_v(at, 2.2 * s, BONE);
         }
         ShotKind::Lance => {
-            draw.draw_line_ex(at, tail(70.0), (8.0 * s).max(3.0), with_alpha(MINT, 110));
-            draw.draw_line_ex(at, tail(64.0), (3.0 * s).max(1.5), BONE);
+            glow(draw, 12.0, MINT);
+            draw.draw_line_ex(at, tail(70.0), 9.0 * s, with_alpha(MINT, 110));
+            draw.draw_line_ex(at, tail(64.0), 3.5 * s, BONE);
         }
     }
 }
@@ -825,25 +902,28 @@ mod tests {
             let sprite = ship_sprite(class);
             let (w, h) = (sprite.width(), sprite.height());
             let size = class.stats().size;
+            // The sprite is drawn at the class's art scale (Wave 13: the fighters half again
+            // as big as their art's two px an art pixel), and that is its drawn size.
+            let scale = class.art_scale();
             assert_eq!(
-                (w as f32 * 2.0, h as f32 * 2.0),
+                (w as f32 * scale, h as f32 * scale),
                 size,
-                "{class:?}: the sprite is the drawn size (two space px an art px)"
+                "{class:?}: the sprite is the drawn size ({scale} space px an art px)"
             );
+            let circles: Vec<_> = class.hit_circles().collect();
             // Every circle's middle sits on the body.
-            for circle in class.hits() {
-                let x = (circle.x / 2.0 + w as f32 * 0.5).floor() as i32;
-                let y = (circle.y / 2.0 + h as f32 * 0.5).floor() as i32;
+            for circle in &circles {
+                let x = (circle.x / scale + w as f32 * 0.5).floor() as i32;
+                let y = (circle.y / scale + h as f32 * 0.5).floor() as i32;
                 assert!(body(sprite, x, y), "{class:?}: {circle:?} off the body");
             }
             // The circles cover most of the body and little else.
             let (mut covered, mut total, mut outside) = (0, 0, 0);
             for y in 0..h {
                 for x in 0..w {
-                    let px = (x as f32 + 0.5 - w as f32 * 0.5) * 2.0;
-                    let py = (y as f32 + 0.5 - h as f32 * 0.5) * 2.0;
-                    let inside = class
-                        .hits()
+                    let px = (x as f32 + 0.5 - w as f32 * 0.5) * scale;
+                    let py = (y as f32 + 0.5 - h as f32 * 0.5) * scale;
+                    let inside = circles
                         .iter()
                         .any(|circle| (px - circle.x).hypot(py - circle.y) <= circle.r);
                     if body(sprite, x, y) {
@@ -874,6 +954,48 @@ mod tests {
             assert!(trooper_sprite(kind).is_some());
         }
         assert!(trooper_sprite(EnemyKind::CaveBat).is_none());
+    }
+
+    #[test]
+    fn scaled_ships_are_hit_where_they_are_drawn() {
+        use fatherload_simulation::hostiles::combat::hits_ship;
+        for class in ShipClass::ALL {
+            let sprite = ship_sprite(class);
+            let (w, h) = (sprite.width(), sprite.height());
+            let scale = class.art_scale();
+            for angle in [0.0_f32, 0.9, -2.4] {
+                let (mut hit, mut total) = (0, 0);
+                for y in -2..h + 2 {
+                    for x in -2..w + 2 {
+                        // The art pixel's middle, as drawn turned `angle` round the centre.
+                        let px = (x as f32 + 0.5 - w as f32 * 0.5) * scale;
+                        let py = (y as f32 + 0.5 - h as f32 * 0.5) * scale;
+                        let at = from_ship_frame(angle, px, py);
+                        let struck = hits_ship(class, angle, at, at, 0.5);
+                        if body(sprite, x, y) {
+                            total += 1;
+                            hit += usize::from(struck);
+                        } else if !(0..w).contains(&x) || !(0..h).contains(&y) {
+                            assert!(!struck, "{class:?} is hit off its sprite at ({x}, {y})");
+                        }
+                    }
+                }
+                let share = hit as f32 / total.max(1) as f32;
+                assert!(
+                    share > 0.8,
+                    "{class:?} at {angle}: {share} of its body takes hits"
+                );
+                // The cheap first test never misses the drawn body.
+                let corner = (w as f32 * 0.5).hypot(h as f32 * 0.5) * scale;
+                assert!(
+                    class.reach() <= corner + 1.0,
+                    "{class:?} reaches past its sprite"
+                );
+            }
+            // The fighters grew together with their art; the bosses kept their size.
+            let expected = if class.is_boss() { 2.0 } else { 3.0 };
+            assert!((scale - expected).abs() < f32::EPSILON, "{class:?}");
+        }
     }
 
     #[test]

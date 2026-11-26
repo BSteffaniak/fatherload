@@ -229,6 +229,9 @@ pub enum ShipClass {
 }
 
 /// A hit circle in a ship's frame (px; x right, y toward the tail: the nose is at negative y).
+///
+/// The tables are authored at two px an art pixel; a ship is drawn and hit at
+/// [`ShipClass::hull_scale`] times that ([`ShipClass::hit_circles`] scales them).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HitCircle {
     pub x: f32,
@@ -403,6 +406,9 @@ pub struct ShipStats {
     pub size: (f32, f32),
 }
 
+/// How much bigger than their art the fighters are drawn and hit ([`ShipClass::hull_scale`]).
+pub const HULL_SCALE: f32 = 1.5;
+
 /// Steps after a hit before a shield recharges (3 s).
 pub const SHIELD_REGEN_DELAY_STEPS: u64 = 360;
 
@@ -458,6 +464,30 @@ impl ShipClass {
         matches!(self, Self::PirateKing | Self::SwarmQueen | Self::Arbiter)
     }
 
+    /// How much bigger than its authored art (two px an art pixel) the ship is drawn and hit
+    /// (Wave 13 art-audio: fighters read at a fight's zoom; the bosses are big already). The
+    /// sprite, the hit circles, the reach and the drawn size all scale together.
+    #[must_use]
+    pub const fn hull_scale(self) -> f32 {
+        if self.is_boss() { 1.0 } else { HULL_SCALE }
+    }
+
+    /// Space px a sprite's art pixel covers.
+    #[must_use]
+    pub const fn art_scale(self) -> f32 {
+        2.0 * self.hull_scale()
+    }
+
+    /// The hit circles as drawn and hit ([`Self::hits`] scaled by [`Self::hull_scale`]).
+    pub fn hit_circles(self) -> impl Iterator<Item = HitCircle> {
+        let scale = self.hull_scale();
+        self.hits().iter().map(move |circle| HitCircle {
+            x: circle.x * scale,
+            y: circle.y * scale,
+            r: circle.r * scale,
+        })
+    }
+
     /// Its name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -493,7 +523,7 @@ impl ShipClass {
                 contact_damage: 8.0,
                 credits: 90,
                 cargo: 2,
-                size: (44.0, 48.0),
+                size: (66.0, 72.0),
             },
             Self::Marauder => ShipStats {
                 hull: 140.0,
@@ -509,7 +539,7 @@ impl ShipClass {
                 contact_damage: 12.0,
                 credits: 220,
                 cargo: 5,
-                size: (72.0, 80.0),
+                size: (108.0, 120.0),
             },
             Self::PirateKing => ShipStats {
                 hull: 1_500.0,
@@ -541,7 +571,7 @@ impl ShipClass {
                 contact_damage: 7.0,
                 credits: 12,
                 cargo: 0,
-                size: (24.0, 24.0),
+                size: (36.0, 36.0),
             },
             Self::Stinger => ShipStats {
                 hull: 48.0,
@@ -557,7 +587,7 @@ impl ShipClass {
                 contact_damage: 6.0,
                 credits: 40,
                 cargo: 1,
-                size: (40.0, 48.0),
+                size: (60.0, 72.0),
             },
             Self::SwarmQueen => ShipStats {
                 hull: 1_400.0,
@@ -589,7 +619,7 @@ impl ShipClass {
                 contact_damage: 6.0,
                 credits: 70,
                 cargo: 2,
-                size: (36.0, 40.0),
+                size: (54.0, 60.0),
             },
             Self::Lancer => ShipStats {
                 hull: 160.0,
@@ -605,7 +635,7 @@ impl ShipClass {
                 contact_damage: 12.0,
                 credits: 260,
                 cargo: 6,
-                size: (64.0, 96.0),
+                size: (96.0, 144.0),
             },
             Self::Arbiter => ShipStats {
                 hull: 1_700.0,
@@ -626,7 +656,9 @@ impl ShipClass {
         }
     }
 
-    /// Hit areas in the ship's frame, matching its drawn body (the nose at negative y).
+    /// Hit areas in the ship's frame as authored (two px an art pixel: see
+    /// [`Self::hit_circles`] for the drawn scale), matching its drawn body (the nose at
+    /// negative y).
     #[must_use]
     pub const fn hits(self) -> &'static [HitCircle] {
         match self {
@@ -649,6 +681,7 @@ impl ShipClass {
             .iter()
             .map(|circle| (circle.x * circle.x + circle.y * circle.y).sqrt() + circle.r)
             .fold(0.0, f32::max)
+            * self.hull_scale()
     }
 
     /// The bounty a station pays for one (credits).

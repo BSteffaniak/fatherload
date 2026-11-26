@@ -58,7 +58,7 @@ pub const STINGER_RANGE: f32 = 430.0;
 /// A mite's circling range between dives (px).
 pub const MITE_ORBIT: f32 = 240.0;
 /// The swarm's separation distance (px).
-pub const FLOCK_SEPARATION: f32 = 52.0;
+pub const FLOCK_SEPARATION: f32 = 70.0;
 /// How far the flock's alignment and cohesion reach (px).
 pub const FLOCK_REACH: f32 = 260.0;
 /// A machine formation's attack range (px).
@@ -66,8 +66,8 @@ pub const FORMATION_RANGE: f32 = 600.0;
 /// How far a patrol sees a rig (px; halved in a nebula's fog).
 pub const PATROL_SIGHT: f32 = 1_500.0;
 /// Machine slot spacing (px): rank behind and spread to the side.
-pub const SLOT_BACK: f32 = 64.0;
-pub const SLOT_SIDE: f32 = 70.0;
+pub const SLOT_BACK: f32 = 90.0;
+pub const SLOT_SIDE: f32 = 100.0;
 /// A wounded cutter runs at this share of its hull.
 pub const CUTTER_FLEE_SHARE: f32 = 0.25;
 /// A mite's dive lasts this long (steps).

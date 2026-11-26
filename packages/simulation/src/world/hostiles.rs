@@ -1105,7 +1105,11 @@ impl WorldState {
                         // Holds its line while the lance charges.
                         order.face = telegraph.angle;
                         if step >= telegraph.fire_at {
-                            let from = combat::from_ship_frame(ship.angle, 0.0, -44.0);
+                            let from = combat::from_ship_frame(
+                                ship.angle,
+                                0.0,
+                                -ship.class.stats().size.1 * 0.46,
+                            );
                             self.spawn_hostile_shot(
                                 &ship,
                                 ShotKind::Lance,
