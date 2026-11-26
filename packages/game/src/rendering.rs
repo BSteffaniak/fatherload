@@ -297,7 +297,7 @@ impl GameRenderer {
     /// frame, showing the coarse map meanwhile).
     #[cfg(not(target_os = "emscripten"))]
     #[must_use]
-    pub const fn space_ground_settled(&self) -> bool {
+    pub fn space_ground_settled(&self) -> bool {
         self.space.polar.settled()
     }
 
@@ -382,9 +382,12 @@ impl GameRenderer {
         // rolled view draws a wider square of the world.
         self.post.prepare(raylib, thread, snapshot);
         let explored = &self.explored_drawn;
+        // Only the seats at home look at the home world's ground (a seat away draws its own
+        // place, Wave 13 QA).
         let views: Vec<Rectangle> = snapshot
             .views
             .iter()
+            .filter(|view| view.place_scene.is_none())
             .map(|view| {
                 if let Some(plan) = self.post.plan(view.seat_index) {
                     return plan

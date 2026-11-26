@@ -59,7 +59,7 @@ pub enum Upload {
 }
 
 impl Upload {
-    const fn add_row(self, row: i32) -> Self {
+    pub(super) const fn add_row(self, row: i32) -> Self {
         match self {
             Self::Nothing => Self::Rows(row, row),
             Self::Rows(first, last) => Self::Rows(

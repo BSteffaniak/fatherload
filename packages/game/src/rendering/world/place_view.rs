@@ -47,14 +47,26 @@ impl PlaceRenderers {
         snapshot: &RenderSnapshot<'_>,
         changed: &[(StoreKey, TilePosition)],
     ) {
+        // A body's round ground is the polar renderer's (`rendering/space_seat.rs`): only the
+        // flat places (free flight's store, the test ground) keep a flat cache here (Wave 13
+        // QA: painting a dune world flat as well cost a third of the browser's frame).
+        let flat = |scene: &&PlaceScene<'_>| {
+            scene.body.is_none()
+                || crate::rendering::space::live::LiveStrip::of(scene.terrain).is_none()
+        };
         let shown: BTreeSet<StoreKey> = snapshot
             .views
             .iter()
-            .filter_map(|view| view.place_scene.as_ref().map(|scene| scene.store))
+            .filter_map(|view| {
+                view.place_scene
+                    .as_ref()
+                    .filter(flat)
+                    .map(|scene| scene.store)
+            })
             .collect();
         self.stores.retain(|store, _| shown.contains(store));
         for view in &snapshot.views {
-            let Some(scene) = &view.place_scene else {
+            let Some(scene) = view.place_scene.as_ref().filter(flat) else {
                 continue;
             };
             let cache = self
