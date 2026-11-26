@@ -124,7 +124,10 @@ pub(super) fn volcanic_music_loop(rng: &mut Rng) -> Vec<f32> {
         )]
         let index = ((t / (beat * 2.0)) as usize).min(riff.len() - 1);
         let note = riff[index];
-        let gate = f32::from(u8::from((t / (beat * 2.0)).fract() < 0.85));
+        // Each held note opens and closes over a few milliseconds (a hard gate clicked, and
+        // at the loop's seam the first note's random phase landed off zero).
+        let into = (t / (beat * 2.0)).fract();
+        let gate = (into * 60.0).min(1.0) * ((0.85 - into) * 60.0).clamp(0.0, 1.0);
         let body = low.next(note) + low_two.next(note * 1.005);
         saturate(filter.run(body * 0.5, 240.0, 1.3), 2.4) * 0.22 * gate
     });
@@ -390,9 +393,12 @@ pub(super) fn vault_open(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn rumble(rng: &mut Rng) -> Vec<f32> {
     let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
     let mut filter = Svf::new(FilterMode::LowPass, 120.0, 0.9);
+    // The brown noise's drift below hearing goes (it only ate headroom; the integrated
+    // stack's patch order reseeded this one past the quality bar's sub-bass line).
+    let mut floor = Svf::new(FilterMode::HighPass, 45.0, 0.7);
     render(2.4, |t| {
-        filter.process(noise.next())
-            * 2.0
+        floor.process(filter.process(noise.next()))
+            * 2.2
             * (0.7 + 0.3 * sine(t, 7.0))
             * segments(t, &[(0.0, 0.0), (0.8, 1.0), (2.0, 0.8), (2.4, 0.0)])
     })
