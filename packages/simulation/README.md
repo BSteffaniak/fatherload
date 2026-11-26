@@ -11870,6 +11870,10 @@ either way. The endgame's curve tests pass unchanged.
   `hostile_tests::the_starwright_hull_softens_a_fight`.
 - **Thousands separators** on every credit figure (game `credits_text::grouped`: the hub's and
   counters' prices and payouts, the HUD's purse, toasts, homes, aliens, villages, tombs...).
+  Review fixes: the wallet panel's purse and the purchase receipt (credits now, price, balance
+  after, short by) and the build bar's prices are grouped too, and the receipt reads a grouped
+  offer price back (`credits_text::parse_grouped`; it parsed "1,200" as nothing, so every
+  purchase over 999 credits lost its price rows).
 - **Music for the set pieces** (appended at the end of `patches!`): `f14_loop_works` on the
   Works page (an anvil, a plucked arpeggio in C over a warm pad), `f14_loop_gate` at Halcyon Dock
   once the gate rises and on a gate ride (a slow choir in E, a great bell), `f14_loop_harbour` in
@@ -11885,7 +11889,8 @@ either way. The endgame's curve tests pass unchanged.
 - **The goal strip at 960 points**: in a narrow view it sits in the left column under the badges
   and trackers, clear of the body panel and a boss's label.
 - **"New lead" toasts**: a system's leads are told in one line (by its first lead), and only to a
-  seat in flight (a rig set down on a world by a warp or a scene keeps the ground's own words).
+  seat in flight (a rig set down on a world by a warp or a scene keeps the ground's own words;
+  review fix: nor to a rig docked at a station, where the toast sat over the counter's page).
 
 ### Formats and digests
 
@@ -11898,7 +11903,8 @@ either way. The endgame's curve tests pass unchanged.
   sample the surface and core; the lairs lie 52 rows under the landmarks). Their bodies in a
   Wave 12-13 save keep their edits and gain their lairs: a body's fingerprint samples the
   surface chunk at column 0, which the lair (under the landmark, half a lap from the
-  settlement) does not reach, so the edits are laid over the new ground. An old edit the new
+  settlement) almost never reaches, so the edits are laid over the new ground (when the shaft
+  does cross that chunk, the body loads fresh by the Wave 12 rule). An old edit the new
   ground now generates itself (a tunnel dug where the hall is) stops counting as an edit, so the
   rebuilt terrain digest can be smaller than the saved one; the load then checks the saved
   edits' own digest instead (`Terrain::edits_digest`, review fix: such a save used to fail to
