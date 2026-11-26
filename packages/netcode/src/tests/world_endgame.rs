@@ -153,9 +153,10 @@ fn a_client_buys_space_ore_and_delivers_a_gate_part_online() {
     assert_eq!(pair.client.phase(), ClientPhase::InGame);
     let me = to_sim_player(pair.me());
     assert!(pair.host.world().docked_station(me).is_some());
-    pair.step(works(WorkOrder::BuyMaterial(MineralKind::Kamacite, 10)));
-    pair.run(2);
+    // The part first (its ore fills the bay), then ten units bought into the room it left.
     pair.step(works(WorkOrder::GatePart(0)));
+    pair.run(2);
+    pair.step(works(WorkOrder::BuyMaterial(MineralKind::Kamacite, 10)));
     pair.run(40);
     let host = pair.host.world();
     assert!(host.endgame().gate_part(0), "the host took the part");
