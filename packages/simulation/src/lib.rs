@@ -27,6 +27,7 @@ pub mod crew;
 pub mod crust;
 pub mod depth_progression;
 pub mod descent;
+pub mod destination;
 pub mod distortion;
 pub mod drowned;
 pub mod economy;
