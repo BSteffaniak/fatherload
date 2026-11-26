@@ -1027,6 +1027,15 @@ pub enum SoundCue {
     ExoticBossDown,
     /// A rig docking at a sky city.
     ExoticDock,
+    // Space's drive and docking (Wave 13 art-audio).
+    /// The Star Drive engaging a warp.
+    SpaceWarpEngage,
+    /// Dropping out of warp at a star.
+    SpaceWarpArrive,
+    /// Cruise engaging.
+    SpaceCruiseEngage,
+    /// The clamps closing at a station, and its welcome.
+    SpaceDocked,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

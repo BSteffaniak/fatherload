@@ -27,6 +27,7 @@ mod hollow;
 mod hostiles;
 mod old_deep;
 mod outlands;
+mod space_audio;
 mod story_finale;
 mod systems;
 mod wilds;
@@ -635,6 +636,23 @@ patches! {
     PdLockedAirLoop => "pd_loop_locked_air",
     PdRingHumLoop => "pd_loop_ring_hum",
     PdBossLoop => "pd_loop_boss",
+    // Space's music and ambience (wave 13 art-audio), appended at the end so every earlier
+    // patch keeps its seeds.
+    AaStationHumanLoop => "aa_loop_station_human",
+    AaStationVessiLoop => "aa_loop_station_vessi",
+    AaStationTokkariLoop => "aa_loop_station_tokkari",
+    AaStationSiphraLoop => "aa_loop_station_siphra",
+    AaSpaceWarmLoop => "aa_loop_space_warm",
+    AaSpaceBrightLoop => "aa_loop_space_bright",
+    AaSpaceNebulaLoop => "aa_loop_space_nebula",
+    AaCruiseLoop => "aa_loop_cruise",
+    AaWarpLoop => "aa_loop_warp",
+    AaCombatSwarmLoop => "aa_loop_combat_swarm",
+    AaCombatMachineLoop => "aa_loop_combat_machine",
+    AaWarpEngage => "aa_warp_engage",
+    AaWarpArrive => "aa_warp_arrive",
+    AaCruiseEngage => "aa_cruise_engage",
+    AaDockChime => "aa_dock_chime",
 }
 
 /// Playback metadata of a patch.
@@ -1268,6 +1286,21 @@ impl Patch {
                     .send(0.2)
                     .jitter(0.04, 1.0)
             }
+            // Space's music and ambience (wave 13 art-audio): beds and music, the drive's
+            // moments carry (a warp hushes the mix a little), docking is a welcome.
+            Self::AaStationHumanLoop
+            | Self::AaStationVessiLoop
+            | Self::AaStationTokkariLoop
+            | Self::AaStationSiphraLoop
+            | Self::AaSpaceWarmLoop
+            | Self::AaSpaceBrightLoop
+            | Self::AaSpaceNebulaLoop
+            | Self::AaCruiseLoop
+            | Self::AaWarpLoop
+            | Self::AaCombatSwarmLoop
+            | Self::AaCombatMachineLoop => PatchInfo::new(Loop),
+            Self::AaWarpEngage | Self::AaWarpArrive => PatchInfo::new(Big).send(0.25),
+            Self::AaCruiseEngage | Self::AaDockChime => PatchInfo::new(Feedback).send(0.15),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -2117,6 +2150,21 @@ impl Patch {
             Self::PdLockedAirLoop => exotic::locked_air_loop(rng),
             Self::PdRingHumLoop => exotic::ring_hum_loop(rng),
             Self::PdBossLoop => exotic::boss_loop(rng),
+            Self::AaStationHumanLoop => space_audio::station_human_loop(rng),
+            Self::AaStationVessiLoop => space_audio::station_vessi_loop(rng),
+            Self::AaStationTokkariLoop => space_audio::station_tokkari_loop(rng),
+            Self::AaStationSiphraLoop => space_audio::station_siphra_loop(rng),
+            Self::AaSpaceWarmLoop => space_audio::space_warm_loop(rng),
+            Self::AaSpaceBrightLoop => space_audio::space_bright_loop(rng),
+            Self::AaSpaceNebulaLoop => space_audio::space_nebula_loop(rng),
+            Self::AaCruiseLoop => space_audio::cruise_loop(rng),
+            Self::AaWarpLoop => space_audio::warp_loop(rng),
+            Self::AaCombatSwarmLoop => space_audio::combat_swarm_loop(rng),
+            Self::AaCombatMachineLoop => space_audio::combat_machine_loop(rng),
+            Self::AaWarpEngage => space_audio::warp_engage(rng),
+            Self::AaWarpArrive => space_audio::warp_arrive(rng),
+            Self::AaCruiseEngage => space_audio::cruise_engage(rng),
+            Self::AaDockChime => space_audio::dock_chime(rng),
         }
     }
 }

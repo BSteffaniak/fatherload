@@ -480,6 +480,20 @@ enum SeatLoop {
     // Space combat (Wave 12 hostiles): the dogfight's music and the bosses' theme.
     CombatMusic,
     BossMusic,
+    // Space's music and ambience (Wave 13 art-audio): each station owner's music, the
+    // stars' ambience by class, the drive's cruise and warp, the swarm's and the machines'
+    // fights.
+    StationHumanMusic,
+    StationVessiMusic,
+    StationTokkariMusic,
+    StationSiphraMusic,
+    SpaceWarmBed,
+    SpaceBrightBed,
+    SpaceNebulaBed,
+    CruiseBed,
+    WarpBed,
+    SwarmCombatMusic,
+    MachineCombatMusic,
 }
 
 /// Loop key sources reserved per seat (one per [`SeatLoop`], with room to grow).
@@ -1139,6 +1153,23 @@ impl Director {
             rate,
             cutoff,
         }));
+    }
+
+    /// A loop that is the seat's music or score rather than a sound in its world: never
+    /// muffled by vacuum (space's music plays in free flight as anywhere).
+    fn music_command(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        slot: SeatLoop,
+        patch: Patch,
+        gain: f32,
+    ) {
+        let open = Listener {
+            vacuum: false,
+            ..*listener
+        };
+        self.loop_command(live, &open, slot, patch, (gain, 0.0, 1.0, OPEN_CUTOFF));
     }
 
     fn play(&mut self, patch: Patch, gain: f32, pan: f32, rate: f32) {
@@ -2646,6 +2677,7 @@ impl Director {
         listener: &Listener,
         snapshot: &RenderSnapshot<'_>,
     ) {
+        use fatherload_simulation::hostiles::Faction;
         let hostiles = snapshot.space.hostiles;
         let flyer = snapshot
             .space
@@ -2657,20 +2689,172 @@ impl Director {
                 .boss()
                 .is_some_and(|boss| boss.pos.distance(flyer.flight.pos) < 6_000.0)
         });
-        let fighting = !boss && flyer.is_some() && hostiles.engaged(listener.player_id).is_some();
-        self.loop_command(
-            live,
-            listener,
-            SeatLoop::CombatMusic,
-            Patch::HxCombatLoop,
-            (if fighting { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
-        );
-        self.loop_command(
+        // Each faction fights to its own music (Wave 13 art-audio): the corsairs' pulse, the
+        // swarm's hunt, the machines' march; never muffled by the vacuum round the rig.
+        let faction = (!boss && flyer.is_some())
+            .then(|| hostiles.engaged(listener.player_id))
+            .flatten()
+            .map(|encounter| encounter.faction);
+        for (slot, patch, who) in [
+            (SeatLoop::CombatMusic, Patch::HxCombatLoop, Faction::Pirates),
+            (
+                SeatLoop::SwarmCombatMusic,
+                Patch::AaCombatSwarmLoop,
+                Faction::Swarm,
+            ),
+            (
+                SeatLoop::MachineCombatMusic,
+                Patch::AaCombatMachineLoop,
+                Faction::Machine,
+            ),
+        ] {
+            let gain = if faction == Some(who) { 0.5 } else { 0.0 };
+            self.music_command(live, listener, slot, patch, gain);
+        }
+        self.music_command(
             live,
             listener,
             SeatLoop::BossMusic,
             Patch::HxBossLoop,
-            (if boss { 0.55 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+            if boss { 0.55 } else { 0.0 },
+        );
+        self.space_music(live, listener, snapshot, faction.is_some() || boss);
+    }
+
+    /// Space's music and ambience for a seat in flight (Wave 13 art-audio): docked, its
+    /// station owner's music; flying, the nearest star's ambience by class (fuller near it,
+    /// faint between the stars, under a fight's music), the drive's cruise whine (rising with
+    /// speed) and warp's tunnel roar.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the stations, the stars and the drive in turn"
+    )]
+    fn space_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        snapshot: &RenderSnapshot<'_>,
+        fighting: bool,
+    ) {
+        use fatherload_simulation::{
+            alien::AlienSpecies,
+            flight::{FlightPlace, SpaceQuery, StarDrive, space::GALAXY_SECTOR_TILES},
+            star_chart::StarClass,
+            station::StationOwner,
+            terrain::TILE_SIZE,
+        };
+        let flight = snapshot
+            .space
+            .flyers
+            .iter()
+            .find(|flyer| flyer.player_id == listener.player_id)
+            .map(|flyer| flyer.flight);
+        // Docked: the owner's music.
+        let owner = flight.and_then(|flight| match flight.place {
+            FlightPlace::Docked(body) => Some(
+                fatherload_simulation::world::station_profile_at(snapshot.space.world, body)
+                    .map_or(StationOwner::Human, |profile| profile.owner),
+            ),
+            _ => None,
+        });
+        let species = |kin: fatherload_simulation::station::profile::AlienKin| kin.species();
+        let stations = [
+            (
+                SeatLoop::StationHumanMusic,
+                Patch::AaStationHumanLoop,
+                matches!(owner, Some(StationOwner::Human)),
+            ),
+            (
+                SeatLoop::StationVessiMusic,
+                Patch::AaStationVessiLoop,
+                matches!(owner, Some(StationOwner::Alien(kin)) if species(kin) == AlienSpecies::Vessi),
+            ),
+            (
+                SeatLoop::StationTokkariMusic,
+                Patch::AaStationTokkariLoop,
+                matches!(owner, Some(StationOwner::Alien(kin)) if species(kin) == AlienSpecies::Tokkari),
+            ),
+            (
+                SeatLoop::StationSiphraMusic,
+                Patch::AaStationSiphraLoop,
+                matches!(owner, Some(StationOwner::Alien(kin)) if species(kin) == AlienSpecies::Siphra),
+            ),
+        ];
+        for (slot, patch, playing) in stations {
+            self.music_command(
+                live,
+                listener,
+                slot,
+                patch,
+                if playing { 0.42 } else { 0.0 },
+            );
+        }
+        // Flying: the nearest star's ambience.
+        let flying = flight
+            .filter(|flight| matches!(flight.place, FlightPlace::Space | FlightPlace::Approach(_)));
+        let star = flying.and_then(|flight| {
+            snapshot
+                .space
+                .galaxy()
+                .systems_near(flight.pos, 1)
+                .into_iter()
+                .map(|system| (flight.pos.distance(system.star), system.class))
+                .min_by(|a, b| a.0.total_cmp(&b.0))
+        });
+        let (warm, bright, nebula) = star.map_or((0.0, 0.0, 0.0), |(distance, class)| {
+            let sectors = distance / (GALAXY_SECTOR_TILES as f32 * TILE_SIZE);
+            let near = (1.0 - (sectors - 0.4) / 1.2).clamp(0.3, 1.0);
+            let level = near * if fighting { 0.12 } else { 0.3 };
+            match class {
+                StarClass::Yellow | StarClass::Red | StarClass::Binary => (level, 0.0, 0.0),
+                StarClass::Blue | StarClass::White => (0.0, level, 0.0),
+                StarClass::Nebula => (0.0, 0.0, level),
+            }
+        });
+        // A red sun's drone sits lower, a binary's a little higher.
+        let rate = match star.map(|(_, class)| class) {
+            Some(StarClass::Red) => 0.84,
+            Some(StarClass::Binary | StarClass::White) => 1.12,
+            _ => 1.0,
+        };
+        for (slot, patch, gain) in [
+            (SeatLoop::SpaceWarmBed, Patch::AaSpaceWarmLoop, warm),
+            (SeatLoop::SpaceBrightBed, Patch::AaSpaceBrightLoop, bright),
+            (SeatLoop::SpaceNebulaBed, Patch::AaSpaceNebulaLoop, nebula),
+        ] {
+            let open = Listener {
+                vacuum: false,
+                ..*listener
+            };
+            self.loop_command(live, &open, slot, patch, (gain, 0.0, rate, OPEN_CUTOFF));
+        }
+        // The drive.
+        let (cruise, cruise_rate, tunnel) = match flight.map(|flight| flight.drive) {
+            Some(StarDrive::Cruise { speed }) => {
+                let share = (speed / 40_000.0).clamp(0.0, 1.0);
+                (0.18 + 0.2 * share, 0.8 + 0.6 * share, 0.0)
+            }
+            Some(StarDrive::Spool { .. }) => (0.25, 1.4, 0.15),
+            Some(StarDrive::Warp(_) | StarDrive::Transit(_)) => (0.0, 1.0, 0.4),
+            _ => (0.0, 1.0, 0.0),
+        };
+        let open = Listener {
+            vacuum: false,
+            ..*listener
+        };
+        self.loop_command(
+            live,
+            &open,
+            SeatLoop::CruiseBed,
+            Patch::AaCruiseLoop,
+            (cruise, 0.0, cruise_rate, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            &open,
+            SeatLoop::WarpBed,
+            Patch::AaWarpLoop,
+            (tunnel, 0.0, 1.0, OPEN_CUTOFF),
         );
     }
 
@@ -3564,6 +3748,7 @@ mod tests {
         assert!((SeatLoop::StacksBed as u32) < SEAT_LOOP_SLOTS);
         assert!((SeatLoop::AbSealHallBed as u32) < SEAT_LOOP_SLOTS);
         assert!((SeatLoop::StarDriveBed as u32) < SEAT_LOOP_SLOTS);
+        assert!((SeatLoop::MachineCombatMusic as u32) < SEAT_LOOP_SLOTS);
     }
 
     #[test]

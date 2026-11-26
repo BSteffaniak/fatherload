@@ -413,6 +413,10 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::ExoticBossTell => Patch::PdBossTell,
         SoundCue::ExoticBossDown => Patch::PdBossDown,
         SoundCue::ExoticDock => Patch::PdDock,
+        SoundCue::SpaceWarpEngage => Patch::AaWarpEngage,
+        SoundCue::SpaceWarpArrive => Patch::AaWarpArrive,
+        SoundCue::SpaceCruiseEngage => Patch::AaCruiseEngage,
+        SoundCue::SpaceDocked => Patch::AaDockChime,
     }
 }
 
@@ -875,11 +879,13 @@ pub const fn exotic_cue(what: fatherload_simulation::exotic::ExoticEvent) -> Opt
 pub const fn flight_cue(what: fatherload_simulation::flight::FlightEvent) -> SoundCue {
     use fatherload_simulation::flight::FlightEvent as E;
     match what {
-        E::EnteredSpace | E::ReturnedHome | E::ApproachBody | E::WarpArrived => SoundCue::SkyBand,
-        E::CruiseEngaged => SoundCue::JetStream,
+        E::EnteredSpace | E::ReturnedHome | E::ApproachBody => SoundCue::SkyBand,
+        // Wave 13 art-audio: the drive's own moments.
+        E::WarpArrived => SoundCue::SpaceWarpArrive,
+        E::CruiseEngaged => SoundCue::SpaceCruiseEngage,
         E::CruiseDropped => SoundCue::UiBack,
         E::WarpSpooling => SoundCue::MachineCharge,
-        E::WarpEngaged => SoundCue::UplinkWarp,
+        E::WarpEngaged => SoundCue::SpaceWarpEngage,
         E::WarpInterrupted => SoundCue::GravityHum,
         E::WarpRefused => SoundCue::UiError,
         E::Landed => SoundCue::MoonLanding,
@@ -888,7 +894,7 @@ pub const fn flight_cue(what: fatherload_simulation::flight::FlightEvent) -> Sou
         E::HullScraped => SoundCue::ImpactRock,
         E::AirLow => SoundCue::OxygenAlarm,
         E::BeaconReturn => SoundCue::Rescue,
-        E::Docked => SoundCue::HatchClose,
+        E::Docked => SoundCue::SpaceDocked,
         E::Undocked => SoundCue::HatchOpen,
         E::ScannerPing => SoundCue::Scanner,
         E::NavUpdated => SoundCue::UiMove,
@@ -3219,6 +3225,10 @@ mod tests {
             SoundCue::ExoticBossTell,
             SoundCue::ExoticBossDown,
             SoundCue::ExoticDock,
+            SoundCue::SpaceWarpEngage,
+            SoundCue::SpaceWarpArrive,
+            SoundCue::SpaceCruiseEngage,
+            SoundCue::SpaceDocked,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

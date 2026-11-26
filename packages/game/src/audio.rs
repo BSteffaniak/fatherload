@@ -128,12 +128,34 @@ mod tests {
     };
 
     #[test]
+    fn every_patch_meets_the_quality_bar() {
+        for &patch in Patch::ALL {
+            meets_the_quality_bar(patch);
+        }
+    }
+
+    #[test]
+    fn space_music_and_ambience_meet_the_quality_bar() {
+        // Wave 13 art-audio: the stations' music, the stars' ambience, the drive, the
+        // factions' fights and docking, on their own (the full bar renders every patch).
+        let space: Vec<Patch> = Patch::ALL
+            .iter()
+            .copied()
+            .filter(|patch| patch.name().starts_with("aa_"))
+            .collect();
+        assert_eq!(space.len(), 15);
+        for patch in space {
+            meets_the_quality_bar(patch);
+        }
+    }
+
+    /// One patch's quality gates (see the module docs).
     #[allow(
         clippy::too_many_lines,
         reason = "one bar per measure, every patch's exceptions listed"
     )]
-    fn every_patch_meets_the_quality_bar() {
-        for &patch in Patch::ALL {
+    fn meets_the_quality_bar(patch: Patch) {
+        {
             let name = patch.name();
             let samples = render_patch(patch, variation_seed(11, patch, 0));
             let info = patch.info();
@@ -350,7 +372,10 @@ mod tests {
                 | Patch::PdLockedAirLoop
                 | Patch::PdBossLoop
                 | Patch::PdStormRising
-                | Patch::PdDock => (40.0, 3_000.0),
+                | Patch::PdDock
+                // Space (wave 13 art-audio): a warm sun's low drone, the drive's boom.
+                | Patch::AaSpaceWarmLoop
+                | Patch::AaWarpEngage => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }
