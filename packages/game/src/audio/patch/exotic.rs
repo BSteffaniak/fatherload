@@ -332,11 +332,11 @@ pub(super) fn crackle(rng: &mut Rng) -> Vec<f32> {
     for at in scatter(rng, 18, 0.0, 1.2, 1.4) {
         let spark = burst(
             rng.next_u64(),
-            NoiseColor::White,
-            FilterMode::HighPass,
-            rng.range(3_000.0, 6_000.0),
-            0.8,
-            0.015,
+            NoiseColor::Pink,
+            FilterMode::BandPass,
+            rng.range(1_800.0, 3_200.0),
+            1.5,
+            0.02,
         );
         mix_into(&mut out, &spark, at, 0.35 + 0.4 * at / 1.2);
     }
@@ -453,10 +453,10 @@ pub(super) fn meteor_whistle(rng: &mut Rng) -> Vec<f32> {
 pub(super) fn ice_vent(rng: &mut Rng) -> Vec<f32> {
     let mut out = burst(
         rng.next_u64(),
-        NoiseColor::White,
-        FilterMode::HighPass,
-        2_500.0,
-        0.8,
+        NoiseColor::Pink,
+        FilterMode::BandPass,
+        2_200.0,
+        1.0,
         0.5,
     );
     let pop = thump(160.0, 90.0, 0.15, 1.4);

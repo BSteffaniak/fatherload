@@ -6863,7 +6863,9 @@ mod tests {
                 || kind.is_colossus_part()
                 || kind == EnemyKind::StarHeart
                 // ... and the outland worlds' theme bosses (Wave 13), in their own lairs.
-                || kind.is_outland_boss();
+                || kind.is_outland_boss()
+                // The exotic worlds' theme bosses (Wave 13).
+                || kind.is_exotic_boss();
             assert!(
                 stats.radius >= 6.0 && (stats.radius <= 20.0 || giant),
                 "{kind:?}"
@@ -6876,6 +6878,7 @@ mod tests {
                     || kind.is_frontier_fauna()
                     // ... nor the outland worlds' gentler fauna (Wave 13).
                     || kind.is_outland_fauna()
+                    || kind.is_exotic_fauna()
                     || matches!(
                         kind,
                         EnemyKind::Crestback | EnemyKind::Glimmerfin | EnemyKind::Rimeskipper

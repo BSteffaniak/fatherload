@@ -1245,7 +1245,12 @@ impl Patch {
             | Self::PdLockedAirLoop
             | Self::PdRingHumLoop
             | Self::PdBossLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
-            Self::PdBolt | Self::PdBossAwake | Self::PdBossDown | Self::PdGeyser | Self::PdQuake => {
+            Self::PdBolt
+            | Self::PdBossAwake
+            | Self::PdBossDown
+            | Self::PdGeyser
+            | Self::PdQuake
+            | Self::PdStormRising => {
                 PatchInfo::new(Big)
                     .instances(2)
                     .send(0.4)
@@ -1256,8 +1261,7 @@ impl Patch {
             | Self::PdHiss
             | Self::PdWhistle
             | Self::PdBossTell
-            | Self::PdPressure
-            | Self::PdStormRising => PatchInfo::new(Alarm).instances(2).send(0.3).jitter(0.02, 0.5),
+            | Self::PdPressure => PatchInfo::new(Alarm).instances(2).send(0.3).jitter(0.02, 0.5),
             Self::PdImpact | Self::PdVent | Self::PdZap | Self::PdPowerDown | Self::PdDock => {
                 PatchInfo::new(Impact)
                     .instances(3)
