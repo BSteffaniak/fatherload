@@ -1134,7 +1134,7 @@ mod tests {
             play_seconds: 7.0,
         };
         let v6 = as_v6_json(&save);
-        assert!(v6["save"]["world"]["players"]["1"]["cargo"]["Gold"] == 3);
+        assert_eq!(v6["save"]["world"]["players"]["1"]["cargo"]["Gold"], 3);
         let migrated = parse_save(&v6.to_string()).expect("v6 migrates");
         assert_eq!(
             migrated.world.simulation_state_hash(),

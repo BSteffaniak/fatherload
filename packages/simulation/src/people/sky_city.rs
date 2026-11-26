@@ -98,7 +98,7 @@ mod tests {
             ..WorldSettings::new(0x5EED)
         };
         let cities = continent::sky_cities_between(&settings, -8_000, 8_000);
-        assert!(!cities.is_empty());
+        assert_ne!(cities, []);
         for city in cities {
             let settlement = routine::settlement(&settings, city.id).expect("a settlement");
             assert_eq!(settlement.ground_row, city.street_row);

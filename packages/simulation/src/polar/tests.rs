@@ -265,15 +265,15 @@ fn neighbours_across_a_halving_boundary_agree_both_ways() {
             }]
         );
         // Nothing below the last row: the core.
-        assert!(
+        assert_eq!(
             grid.neighbours(
                 PolarTile {
                     column: 0,
                     row: grid.bottom_row()
                 },
                 PolarStep::Down
-            )
-            .is_empty()
+            ),
+            []
         );
     }
 }

@@ -642,25 +642,23 @@ impl NetSimulation for WorldState {
                 continue;
             };
             let input = inputs.players.get(&net_player);
-            let held = input.map(|input| input.controls).unwrap_or_default();
+            let held = input.map_or_default(|input| input.controls);
             let mut ids = Vec::new();
-            let actions = input
-                .map(|input| {
-                    input
-                        .actions
-                        .iter()
-                        .map(|envelope| {
-                            let sequence =
-                                InputSequence::new(u32::try_from(ids.len()).unwrap_or(u32::MAX));
-                            ids.push(envelope.id);
-                            TickAction {
-                                sequence,
-                                command: envelope.action.clone(),
-                            }
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+            let actions = input.map_or_default(|input| {
+                input
+                    .actions
+                    .iter()
+                    .map(|envelope| {
+                        let sequence =
+                            InputSequence::new(u32::try_from(ids.len()).unwrap_or(u32::MAX));
+                        ids.push(envelope.id);
+                        TickAction {
+                            sequence,
+                            command: envelope.action.clone(),
+                        }
+                    })
+                    .collect()
+            });
             sim_inputs.players.insert(
                 player,
                 input::PlayerTickInput {

@@ -1225,8 +1225,7 @@ pub fn ending_reply(
     }
     let mut opener = cast
         .template()
-        .map(|template| cast.voiced(&template.thanks, Some(giver), salt_value))
-        .unwrap_or_default();
+        .map_or_default(|template| cast.voiced(&template.thanks, Some(giver), salt_value));
     if opener.is_empty() {
         let options = thanks_openers(giver.tone);
         let index = (giver.voice_seed ^ salt_value) % options.len() as u64;

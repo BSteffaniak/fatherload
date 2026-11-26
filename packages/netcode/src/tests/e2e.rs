@@ -67,7 +67,7 @@ fn bad_internet_corrections_are_rare_and_actions_exactly_once() {
     let target = harness.config.tuning.input_lead_target_ticks(&params);
     for client in &harness.clients {
         let tail = &client.margins[client.margins.len() / 2..];
-        assert!(!tail.is_empty());
+        assert_ne!(tail, [] as [i64; 0]);
         let late = tail.iter().filter(|m| **m < 1).count();
         assert!(
             late * 50 <= tail.len(),
@@ -106,7 +106,7 @@ fn input_margin_converges_without_rtt_hint() {
                 "latency {latency}: resyncs {resyncs}"
             );
             let tail = &client.margins[client.margins.len().saturating_sub(60)..];
-            assert!(!tail.is_empty());
+            assert_ne!(tail, [] as [i64; 0]);
             for margin in tail {
                 assert!(
                     (1..=target * 2 + 2).contains(margin),

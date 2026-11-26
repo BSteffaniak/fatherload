@@ -94,8 +94,8 @@ fn v9_is_current_and_only_v9_furnishes_the_isles() {
             .all(|land| land.content().is_none() && land.kind != SkyLandKind::TownIsle),
         "V8 islands stay bare"
     );
-    assert!(sky_towns_touching(&v8(5), &area).is_empty());
-    assert!(jet_streams_touching(&v8(5), &area).is_empty());
+    assert_eq!(sky_towns_touching(&v8(5), &area), []);
+    assert_eq!(jet_streams_touching(&v8(5), &area), []);
 }
 
 #[test]
@@ -450,7 +450,7 @@ fn jet_streams_and_vents_blow_where_they_should() {
         .iter()
         .filter_map(|land| land.content().and_then(|content| content.vent))
         .collect();
-    assert!(!vents.is_empty());
+    assert_ne!(vents, []);
     for vent in vents {
         assert!(vent_updraft_at(&settings, vent.x, vent.y - 3) >= winds::VENT_STRENGTH);
         assert_eq!(vent_updraft_at(&settings, vent.x + 3, vent.y - 3), 0);

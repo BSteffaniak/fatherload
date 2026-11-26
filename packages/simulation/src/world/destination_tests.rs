@@ -434,10 +434,10 @@ fn bookmarks_and_the_back_stack_are_saved_and_replicated() {
     assert_eq!(replica.travel_log(), &log);
     // A leaving player's records go with them.
     world.remove_player(OTHER);
-    assert!(world.travel_log().of(OTHER).bookmarks.is_empty());
+    assert_eq!(world.travel_log().of(OTHER).bookmarks, []);
     // Removing a bookmark.
     let _ = act(&mut world, TestModeAction::RemoveBookmark(0));
-    assert!(world.player_travel(PLAYER).bookmarks.is_empty());
+    assert_eq!(world.player_travel(PLAYER).bookmarks, []);
 }
 
 #[test]

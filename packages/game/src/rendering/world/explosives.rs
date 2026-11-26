@@ -120,7 +120,7 @@ pub fn draw_charge(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, seconds: f32, 
     reason = "animation phases from bounded clock values"
 )]
 fn draw_burning(draw: &mut impl RaylibDraw, bomb: &PlacedBomb, x: f32, y: f32, seconds: f32) {
-    let flicker = ((seconds * 23.0).sin() + (seconds * 37.0).sin()) * 0.5;
+    let flicker = f32::midpoint((seconds * 23.0).sin(), (seconds * 37.0).sin());
     match bomb.kind {
         ExplosiveKind::Flare => {
             let reach = FLARE_LIGHT_RADIUS / ART;

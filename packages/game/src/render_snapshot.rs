@@ -1812,8 +1812,7 @@ fn view_snapshot(
         quest_desk: world
             .player_surface_zone(player_id)
             .and_then(fatherload_simulation::quest::QuestGiver::at)
-            .map(|giver| crate::shell::desk_rows(world, player_id, giver))
-            .unwrap_or_default(),
+            .map_or_default(|giver| crate::shell::desk_rows(world, player_id, giver)),
         pilot,
         can_board: world.can_board_rig(player_id),
         can_exit: world.can_exit_rig(player_id),
@@ -2017,7 +2016,7 @@ mod tests {
     #[test]
     fn empty_split_cells_fill_the_rest_of_the_grid() {
         for count in [1, 2, 4] {
-            assert!(empty_split_cells(count, SCREEN_WIDTH, SCREEN_HEIGHT).is_empty());
+            assert_eq!(empty_split_cells(count, SCREEN_WIDTH, SCREEN_HEIGHT), []);
         }
         let half_width = SCREEN_WIDTH / 2;
         let half_height = SCREEN_HEIGHT / 2;

@@ -96,7 +96,7 @@ fn every_wave_13_theme_boss_is_on_the_hunt_list() {
         let quarry = hunt::Quarry::Theme(theme.0);
         assert!(list.contains(&quarry), "{theme:?}");
         assert_ne!(quarry.name(), "Unknown");
-        assert!(!quarry.whereabouts().is_empty());
+        assert_ne!(quarry.whereabouts(), "");
     }
     for boss in &outlands::THEME_BOSSES {
         assert_eq!(hunt::theme_boss_of(boss.kind), Some(boss.theme.0));

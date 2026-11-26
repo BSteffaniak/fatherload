@@ -114,8 +114,7 @@ impl Console {
     pub fn bookmarks(&self) -> Vec<String> {
         self.travel
             .get(self.acting_seat())
-            .map(|travel| travel.bookmarks.keys().cloned().collect())
-            .unwrap_or_default()
+            .map_or_default(|travel| travel.bookmarks.keys().cloned().collect())
     }
 
     fn seat_travel(&mut self, seat: usize) -> &mut SeatTravel {
@@ -219,8 +218,7 @@ impl Console {
         };
         self.text = self
             .history_at
-            .map(|at| self.history[at].clone())
-            .unwrap_or_default();
+            .map_or_default(|at| self.history[at].clone());
     }
 
     /// Runs one command line for the palette's seat (also the tests' and tools' entry).

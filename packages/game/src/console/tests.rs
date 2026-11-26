@@ -560,7 +560,7 @@ fn every_command_dispatches_its_action() {
         ))]
     );
     // Nothing travelled yet in this world: there is no back-stack to go down.
-    assert!(run(&mut console, &world, "tp back").is_empty());
+    assert_eq!(run(&mut console, &world, "tp back"), []);
     // A preview prints a card with the destination's name.
     let _ = run(&mut console, &world, "tp descent 5 ?");
     assert!(
@@ -572,14 +572,14 @@ fn every_command_dispatches_its_action() {
         console.lines
     );
     // Errors print and send nothing.
-    assert!(run(&mut console, &world, "tp player 1").is_empty());
+    assert_eq!(run(&mut console, &world, "tp player 1"), []);
     assert!(
         console
             .lines
             .last()
             .is_some_and(|line| line.contains("you"))
     );
-    assert!(run(&mut console, &world, "tp bookmark nowhere").is_empty());
+    assert_eq!(run(&mut console, &world, "tp bookmark nowhere"), []);
 }
 
 #[test]
@@ -599,7 +599,7 @@ fn online_sessions_keep_real_time() {
             online: true,
         },
     );
-    assert!(effects.is_empty());
+    assert_eq!(effects, []);
 }
 
 #[test]
@@ -689,7 +689,7 @@ fn typing_tab_history_and_closing() {
         ctx,
     );
     assert_eq!(effects.len(), 1);
-    assert!(console.text.is_empty());
+    assert_eq!(console.text, "");
     // Up brings the line back.
     let _ = console.handle(
         PlayerInput {
@@ -721,7 +721,7 @@ fn typing_tab_history_and_closing() {
     // The backtick toggles it shut too, and is never typed.
     console.open_for(0);
     let _ = console.handle(key('`'), ctx);
-    assert!(console.text.is_empty());
+    assert_eq!(console.text, "");
     let _ = console.handle(
         PlayerInput {
             console: true,
@@ -799,7 +799,7 @@ fn seat_switches_whose_rig_the_palette_acts_for() {
         players: &players,
         online: false,
     };
-    assert!(console.run("seat 2", ctx).is_empty());
+    assert_eq!(console.run("seat 2", ctx), []);
     assert_eq!(console.acting_seat(), 1);
     assert_eq!(console.seat, 0, "the keyboard seat still types");
     let effects = console.run("tp player 1", ctx);

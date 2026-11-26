@@ -124,7 +124,7 @@ fn reaching_a_descent_records_it_and_the_ones_above_once() {
     // Standing there longer raises nothing new.
     for _ in 0..3 {
         let again = step(&mut world);
-        assert!(story(&again).is_empty());
+        assert_eq!(story(&again), []);
         milestones.extend(earned(&again, PLAYER));
     }
     for milestone in [
@@ -316,7 +316,7 @@ fn classic_worlds_track_no_descent_progress() {
     );
     classic.note_descent_boss_beaten(DescentBoss::TheHeart);
     for _ in 0..3 {
-        assert!(story(&step(&mut classic)).is_empty());
+        assert_eq!(story(&step(&mut classic)), []);
     }
     assert!(classic.expedition().is_empty());
 }

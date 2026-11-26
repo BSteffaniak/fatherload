@@ -138,7 +138,7 @@ fn a_client_stocks_and_spawns_on_its_own_rig_in_the_hosts_test_world() {
     let me = to_sim_player(pair.me());
     let host_rig = fatherload_simulation::PlayerId::new(0);
     // The joiner arrived fully stocked.
-    assert!(pair.host.world().test_stock_gaps(me).is_empty());
+    assert_eq!(pair.host.world().test_stock_gaps(me), [] as [String; 0]);
     assert_eq!(pair.authority().stock_count(me, StockItem::Bombs), 99);
 
     pair.act(TestModeAction::SetInfiniteSupplies(false));

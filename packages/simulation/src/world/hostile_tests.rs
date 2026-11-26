@@ -178,7 +178,7 @@ fn home_is_calm_and_encounters_find_rigs_farther_out() {
         }
     }
     assert!(found.is_some(), "an encounter four sectors out");
-    assert!(!world.hostiles().ships.is_empty());
+    assert_ne!(world.hostiles().ships, []);
     // A peaceful world's space stays calm even far out.
     let mut world = world_at(30);
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
@@ -205,7 +205,7 @@ fn encounters_scale_with_distance_and_the_rigs_tier() {
         for spend in [2_u32, 5, 9, 14] {
             for roll in 0..20_u64 {
                 let ships = compose(faction, spend, roll);
-                assert!(!ships.is_empty());
+                assert_ne!(ships, []);
                 assert!(ships.iter().all(|ship| ship.faction() == faction));
                 let spent: u32 = ships.iter().map(|ship| cost(*ship)).sum();
                 assert!(spent <= spend.max(3), "{faction:?} {spend}: {ships:?}");
@@ -267,7 +267,7 @@ fn pirates_hail_and_leave_once_paid() {
         }
     }
     assert!(over, "paid pirates leave");
-    assert!(world.hostiles().ships.is_empty());
+    assert_eq!(world.hostiles().ships, []);
     // A rig that never fired nor was hit keeps a charged deflector and a full rack after it.
     let combat = world.rig_combat(PLAYER);
     let gear = world.player(PLAYER).expect("rig").hazard_gear.arms;
@@ -592,7 +592,7 @@ fn combat_is_deterministic_and_tick_rate_safe() {
     );
     assert_eq!(a.simulation_state_hash(), b.simulation_state_hash());
     let base = summary(&a);
-    assert!(!base.is_empty());
+    assert_ne!(base, []);
     for hz in [60, 120] {
         let other = summary(&play(hz));
         assert_eq!(other.len(), base.len(), "{hz} Hz");
@@ -649,7 +649,7 @@ fn an_escape_jump_always_gets_away() {
         world.hostiles().engaged(PLAYER).is_none(),
         "the fight is over"
     );
-    assert!(world.hostiles().ships.is_empty());
+    assert_eq!(world.hostiles().ships, []);
     assert!(rig_pos(&world).distance(start) > space::tiles(10_000.0));
     assert!(world.player(PLAYER).expect("rig").hull > 0.0);
 }
@@ -822,7 +822,7 @@ fn fight_boss(faction: Faction, hz: u32) -> (WorldState, Vec<(HostileEvent, u32)
     let mut events = Vec::new();
     for tick in 0..seconds(&world, 300.0) {
         let (controls, command) = boss_bot(&world, tick);
-        let out = match command.clone() {
+        let out = match command {
             Some(command) => act(&mut world, controls, command),
             None => tick_with(&mut world, controls),
         };
@@ -933,7 +933,7 @@ fn every_boss_attack_is_telegraphed_long_enough() {
         ShipClass::Arbiter,
     ] {
         for phase in 0..2 {
-            assert!(!boss::cycle(class, phase).is_empty());
+            assert_ne!(boss::cycle(class, phase), []);
         }
     }
 }

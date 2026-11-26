@@ -297,7 +297,7 @@ fn draw_speech_card(
         .people()
         .conversation(player)
         .filter(|conversation| conversation.npc == talk.npc)
-        .map(|conversation| {
+        .map_or_default(|conversation| {
             let skip = conversation.lines.len().saturating_sub(SHOWN_LINES);
             conversation
                 .lines
@@ -305,8 +305,7 @@ fn draw_speech_card(
                 .skip(skip)
                 .map(|line| (line.speaker, line.text.clone()))
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     // The elder's request while a chapter is offered.
     let log = world.aliens().log(player, species);
     if let Some(def) = log.offered.and_then(|index| chapter(species, index)) {

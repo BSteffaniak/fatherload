@@ -100,7 +100,7 @@ mod tests {
         assert_eq!(filter(&list, "leviathan"), vec![4]);
         assert_eq!(filter(&list, "d4"), vec![1]);
         // "5" does not match "50": words must start with the term, not hold it.
-        assert!(filter(&list, "50").is_empty());
+        assert_eq!(filter(&list, "50"), [] as [usize; 0]);
         // An empty query keeps everything, in order.
         assert_eq!(filter(&list, "  "), vec![0, 1, 2, 3, 4]);
     }

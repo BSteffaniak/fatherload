@@ -1,6 +1,14 @@
 #![cfg_attr(feature = "fail-on-warnings", deny(warnings))]
 #![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 #![allow(clippy::multiple_crate_versions)]
+// These lints suggest `mul_add`, `hypot`, `midpoint` and `to_radians`, which can round differently
+// from the plain arithmetic written here. The simulation must produce bit-identical results on the
+// host, in client prediction and in replays, so its float math is kept exactly as written.
+#![allow(
+    clippy::suboptimal_flops,
+    clippy::imprecise_flops,
+    clippy::manual_midpoint
+)]
 
 //! Canonical, deterministic Fatherload gameplay simulation.
 //!

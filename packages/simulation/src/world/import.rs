@@ -176,21 +176,17 @@ impl WorldState {
             infrastructure: import.infrastructure.clone(),
             active_drills: import
                 .active_drill
-                .map(|drill| BTreeMap::from([(player_id, drill)]))
-                .unwrap_or_default(),
-            active_drill_timers: import
-                .active_drill
-                .map(|drill| {
-                    let period_ticks = ticks(drill.seconds_per_chip);
-                    BTreeMap::from([(
-                        player_id,
-                        ActiveDrillTimer {
-                            next_chip_tick: SimulationTick::new(period_ticks),
-                            period_ticks,
-                        },
-                    )])
-                })
-                .unwrap_or_default(),
+                .map_or_default(|drill| BTreeMap::from([(player_id, drill)])),
+            active_drill_timers: import.active_drill.map_or_default(|drill| {
+                let period_ticks = ticks(drill.seconds_per_chip);
+                BTreeMap::from([(
+                    player_id,
+                    ActiveDrillTimer {
+                        next_chip_tick: SimulationTick::new(period_ticks),
+                        period_ticks,
+                    },
+                )])
+            }),
             scanner_cooldowns: BTreeMap::from([(player_id, import.scanner_cooldown_seconds)]),
             scanner_cooldown_deadlines: BTreeMap::from([(
                 player_id,

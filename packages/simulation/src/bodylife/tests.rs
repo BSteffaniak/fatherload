@@ -346,9 +346,9 @@ fn the_theme_registry_round_trips_and_every_theme_has_hooks() {
             .map(|stratum| u32::from(stratum.share_permille))
             .sum();
         assert_eq!(shares, 1_000);
-        assert!(!found.weather_table().is_empty());
-        assert!(!found.music_bed().name.is_empty());
-        assert!(!hooks::common_minerals(data.id).is_empty());
+        assert_ne!(found.weather_table(), []);
+        assert_ne!(found.music_bed().name, "");
+        assert_ne!(hooks::common_minerals(data.id), []);
     }
     // The ported placeholders have hooks of their own; ids are unique.
     let ids: BTreeSet<_> = THEME_HOOKS.iter().map(|hooks| hooks.id()).collect();

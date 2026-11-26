@@ -279,7 +279,8 @@ fn draw_lantern_strings(draw: &mut impl RaylibDraw, city: &SkyCity, seconds: f32
 /// The open plaza: a stone fountain with a little aether flame.
 fn draw_plaza(draw: &mut impl RaylibDraw, city: &SkyCity, street: f32, seconds: f32) {
     let frame = crate::view_frame::frame();
-    let middle = (frame.rel_col(city.plaza.0) + frame.rel_col(city.plaza.1)) * 0.5 * TILE_SIZE;
+    let middle =
+        f32::midpoint(frame.rel_col(city.plaza.0), frame.rel_col(city.plaza.1)) * TILE_SIZE;
     let pen = Pen::at(middle - 12.0 * ART, street - 14.0 * ART);
     pen.boxed(draw, 2, 8, 20, 6, MIST);
     pen.rect(draw, 3, 9, 18, 1, BONE);

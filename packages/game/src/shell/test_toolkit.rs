@@ -777,7 +777,7 @@ mod tests {
         select(&mut shell, &world, ToolkitRow::SpawnCreature);
         let mut requests = Vec::new();
         shell.handle_toolkit(press(|input| input.confirm = true), &world, &mut requests);
-        assert!(requests.is_empty());
+        assert_eq!(requests, []);
         assert!(shell.message.contains("Peaceful"));
     }
 }

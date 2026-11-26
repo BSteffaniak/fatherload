@@ -142,7 +142,7 @@ fn logs_are_read_in_order_and_a_later_canister_waits_sealed() {
     let events = visit(&mut world, 4);
     assert_eq!(found(&events), vec![4, 5]);
     // A canister already read does nothing.
-    assert!(found(&visit(&mut world, 2)).is_empty());
+    assert_eq!(found(&visit(&mut world, 2)), [] as [u8; 0]);
     assert_eq!(
         world.expedition().read_logs().count(),
         usize::from(world.expedition().found)
@@ -438,8 +438,8 @@ fn the_codex_saves_loads_and_reaches_co_op_partners() {
             .map(|entry| entry.title)
             .collect::<Vec<_>>()
     };
-    assert!(found(&host, CodexPage::Diary).is_empty());
-    assert!(found(&host, CodexPage::Tablets).is_empty());
+    assert_eq!(found(&host, CodexPage::Diary), [] as [&str; 0]);
+    assert_eq!(found(&host, CodexPage::Tablets), [] as [&str; 0]);
     assert_eq!(diary(host.crust()).len(), crate::crust::CRUST_LOGS.len());
     // The crew opens two strongboxes, reads a builder tablet and enters a deep room.
     host.set_codex_finds_for_tests(&[0, 2], &[crate::old_deep::LOG_TABLET_FIRST + 1]);

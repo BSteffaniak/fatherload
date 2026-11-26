@@ -263,7 +263,7 @@ fn every_stratum_has_its_materials_ores_and_one_signature_rule() {
         for (index, stratum) in theme.strata.iter().enumerate() {
             assert!(!stratum.ores.is_empty(), "{}", stratum.name);
             assert!(matches!(stratum.rock, TileKind::Frontier(_)));
-            assert!(!rules[index].hint().is_empty());
+            assert_ne!(rules[index].hint(), "");
             // Its rock, accent and ores all turn up in a sweep of it.
             let mut kinds = std::collections::BTreeSet::new();
             for x in (0..g.strip_width()).step_by(61) {
@@ -298,7 +298,7 @@ fn each_surface_has_its_own_shape() {
     // Dunes: oases hold water ringed by palms.
     let dunes = ground(FrontierStyle::Desert, 1_000);
     let pools = generate::oases(&dunes);
-    assert!(!pools.is_empty());
+    assert_ne!(pools, [] as [i64; 0]);
     let oasis = i32::try_from(pools[0]).expect("column");
     assert!(
         matches!(dunes.generated_tile(oasis, 2).kind, TileKind::Fluid(_)),
@@ -516,7 +516,7 @@ fn volcanoes_rumble_before_they_erupt_and_their_bombs_fall_near_them() {
         for window in (0..400_u64).map(|second| second * 1_000) {
             bombs.extend(rules::bombs_landing(&g, cone.index, window, window + 1_000));
         }
-        assert!(!bombs.is_empty());
+        assert_ne!(bombs, []);
         let width = i64::from(g.strip_width());
         for bomb in bombs {
             let mut dx = (bomb.column - cone.centre).rem_euclid(width);
@@ -585,7 +585,7 @@ fn each_world_has_neutral_fauna_and_hunters_in_its_rosters() {
         let mut seen = std::collections::BTreeSet::new();
         for zone in zones {
             let roster = roster(style, zone);
-            assert!(!roster.is_empty());
+            assert_ne!(roster, []);
             for (kind, weight) in roster {
                 assert!(own.contains(kind), "{style:?} {zone:?} {kind:?}");
                 assert!(*weight > 0);

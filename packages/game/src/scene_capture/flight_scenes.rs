@@ -116,8 +116,7 @@ fn home_bodies(world: &WorldState) -> Vec<fatherload_simulation::flight::FlightB
     let space = world.space();
     space
         .system_at((0, 0))
-        .map(|home| space.bodies_of(&home))
-        .unwrap_or_default()
+        .map_or_default(|home| space.bodies_of(&home))
 }
 
 /// The first world of the home system past the home world (a landable one, with air if any).
@@ -329,7 +328,9 @@ fn reentry(stage: &mut SceneStage<'_>) {
         let planet = home_planet(world);
         let depth = planet.atmosphere.max(space::tiles(300.0));
         // A third of the way down the air, falling straight in, nose first.
-        let pos = planet.centre.offset(0.0, -(planet.radius + depth * 0.55));
+        let pos = planet
+            .centre
+            .offset(0.0, -depth.mul_add(0.55, planet.radius));
         launch(
             world,
             seats[0].player,

@@ -123,7 +123,7 @@ fn a_classic_test_world_stocks_everything_it_has() {
     let gaps = world.test_stock_gaps(PLAYER);
     assert!(gaps.is_empty(), "{gaps:#?}");
     // No Descents, no space: no charts, no Star Drive, nothing to clear.
-    assert!(world.star_charts().is_empty());
+    assert_eq!(world.star_charts(), []);
     assert!(!world.space_unlocked());
 }
 
@@ -222,7 +222,7 @@ fn stock_all_refits_a_rig_that_lost_its_gear() {
         rig.hazard_gear.ship = crate::station::ShipGear::default();
         rig.cosmetic_unlocks = crate::cosmetics::CosmeticUnlocks::default();
     }
-    assert!(!world.test_stock_gaps(PLAYER).is_empty());
+    assert_ne!(world.test_stock_gaps(PLAYER), [] as [String; 0]);
     let output = act(&mut world, PLAYER, TestModeAction::StockAll);
     assert_eq!(outcome(&output), PlayerScopedCommandOutcome::Applied);
     let gaps = world.test_stock_gaps(PLAYER);
@@ -245,7 +245,7 @@ fn an_older_test_mode_save_upgrades_cleanly_and_is_stocked_on_its_first_tick() {
     let state = loaded.test_mode().expect("still a test-mode world");
     assert!(state.infinite_supplies, "infinite supplies default on");
     assert_eq!(state.stock_revision, 0);
-    assert!(!loaded.test_stock_gaps(PLAYER).is_empty());
+    assert_ne!(loaded.test_stock_gaps(PLAYER), [] as [String; 0]);
     idle(&mut loaded, 1);
     let gaps = loaded.test_stock_gaps(PLAYER);
     assert!(gaps.is_empty(), "{gaps:#?}");
@@ -420,7 +420,7 @@ fn unlocking_the_story_fills_the_codex_and_switching_it_off_starts_it_fresh() {
     assert!(world.test_mode().expect("mode").story_unlocked);
     for page in CodexPage::ALL {
         let entries = world.expedition_codex(page);
-        assert!(!entries.is_empty());
+        assert_ne!(entries, []);
         assert!(entries.iter().all(|entry| entry.found), "{page:?}");
     }
     assert!(world.expedition().trail_complete());
@@ -627,7 +627,7 @@ fn frozen_ai_stands_still_until_it_is_let_go() {
             .collect()
     };
     let frozen = positions(&world);
-    assert!(!frozen.is_empty());
+    assert_ne!(frozen, [] as [(f32, f32); 0]);
     idle(&mut world, 120);
     assert_eq!(positions(&world), frozen, "nothing moved");
     let _ = act(&mut world, PLAYER, TestModeAction::SetAiFrozen(false));

@@ -1184,7 +1184,7 @@ mod tests {
 
     #[test]
     fn a_fresh_rig_has_met_nothing() {
-        assert!(Milestone::newly_met(&rig(), &MilestoneFacts::default()).is_empty());
+        assert_eq!(Milestone::newly_met(&rig(), &MilestoneFacts::default()), []);
     }
 
     #[test]

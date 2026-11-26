@@ -596,7 +596,7 @@ impl WorldState {
                 let member = run.member(player);
                 (
                     view_of(run.site.style),
-                    member.map(RunMember::effects).unwrap_or_default(),
+                    member.map_or_default(RunMember::effects),
                     member.is_some_and(RunMember::is_downed),
                 )
             },

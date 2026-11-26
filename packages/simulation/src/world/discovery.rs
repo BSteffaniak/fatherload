@@ -490,7 +490,7 @@ mod tests {
 
         // Standing still discovers nothing new and reports nothing.
         let output = world.simulate_tick(tick.next(), &TickInputs::default());
-        assert!(output.discoveries.is_empty());
+        assert_eq!(output.discoveries, []);
 
         // Moving on reports exactly the tiles that became discovered.
         let initial = tiles_of(&world, player);

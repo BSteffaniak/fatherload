@@ -172,7 +172,7 @@ fn split_screen_seats_in_two_places_each_see_their_own() {
             .local_permille
     );
     assert_eq!(life.gravity_milli, body_life.gravity_milli());
-    assert!(!life.name.is_empty());
+    assert_ne!(life.name, "");
     assert!(snapshot.views[1].player.flight.away(), "seat 1 flies");
 }
 
@@ -275,7 +275,7 @@ fn split_screen_seats_on_a_jungle_and_a_volcanic_world_each_see_their_own() {
                 .as_ref()
                 .and_then(|body| body.life.as_ref())
                 .expect("the body's life for its seat");
-            assert!(!life.name.is_empty());
+            assert_ne!(life.name, "");
             ground.params().theme
         })
         .collect();

@@ -40,7 +40,11 @@ fn brass(rng: &mut Rng, note: f32, seconds: f32, swell: f32) -> Vec<f32> {
             ],
         );
         let cutoff = 500.0 + swell * 2_200.0 * env;
-        filter.run((a.next(note) + b.next(note * 1.006)) * 0.5, cutoff, 1.1) * env
+        filter.run(
+            f32::midpoint(a.next(note), b.next(note * 1.006)),
+            cutoff,
+            1.1,
+        ) * env
     })
 }
 

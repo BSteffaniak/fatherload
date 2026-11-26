@@ -341,7 +341,7 @@ fn crew_rigs_light_simultaneous_marks_together_and_share_the_reward() {
             .iter()
             .any(|q| q.quest == TWIN_FUSES)
     );
-    assert!(world.player(LEAD).expect("rig").quests.active.is_empty());
+    assert_eq!(world.player(LEAD).expect("rig").quests.active, []);
     // The wing sees the crew quest too.
     assert!(
         world
@@ -380,7 +380,7 @@ fn crew_rigs_light_simultaneous_marks_together_and_share_the_reward() {
         world.player(WING).expect("wing").credits,
         wing_credits + 680 / 4
     );
-    assert!(world.crew_quests().active.is_empty());
+    assert_eq!(world.crew_quests().active, []);
 }
 
 #[test]
@@ -845,14 +845,7 @@ fn quest_state_replicates_privately_and_publicly() {
     assert_eq!(replica.crew_quests(), authority.crew_quests());
     // The wing's solo quest is private; the crew quest is shared.
     let seen_by_lead = authority.redacted_for(Some(LEAD));
-    assert!(
-        seen_by_lead
-            .player(WING)
-            .expect("wing")
-            .quests
-            .active
-            .is_empty()
-    );
+    assert_eq!(seen_by_lead.player(WING).expect("wing").quests.active, []);
     assert_eq!(seen_by_lead.crew_quests().active.len(), 1);
     assert_eq!(
         seen_by_lead.visible_state_hash(Some(LEAD)),
@@ -895,8 +888,8 @@ fn saves_from_before_quests_load_with_empty_quest_logs() {
         .expect("progression")
         .remove("crew_quests");
     let old: WorldState = serde_json::from_value(value).expect("old save");
-    assert!(old.player(LEAD).expect("rig").quests.active.is_empty());
-    assert!(old.crew_quests().active.is_empty());
+    assert_eq!(old.player(LEAD).expect("rig").quests.active, []);
+    assert_eq!(old.crew_quests().active, []);
 }
 
 #[test]

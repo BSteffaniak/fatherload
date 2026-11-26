@@ -193,7 +193,7 @@ fn categories_search_and_the_preview_follow_the_inputs() {
     }
     // Back out: the search clears, then the Atlas closes.
     press_seat(&mut game, 0, back_input());
-    assert!(game.shell.seat(0).atlas.search.is_empty());
+    assert_eq!(game.shell.seat(0).atlas.search, "");
     press_seat(&mut game, 0, back_input());
     assert_eq!(game.shell.seat(0).modal, None);
 }
@@ -250,7 +250,7 @@ fn go_travels_after_the_preview_and_back_comes_home() {
         "back at the surface: {}",
         depth_of(&game, PLAYER)
     );
-    assert!(game.world().player_travel(PLAYER).recent.is_empty());
+    assert_eq!(game.world().player_travel(PLAYER).recent, []);
 }
 
 #[test]
@@ -334,9 +334,9 @@ fn each_split_screen_seat_has_its_own_atlas() {
     press_seat(&mut game, 1, pick(AtlasHit::Button(AtlasButton::Bookmark)));
     idle(&mut game, 2);
     assert_eq!(game.world().player_travel(second).bookmarks.len(), 1);
-    assert!(game.world().player_travel(PLAYER).bookmarks.is_empty());
+    assert_eq!(game.world().player_travel(PLAYER).bookmarks, []);
     assert_eq!(game.shell.seat(1).atlas.marks.len(), 1);
-    assert!(game.shell.seat(0).atlas.marks.is_empty());
+    assert_eq!(game.shell.seat(0).atlas.marks, []);
     // Seat 1 travels; seat 2's rig stays.
     let second_depth = depth_of(&game, second);
     press_seat(&mut game, 0, pick(AtlasHit::Row(4)));
@@ -512,7 +512,7 @@ fn the_toolkit_end_to_end_atlas_previews_palette_and_split_screen() {
     press_seat(&mut game, 0, backtick);
     assert!(game.shell.console.open);
     line(&mut game, "give all");
-    assert!(game.world().test_stock_gaps(PLAYER).is_empty());
+    assert_eq!(game.world().test_stock_gaps(PLAYER), [] as [String; 0]);
     line(&mut game, "tp boss sporemother");
     assert!(
         matches!(

@@ -228,12 +228,12 @@ fn placement_is_deterministic_and_seeded() {
             generator,
             ..WorldSettings::new(7)
         };
-        assert!(sites::sites(&settings).is_empty());
+        assert_eq!(sites::sites(&settings), []);
         let everywhere = TileRect {
             min: TilePosition { x: -400, y: 0 },
             max: TilePosition { x: 400, y: 900 },
         };
-        assert!(anomaly::rooms_in(&settings, &everywhere).is_empty());
+        assert_eq!(anomaly::rooms_in(&settings, &everywhere), []);
         assert!(field::stratum_profile_at(&settings, Frame::default(), 0.0, 9_000.0).is_none());
     }
 }
@@ -330,8 +330,11 @@ fn anomaly_rooms_are_rare_varied_and_found_at_every_depth() {
     for room in &rooms {
         assert!(room.bounds.min.y >= layout.tops[0] + anomaly::FIRST_ROWS);
         assert!(room.bounds.max.x < lift - 2 || room.bounds.min.x > lift + 2);
-        assert!(landmarks::landmarks_with(&settings, &layout, &room.bounds).is_empty());
-        assert!(sites::sites_in(&settings, &room.bounds).is_empty());
+        assert_eq!(
+            landmarks::landmarks_with(&settings, &layout, &room.bounds),
+            []
+        );
+        assert_eq!(sites::sites_in(&settings, &room.bounds), []);
         // Lined walls, an open interior and its caches.
         let corner = anomaly::room_tile(room, room.bounds.min.x, room.bounds.min.y);
         assert!(matches!(
@@ -442,7 +445,7 @@ fn a_journal_reads_as_a_prefix_and_memories_open_with_the_trail() {
     for memory in &MEMORIES {
         assert!(memory.id.starts_with(memory.settlement.id_prefix()));
         assert_eq!(memory.id.split('.').count(), 3, "{}", memory.id);
-        assert!(!memory.speaker_key().is_empty());
+        assert_ne!(memory.speaker_key(), "");
         assert!(
             memory
                 .after_log
@@ -563,7 +566,7 @@ fn every_anomaly_room_opens_through_a_door_and_its_caches_open_with_the_local_dr
     use crate::worldgen::streamed::generated_tile;
     let settings = v11(0x00FA_7E45);
     let rooms = rooms_of(&settings);
-    assert!(!rooms.is_empty());
+    assert_ne!(rooms, []);
     // A sample of rooms per kind (generation is slow in debug).
     for kind in AnomalyKind::ALL {
         for room in rooms.iter().filter(|room| room.kind == kind).take(3) {

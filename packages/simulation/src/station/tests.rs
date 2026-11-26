@@ -87,7 +87,7 @@ fn stations_come_in_every_owner_and_are_seeded() {
             assert!(station.salvage && !station.market && !station.bar && !station.dock_services);
             assert!(station.name.starts_with("Wreck of "));
         }
-        assert!(!station.name.is_empty());
+        assert_ne!(station.name, "");
     }
     // A pure function of the seed.
     assert_eq!(
@@ -118,7 +118,7 @@ fn the_shipyard_prices_climb_and_the_gear_does_what_it_says() {
             gear.fit(upgrade);
         }
         assert_eq!(upgrade.level(&gear), upgrade.max_level(), "{upgrade:?}");
-        assert!(!upgrade.effect(0).is_empty());
+        assert_ne!(upgrade.effect(0), "");
     }
     assert_eq!(gear, ShipGear::MAXED);
     assert!(gear.damage_scale() < 0.6);
@@ -277,7 +277,7 @@ fn body(temperature_c: i16, atmosphere: Atmosphere, gravity_milli_g: u16) -> Spa
 
 #[test]
 fn hazard_tags_come_from_the_world_and_gear_counters_them() {
-    assert!(hazards_of(&body(15, Atmosphere::Breathable, 1_000)).is_empty());
+    assert_eq!(hazards_of(&body(15, Atmosphere::Breathable, 1_000)), []);
     assert_eq!(
         hazards_of(&body(140, Atmosphere::Thin, 1_000)),
         vec![(PlanetHazard::Heat, 1)]
@@ -337,7 +337,7 @@ fn codes_are_stable_and_in_range() {
     for (index, event) in StationEvent::ALL.iter().enumerate() {
         assert_eq!(usize::from(event.code()), index);
         assert!(960 + u32::from(event.code()) < 980);
-        assert!(!event.headline().is_empty());
+        assert_ne!(event.headline(), "");
     }
     for refusal in StationRefusal::ALL {
         assert_eq!(StationRefusal::from_code(refusal.code()), Some(refusal));

@@ -76,8 +76,8 @@ const RAYLIB_BUTTONS: [(PadButton, GamepadButton); 15] = [
 ];
 
 /// Trigger travel 0..1 from raylib's -1 (released) .. 1 (pulled) axis.
-fn trigger(raw: f32) -> f32 {
-    ((raw + 1.0) * 0.5).clamp(0.0, 1.0)
+const fn trigger(raw: f32) -> f32 {
+    f32::midpoint(raw, 1.0).clamp(0.0, 1.0)
 }
 
 /// Samples one pad (assumed available).

@@ -1006,7 +1006,7 @@ fn a_rig_link_recalls_the_rig_to_its_pilot_along_an_open_path() {
     let mut unlinked = arena();
     out_of_the_rig(&mut unlinked);
     stand_at(&mut unlinked, 50.0);
-    assert!(pilot_action(&mut unlinked, PilotAction::RecallRig).is_empty());
+    assert_eq!(pilot_action(&mut unlinked, PilotAction::RecallRig), []);
 }
 
 #[test]

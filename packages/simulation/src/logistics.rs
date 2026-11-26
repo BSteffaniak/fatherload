@@ -685,11 +685,7 @@ mod tests {
             logistics.stations_at(TilePosition { x: 40, y: 12 }),
             vec![(0, 12)]
         );
-        assert!(
-            logistics
-                .stations_at(TilePosition { x: 41, y: 549 })
-                .is_empty()
-        );
+        assert_eq!(logistics.stations_at(TilePosition { x: 41, y: 549 }), []);
     }
 
     #[test]

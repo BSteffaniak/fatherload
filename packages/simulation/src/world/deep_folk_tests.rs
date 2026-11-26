@@ -181,11 +181,11 @@ fn the_amber_court_stays_shut_while_it_is_hostile() {
     world.living_dark.hive.standing = -100;
     park(&mut world, PLAYER, DeepSettlement::AmberCourt);
     run(&mut world, 40);
-    assert!(folk_of(&world, AMBER_COURT).is_empty());
+    assert_eq!(folk_of(&world, AMBER_COURT), []);
     // Cathedral Station is not the Hive's to close.
     park(&mut world, PLAYER, DeepSettlement::CathedralStation);
     run(&mut world, 40);
-    assert!(!folk_of(&world, CATHEDRAL_STATION).is_empty());
+    assert_ne!(folk_of(&world, CATHEDRAL_STATION), []);
 }
 
 #[test]

@@ -599,7 +599,7 @@ fn an_emptied_bay_carries_no_haul_premium_into_the_next_trip() {
 fn the_registry_names_a_layer_resource_for_every_recipe() {
     for recipe in &RECIPES {
         for (stratum, _) in recipe.inputs {
-            assert!(!stratum.def().layer_resource.name.is_empty());
+            assert_ne!(stratum.def().layer_resource.name, "");
         }
     }
 }

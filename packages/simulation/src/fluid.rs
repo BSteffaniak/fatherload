@@ -681,7 +681,7 @@ mod tests {
         // Never next to open ground.
         let none =
             fluid_pockets_in_chunk(7, ChunkPosition { x: 0, y: 3 }, &[rule], |_| TileKind::Air);
-        assert!(none.is_empty());
+        assert_eq!(none, []);
     }
 
     #[test]

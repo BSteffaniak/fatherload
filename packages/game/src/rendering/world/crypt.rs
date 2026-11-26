@@ -1012,7 +1012,7 @@ fn draw_fixture(
                     Vector2::new(4.0, 5.0),
                     AMBER,
                 );
-                let glint = ((seconds * 2.0 + tile.x as f32).sin() + 1.0) * 0.5;
+                let glint = f32::midpoint((seconds * 2.0 + tile.x as f32).sin(), 1.0);
                 draw.draw_circle_v(
                     Vector2::new(cx + 7.0, cy - 9.0),
                     1.5,

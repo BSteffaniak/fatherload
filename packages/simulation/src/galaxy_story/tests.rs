@@ -50,7 +50,10 @@ fn the_story_has_ten_chapters_with_goals_and_words() {
         last.goals.iter().map(|goal| goal.goal).collect::<Vec<_>>(),
         vec![Goal::CalmWarden, Goal::Choose]
     );
-    assert!(chapters::all_goals().count() == usize::try_from(goals).unwrap_or(0));
+    assert_eq!(
+        chapters::all_goals().count(),
+        usize::try_from(goals).unwrap_or(0)
+    );
 }
 
 #[test]
@@ -214,7 +217,7 @@ fn leads_are_deterministic_per_system_and_varied() {
                         }
                     }
                     for step in 0..=u8::try_from(lead.steps.len()).unwrap_or(0) {
-                        assert!(!lead.step_text(step, system).is_empty());
+                        assert_ne!(lead.step_text(step, system), "");
                     }
                 }
                 // Another seed, other leads (at least sometimes).

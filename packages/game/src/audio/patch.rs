@@ -2500,7 +2500,7 @@ fn ui_error(rng: &mut Rng) -> Vec<f32> {
         let gate = 0.085;
         let env = Adsr::new(0.003, 0.05, 0.7, 0.03);
         let tone = render(gate + 0.06, |t| {
-            let raw = (a.next(base) + b.next(base * 1.06)) * 0.5;
+            let raw = f32::midpoint(a.next(base), b.next(base * 1.06));
             fold(saturate(filter.process(raw), 2.0) * 1.4) * env.level(t, gate)
         });
         mix_into(&mut out, &tone, pulse as f32 * 0.13, 1.0);
@@ -2944,7 +2944,7 @@ fn hull_alarm(_rng: &mut Rng, critical: bool) -> Vec<f32> {
         let mut b = Osc::new(Wave::Saw);
         let mut filter = Svf::new(FilterMode::LowPass, 2_500.0, 2.0);
         render(gate + 0.1, |t| {
-            let raw = (a.next(620.0) + b.next(655.0)) * 0.5;
+            let raw = f32::midpoint(a.next(620.0), b.next(655.0));
             let tremolo = 0.65 + 0.35 * sine(t, 18.0);
             saturate(filter.process(raw), 3.0) * tremolo * env.level(t, gate)
         })

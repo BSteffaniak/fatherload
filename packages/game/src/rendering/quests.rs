@@ -108,9 +108,9 @@ fn desk_about(row: &DeskRow, ui: &UiFrame<'_, '_>) -> String {
         .find(|quest| quest.quest == def.id && quest.owner == ui.view.player_id);
     let mut about = match row {
         DeskRow::TurnIn(_) => def.text.progress.to_owned(),
-        DeskRow::Active(_) => quest
-            .map(|quest| first_line(quest, ui.player, ui.snapshot))
-            .unwrap_or_default(),
+        DeskRow::Active(_) => {
+            quest.map_or_default(|quest| first_line(quest, ui.player, ui.snapshot))
+        }
         _ => def.text.offer.to_owned(),
     };
     let twists: Vec<String> = match row {
@@ -131,7 +131,7 @@ fn desk_about(row: &DeskRow, ui: &UiFrame<'_, '_>) -> String {
                 },
             )
         }
-        _ => quest.map(|quest| twist_lines(quest)).unwrap_or_default(),
+        _ => quest.map_or_default(|quest| twist_lines(quest)),
     };
     if !twists.is_empty() {
         about.push_str(" [");
@@ -158,8 +158,7 @@ fn first_line(quest: &ActiveQuest, owner: &Player, snapshot: &RenderSnapshot<'_>
     current_lines(quest, Some(owner), snapshot.tick_rate)
         .into_iter()
         .find(|(_, done)| !done)
-        .map(|(line, _)| line)
-        .unwrap_or_default()
+        .map_or_default(|(line, _)| line)
 }
 
 /// A keeper's quest desk.

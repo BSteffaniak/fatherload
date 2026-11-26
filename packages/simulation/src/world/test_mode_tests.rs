@@ -95,7 +95,7 @@ fn test_mode_actions_are_ignored_in_a_normal_world() {
         output.action_outcomes[0].outcome,
         PlayerScopedCommandOutcome::IgnoredUnavailable
     );
-    assert!(output.terrain_ops.is_empty());
+    assert_eq!(output.terrain_ops, []);
 }
 
 #[test]

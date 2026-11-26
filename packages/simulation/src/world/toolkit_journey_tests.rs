@@ -221,7 +221,7 @@ fn a_stocked_rig_travels_to_every_kind_of_place_and_back() {
     assert!(arrived(&events), "back");
     assert_eq!(world.place_of(PLAYER), before_station.place);
     // Still stocked after the whole journey (infinite supplies keep it so).
-    assert!(world.test_stock_gaps(PLAYER).is_empty());
+    assert_eq!(world.test_stock_gaps(PLAYER), [] as [String; 0]);
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn none_of_the_toolkit_reaches_a_normal_world() {
         (now.y - start.y).abs() < 4,
         "the rig stayed: {start:?} -> {now:?}"
     );
-    assert!(world.player_travel(PLAYER).bookmarks.is_empty());
+    assert_eq!(world.player_travel(PLAYER).bookmarks, []);
     assert!(
         !world.heart().space_unlocked,
         "the ending was not marked done"

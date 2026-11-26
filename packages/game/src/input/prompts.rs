@@ -471,12 +471,12 @@ mod tests {
             glyphs(Prompt::Scroll, InputDevice::KEYBOARD),
             vec![Glyph::MouseWheel, Glyph::Key("PgUp"), Glyph::Key("PgDn")]
         );
-        assert!(
+        assert_eq!(
             glyphs(
                 Prompt::Scroll,
                 InputDevice::Keyboard(KeyboardLayout::Arrows)
-            )
-            .is_empty()
+            ),
+            []
         );
         assert_eq!(
             glyphs(Prompt::Scroll, XBOX),
@@ -498,6 +498,6 @@ mod tests {
             glyphs(Prompt::Join, InputDevice::Unassigned),
             vec![Glyph::Pad(PadGlyph::Button(PadButton::A), PadFamily::Xbox)]
         );
-        assert!(glyphs(Prompt::Join, InputDevice::KEYBOARD).is_empty());
+        assert_eq!(glyphs(Prompt::Join, InputDevice::KEYBOARD), []);
     }
 }

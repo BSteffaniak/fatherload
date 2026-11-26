@@ -544,7 +544,7 @@ impl PolarGround {
                     let u1 = (x + STEP) as f32 / window.size.0 as f32;
                     let v0 = y as f32 / window.size.1 as f32;
                     let v1 = (y + 1) as f32 / window.size.1 as f32;
-                    let mid = (c0 + c1) * 0.5;
+                    let mid = f64::midpoint(c0, c1);
                     let phi = ((mid - camera.column) / camera.columns * TAU) as f32;
                     let day = (phi - sun).cos();
                     let daylight = ground.night_light

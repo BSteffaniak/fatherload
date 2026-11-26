@@ -217,7 +217,7 @@ fn entity_deltas_keep_a_replica_exact_and_skip_sleeping_entities() {
         .filter(|entity| entity.expires_at.is_some())
         .map(|entity| entity.id)
         .collect();
-    assert!(!short_lived.is_empty());
+    assert_ne!(short_lived, []);
     let mut entity_ticks = 0;
     let mut saw_sleep = false;
     let mut woke = false;

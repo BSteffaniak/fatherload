@@ -135,8 +135,8 @@ fn the_three_themes_are_registered_and_the_space_tags_land_on_them() {
         let hooks = crate::planet::hooks(id);
         assert_eq!(hooks.id(), id);
         assert!(hooks.world().is_some(), "{style:?} builds its own chunks");
-        assert!(!hooks.weather_table().is_empty());
-        assert!(!hooks.creature_spawns().is_empty());
+        assert_ne!(hooks.weather_table(), []);
+        assert_ne!(hooks.creature_spawns(), []);
         assert!(hooks.music_bed().name.starts_with("pd_"));
     }
     // The reserved slots (planets-c's 9-11) keep their ids.
@@ -243,7 +243,7 @@ fn every_stratum_has_its_rule_and_the_zones_find_them() {
         assert_eq!(seen, vec![0, 1, 2, 3], "{style:?}");
         for index in 0..4 {
             let rule = style.rules()[index];
-            assert!(!rule.hint().is_empty());
+            assert_ne!(rule.hint(), "");
         }
     }
 }
@@ -457,7 +457,7 @@ fn hazards_are_tagged_for_the_planet_gear() {
     );
     for style in ExoticStyle::ALL {
         assert!(crate::planet::hooks(style.theme()).rules_own_hazards());
-        assert!(!super::hazards(style).is_empty());
+        assert_ne!(super::hazards(style), []);
     }
     assert_eq!(
         ExoticRule::CrushingPressure.hazard(),

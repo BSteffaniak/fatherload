@@ -195,8 +195,8 @@ fn dry_rock_outside_the_echo_caves_has_no_sonar() {
     let mut output = crate::event::TickOutput::default();
     assert!(!world.sonar_ping(PLAYER, &mut output));
     let _ = scan(&mut world);
-    assert!(world.sonar_pings().is_empty());
-    assert!(world.far_strange().pings.is_empty());
+    assert_eq!(world.sonar_pings(), []);
+    assert_eq!(world.far_strange().pings, []);
 }
 
 #[test]

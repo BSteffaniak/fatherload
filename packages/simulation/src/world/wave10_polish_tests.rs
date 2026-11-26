@@ -348,7 +348,7 @@ fn a_ballast_tank_blows_when_the_sea_crushes_a_sub_and_it_surges_up() {
     // A healthy sub keeps its tanks.
     let mut healthy = submerged_rig(0.9, 2);
     let events = ticks(&mut healthy, 45);
-    assert!(supply_events(&events).is_empty());
+    assert_eq!(supply_events(&events), []);
     assert_eq!(healthy.supplies_of(PLAYER, DeepSupply::BallastTank), 2);
 }
 
@@ -514,7 +514,7 @@ fn a_baited_predator_goes_back_to_its_old_home_when_the_bait_is_spent() {
         "the bait is spent"
     );
     assert_eq!(runner_home(&world), first_home, "it went home again");
-    assert!(world.supply_effects().baited_homes.is_empty());
+    assert_eq!(world.supply_effects().baited_homes, []);
 }
 
 #[test]

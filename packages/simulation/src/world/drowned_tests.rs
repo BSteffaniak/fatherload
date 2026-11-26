@@ -301,7 +301,7 @@ fn the_scanner_pings_sonar_under_water_and_the_sonar_suite_reaches_further() {
     // It fades.
     let fade = u64::from(30_u32) * SONAR_PING_MILLIS / 1_000;
     let _ = ticks(&mut world, fade);
-    assert!(world.sonar_pings().is_empty());
+    assert_eq!(world.sonar_pings(), []);
     assert!(world.sonar_light_at(TILE_SIZE.mul_add(5.0, x), y) <= 0.0);
     crate::economy::grant_rig_system(
         world.player_mut(PLAYER).expect("rig"),

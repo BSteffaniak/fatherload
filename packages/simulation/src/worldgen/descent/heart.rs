@@ -723,8 +723,9 @@ pub fn chunk_context(
     context.wells = wells_touching(settings, layout, rect);
     context.terminal =
         Some(ferry_terminal(settings, layout)).filter(|terminal| terminal.intersects(rect));
-    context.heart = Some(heart_centre(settings, layout))
-        .filter(|_| heart_chamber(settings, layout).intersects(rect));
+    context.heart = heart_chamber(settings, layout)
+        .intersects(rect)
+        .then(|| heart_centre(settings, layout));
     let (cable_top, cable_bottom) = cable_rows(settings, layout);
     let column = landmarks::lift_column(settings);
     if column >= rect.min.x

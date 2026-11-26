@@ -155,8 +155,7 @@ fn kill_wave(world: &mut WorldState, pylon: TilePosition) {
         .garrison()
         .forts
         .get(&pylon)
-        .map(|fort| fort.machines.clone())
-        .unwrap_or_default();
+        .map_or_default(|fort| fort.machines.clone());
     for id in machines {
         let mut output = crate::TickOutput::default();
         let _ = world.damage_enemy(
@@ -246,7 +245,7 @@ fn a_fort_stirs_telegraphs_its_waves_and_sleeps_again_paying_its_armoury() {
     assert!(events.contains(&GarrisonEvent::WaveTelegraphed));
     let state = &world.garrison().forts[&pylon];
     assert_eq!(state.phase, FortPhase::Telegraph);
-    assert!(!state.lit_bays.is_empty());
+    assert_ne!(state.lit_bays, []);
     let lit = state.lit_bays.clone();
     let events = garrison_events(&ticks(&mut world, 30 * WAVE_TELL_MILLIS / 1_000 + 1));
     assert!(events.contains(&GarrisonEvent::WaveWoke));
@@ -308,7 +307,7 @@ fn a_fort_nobody_holds_stands_down_and_its_waves_start_over() {
     let _ = ticks(&mut world, 30 * WAVE_TELL_MILLIS / 1_000 + 2);
     assert_eq!(world.garrison().forts[&pylon].wave, 2);
     let machines = world.garrison().forts[&pylon].machines.clone();
-    assert!(!machines.is_empty());
+    assert_ne!(machines, [] as [u64; 0]);
     put_rig(
         &mut world,
         TilePosition {

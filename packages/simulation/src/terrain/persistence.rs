@@ -121,7 +121,7 @@ fn build_base(settings: &WorldSettings, width: i32, height: i32) -> GeneratedBas
     }
     GeneratedBase {
         tiles,
-        features: generated.map(|world| world.features).unwrap_or_default(),
+        features: generated.map_or_default(|world| world.features),
     }
 }
 
@@ -157,7 +157,6 @@ impl TileDiffs {
     }
 
     /// The `(index, tile)` pairs in ascending index order.
-    #[must_use]
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = (u32, Tile)> + ExactSizeIterator + '_ {
         self.entries.iter().copied()
     }
@@ -352,10 +351,7 @@ impl From<&Terrain> for FullTerrain {
     /// The full-tile form of a bounded terrain (a streamed terrain has no finite grid: it
     /// converts to no tiles).
     fn from(terrain: &Terrain) -> Self {
-        let tiles = terrain
-            .bounded_tiles()
-            .map(<[Tile]>::to_vec)
-            .unwrap_or_default();
+        let tiles = terrain.bounded_tiles().map_or_default(<[Tile]>::to_vec);
         Self {
             width: if terrain.is_streamed() {
                 0
@@ -773,16 +769,12 @@ impl Terrain {
     pub fn chunk_diffs(&self, chunk: ChunkPosition) -> TileDiffs {
         if let Storage::Streamed(streamed) = &self.storage {
             return TileDiffs {
-                entries: streamed
-                    .edits
-                    .get(&chunk)
-                    .map(|edits| {
-                        edits
-                            .iter()
-                            .map(|(local, tile)| (u32::from(*local), *tile))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                entries: streamed.edits.get(&chunk).map_or_default(|edits| {
+                    edits
+                        .iter()
+                        .map(|(local, tile)| (u32::from(*local), *tile))
+                        .collect()
+                }),
             };
         }
         TileDiffs::new(self.chunk_positions(chunk).filter_map(|position| {

@@ -349,7 +349,7 @@ fn moon(stage: &mut SceneStage<'_>, arrived: bool) {
         let radius = tiles(640.0);
         let reach = radius + tiles(if arrived { 63.0 } else { 140.0 });
         let across = tiles(160.0);
-        let at = moon.offset(across, -(reach * reach - across * across).sqrt());
+        let at = moon.offset(across, -across.mul_add(-across, reach * reach).sqrt());
         launch(
             world,
             player(seats),

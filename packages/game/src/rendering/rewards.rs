@@ -524,17 +524,14 @@ pub(super) fn draw_shop_showcase(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'
     let seconds = ui_kit::seconds();
     let ticks = (seconds * 60.0) as u64;
     let inner = width - 16;
-    let lines: Vec<String> = preview
-        .as_ref()
-        .map(|preview| {
-            preview
-                .changes
-                .iter()
-                .flat_map(|change| ui_kit::wrap(change, inner - 10, TextStyle::Body))
-                .take(4)
-                .collect()
-        })
-        .unwrap_or_default();
+    let lines: Vec<String> = preview.as_ref().map_or_default(|preview| {
+        preview
+            .changes
+            .iter()
+            .flat_map(|change| ui_kit::wrap(change, inner - 10, TextStyle::Body))
+            .take(4)
+            .collect()
+    });
     let bar_count = preview
         .as_ref()
         .map_or(0, |preview| preview.bars.len().min(3)) as i32;

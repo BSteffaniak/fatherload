@@ -433,15 +433,12 @@ pub fn seconds_left(quest: &ActiveQuest, tick: u64, rate: TickRate) -> Option<u6
 /// The twists in force, described.
 #[must_use]
 pub fn twist_lines(quest: &ActiveQuest) -> Vec<String> {
-    quest
-        .def()
-        .map(|def| {
-            def.active_twists(quest.variant)
-                .into_iter()
-                .map(Twist::describe)
-                .collect()
-        })
-        .unwrap_or_default()
+    quest.def().map_or_default(|def| {
+        def.active_twists(quest.variant)
+            .into_iter()
+            .map(Twist::describe)
+            .collect()
+    })
 }
 
 /// `ticks` at `rate`, in whole seconds (rounded up).

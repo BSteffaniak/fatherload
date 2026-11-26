@@ -909,7 +909,7 @@ fn world_people_and_conversations_replicate_to_every_client() {
         .conversation(talker)
         .expect("the host opened the conversation");
     assert_eq!(conversation.npc, npc);
-    assert!(!conversation.lines.is_empty());
+    assert_ne!(conversation.lines, []);
     let people = host.entities().of_kind(EntityKind::Npc).count();
     assert_eq!(people, found.population.characters.len());
     for client in &harness.clients {

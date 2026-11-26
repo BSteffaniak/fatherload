@@ -447,7 +447,7 @@ fn shear_halls_turn_gravity_and_the_spire_points_down_at_its_walls() {
             max: TilePosition { x: 900, y: bottom },
         },
     );
-    assert!(!regions.is_empty());
+    assert_ne!(regions, []);
     let zones = crate::field::FieldZones::default();
     for region in regions.iter().take(8) {
         let centre = region.bounds.center();
@@ -1035,13 +1035,13 @@ fn parallax_station_is_a_peopled_research_station_beside_the_descent_vi_outpost(
     };
     let generated = crate::worldgen::streamed::generated_tile(&settings, hall_air);
     assert!(generated.kind.is_open(), "{generated:?}");
-    assert!(
+    assert_eq!(
         mirror::zones_touching(
             &settings,
             &layout(&settings),
             &TileRect::around(hall_air, 40, 8)
-        )
-        .is_empty()
+        ),
+        []
     );
     // No other world has it.
     assert!(village::village(&WorldSettings::new(SEED), id).is_none());

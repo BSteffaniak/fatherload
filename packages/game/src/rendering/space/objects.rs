@@ -384,7 +384,7 @@ fn draw_disc(
         for segment in 0..SEGMENTS {
             let a0 = segment as f32 / SEGMENTS as f32 * 360.0;
             let a1 = a0 + 360.0 / SEGMENTS as f32;
-            let middle = (a0 + a1) * 0.5;
+            let middle = f32::midpoint(a0, a1);
             // Lower half (y down in the disc's frame) passes in front.
             let near = middle < 180.0;
             if front.is_some_and(|want| want != near) {

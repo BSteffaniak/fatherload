@@ -142,7 +142,7 @@ fn sequence_vaults_open_only_in_order_and_reset_on_a_wrong_switch() {
             .expect("switch")
     };
     let doors = poi_tiles(&world, &vault, |tile| tile == PoiTile::VaultDoor);
-    assert!(!doors.is_empty());
+    assert_ne!(doors, []);
     // Switch 1 lights, then switch 3 out of order resets the lock.
     let first = switch(&world, 1);
     let _ = drill_down_into(&mut world, first);
@@ -156,12 +156,12 @@ fn sequence_vaults_open_only_in_order_and_reset_on_a_wrong_switch() {
     let third = switch(&world, 3);
     let events = drill_down_into(&mut world, third);
     assert!(events.contains(&GameplayEventKind::VaultLockReset { feature: vault.id }));
-    assert!(
+    assert_eq!(
         poi_tiles(&world, &vault, |tile| matches!(
             tile,
             PoiTile::VaultSwitch { lit: true, .. }
-        ))
-        .is_empty()
+        )),
+        []
     );
     // In order, the doors open.
     for order in 1..=3 {
@@ -279,7 +279,10 @@ fn twin_relays_must_be_drilled_within_the_window() {
     let _ = drill_down_into(&mut world, relays[0]);
     let events = drill_down_into(&mut world, relays[1]);
     assert!(events.contains(&GameplayEventKind::VaultOpened { feature: vault.id }));
-    assert!(poi_tiles(&world, &vault, |tile| tile == PoiTile::VaultDoor).is_empty());
+    assert_eq!(
+        poi_tiles(&world, &vault, |tile| tile == PoiTile::VaultDoor),
+        []
+    );
 }
 
 /// Opens the first vault cache of a fresh world with `prepare` applied to the rig first.

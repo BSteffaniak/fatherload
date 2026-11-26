@@ -333,7 +333,7 @@ fn a_time_bubble_slows_every_creature_inside_it_and_lapses() {
     assert_eq!(world.time_bubbles().len(), 1);
     // Ten seconds on, the bubble is gone.
     let _ = ticks(&mut world, 30 * 11);
-    assert!(world.time_bubbles().is_empty());
+    assert_eq!(world.time_bubbles(), []);
 }
 
 #[test]
@@ -550,7 +550,7 @@ fn a_scanner_press_in_the_echo_caves_is_a_sonar_ping_that_lights_the_cave_for_a_
     // It fades, and the ping is forgotten.
     let _ = ticks(&mut world, 30 * 5);
     assert!(world.echo_sonar_light_at(near) <= 0.0);
-    assert!(world.far_strange().pings.is_empty());
+    assert_eq!(world.far_strange().pings, []);
 }
 
 #[test]

@@ -780,7 +780,7 @@ fn old_bombs_without_explosive_fields_load_as_plain_unowned_bombs() {
         value
     })
     .expect("old player");
-    assert!(player.carried_explosives().is_empty());
+    assert_eq!(player.carried_explosives(), []);
 }
 
 #[test]

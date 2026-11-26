@@ -56,7 +56,7 @@ fn older_generators_have_no_villages() {
             ..WorldSettings::new(9)
         };
         assert!(village(&settings, placement::surface_id(1)).is_none());
-        assert!(villages_between(&settings, -5_000, 5_000).is_empty());
+        assert_eq!(villages_between(&settings, -5_000, 5_000), []);
         let site = placement::surface_site(9, 1).expect("site");
         assert_eq!(
             crate::worldgen::surface_row(&settings, site.center),
@@ -144,7 +144,7 @@ fn every_village_is_laid_out_inside_its_span_with_a_service_and_a_specialty() {
                     building.kind
                 );
             }
-            assert!(!found.name.is_empty());
+            assert_ne!(found.name, "");
         }
     }
 }
@@ -427,7 +427,7 @@ fn village_facts_and_story_seeds_bind() {
     let facts = village_facts(&settings, &found);
     assert!(!facts.is_empty());
     let seeds = found.story_seeds(&facts, &[], 0);
-    assert!(!seeds.is_empty());
+    assert_ne!(seeds, []);
 }
 
 /// Chunk generation cost with and without villages, and the cost of building a village

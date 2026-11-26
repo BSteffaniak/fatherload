@@ -995,7 +995,7 @@ impl Effects {
                 break;
             }
             let angle = f32::from(grain) / 16.0 * std::f32::consts::TAU;
-            let speed = 90.0 + f32::from(grain % 4) * 28.0;
+            let speed = f32::mul_add(f32::from(grain % 4), 28.0, 90.0);
             self.sparks.push(SparkParticle {
                 x,
                 y,
@@ -1022,7 +1022,7 @@ impl Effects {
                 x,
                 y,
                 velocity_x: spread * 38.0,
-                velocity_y: -150.0 - jitter * 12.0,
+                velocity_y: jitter.mul_add(-12.0, -150.0),
                 life: SPARK_LIFE_SECONDS,
             });
         }
@@ -1346,7 +1346,7 @@ mod tests {
         let damaged = GameplayEventKind::PlayerDamaged { player_id: player };
         let mut feed = EventFeed::default();
         assert_eq!(feed.present(vec![event(5, player, damaged)]).len(), 1);
-        assert!(feed.present(vec![event(5, player, damaged)]).is_empty());
+        assert_eq!(feed.present(vec![event(5, player, damaged)]), []);
         assert_eq!(feed.present(vec![event(6, player, damaged)]).len(), 1);
     }
 
@@ -1374,7 +1374,7 @@ mod tests {
             remote,
             GameplayEventKind::PlayerDamaged { player_id: remote },
         )];
-        assert!(effects.apply(&remote_hit, &world, &[local]).is_empty());
+        assert_eq!(effects.apply(&remote_hit, &world, &[local]), []);
         effects.update(1.0);
         assert_eq!(
             effects.apply(&burst, &world, &[local]),
@@ -1415,7 +1415,7 @@ mod tests {
             ]
         );
         effects.update(1.0);
-        assert!(effects.apply(&crossings, &world, &[local]).is_empty());
+        assert_eq!(effects.apply(&crossings, &world, &[local]), []);
         effects.update(SKY_CUE_COOLDOWN_SECONDS);
         assert_eq!(effects.apply(&crossings, &world, &[local]).len(), 2);
     }
@@ -1490,7 +1490,7 @@ mod tests {
             vec![PlacedCue::player(SoundCue::MilestoneFanfare, local)]
         );
         effects.update(0.1);
-        assert!(effects.apply(&depth(23), &world, &[local]).is_empty());
+        assert_eq!(effects.apply(&depth(23), &world, &[local]), []);
     }
 
     #[test]
@@ -1515,7 +1515,7 @@ mod tests {
         assert_eq!(cues.len(), 8);
         assert_eq!(effects.explosions.len(), 64);
         assert!(effects.sparks.len() <= 768);
-        assert!(effects.apply(&events, &world, &[local]).is_empty());
+        assert_eq!(effects.apply(&events, &world, &[local]), []);
         effects.clear();
         assert_eq!(effects.apply(&events[..1], &world, &[local]).len(), 1);
     }
@@ -1557,7 +1557,7 @@ mod tests {
             local,
             GameplayEventKind::CargoChanged { player_id: local },
         )];
-        assert!(effects.apply(&changed, &world, &[local]).is_empty());
+        assert_eq!(effects.apply(&changed, &world, &[local]), []);
         if let Some(player) = world.player_mut(local) {
             player
                 .cargo_bay

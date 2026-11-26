@@ -598,7 +598,7 @@ fn members_pick_their_own_relics_and_the_party_descends_together() {
     assert_eq!(run.floor, 1);
     assert_eq!(run.phase, RunPhase::Exploring);
     assert_eq!(run.member(PLAYER).expect("member").relics, vec![first[1]]);
-    assert!(run.member(OTHER).expect("member").relics.is_empty());
+    assert_eq!(run.member(OTHER).expect("member").relics, []);
     assert!(
         world
             .tombs()

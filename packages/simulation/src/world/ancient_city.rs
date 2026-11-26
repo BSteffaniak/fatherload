@@ -302,8 +302,7 @@ impl WorldState {
     #[must_use]
     pub fn archivist_cores(&self) -> Vec<TilePosition> {
         self.descent_strata_layout()
-            .map(|layout| sites::archivist_cores(self.terrain.settings(), &layout))
-            .unwrap_or_default()
+            .map_or_default(|layout| sites::archivist_cores(self.terrain.settings(), &layout))
     }
 
     /// The bounds of `landmark` (Deep Descent worlds).

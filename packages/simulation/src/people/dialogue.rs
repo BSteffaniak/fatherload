@@ -263,9 +263,8 @@ fn people_topic(
     vars: &mut Vars,
     rng: &mut PeopleRng,
 ) -> Option<LineTopic> {
-    let neighbours: Vec<(String, &'static str, RelationshipKind)> = ctx
-        .population
-        .map(|population| {
+    let neighbours: Vec<(String, &'static str, RelationshipKind)> =
+        ctx.population.map_or_default(|population| {
             population
                 .relationships_of(character.id)
                 .filter_map(|edge| {
@@ -277,8 +276,7 @@ fn people_topic(
                     ))
                 })
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     let absent = &character.absent;
     let total = neighbours.len() + absent.len();
     if total == 0 {

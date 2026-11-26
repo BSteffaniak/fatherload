@@ -188,6 +188,6 @@ mod tests {
         // Not a test-mode world: nothing to toggle.
         requests.clear();
         shell.toggle_test_mode(PauseOption::ToggleInvulnerable, None, &mut requests);
-        assert!(requests.is_empty());
+        assert_eq!(requests, []);
     }
 }

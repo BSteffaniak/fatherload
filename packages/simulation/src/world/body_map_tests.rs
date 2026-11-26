@@ -202,7 +202,7 @@ fn a_keyframe_carries_only_its_viewers_body_maps() {
         );
         // Smaller on the wire than the whole world's maps.
         let sent = postcard::to_allocvec(&keyframe).expect("encode").len();
-        let mut everyone = keyframe.clone();
+        let mut everyone = keyframe;
         everyone.places = world.places.clone();
         let all = postcard::to_allocvec(&everyone).expect("encode").len();
         assert!(sent < all, "{sent} bytes against {all}");
@@ -243,7 +243,7 @@ fn a_replica_applying_a_store_frame_relabelled_by_a_lap_moves_nothing() {
             .collect()
     };
     let before = positions(&world);
-    assert!(!before.is_empty());
+    assert_ne!(before, [] as [(u64, f32, f32); 0]);
     let frame = world.store_frame(store).expect("frame");
     let lap = world
         .store_terrain(store)

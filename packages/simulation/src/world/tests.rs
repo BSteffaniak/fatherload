@@ -542,7 +542,7 @@ fn canonical_salvage_subservices_update_only_canonical_state() {
             Some(crate::PlayerScopedCommandOutcome::Applied)
         );
     }
-    assert!(world.collapse_warnings.is_empty());
+    assert_eq!(world.collapse_warnings, []);
     assert!(world.scan_markers.is_empty());
     assert!(
         world
@@ -866,12 +866,12 @@ fn canonical_story_contract_progression_consumes_cargo_and_hashes_state() {
         first.simulation_state_hash(),
         second.simulation_state_hash()
     );
-    assert!(
+    assert_eq!(
         first
             .player(LOCAL_PLAYER_ID)
             .expect("player exists")
-            .cargo_used()
-            == 0
+            .cargo_used(),
+        0
     );
     assert!(first.progression.total_earnings > 0);
 }
@@ -1632,7 +1632,7 @@ fn authoritative_world_handles_hazard_damage_failure_scanner_and_bomb_effects() 
 fn the_old_top_radiator_keeps_the_rig_cool_into_the_first_deep_stratum() {
     use crate::{protection::heat_excess, terrain::DeepStratum, worldgen::Band};
     let crystal = Band::Deep(DeepStratum::CrystalFaults);
-    assert!(heat_excess(Band::Topsoil, 1, 0) == 0);
+    assert_eq!(heat_excess(Band::Topsoil, 1, 0), 0);
     assert!(
         heat_excess(crystal, 4, 0) > 0,
         "tier 4 runs hot in the crystal faults"

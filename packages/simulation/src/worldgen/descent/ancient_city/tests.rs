@@ -297,7 +297,7 @@ fn the_lantern_library_holds_the_archivist_core_and_its_lift_runs() {
             "seed {seed}: the Archive Post's core"
         );
         assert_eq!(archivist_cores(&settings, &layout).len(), 2);
-        assert!(layout.stratum_of_row(post.y) == Stratum::BuriedMegacity);
+        assert_eq!(layout.stratum_of_row(post.y), Stratum::BuriedMegacity);
     }
 }
 
@@ -411,7 +411,7 @@ fn older_worlds_have_none_of_it() {
     let v11 = settings(DEFAULT_WORLD_SEED);
     let layout = layout(&v11);
     let area = probe_area(&layout, Stratum::BuriedMegacity, -100, 100);
-    assert!(stamps_with(&classic, &layout, &area).is_empty());
+    assert_eq!(stamps_with(&classic, &layout, &area), []);
     assert!(lantern_library(&classic, &layout).is_none());
     assert!(great_engine(&classic, &layout).is_none());
     assert!(orrery(&classic, &layout).is_none());

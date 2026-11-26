@@ -823,7 +823,7 @@ mod wave6_tests {
         let all: BTreeSet<Furniture> = Furniture::ALL.into_iter().collect();
         assert_eq!(all.len(), Furniture::ALL.len(), "every piece listed once");
         for piece in Furniture::ALL {
-            assert!(!piece.name().is_empty());
+            assert_ne!(piece.name(), "");
             assert!(piece.width() >= 1 && piece.width() <= ROOM_COLUMNS);
             assert!(piece.catalogue_price() > 0, "{piece:?} has a price");
             if piece.storage_slots() > 0 {

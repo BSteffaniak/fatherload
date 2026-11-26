@@ -144,7 +144,10 @@ fn a_seat_uses_the_toolkit_on_its_own_rig() {
     let second = PlayerId::new(2);
     let mut game = playing(world, 2, "test-toolkit-split");
     idle(&mut game, 5);
-    assert!(game.runtime.world().test_stock_gaps(second).is_empty());
+    assert_eq!(
+        game.runtime.world().test_stock_gaps(second),
+        [] as [String; 0]
+    );
 
     // Seat 2 opens the toolkit from the pause menu, turns infinite supplies off and spawns a
     // creature beside its own rig.

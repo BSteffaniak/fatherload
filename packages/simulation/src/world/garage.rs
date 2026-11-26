@@ -140,7 +140,7 @@ mod tests {
         };
         let (outcome, events) = customize(&mut world, Some(stealth));
         assert_eq!(outcome, PlayerScopedCommandOutcome::IgnoredUnavailable);
-        assert!(events.is_empty());
+        assert_eq!(events, []);
         assert!(
             world
                 .player_mut(PLAYER)
