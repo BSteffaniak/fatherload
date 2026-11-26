@@ -196,6 +196,13 @@ peak would pass -1 dBFS (very transient sounds such as landings end up 1-4 dB un
 | `ghost_voice` | big | One of Dov's ghost recordings: the same formant voice off an old tape (wow and flutter on the pitch, pink hiss, a wider 160-3,800 Hz band), a recorder click at the start and a slow damped tape echo. Ducks the mix a little. |
 | `log_canister` | feedback | A cipher canister opening: a small brass clank (three decaying partials), two tumbler clicks and a paper rustle. |
 | `anomaly_hum` | big | Stepping into an anomaly room: a slow detuned saw-and-fifth swell whose low-pass opens and closes over 2.4 s, with a glassy FM shimmer on top. Steady: nothing pulses fast. |
+| `aa_loop_station_human` | loop | A human station's lounge (docked): soft electric-piano sevenths (Fmaj7, Em7, Dm7, Cmaj7), a bass tine, a brushed hat, the station's 110 Hz hum and air handlers. |
+| `aa_loop_station_vessi` / `_tokkari` / `_siphra` | loop | An alien-run station's signature: the Vessi's hooted fifths as a duet over a breathing pad; the Tokkari's wooden clave of clacks over a low hum, a marimba answer; the Siphra's glass chimes beating against two high sines. |
+| `aa_loop_space_warm` / `_bright` / `_nebula` | loop | Space's ambience by star class: a warm low drone and solar wind (yellow, red, binary); a high crystalline shimmer and faint bells (blue, white); a breathing formant choir drifting "oo" to "ah" (nebula). |
+| `aa_loop_cruise` / `aa_loop_warp` | loop | The Star Drive: cruise's airy whine over a rush (pitch rises with speed); warp's brown-noise roar with a sheen and an engine hum. |
+| `aa_loop_combat_swarm` / `_machine` | loop | The swarm's hunt (wing drone, skittering clicks, buzzing stabs) and the machine fleet's march (square arpeggios over an electronic kick and brass). |
+| `aa_warp_engage` / `aa_warp_arrive` | big | The drive engaging (a spool rising two octaves into a deep boom and a rush) and dropping out at a star (a falling rush and two bells). |
+| `aa_cruise_engage` / `aa_dock_chime` | feedback | Cruise engaging (an upward sweep and a soft thump); docking (the clamps' clunk and a two-note welcome chime). |
 
 Loops are 4 s long (a 2 s loop of frozen noise becomes recognisable over minutes of drilling). Periodic parts use frequencies with whole cycles in the loop (multiples of 0.5 Hz); scattered events (pops, knocks, grit) are spread evenly at a steady density, so nothing marks the restart.
 

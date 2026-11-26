@@ -1361,6 +1361,121 @@ light year away never makes a NaN); the fixtures put their systems a billion sec
   ~60 ms repaint (desktop release, measured), i.e. a visible hitch every 16 tiles of flight and
   on every dig. Software rendering was not re-timed.
 
+## Wave 13 art-audio: space looks and sounds the part (`src/planet/look.rs`, game `rendering/space/{bodies,shaders,view,live}.rs`, `rendering/space_hud_layout.rs`, `rendering/space_seat.rs`, `rendering/hostiles_view.rs`, `audio/patch/space_audio.rs`)
+
+The art and audio pass over everything in space. No format, protocol, digest or event code
+changes: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are untouched (no generation
+changed), `PROTOCOL_VERSION` stays 20 and the save format 15. Sound names are `aa_*`. The one
+simulation change to play is the fighters' size (below).
+
+### Worlds from orbit (`planet::look`, the planet shader)
+
+* **`PlanetThemeHooks::orbital_look`** (new, defaulted): a theme's face from orbit as plain
+  data (`planet::look::OrbitalLook`): land in three tones, then optional layers each with a
+  colour and an amount: seas (share of the surface), cloud decks (cover), polar caps (reach),
+  night-side lights (density), glowing cracks (lava, crystal light), weather bands instead of
+  land, and ring colours (with decorative rings for a body the generator gave none). The
+  default reads **`planet::look::ORBITAL_LOOKS`** by theme id.
+* The six Wave 12 themes are registered (jungle: green continents under thick cloud and
+  shallow seas; archipelago: a blue world of islands and reefs; glacier: ice sheets, frozen
+  seas and broad caps; dunes: sand seas under a dusty sky; volcanic: black basalt split by
+  glowing lava under ash; crystal: violet plains veined with lit crystal). **TODO-SEAM
+  (w13-planets-c/-d, ids 9-14):** append `(YOUR_THEME, YOUR_LOOK)` to `ORBITAL_LOOKS` (or
+  override the hook); until then a body is drawn from its space tag's preset.
+* The game (`rendering/space/view.rs`) turns a look into a `BodyLook`; a body with no theme
+  look keeps a preset per space tag (`BodyTheme::look`: machine worlds' teal grid lights, a
+  fungal world's glowing spores, a gas giant's bands, storm and decorative rings, a dead
+  world's faint embers, the home world's seas, clouds and towns). `live::body_look` resolves
+  `planet_theme_of(tag)` through the hooks; a world the aliens settled
+  (`alien::atlas::folk_of_body`) shows their towns' lights on its night side. The
+  generator's rings (`SpaceBody::ring`) are drawn at last.
+* **The planet shader** (`shaders::PLANET_BODY`, GLSL ES 100 safe) draws it all on the one quad
+  per body, at whole art pixels with the ordered dither: a sea level with a lighter shallow
+  fringe, ragged caps, ridged glowing cracks (brightest at night), lights on the land of the
+  night side, a cloud deck drifting a little faster than the ground and lit like it, a gas
+  giant's storm, and rings seen face on (the plane of flight is theirs) with lanes, gaps and
+  the body's shadow across the far side. A few value-noise lookups a pixel whatever a body
+  shows; the CPU fallback draws the rings and the sea's colour. Night sides keep more of
+  their colour (a moon on approach read black).
+* Scenes `space_orbit_themes` (every look by day, the ringed gas giant and a ringed rock) and
+  `space_orbit_night` (a settled jungle world's town lights, a volcanic world's lava, home).
+
+### Ships that read in a fight (`hostiles`, `hostiles_view.rs`)
+
+* **`ShipClass::hull_scale`**: the fighters (cutter, marauder, mite, stinger, drone, lancer)
+  are drawn and hit at 1.5 times their art's two px an art pixel (`HULL_SCALE`); the bosses
+  stay 1. `hit_circles()` scales the authored tables, `reach()` and `stats().size` grew with
+  them, and `combat::hits_ship` tests in the authored frame. The lancer's lance leaves its new
+  nose; the flock's separation (70) and the formation's slots (90 back, 100 aside) grew with
+  the hulls. The fight's zoom is 0.65 (was 0.55); a boss is framed in three fifths of the
+  half view so it does not hide under the plate's banners.
+* Each ship has a soft aura in its faction's colour and a dark rim round its silhouette; shots
+  have a glow and a bright core and never draw thinner than a couple of pixels; a hull hit
+  lights the hull additively and fades over an eighth of a second (re-lit by the next hit,
+  never blinking; scaled by the effects setting, `ScreenEffect::Exposure`).
+* Game tests: `every_ships_hit_circles_match_its_drawn_body` (at the scaled size) and
+  `scaled_ships_are_hit_where_they_are_drawn` (a shot at every drawn pixel, at three angles,
+  hits; none off the sprite does).
+
+### The flight HUD's layout (`rendering/space_hud_layout.rs`)
+
+* `SpaceHudLayout` places every panel before anything is drawn: the meters, the deflector,
+  the docking guide and the nav note down the left column; the plate between the meters and
+  the nav panel (or first in the left column on a narrow view); the bounties above the
+  prompts and clear of where a message toast rises; the prompt rows. `banner` fits each
+  centred banner (warnings, systems readings, the fight's) between the panels at its height or
+  under them. On a phone the touch buttons are obstacles too.
+* `Markers` places the edge markers (waypoint, wormholes, crewmates, ships, salvage): an
+  arrow slides along the view's edge until it and its label clear every panel and every
+  marker before it; a label may fall back to the distance alone, or sit beside the tip.
+  The reported overlap (a wormhole's label over "No waypoint") is a test.
+* Tests: `the_flight_hud_panels_never_overlap_at_any_size` and
+  `edge_markers_keep_clear_of_the_panels_and_each_other_at_any_size` lay the HUD out on nine
+  screens (desktop windows and monitors, phones both ways) with one to four seats and every
+  combination of touch, nav suite, docking guide, missions and plate width;
+  `a_phones_touch_controls_stay_clear_of_banners_and_markers`; `the_reported_overlap_is_gone`.
+* A narrow seat's body or clock badge now steps under the stats panel (compact for a body:
+  name, hour and air) instead of over it (`clock_hud::badge_rect`).
+
+### Tall ground on the ground camera (`rendering/space_seat.rs`)
+
+* `headroom_drop` looks a dozen columns either way from a seat standing on a planet's
+  surface for the tallest thing above it (a jungle's giant trees and canopy, a spire, a
+  town's mast). Where the view would cut it off, the craft sits lower in the view
+  (`SpaceCamera::drop`, up to half the half height) and past that the view zooms out to 0.6
+  (`SpaceCamera::zoom`, the craft scaled with the tiles), eased over about half a second (at
+  once on landing; `LiveSpace::ease_framing`). The polar windows reach the farther corner.
+  Scene capture waits for a live seat's ground art like the fixtures'.
+
+### Space's music and ambience (`audio/patch/space_audio.rs`, `audio/director.rs`)
+
+* **Stations**: docked, a human hub plays a slow electric-piano lounge; an alien-run station
+  its people's signature, in the voice of their speech: the Vessi's hooted fifths as a duet,
+  the Tokkari's clacker rhythm, the Siphra's glass chimes.
+* **Ambience by star class**: a warm drone by yellow, red (lower) and binary suns, a high
+  shimmer by blue giants and white dwarfs, a breathing choir in a nebula; fuller near the star,
+  faint between the stars, hushed under a fight's music.
+* **The drive**: cruise whines higher with speed; warp roars; the drive engaging, arriving at a
+  star and cruise engaging have their own one-shots (`WarpEngaged`, `WarpArrived`,
+  `CruiseEngaged`), and docking a clunk and a welcome chime.
+* **Combat music per faction**: the corsairs keep the hostiles track's pulse; the swarm hunts
+  to skittering clicks and a buzzing wing drone; the machine fleet marches to cold square
+  arpeggios. Space's music is no longer muffled by the vacuum round the rig
+  (`Director::music_command`).
+* Fifteen `aa_` patches; `audio::tests::space_music_and_ambience_meet_the_quality_bar` checks
+  them alone (the full bar checks every patch).
+
+### Screenshot review
+
+Every space scene (142: space, systems, stations, hostiles, flight, places, planets, the wild,
+frontier and alien worlds, bodylife) was captured and looked at. Fixed: the nav HUD's
+overlaps, the docking guide over the deflector, a narrow seat's badge over its stats, the
+bounties under a toast and the fight's banners under it, a boss hidden under the plate's
+banners, a moon's near-black night side on approach, a frontier warning in red on lava, the
+jungle's canopy above the view. Known: on a phone the touch layout's rotate pair can sit over
+the deflector panel and the stick under an edge marker's label (the touch layout's own
+places), and the home world's "THE STARS ARE OPEN" card covers the HUD while it shows.
+
 ## Replication of entities
 
 Entities replicate per client as deltas: the host keeps each client's `(EntityId, revision)`
