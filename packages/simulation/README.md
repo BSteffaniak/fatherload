@@ -12725,8 +12725,26 @@ those; nothing else moves a rig in test mode (the story's goal keeps its own `Wa
   (the client stocks and goes to a lair, the host's seats to a station and a flagship; hashes
   agree), with the tracks' normal-world refusals online (`world_travel`, `world_toolkit`).
 
+### Validation and measurements (integration run)
+
+* Every commit of the branch passes `cargo clippy --workspace --all-targets -- -D warnings`
+  (checked commit by commit, each extracted on its own). The full debug test run passes with
+  zero failures: simulation 1978 passed / 53 ignored (+1 deep-descent memory), game 546 +
+  headless 1, netcode 96 / 3 ignored, quic_transport 10 + loopback 11.
+* Web: `scripts/build-web.sh` with no warnings, `scripts/check-web.sh` (strict web Clippy)
+  passes, the web acceptance tests pass (storage, gameplay, split-screen, phone touch).
+* Browser (Chrome on the GPU, 1280x720, a test-mode save, 8 s each): playing 60.0 fps, mean
+  2.2 ms, p95 4.0 ms; the Atlas open with Next pressed every 240 ms and the category stepped
+  every few presses (fresh previews building all along) 59.8 fps, mean 2.9 ms, p95 5.9 ms, one
+  57 ms frame when a category's lists are built for the first time; the Atlas open and idle
+  60.0 fps, mean 1.6 ms.
+* `--balance-report --only descent` (one seed): every target met. `--only tombs` (4 seeds):
+  byte-identical to the master build (8ce6c5b).
+
 ### Still open
 
+* A category's first opening builds its lists through the index in one frame (the 57 ms
+  browser frame above).
 * Travel inside the tick can stall the host for up to ~240 ms (the index's costliest kinds,
   measured in its review); the Atlas builds a category's lists once per opening.
 * The palette prints the travel line it sends; a travel the world refuses shows the index's
