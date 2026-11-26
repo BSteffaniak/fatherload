@@ -1476,6 +1476,13 @@ pub(super) fn draw_space_hud(
         .map(|row| super::prompts::bar_width(row, device))
         .max()
         .unwrap_or(0) as f32;
+    let controls = if touch {
+        let mut controls = super::touch_controls::cluster_rects();
+        controls.extend(super::touch_controls::top_row_rects());
+        controls
+    } else {
+        Vec::new()
+    };
     let mut layout = SpaceHudLayout::new(
         rect,
         &HudSpec {
@@ -1487,6 +1494,7 @@ pub(super) fn draw_space_hud(
             missions,
             prompt_rows: rows.len(),
             prompt_width,
+            controls: &controls,
         },
     );
     // The meters, top left.

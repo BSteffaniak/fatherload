@@ -40,7 +40,7 @@ const MARKER_MARGIN: f32 = 2.0;
 
 /// What the HUD shows this frame, as far as its layout cares.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct HudSpec {
+pub struct HudSpec<'a> {
     /// The phone's touch controls are up (the plate drops under their top row, no prompt bar).
     pub touch: bool,
     /// A nav suite is fitted (the nav panel shows when the view is wide enough).
@@ -56,6 +56,9 @@ pub struct HudSpec {
     /// Rows of button prompts, and the widest row's width.
     pub prompt_rows: usize,
     pub prompt_width: f32,
+    /// The phone's touch controls on this view (UI points): banners and markers keep clear
+    /// of them.
+    pub controls: &'a [Rectangle],
 }
 
 /// Every fixed panel of the flight HUD (see the module docs).
@@ -78,6 +81,8 @@ pub struct SpaceHudLayout {
     /// Banners placed so far (the plate's stack and the fight's), each one an obstacle for the
     /// next and for the markers.
     pub banners: Vec<Rectangle>,
+    /// The touch controls (obstacles, not panels of the HUD's own).
+    pub controls: Vec<Rectangle>,
 }
 
 /// Whether two rectangles overlap (touching edges do not).
@@ -131,6 +136,7 @@ pub fn toast_band(rect: Rectangle) -> Rectangle {
 impl SpaceHudLayout {
     /// Lays the fixed panels out in `rect` (UI points).
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "each panel in reading order")]
     pub fn new(rect: Rectangle, spec: &HudSpec) -> Self {
         let narrow = rect.width < NARROW_WIDTH;
         let meters = Rectangle::new(rect.x + 4.0, rect.y + 4.0, METERS_SIZE.0, METERS_SIZE.1);
@@ -166,6 +172,7 @@ impl SpaceHudLayout {
             bounties: None,
             prompts,
             banners: Vec::new(),
+            controls: spec.controls.to_vec(),
         };
         // The plate at the top between the meters and the nav panel (under the touch top row
         // on a touch screen), or, in a view too narrow for that, first in the left column.
@@ -180,8 +187,18 @@ impl SpaceHudLayout {
         layout.plate = if (at_top.y - top).abs() < 0.5 {
             at_top
         } else {
-            let plate = Rectangle::new(meters.x, cursor, width, PLATE_HEIGHT);
-            cursor = bottom(plate) + GAP;
+            let mut plate = Rectangle::new(meters.x, cursor, width, PLATE_HEIGHT);
+            // Clear of a phone's buttons beside the meters.
+            if spec
+                .controls
+                .iter()
+                .any(|control| overlaps(*control, plate))
+            {
+                plate = layout.fit(cursor, width, PLATE_HEIGHT);
+            }
+            if (plate.y - cursor).abs() < 0.5 && (plate.x - meters.x).abs() < 0.5 {
+                cursor = bottom(plate) + GAP;
+            }
             plate
         };
         // The left column: the deflector, the docking guide, the nav note.
@@ -252,9 +269,26 @@ impl SpaceHudLayout {
     /// allow, or under them when they leave no room.
     #[must_use]
     pub fn fit(&self, top: f32, width: f32, height: f32) -> Rectangle {
+        // Inside the view if it can be, else under the panels as far as it takes.
+        self.fit_within(top, width, height, true)
+            .or_else(|| self.fit_within(top, width, height, false))
+            .unwrap_or_else(|| {
+                let width = width.min(self.rect.width - 4.0);
+                Rectangle::new(
+                    self.rect.x + (self.rect.width - width) * 0.5,
+                    top,
+                    width,
+                    height,
+                )
+            })
+    }
+
+    /// [`Self::fit`]'s search, staying above the view's bottom when `bounded`.
+    fn fit_within(&self, top: f32, width: f32, height: f32, bounded: bool) -> Option<Rectangle> {
         let width = width.min(self.rect.width - 4.0);
         let centre = self.rect.x + self.rect.width * 0.5;
-        let obstacles = self.panels();
+        let mut obstacles = self.panels();
+        obstacles.extend(self.controls.iter().copied());
         let mut y = top;
         for _ in 0..12 {
             let band = Rectangle::new(self.rect.x, y, self.rect.width, height);
@@ -274,14 +308,16 @@ impl SpaceHudLayout {
             }
             if high - low >= width {
                 let x = (centre - width * 0.5).clamp(low, high - width);
-                return Rectangle::new(x, y, width, height);
+                return Some(Rectangle::new(x, y, width, height));
             }
             match next {
-                Some(below) if below > y => y = below,
+                Some(below) if below > y && (!bounded || below + height <= bottom(self.rect)) => {
+                    y = below;
+                }
                 _ => break,
             }
         }
-        Rectangle::new(centre - width * 0.5, y, width, height)
+        (!bounded).then(|| Rectangle::new(centre - width * 0.5, y, width, height))
     }
 
     /// Places a centred banner at `top` (see [`Self::fit`]) and keeps it as an obstacle.
@@ -309,9 +345,11 @@ impl SpaceHudLayout {
     /// The edge markers' layout for this frame, below `top`.
     #[must_use]
     pub fn markers(&self, top: f32) -> Markers {
+        let mut reserved = self.panels();
+        reserved.extend(self.controls.iter().copied());
         Markers {
             lanes: self.lanes(top),
-            reserved: self.panels(),
+            reserved,
             placed: Vec::new(),
         }
     }
@@ -670,7 +708,7 @@ mod tests {
         out
     }
 
-    fn specs() -> Vec<HudSpec> {
+    fn specs() -> Vec<HudSpec<'static>> {
         let plate = ui_kit::text_width("OPEN SPACE  HOME SYSTEM", TextStyle::Bold) as f32 + 16.0;
         let long_plate =
             ui_kit::text_width("NEAR THE MOON  ARCHIPELAGO OF VESS", TextStyle::Bold) as f32 + 16.0;
@@ -688,6 +726,7 @@ mod tests {
                             missions,
                             prompt_rows: 2,
                             prompt_width: 300.0,
+                            controls: &[],
                         });
                     }
                 }
@@ -830,6 +869,56 @@ mod tests {
     }
 
     #[test]
+    fn a_phones_touch_controls_stay_clear_of_banners_and_markers() {
+        // A landscape phone's view (art pixels) with its stick, its thumb cluster, the
+        // rotation pair and the top row.
+        let rect = Rectangle::new(0.0, 0.0, 427.0, 240.0);
+        let controls = [
+            Rectangle::new(8.0, 140.0, 92.0, 92.0),
+            Rectangle::new(300.0, 120.0, 52.0, 52.0),
+            Rectangle::new(360.0, 150.0, 60.0, 60.0),
+            Rectangle::new(84.0, 80.0, 30.0, 22.0),
+            Rectangle::new(118.0, 80.0, 30.0, 22.0),
+            Rectangle::new(150.0, 4.0, 26.0, 18.0),
+            Rectangle::new(180.0, 4.0, 26.0, 18.0),
+        ];
+        let mut layout = SpaceHudLayout::new(
+            rect,
+            &HudSpec {
+                touch: true,
+                nav: true,
+                plate_width: 140.0,
+                rack: true,
+                docking: None,
+                missions: 0,
+                prompt_rows: 0,
+                prompt_width: 0.0,
+                controls: &controls,
+            },
+        );
+        let mut top = bottom(layout.plate) + GAP;
+        for width in [110.0, 90.0] {
+            top = bottom(layout.banner(top, width, 15.0)) + 3.0;
+        }
+        let low = layout.banner(rect.height * 0.7, 160.0, 15.0);
+        for placed in layout.banners.iter().chain([&layout.plate, &low]) {
+            for control in &controls {
+                assert!(!overlaps(*placed, *control), "{placed:?} over {control:?}");
+            }
+        }
+        let mut markers = layout.markers(top);
+        for turn in 0..16 {
+            let angle = turn as f32 / 16.0 * std::f32::consts::TAU;
+            let spot = markers.place(Aim::Toward(angle.sin(), -angle.cos()), &[60.0, 30.0]);
+            for piece in spot.mark_box().into_iter().chain(spot.label) {
+                for control in &controls {
+                    assert!(!overlaps(piece, *control), "{piece:?} over {control:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn the_reported_overlap_is_gone() {
         // 1280 x 720: the wormhole's marker under the nav panel's "No waypoint".
         let rect = Rectangle::new(0.0, 0.0, 640.0, 360.0);
@@ -844,6 +933,7 @@ mod tests {
                 missions: 0,
                 prompt_rows: 1,
                 prompt_width: 360.0,
+                controls: &[],
             },
         );
         let mut markers = layout.markers(bottom(layout.plate) + GAP);

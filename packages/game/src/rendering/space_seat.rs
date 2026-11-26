@@ -215,8 +215,9 @@ pub fn headroom_drop(scene: &PlaceScene<'_>, (u, v): (f64, f64), half_rows: f32)
     let mut top = row;
     for dx in -HEADROOM_COLUMNS..=HEADROOM_COLUMNS {
         let x = (column + i64::from(dx)).rem_euclid(width) as i32;
-        let ground = planet.surface_row(x).min(row);
-        for y in (ground - HEADROOM_ROWS)..ground {
+        // From the seat's own row up: a spire or a tree counts however its column's ground
+        // is measured.
+        for y in (row - HEADROOM_ROWS)..row {
             let filled = scene
                 .terrain
                 .tile(fatherload_simulation::terrain::TilePosition { x, y })

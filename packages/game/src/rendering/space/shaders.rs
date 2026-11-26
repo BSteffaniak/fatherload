@@ -154,7 +154,7 @@ void main() {
                 land = 0.0;
             }
         }
-        vec3 colour = surface * (vec3(0.17, 0.18, 0.27) + vec3(0.83, 0.82, 0.73) * light);
+        vec3 colour = surface * (vec3(0.27, 0.28, 0.38) + vec3(0.73, 0.72, 0.62) * light);
         // Glowing cracks: lava, crystal light. They glow brightest on the night side.
         if (uGlow.w > 0.0) {
             float ridge = 1.0 - abs(valueNoise(turned * (scale * 3.0) + seed * 1.7) * 2.0 - 1.0);
