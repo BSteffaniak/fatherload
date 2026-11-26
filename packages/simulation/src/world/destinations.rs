@@ -33,7 +33,7 @@ const POCKET_HEIGHT: i32 = 2;
 /// Tiles round the pocket whose hazards (lava, gas, pockets, vents, fluids) turn to rock.
 const HAZARD_MARGIN: i32 = 3;
 /// Columns either side an arrival looks for a spot clear of fixtures.
-const SITE_SEARCH_COLUMNS: i32 = 48;
+const SITE_SEARCH_COLUMNS: i32 = 160;
 /// Rows an arrival in open air drops to find a floor.
 const SETTLE_ROWS: i32 = 24;
 /// Tiles round an arrival cleared of (non-boss) enemies.
@@ -495,7 +495,20 @@ impl WorldState {
 
     /// Runs the travel orders queued this tick (after its last pass).
     pub(super) fn run_travel_orders(&mut self, output: &mut TickOutput) {
-        for (player_id, order) in self.take_travel_orders() {
+        let orders = self.take_travel_orders();
+        if orders.is_empty() {
+            return;
+        }
+        // The pockets carved in the home ground travel with this tick's home tile ops.
+        self.terrain.start_journal();
+        self.run_orders(orders, output);
+        let carved = self.terrain.finish_journal();
+        self.wake_entities_near(&carved);
+        output.terrain_ops.extend(carved);
+    }
+
+    fn run_orders(&mut self, orders: Vec<(PlayerId, TravelOrder)>, output: &mut TickOutput) {
+        for (player_id, order) in orders {
             if !self.players.contains_key(&player_id) || !self.is_test_mode() {
                 continue;
             }

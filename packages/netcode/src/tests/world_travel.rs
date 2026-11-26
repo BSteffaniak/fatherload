@@ -9,7 +9,7 @@ use std::time::Duration;
 use fatherload_simulation::{
     ControlState, PlayerCommand, TestModeAction, WorldState,
     descent::Descent,
-    destination::{DestinationKind, Selector, TravelRequest},
+    destination::{DestinationFilter, DestinationKind, Selector, TravelRequest},
     enemy::EnemyDifficulty,
     place::{BodyId, Place},
     worldgen::{GeneratorVersion, WorldSettings},
@@ -152,11 +152,14 @@ fn travel_online_and_in_split_screen_moves_each_players_own_rig() {
     let host = trio.host.world();
     let deep = host.travel_here(me).expect("client rig");
     let fifth = host
-        .destinations(me, DestinationKind::Descent, Default::default())
+        .destinations(me, DestinationKind::Descent, DestinationFilter::Any)
         .into_iter()
         .find(|found| found.info.descent == Some(Descent::HollowWorld))
         .expect("Descent V");
-    assert!(deep.y > 5_000, "the client is deep down ({deep:?}, {fifth:?})");
+    assert!(
+        deep.y > 5_000,
+        "the client is deep down ({deep:?}, {fifth:?})"
+    );
     assert!(
         matches!(host.place_of(seat0), Place::OnBody(BodyId::Space(_))),
         "seat 0 is on a planet"
@@ -169,7 +172,10 @@ fn travel_online_and_in_split_screen_moves_each_players_own_rig() {
     assert_eq!(host.player_travel(seat0).bookmarks.len(), 1);
     assert_eq!(host.player_travel(me).recent.len(), 1);
     // The client's authority follows: its own place and the replicated log.
-    assert_eq!(trio.authority().travel_here(me).map(|id| id.y), Some(deep.y));
+    assert_eq!(
+        trio.authority().travel_here(me).map(|id| id.y),
+        Some(deep.y)
+    );
     assert_eq!(trio.authority().travel_log(), host.travel_log());
     assert!(trio.hashes_agree(), "the client's view matches the host's");
 
@@ -190,6 +196,9 @@ fn a_normal_world_refuses_travel_online() {
     trio.step(travel(TravelRequest::descent(Descent::Heart)));
     trio.run(30);
     let after = trio.host.world().travel_here(me).expect("rig");
-    assert!((after.y - before.y).abs() < 4, "no travel in a normal world");
+    assert!(
+        (after.y - before.y).abs() < 4,
+        "no travel in a normal world"
+    );
     assert!(trio.host.world().travel_log().is_empty());
 }

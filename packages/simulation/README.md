@@ -12096,6 +12096,176 @@ just the UI).
   spawning on a Peaceful world says so.
 * netcode `world_toolkit`: a client stocks, spends and restocks its own rig and spawns a
   creature in the host's test-mode world; the same actions to a normal world are refused.
+## Wave 14 index: the destination index, selectors, safe arrival, bookmarks and the back-stack (`src/destination.rs`, `src/destination/{home,space}.rs`, `src/world/destinations.rs`)
+
+W14-B of the plan (§19): a deterministic "where is X" for every kind of place, and test-mode
+travel there with safe arrival. Everything is **test mode only**: the actions are refused in
+the simulation (`IgnoredUnavailable`) in a normal world, so an online client sending them to a
+normal world moves nothing.
+
+### The model (`crate::destination`)
+
+* **`DestinationKind`** (append only, 35): `Descent`, `Stratum`, `Depth`; the home world's
+  `HomeTown`, `Village` (surface villages and sky towns), `SkyIsland` (isles and continents),
+  `Tomb`, `Cave` (cave ecosystems and large caverns), `Vault`, `AnomalyRoom` (the expedition's
+  and the Strange Layers' crystal rooms), `Landmark` (points of interest and the Descents'
+  named set pieces: the Pressure Cathedral, Old Faithful, the Lantern Library, the Great
+  Engine, the Orrery, the Clock Hall, the Choir), `Settlement` (underground settlements and
+  the deep halls), `Outpost`, `StoryLog`, `Camp` (the Fathers' camps and wanderers' camps),
+  `BossArena` (the eight gate bosses' arenas but the Heart's, plus the Brood Matriarch and the
+  Eel-Dragon), `GateSetPiece`, `Heart`, `Moon`; space's `System`, `Planet`, `SmallBody` (moons
+  and crater rocks), `Station`, `Belt`, `Comet`, `Nebula`, `BlackHole`, `Wormhole`,
+  `ArchiveSystem`, `ThemeBossLair`, `AlienTown`, `BuilderOutpost`; and `Player`, `Bookmark`,
+  `Recent`. Each has a name, an Atlas category (`DestinationCategory`: Depth, Places, Bosses,
+  Settlements, Space, Players, Bookmarks, Recent) and a word parser (`DestinationKind::parse`:
+  "planet", "boss", "descent", ...).
+* **`DestinationId`** `{ kind, place, x, y }`: a stable identity. On the home world and the
+  Moon `(x, y)` is the absolute tile the rig stands on; on a body the strip column and the row
+  it stands on (`space::ARRIVAL_POINT` / `space::SURFACE` sentinels: the body's own arrival
+  point, the surface at that column); in free flight the space tile the rig stops at (already
+  a safe distance off). Bookmarks and the back-stack keep ids.
+* **`Destination`** `{ id, name, info: PreviewInfo, inside }`: the Atlas's info card (place
+  line, depth in metres, coords, Descent, stratum, space theme, system, gravity, hazards,
+  residents, boss, distance from the player) and, for arenas and lairs, the "in the arena"
+  spot.
+* **`TravelRequest`** `{ kind, filter, selector, arrival }`, all `Copy` (it rides in
+  `TestModeAction`). `DestinationFilter`: `Any`, `Descent`, `Stratum`, `Metres`, `Row`,
+  `Theme`, `Player`. `Selector`: `Nearest` (the player's own spot excepted), `Next`,
+  `Previous`, `Random(seed)`, `Exact(id)`. `ArrivalOptions { in_water, in_arena }`.
+  Shorthands: `TravelRequest::descent(Descent::HollowWorld)` ("to Descent V"),
+  `TravelRequest::new(DestinationKind::Planet, Selector::Next)` ("the next planet"),
+  `TravelRequest::depth_metres(4_200)`, `.filtered(DestinationFilter::Theme(Theme::Ice))`.
+
+### Where the answers come from (no streaming)
+
+* **Home** (`destination::home`): pure functions of the settings: the V11 layout
+  (`stratum_solid_top_row` for Descents and strata, the surface heightmap for metres), the
+  landmark stamps (outposts, gate chambers, anomaly rooms), the regional feature index
+  (`streamed::features_in`: villages, sky lands, caves, points of interest), tomb sites, the
+  wanderers' camps, the expedition's sites and anomaly rooms, the deep settlements' halls and
+  each gate arena's generator. Windowed kinds search `WINDOW_COLUMNS` (1,536) either side of
+  the player's column (the spawn when the player is off world); caves and points of interest
+  are costly to place, so they search a window that doubles from 128 tiles until it holds
+  eight (`features_near`). A Descent or stratum filter centres the window on its rows.
+* **Space** (`destination::space`): the shared space generator's sectors in square rings round
+  the player's sector (`RINGS` 3; towns and builder outposts read planet grounds, `SITE_RINGS`
+  1); wormholes from the pairing itself (`Space::wormholes_near`, a new read-only query; no
+  sector generated, the space digest is unchanged); theme-boss lairs on the hunt list's
+  nearest world of each theme (`hunt::nearest_theme_world`, the outland lair or the exotic
+  arena); Archive systems from the charts the crew holds, else the first plinth's and the
+  orrery's.
+* **Ordering** (`WorldState::destinations`): outward from where the player stands: first the
+  candidates in the same place by tile distance, then other places by space distance between
+  them (all in integers: `destination::distance2`, `isqrt`); ties by id; at most 64.
+* **Search** (`WorldState::search_destinations`): every word of the query must appear in the
+  name, kind, theme, Descent (numeral and number), stratum, boss, system or residents; a
+  leading kind word narrows to that kind ("boss leviathan", "planet ice", "descent 5").
+
+### Selectors
+
+* `Nearest`: the first candidate that is not "here" (same place within 24 tiles).
+* `Next` / `Previous`: a cycle per player (`TravelCursor`: kind, filter, origin, index, in the
+  travel log). The list is ordered from where the cycle **began**, so repeated "next planet"
+  walks outward instead of bouncing between neighbours; a new kind or filter starts a new
+  cycle. A fresh `Previous` starts at the farthest.
+* `Random(seed)`: a hash of the world seed, the kind and the seed: the same seed picks the
+  same candidate on every peer.
+* `Exact(id)`: the listed candidate with that id (its card), else the id itself.
+* `WorldState::resolve_travel` is the pure preview of a request (the Atlas shows it before Go).
+
+### Travel and safe arrival (`world/destinations.rs`)
+
+`TestModeAction::{TravelTo(TravelRequest), TravelBack, BookmarkHere, Bookmark(id),
+RemoveBookmark(index)}` (appended). Inside the tick an order is queued and run in
+`simulate_tick` after the tick's last pass (`run_travel_orders`), with the home ground swapped
+in and every rig back in its store, so it can carve home ground, swap a body's ground in or
+move between stores at once (a `PlaceChanged` event is raised when the place changes).
+`WorldState::stage_travel` does the same outside the tick (scenes, tools, `--start-at`).
+
+* **Journal**: the pockets carved inside the tick travel with that tick's home tile ops, so
+  clients get them exactly.
+* **Home world and Moon**: the rig is brought home first if it was away (flight reset), the
+  target drops through open air onto the first floor within 24 rows, a 3x2 pocket is placed at
+  the nearest column clear of fixtures (points of interest, foundations, buildings, bedrock),
+  carved to air with a floor of the stratum's rock, and every lava, gas, explosive or
+  pressure pocket, magma vent and fluid tile within 3 tiles becomes rock (fluids stay with
+  `in_water`). Non-boss enemies within 24 tiles are despawned (not with `in_arena`). Boss
+  arenas and the Heart arrive 8 rows above the roof (the "door"); `in_arena` arrives on the
+  arena's floor.
+* **Bodies**: the body's arrival point (its first alien town or the generator's), or
+  `warp_onto_body` at a column (the surface, or a floor such as an exotic builder outpost's);
+  lairs arrive on the surface over the lair (`in_arena`: inside). Enemies near the rig are
+  cleared in the body's store.
+* **Space**: stopped in free flight at the candidate's tile: past a star's heat radius plus
+  3,000 tiles, a black hole's lensing radius plus 6,000, a body's radius plus 3,000, a
+  station's hull plus 1,000, just inside a belt's inner edge.
+* Every arrival stands the rig level on ground (in flight it keeps its heading, the player's,
+  and stops spinning), zeroes its velocity and fills its air.
+* **No records**: travel exists only in test-mode worlds, where depth records, milestones and
+  achievements never count (`advance_progression_depth`, `advance_milestones`,
+  `advance_space_milestones`); the test checks milestones and progression are unchanged. No
+  generator is touched: V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are unchanged.
+
+### Bookmarks and the back-stack
+
+`TravelLog { players: BTreeMap<PlayerId, PlayerTravel> }`, `PlayerTravel { bookmarks (32),
+recent (16), cursor, travels }`: the world field `travel` (serde default, so older saves load
+with an empty log) and the appended shared section `SectionKey::Travel` (`SHARED` is 39). It is
+hashed only when not empty (older worlds keep their hashes). Every travel pushes where the
+player stood on the back-stack; `TravelBack` pops it. A player removed from the world loses
+theirs (parked players keep them). Ids are absolute tiles, so the log never reframes.
+
+### Events, formats
+
+* `GameplayEventKind::Travel { what: TravelEvent, player_id, detail }`, netcode codes
+  1140-1159 (`Arrived` 1140 with the kind's code, `WentBack`, `Bookmarked`,
+  `BookmarkRemoved`, `NotFound`). The game plays the uplink warp on arrival and back; effects
+  route it to its player.
+* `PROTOCOL_VERSION` **22** (one bump for the track). Save format unchanged (15).
+
+### Tests
+
+* `world::destination_tests`: every generated kind resolves on two seeds with a name, a card
+  and distances in order; all eight Descents, Descent V by filter, all 41 strata, a planet of
+  each of the twelve themes, 4,200 m exactly, the other player, search by "descent 5" and
+  "boss leviathan"; selectors are deterministic across two worlds (random by seed, next keeps
+  its origin and walks outward, previous steps back, two "next planet"s land on two worlds,
+  equal state hashes); a bot travels to the nearest of every kind (and a player, a bookmark,
+  the back-stack, a boss arena "in the arena") and survives 10 s with invulnerability off
+  (Descent hazard gear on, no space gear); no milestones or progression counted; back returns
+  through two places; refused outside test mode; the log saves (and a save without it loads),
+  replicates by section and leaves with its player.
+* `destination::tests`: kind codes and names, bounded bookmarks and back-stack, exact integer
+  distances.
+* netcode `world_travel`: a client travels to Descent V and back while one split-screen seat
+  bookmarks and travels to the next planet and the other stays home; the host decides, hashes
+  agree, the log replicates; a normal world refuses it online.
+
+### Seams (TODO-SEAM, for the integrator and the other Wave 14 tracks)
+
+* **w14-atlas (W14-C)**: list with `WorldState::destinations(player, kind, filter)` by
+  `DestinationKind::category`, preview with `resolve_travel`, search with
+  `search_destinations`, go with `TestModeAction::TravelTo(TravelRequest::exact(id))`, Next /
+  Previous / Random with the selectors, "Bookmark this" with `TestModeAction::Bookmark(id)`,
+  Back with `TestModeAction::TravelBack`. Map mode's "pick any spot": `TravelRequest::exact`
+  of a `DestinationId` of kind `Depth` (home tile) or `System`/`Planet` (space tile / body).
+  The preview chunk round a target is `DestinationId { place, x, y }`.
+* **w14-console (W14-D)**: `tp <kind> [nearest|next|prev|random [theme]|<name>]` parses the
+  kind with `DestinationKind::parse`, a name with `search_destinations` then `exact`; `tp depth
+  4200m` is `TravelRequest::depth_metres`; `tp descent 5` is `TravelRequest::descent`;
+  `tp player 2` is kind `Player` with `DestinationFilter::Player`; `tp back` is `TravelBack`.
+  `--start-at "descent:5"` can call `WorldState::stage_travel` on the new world.
+* **w14-stock (W14-A)**: the survival test grants `HazardGear::MAXED` itself; once stocking
+  grants the gate rewards and space gear, a fully stocked rig needs nothing more.
+* The six Wave 12 themes have no theme boss, so `ThemeBossLair` lists six lairs.
+
+### Known limits
+
+* Windowed home kinds see 1,536 columns either side of the player (the spawn when off world);
+  space kinds three sector rings (wormholes two regions, sites on bodies one ring).
+* `Exact` of an id that is no longer listed travels to the id's spot without its card.
+* A lair's or outpost's surface arrival trusts the body's surface row (no pocket is carved on
+  a body).
 
 ## Replication
 

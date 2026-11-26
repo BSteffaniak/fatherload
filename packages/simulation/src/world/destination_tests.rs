@@ -12,7 +12,6 @@ use crate::{
     },
     place::{BodyId, Place},
     space::Theme,
-    terrain::TILE_SIZE,
     worldgen::{GeneratorVersion, WorldSettings},
 };
 
@@ -267,7 +266,7 @@ fn survives(world: &mut WorldState, request: TravelRequest) {
     let events = travel(world, request);
     assert!(arrived(&events), "{request:?}: arrived ({events:?})");
     let place = world.place_of(PLAYER);
-    let (x, y, _) = world.store_actor_position(PLAYER).expect("actor");
+    let start = world.travel_here(PLAYER).expect("here");
     for tick in 0..10 * HZ {
         run(world, 1);
         let rig = world.player(PLAYER).expect("rig");
@@ -278,9 +277,12 @@ fn survives(world: &mut WorldState, request: TravelRequest) {
     }
     assert_eq!(world.place_of(PLAYER), place, "{request:?}: still there");
     if place != Place::Space {
-        let (nx, ny, _) = world.store_actor_position(PLAYER).expect("actor");
-        let moved = (nx - x).hypot(ny - y) / TILE_SIZE;
-        assert!(moved < 40.0, "{request:?}: drifted {moved} tiles");
+        let end = world.travel_here(PLAYER).expect("here");
+        let moved = crate::destination::isqrt(crate::destination::distance2(
+            (start.x, start.y),
+            (end.x, end.y),
+        ));
+        assert!(moved < 40, "{request:?}: drifted {moved} tiles");
     }
 }
 
