@@ -71,6 +71,7 @@ pub const fn body_view(body: &SpaceBody, id: u64) -> BodyView {
         theme: body_theme(body.theme),
         atmosphere: atmosphere_share(body.atmosphere),
         spin: 0.0,
+        sun: None,
         seed: body.ground_seed as u32,
     }
 }
@@ -172,9 +173,40 @@ pub struct LiveSpace {
     pub structures: Vec<StructureView>,
     pub black_holes: Vec<BlackHoleView>,
     pub wormholes: Vec<WormholeView>,
+    /// Each body's clock (Wave 12 bodylife), by index into `bodies`: where its star stands
+    /// ([`Self::turn_bodies`]). `None` for the home world and the Moon.
+    days: Vec<Option<fatherload_simulation::bodylife::BodyClock>>,
+}
+
+/// Where a body's star stands as its clock says (radians clockwise from up) at body time
+/// `millis` (Wave 12 bodylife): local noon at column 0 puts it straight up, and the day
+/// sweeps round with the clock, so every column is lit by its own local hour as the
+/// simulation reads it.
+#[must_use]
+pub fn body_sun(clock: &fatherload_simulation::bodylife::BodyClock, millis: u64) -> f32 {
+    let turn = clock.turn(millis);
+    ((0.5 - turn) * std::f64::consts::TAU).rem_euclid(std::f64::consts::TAU) as f32
 }
 
 impl LiveSpace {
+    /// Turns every gathered body to body time `millis` (each under its own star, by its own
+    /// day; Wave 12 bodylife).
+    pub fn turn_bodies(&mut self, millis: u64) {
+        for (body, day) in self.bodies.iter_mut().zip(&self.days) {
+            body.sun = day.as_ref().map(|clock| body_sun(clock, millis));
+        }
+    }
+
+    /// Where gathered body `id`'s star stands by its clock (`None` when it is not gathered or
+    /// keeps the real star's direction).
+    #[must_use]
+    pub fn sun_of(&self, id: u64) -> Option<f32> {
+        self.bodies
+            .iter()
+            .find(|body| body.id == id)
+            .and_then(|body| body.sun)
+    }
+
     /// Refreshes the gathering for a camera at `at` in the world seeded `seed` (only when the
     /// camera moved to another space sector).
     pub fn update(&mut self, seed: u64, at: WorldPos) {
@@ -213,6 +245,13 @@ impl LiveSpace {
                     }
                     .mix();
                     live.bodies.push(body_view(body, id));
+                    live.days.push((!body.is_home()).then(|| {
+                        fatherload_simulation::bodylife::BodyClock::new(
+                            body.day_seconds,
+                            body.surface_columns,
+                            body.ground_seed,
+                        )
+                    }));
                 }
                 for belt in &system.belts {
                     live.belts.push(BeltView {

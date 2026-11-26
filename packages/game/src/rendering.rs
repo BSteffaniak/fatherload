@@ -19,6 +19,7 @@ use fatherload_simulation::{
 
 pub mod ancient_city_hud;
 mod body_map;
+mod body_life;
 mod build;
 mod counters;
 mod crypt_map;
@@ -423,6 +424,7 @@ impl GameRenderer {
                     space::live::MAX_ROCK_REACH_TILES,
                     snapshot.space.systems,
                 );
+                self.live[seat].turn_bodies(snapshot.space.millis);
                 let camera = space_seat::flight_camera(view, view.player.attitude.orientation, 1.0);
                 let live = &self.live[seat];
                 let picture = space_seat::flight_view(live, snapshot, view, camera, seconds);
@@ -445,6 +447,7 @@ impl GameRenderer {
             }
             let centre = space_seat::body_camera_centre(view, scene, body);
             self.live[seat].update(scene.seed, centre);
+            self.live[seat].turn_bodies(snapshot.space.millis);
             let things = space_seat::body_things(view, scene);
             let px_per_tile = space_seat::ground_px_per_tile(view, density);
             let live = &self.live[seat];
@@ -916,6 +919,20 @@ impl GameRenderer {
                 space_seat::physical_rect(view, density),
                 view.seat_index,
             );
+            // The body's weather over its ground (Wave 12 bodylife).
+            if let Some(life) = &body.life {
+                let (camera, roll) = space_seat::strip_actor(view, scene);
+                body_life::draw_weather(
+                    draw,
+                    life,
+                    space_seat::physical_rect(view, density),
+                    roll,
+                    camera,
+                    space_seat::ground_px_per_tile(view, density),
+                    Self::space_seconds(snapshot),
+                    snapshot.effects,
+                );
+            }
             let _canvas = UiCanvasScope::begin(draw);
             draw_view_hud(draw, shell, snapshot, view);
             return;

@@ -189,6 +189,9 @@ fn draw_star(
 
 /// Draws the nebulae: overlapping cloud quads in their two colours, with young stars inside.
 pub fn draw_nebulae(art: &SpaceArt, view: &SpaceRenderView<'_>, projection: &Projection) {
+    // From a body's ground (Wave 12 bodylife) a nebula is a faint tint in the night sky: its
+    // clouds, scaled up to the ground's zoom, would otherwise paint the whole sky.
+    let seen = if view.ground.is_some() { 0.18 } else { 1.0 };
     for nebula in view.nebulae {
         let point = projection.project(nebula.centre);
         let radius = projection.tiles(nebula.radius_tiles);
@@ -213,7 +216,7 @@ pub fn draw_nebulae(art: &SpaceArt, view: &SpaceRenderView<'_>, projection: &Pro
                     (point.0 + dx, point.1 + dy),
                     (size, size * (0.7 + 0.3 * unit(h, 40))),
                     unit(h, 8) * 360.0 - projection.roll.to_degrees(),
-                    fade(colour, 0.34),
+                    fade(colour, 0.34 * seen),
                 );
             }
         }

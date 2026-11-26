@@ -201,6 +201,9 @@ fn draw_haze(
     let (ox, oy) = (abs_x * factor, abs_y * factor);
     let seed = view.sky_seed as i64;
     let margin = reach + CELL * 1.5;
+    // Seen through a body's sky (Wave 12 bodylife) the galaxy's band is a faint glow, so the
+    // night side reads as night.
+    let haze = if view.ground.is_some() { 0.3 } else { 1.0 };
     additive(|| {
         for cy in ((oy - margin) / CELL).floor() as i64..=((oy + margin) / CELL).floor() as i64 {
             for cx in ((ox - margin) / CELL).floor() as i64..=((ox + margin) / CELL).floor() as i64
@@ -227,7 +230,7 @@ fn draw_haze(
                             point,
                             (size, size * 0.6),
                             BAND_ANGLE.to_degrees() as f32 - projection.roll.to_degrees(),
-                            fade(tint, 0.13 * weight),
+                            fade(tint, 0.13 * weight * haze),
                         );
                     }
                 } else if unit(h, 48) < 0.06 && projection.visible(point, 20.0) {

@@ -152,6 +152,10 @@ pub struct BodyView {
     pub atmosphere: f32,
     /// The surface's turn (radians): where column 0 is. Turns the surface bands with it.
     pub spin: f32,
+    /// Where its star stands as its own clock says (radians clockwise from up, Wave 12
+    /// bodylife): a turning body's day follows its clock, so its disc and its ground are lit
+    /// from here. `None` lights it from the nearest star's real direction.
+    pub sun: Option<f32>,
     /// Seeds its surface pattern.
     pub seed: u32,
 }
@@ -287,6 +291,16 @@ pub struct SpaceRenderView<'a> {
 }
 
 impl SpaceRenderView<'_> {
+    /// The direction from `body` toward its star as it is lit (its clock's sun when it has
+    /// one, else the nearest star's real direction).
+    #[must_use]
+    pub fn light_toward_body(&self, body: &BodyView) -> (f32, f32) {
+        body.sun.map_or_else(
+            || self.light_toward(body.centre),
+            |angle| (angle.sin(), -angle.cos()),
+        )
+    }
+
     /// The star lighting `point` (the nearest one), as a unit direction toward it in the space
     /// frame, or straight up-left when the sky has no star.
     #[must_use]

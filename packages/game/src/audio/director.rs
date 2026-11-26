@@ -594,27 +594,100 @@ impl Director {
 
     /// A seat's place away from the home store (F11): the low wind of a body's thin air, and
     /// the suit's hum and breath in free flight (a stub the space-render track's place sound
-    /// replaces).
+    /// replaces). On a body its weather sounds too (Wave 12 bodylife): the wind rises with a
+    /// storm's gusts, rain hisses, snow whistles and an aurora hums softly; an airless body's
+    /// ground is near silent.
     fn away_ambience(
         &mut self,
         live: &mut BTreeSet<LoopKey>,
         listener: &Listener,
         place: fatherload_simulation::place::Place,
+        body_life: Option<&crate::render_snapshot::BodyLifeView>,
     ) {
+        use fatherload_simulation::bodylife::weather::{WeatherParticles, weather_kind};
         let on_body = matches!(place, fatherload_simulation::place::Place::OnBody(_));
+        let airless = body_life.is_some_and(|found| {
+            found.atmosphere == fatherload_simulation::space::Atmosphere::Vacuum
+        });
+        let weather = body_life.map(|found| found.reading.weather);
+        let strength = weather.map_or(0.0, |now| now.intensity());
+        let particles = weather.map_or(WeatherParticles::None, |now| {
+            weather_kind(now.kind).look.particles
+        });
+        let gust = weather.map_or(0.0, |now| (now.wind.abs() / 260.0).clamp(0.0, 1.0));
+        let base = if !on_body {
+            0.0
+        } else if airless {
+            0.04
+        } else {
+            0.18
+        };
         self.loop_command(
             live,
             listener,
             SeatLoop::Wind,
             Patch::WindLoop,
-            (if on_body { 0.18 } else { 0.0 }, listener.pan, 0.8, 1_800.0),
+            (
+                base + gust * 0.42,
+                listener.pan,
+                0.8 + gust * 0.35,
+                1_800.0 + gust * 2_600.0,
+            ),
+        );
+        let rain = if particles == WeatherParticles::Rain {
+            strength * 0.7
+        } else {
+            0.0
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::Rain,
+            Patch::RainLoop,
+            (rain, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        let whistle = match particles {
+            WeatherParticles::Snow | WeatherParticles::Dust | WeatherParticles::Ash => {
+                strength * 0.3
+            }
+            _ => 0.0,
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::HighWind,
+            Patch::HighWindLoop,
+            (whistle, listener.pan, 1.0, OPEN_CUTOFF),
+        );
+        let shimmer = if particles == WeatherParticles::Aurora {
+            strength * 0.28
+        } else {
+            0.0
+        };
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::SkyAir,
+            Patch::SkyAirLoop,
+            (shimmer, 0.0, 0.9, OPEN_CUTOFF),
         );
         self.loop_command(
             live,
             listener,
             SeatLoop::Moon,
             Patch::MoonLoop,
-            (if on_body { 0.0 } else { 0.22 }, 0.0, 1.0, OPEN_CUTOFF),
+            (
+                if !on_body {
+                    0.22
+                } else if airless {
+                    0.12
+                } else {
+                    0.0
+                },
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
         );
     }
 
@@ -978,7 +1051,8 @@ impl Director {
             // its place's own sound (a body's low wind, free flight's suit hum; Waves 12-13 give
             // planets their own ambience and music) is the place sound below, the rest is the
             // rig's.
-            self.away_ambience(live, listener, scene.place);
+            let body_life = scene.body.as_ref().and_then(|body| body.life.as_ref());
+            self.away_ambience(live, listener, scene.place, body_life);
             state.initialized = true;
             state.velocity_x = velocity_x;
             state.velocity_y = velocity_y;

@@ -154,7 +154,11 @@ impl BodyClock {
     /// `0.0..1.0`): the renderer turns the body's day side with it.
     #[must_use]
     pub fn turn(&self, millis: u64) -> f64 {
-        f64::from(self.local_permille(millis, 0)) / f64::from(DAY_PERMILLE)
+        if self.day_millis == 0 {
+            return 0.5;
+        }
+        let into = (millis % self.day_millis + self.phase_millis) % self.day_millis;
+        into as f64 / self.day_millis as f64
     }
 
     /// Daylight at strip `column` (per mille), from `night` on the night side to full day.

@@ -657,6 +657,50 @@ pub struct PlaceScene<'w> {
 pub struct PlaceBody {
     pub ground: fatherload_simulation::world::BodyGroundInfo,
     pub body: fatherload_simulation::space::SpaceBody,
+    /// The body's life where the seat's player is (Wave 12 bodylife): its own hour, light,
+    /// weather, climate and gravity.
+    pub life: Option<BodyLifeView>,
+}
+
+/// A body's life as one seat sees it (Wave 12 bodylife; see `simulation::bodylife`).
+#[derive(Clone, Debug)]
+pub struct BodyLifeView {
+    /// The body's name (its system's name and numeral or letter).
+    pub name: String,
+    /// The reading where the seat's player is.
+    pub reading: fatherload_simulation::bodylife::BodyReading,
+    /// Surface gravity (milli-g, the ground's).
+    pub gravity_milli: u16,
+    pub atmosphere: fatherload_simulation::space::Atmosphere,
+    /// Tidally locked (an eternal day and night side).
+    pub locked: bool,
+    /// Daylight on its night side (0..1).
+    pub night_light: f32,
+}
+
+impl BodyLifeView {
+    /// The life of `player_id`'s body as that player sees it now.
+    #[must_use]
+    pub fn of(world: &WorldState, player_id: PlayerId) -> Option<Self> {
+        let life = world.body_life_of_player(player_id)?;
+        let reading = world.body_reading_of(player_id)?;
+        let name = life
+            .id
+            .and_then(|id| {
+                fatherload_simulation::space::Space::shared(world.world_seed())
+                    .system(id.system_ref())
+                    .map(|system| system.body_name(id.body))
+            })
+            .unwrap_or_else(|| life.hooks().data().name.to_owned());
+        Some(Self {
+            name,
+            reading,
+            gravity_milli: life.gravity_milli(),
+            atmosphere: life.climate.atmosphere,
+            locked: life.clock.tidally_locked(),
+            night_light: f32::from(life.night_light()) / 1_000.0,
+        })
+    }
 }
 
 impl<'w> PlaceScene<'w> {
@@ -682,7 +726,11 @@ impl<'w> PlaceScene<'w> {
                 world.body_ground_of(id).and_then(|ground| {
                     fatherload_simulation::space::Space::shared(world.world_seed())
                         .body(id)
-                        .map(|body| PlaceBody { ground, body })
+                        .map(|body| PlaceBody {
+                            ground,
+                            body,
+                            life: BodyLifeView::of(world, player_id),
+                        })
                 })
             }
             _ => None,

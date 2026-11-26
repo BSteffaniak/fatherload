@@ -349,7 +349,7 @@ fn reentry(stage: &mut SceneStage<'_>) {
 
 /// `player`'s rig set down on `body`'s round ground (its store, made on arrival) at strip
 /// column `column`, `rows_up` rows over the surface, level and still.
-fn set_down(
+pub(super) fn set_down(
     world: &mut WorldState,
     player: PlayerId,
     body: fatherload_simulation::flight::FlightBody,

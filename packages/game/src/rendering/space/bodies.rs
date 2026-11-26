@@ -100,7 +100,7 @@ impl PlanetShader {
             if ground && ground_blend(projection.px_per_tile) >= 1.0 {
                 continue;
             }
-            let toward = view.light_toward(body.centre);
+            let toward = view.light_toward_body(body);
             let sun = projection.turn(toward);
             if radius < 1.5 {
                 let (_, mid) = (body.theme.palette().0[0], body.theme.palette().0[1]);

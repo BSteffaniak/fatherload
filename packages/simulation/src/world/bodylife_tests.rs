@@ -86,7 +86,7 @@ fn a_storm_carries_an_airborne_rig_and_shelter_stops_it() {
     )
     .expect("a storm on a rocky world");
     // Mid-spell: full strength (the ramp is shorter than half a spell).
-    world.set_world_time_millis(storm - storm % SPELL_MILLIS + SPELL_MILLIS / 2);
+    world.set_body_millis(storm - storm % SPELL_MILLIS + SPELL_MILLIS / 2);
     hover(&mut world, 200, 14);
     let rig = world.player(ONE).expect("rig");
     let wind = world
@@ -122,7 +122,7 @@ fn a_storm_carries_an_airborne_rig_and_shelter_stops_it() {
         400,
     )
     .expect("a clear spell");
-    world.set_world_time_millis(clear - clear % SPELL_MILLIS + SPELL_MILLIS / 2);
+    world.set_body_millis(clear - clear % SPELL_MILLIS + SPELL_MILLIS / 2);
     hover(&mut world, 200, 14);
     for _ in 0..30 {
         let _ = step(&mut world, idle());
@@ -144,7 +144,7 @@ fn the_wind_drifts_the_same_at_every_tick_rate() {
             400,
         )
         .expect("a storm");
-        world.set_world_time_millis(storm - storm % SPELL_MILLIS + SPELL_MILLIS / 2);
+        world.set_body_millis(storm - storm % SPELL_MILLIS + SPELL_MILLIS / 2);
         hover(&mut world, 200, 30);
         let start = world.player(ONE).expect("rig").x;
         for _ in 0..hz / 2 {
@@ -169,12 +169,12 @@ fn a_bodys_day_dawns_and_sets_at_each_column() {
     let life = world.body_life(StoreKey::Home).expect("life");
     let column = rig_column(&world);
     // Midnight is dark.
-    let midnight = life.clock.millis_when(world.world_millis(), column, 0);
-    world.set_world_time_millis(midnight);
+    let midnight = life.clock.millis_when(world.body_millis(), column, 0);
+    world.set_body_millis(midnight);
     let night = world.body_reading_of(ONE).expect("a reading");
     // Just before the local dawn (local 06:00 is the sun on the horizon).
-    let when = life.clock.millis_when(world.world_millis(), column, 248);
-    world.set_world_time_millis(when);
+    let when = life.clock.millis_when(world.body_millis(), column, 248);
+    world.set_body_millis(when);
     let mut dawned = false;
     for _ in 0..30 * 8 {
         dawned |= step(&mut world, idle()).iter().any(|event| {
@@ -191,14 +191,14 @@ fn a_bodys_day_dawns_and_sets_at_each_column() {
     assert!(dawned, "the sun rose at the rig's column");
     // Half a lap round it is the other side of the day.
     let width = i64::from(world.planet().expect("planet").strip_width());
-    let here = life.clock.local_permille(world.world_millis(), column);
+    let here = life.clock.local_permille(world.body_millis(), column);
     let there = life
         .clock
-        .local_permille(world.world_millis(), column + width / 2);
+        .local_permille(world.body_millis(), column + width / 2);
     assert_eq!((here + 500) % 1_000, there);
     // The night was dark; noon is bright.
-    let noon = life.clock.millis_when(world.world_millis(), column, 500);
-    world.set_world_time_millis(noon);
+    let noon = life.clock.millis_when(world.body_millis(), column, 500);
+    world.set_body_millis(noon);
     let day = world.body_reading_of(ONE).expect("a reading");
     assert!(night.light_permille < 400 && day.light_permille > 900);
     assert!(day.climate.temperature_c > night.climate.temperature_c + 100);
@@ -219,8 +219,8 @@ fn the_climate_replaces_the_home_bands_on_a_body() {
         x: 300,
         y: planet.core_chamber_top() - 2,
     };
-    let noon = life.clock.millis_when(world.world_millis(), column, 500);
-    world.set_world_time_millis(noon);
+    let noon = life.clock.millis_when(world.body_millis(), column, 500);
+    world.set_body_millis(noon);
     assert!(world.body_heat_units_at(deep).expect("on a body") > 3);
     let surface = TilePosition {
         x: 300,
@@ -229,8 +229,8 @@ fn the_climate_replaces_the_home_bands_on_a_body() {
     assert_eq!(world.body_heat_units_at(surface), Some(0));
     assert_eq!(world.body_cold_at(surface), Some(0));
     // The airless night freezes a stock rig standing in the open.
-    let midnight = life.clock.millis_when(world.world_millis(), column, 0);
-    world.set_world_time_millis(midnight);
+    let midnight = life.clock.millis_when(world.body_millis(), column, 0);
+    world.set_body_millis(midnight);
     assert!(world.body_cold_at(surface).expect("on a body") >= 2);
     let before = world.player(ONE).expect("rig").hull;
     for _ in 0..60 {
@@ -240,7 +240,7 @@ fn the_climate_replaces_the_home_bands_on_a_body() {
     assert!(after < before - 1.0, "the cold bites: {before} -> {after}");
     // The home world's bands never apply: the classic reading here would be the planet
     // settings' band heat; the body's own says nothing burns at the surface by day.
-    world.set_world_time_millis(life.clock.millis_when(world.world_millis(), column, 500));
+    world.set_body_millis(life.clock.millis_when(world.body_millis(), column, 500));
     let hull = world.player(ONE).expect("rig").hull;
     for _ in 0..60 {
         let _ = step(&mut world, idle());
@@ -364,7 +364,7 @@ fn seats_on_different_bodies_read_their_own_day_and_air() {
     );
     assert_eq!(
         one.local_permille,
-        life_one.clock.local_permille(world.world_millis(), 64)
+        life_one.clock.local_permille(world.body_millis(), 64)
     );
     assert!(one.climate.breathable && !two.climate.breathable);
     // Life support: the breathable world refills, the airless one drains.
@@ -437,7 +437,7 @@ fn weather_turns_are_heard_and_replay_bit_for_bit() {
                 before != after && before != WeatherId::AURORA && after != WeatherId::AURORA
             })
             .expect("the weather changes");
-        world.set_world_time_millis(spell * SPELL_MILLIS - 2_000);
+        world.set_body_millis(spell * SPELL_MILLIS - 2_000);
         let mut turned = Vec::new();
         for _ in 0..30 * 4 {
             for event in step(&mut world, idle()) {

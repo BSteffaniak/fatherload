@@ -357,8 +357,11 @@ impl SeatUi {
     /// Shows the arrival banner when the seat's rig enters a village (the first visit is
     /// announced by [`super::ShellState::village_discovered`]).
     pub(super) fn track_village(&mut self, ctx: SeatContext<'_>, tick: u64) {
+        // A seat on another body or in space is in none of the home world's villages (Wave
+        // 12 bodylife: its strip coordinates are not the home world's).
         let current = ctx
             .player
+            .filter(|player| ctx.world.store_of(*player).is_home() && !ctx.world.in_space(*player))
             .and_then(|player| ctx.world.player_village(player));
         let id = current.as_ref().map(|found| found.id);
         if id != self.village.last_village

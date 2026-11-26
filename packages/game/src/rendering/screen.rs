@@ -1,5 +1,6 @@
 mod cave_map;
 mod clock_hud;
+pub(super) use clock_hud::badge_rect;
 mod poi_map;
 mod village_map;
 
@@ -188,7 +189,17 @@ pub(super) fn draw_view_hud(
     // On a landscape phone the thumb cluster's upper buttons rise level with the badge: it
     // steps left of them.
     let thumb_buttons = super::touch_controls::cluster_rects();
+    // On a body (Wave 12 bodylife) its own day, climate, air, gravity and weather take the
+    // clock's place: the home world's clock is not the seat's.
+    let body_life = view
+        .place_scene
+        .as_ref()
+        .and_then(|scene| scene.body.as_ref())
+        .and_then(|body| body.life.as_ref());
     let badge = wallet_bottom.and_then(|(_, bottom)| {
+        if let Some(life) = body_life {
+            return super::body_life::draw_body_badge(draw, life, rect, bottom + 3, &thumb_buttons);
+        }
         clock_hud::draw_clock_badge(
             draw,
             snapshot,

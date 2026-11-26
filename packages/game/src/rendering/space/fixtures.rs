@@ -419,6 +419,7 @@ fn system(fixture: &mut SpaceFixture) {
             theme,
             atmosphere,
             spin: angle as f32,
+            sun: None,
             seed: 100 + index as u32,
         });
     }
@@ -431,6 +432,7 @@ fn system(fixture: &mut SpaceFixture) {
         theme: BodyTheme::Barren,
         atmosphere: 0.0,
         spin: 0.4,
+        sun: None,
         seed: 20,
     });
     fixture.belts.push(BeltView {
@@ -459,6 +461,7 @@ fn moon_body() -> BodyView {
         atmosphere: 0.0,
         // Column 1,200 faces the star in the afternoon.
         spin: -3.7,
+        sun: None,
         seed: 20,
     }
 }
@@ -473,6 +476,7 @@ fn jungle_body() -> BodyView {
         atmosphere: 0.08,
         // Column 12,000 faces the star.
         spin: -3.0,
+        sun: None,
         seed: 101,
     }
 }
@@ -595,6 +599,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                         0.12
                     },
                     spin: index as f32 * 0.7,
+                    sun: None,
                     seed: 300 + index as u32,
                 });
             }

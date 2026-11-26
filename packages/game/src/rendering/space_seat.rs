@@ -16,7 +16,9 @@ use raylib::prelude::*;
 
 use super::space::{
     live::{LiveSpace, LiveStrip, body_view, ground_things},
-    view::{CraftView, FlightMotion, GroundThing, GroundView, SpaceCamera, SpaceRenderView},
+    view::{
+        BodyView, CraftView, FlightMotion, GroundThing, GroundView, SpaceCamera, SpaceRenderView,
+    },
 };
 use crate::render_snapshot::{PlaceBody, PlaceScene, RenderSnapshot, ViewSnapshot};
 
@@ -91,7 +93,7 @@ pub fn flight_view<'a>(
 
 /// Where a seat on a body stands on its strip (`(u, v)`: columns and rows), and the turn of
 /// its actor relative to the local up there.
-fn strip_actor(view: &ViewSnapshot<'_>, scene: &PlaceScene<'_>) -> ((f64, f64), f32) {
+pub fn strip_actor(view: &ViewSnapshot<'_>, scene: &PlaceScene<'_>) -> ((f64, f64), f32) {
     let on_foot = scene
         .pilots
         .iter()
@@ -145,13 +147,20 @@ pub fn body_view_of<'a>(
         px_per_tile,
     };
     let id = fatherload_simulation::place::SpaceBodyKey::mix(body.ground.id);
+    // The body's own day (Wave 12 bodylife): the star where its clock puts it, its night as
+    // dark as its sky keeps it (never unreadable).
     let ground = GroundView {
-        body: body_view(&body.body, id),
+        body: BodyView {
+            sun: live.sun_of(id),
+            ..body_view(&body.body, id)
+        },
         strip,
         column: u,
         row: v as f32,
         roll,
-        night_light: NIGHT_LIGHT,
+        night_light: body.life.as_ref().map_or(NIGHT_LIGHT, |life| {
+            (life.night_light * 2.6).clamp(0.3, NIGHT_LIGHT)
+        }),
         things,
     };
     live.view(

@@ -418,7 +418,7 @@ impl SpaceRenderer {
         if let Some(ground) = &view.ground {
             let camera =
                 polar::PolarGround::ring_camera(ground, projection.px_per_tile, projection.pivot);
-            let toward = view.light_toward(ground.body.centre);
+            let toward = view.light_toward_body(&ground.body);
             let sun = polar::sun_angle(ground, toward);
             let blend = bodies::ground_blend(projection.px_per_tile);
             if let Some(polar) = self.ground(seat) {

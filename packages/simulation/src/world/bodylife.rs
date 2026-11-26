@@ -16,6 +16,9 @@
 //! * **Markets**: [`WorldState::sell_cargo_at_market`] sells a rig's minerals and artifacts at a
 //!   body's local market (credits are universal; the home depot is refused away from home).
 //!
+//! Bodies run on world time by the tick ([`WorldState::body_millis`]): a night slept away at
+//! home jumps the home clock only.
+//!
 //! A body's life is a pure function of the world seed and the body, memoized per process
 //! ([`body_life_of`]): nothing here is saved or replicated beyond the events.
 
@@ -140,6 +143,21 @@ impl WorldState {
         }
     }
 
+    /// The time every body's clock, weather and market run on (milliseconds): world time by
+    /// the tick alone. A night slept away at home jumps the home clock, not the bodies'.
+    #[must_use]
+    pub fn body_millis(&self) -> u64 {
+        self.millis_at(self.simulation_tick)
+    }
+
+    /// Sets the time the bodies run on (scenes and tests): the tick whose time is `millis`.
+    #[doc(hidden)]
+    pub fn set_body_millis(&mut self, millis: u64) {
+        let hz = u128::from(self.tick_rate_hz().max(1));
+        let tick = u64::try_from(u128::from(millis) * hz / 1_000).unwrap_or(u64::MAX);
+        self.set_simulation_tick(crate::ids::SimulationTick::new(tick));
+    }
+
     /// The life of the body `player_id` is on, if any.
     #[must_use]
     pub fn body_life_of_player(&self, player_id: PlayerId) -> Option<Arc<BodyLife>> {
@@ -189,7 +207,7 @@ impl WorldState {
         let surface = terrain.surface_row(tile.x);
         let exposed = self.open_sky_in(terrain, tile);
         life.reading(
-            self.world_millis(),
+            self.body_millis(),
             i64::from(tile.x),
             tile.y,
             surface,
@@ -285,8 +303,8 @@ impl WorldState {
             return;
         };
         // The edge between this tick's time and the next's.
-        let before = self.world_millis();
-        let now = self.clock_at(self.simulation_tick.next()).world_millis();
+        let before = self.body_millis();
+        let now = self.millis_at(self.simulation_tick.next());
         for (&player_id, player) in &self.players {
             let (x, y) = self
                 .store_actor_position(player_id)
@@ -328,7 +346,7 @@ impl WorldState {
         column: i32,
     ) -> Option<LocalMarket> {
         let life = self.body_life_of_player(player_id)?;
-        Some(life.market(settlement, self.world_millis(), i64::from(column)))
+        Some(life.market(settlement, self.body_millis(), i64::from(column)))
     }
 
     /// Sells `player_id`'s minerals and artifacts at `market` (a settlement's or a station's

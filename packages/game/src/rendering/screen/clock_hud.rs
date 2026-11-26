@@ -43,7 +43,7 @@ const fn dial_sky(phase: DayPhase) -> Color {
     clippy::cast_precision_loss,
     reason = "UI art pixels"
 )]
-pub(super) fn badge_rect(
+pub(in crate::rendering) fn badge_rect(
     rect: Rectangle,
     top: i32,
     (width, height): (i32, i32),

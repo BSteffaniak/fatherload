@@ -254,7 +254,11 @@ void main() {
         air *= smoothstep(-0.25, 0.3, dayf) * 0.85 + 0.15;
         air = floor(air * 8.0 + 0.5) / 8.0;
     }
-    vec3 sky = uAtmos * (0.35 + 0.65 * daylight);
+    // Night skies go dark (Wave 12 bodylife: each body's own day), and the sky warms toward
+    // the terminator at dawn and dusk.
+    vec3 sky = uAtmos * (0.14 + 0.86 * daylight * daylight);
+    float dusk = (1.0 - smoothstep(0.02, 0.4, abs(dayf + 0.04))) * 0.6;
+    sky = mix(sky, vec3(0.96, 0.52, 0.3) * (0.5 + 0.5 * daylight), dusk);
     float alpha = texel.a + air * (1.0 - texel.a);
     vec3 outColour = alpha > 0.0
         ? (colour * texel.a + sky * air * (1.0 - texel.a)) / alpha
