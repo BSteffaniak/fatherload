@@ -405,11 +405,7 @@ impl Runtime {
     /// Network notices (errors, disconnects) since the last call.
     pub fn take_notices(&mut self) -> Vec<String> {
         match self {
-            Self::Host(host) => host
-                .net
-                .as_mut()
-                .map(HostNet::take_notices)
-                .unwrap_or_default(),
+            Self::Host(host) => host.net.as_mut().map_or_default(HostNet::take_notices),
             Self::Client(client) => client.take_notices(),
         }
     }

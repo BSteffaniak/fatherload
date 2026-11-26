@@ -364,5 +364,5 @@ fn older_worlds_have_no_distortion() {
         max: TilePosition { x: 100, y: 100 },
     };
     assert!(!touches_rows(&classic, &layout, &area));
-    assert!(plan_for(&classic, &layout, &area).mirrors.is_empty());
+    assert_eq!(plan_for(&classic, &layout, &area).mirrors, []);
 }

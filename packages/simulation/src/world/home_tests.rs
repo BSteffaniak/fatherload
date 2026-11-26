@@ -291,7 +291,7 @@ fn construction_runs_on_world_time_through_every_stage() {
     let mut world = world();
     let (plot, site) = buy_town_plot(&mut world);
     let offers = world.contractors_for(plot, PLAYER);
-    assert!(!offers.is_empty());
+    assert_ne!(offers, []);
     assert!(
         offers[0].character.is_some(),
         "a person takes the job on a V7 world"

@@ -143,7 +143,7 @@ fn residents_appear_near_rigs_and_leave_when_nobody_is_near() {
         column_x(found.last_column + 400),
     );
     run(&mut world, 40);
-    assert!(npcs_of(&world, found.id).is_empty());
+    assert_eq!(npcs_of(&world, found.id), []);
     // Town folk walk the town street on worlds with villages.
     let town = world.terrain().surface_row(97);
     let rig = world.player_mut(PLAYER).expect("rig");
@@ -168,7 +168,7 @@ fn routines_follow_the_clock() {
     park_at(&mut world, PLAYER, &found, column_x(plaza));
     run(&mut world, 40);
     let night = world.people_about();
-    assert!(!night.is_empty());
+    assert_ne!(night, []);
     for (character, activity, inside) in &night {
         assert_eq!(*activity, Activity::Sleeping, "{character:?}");
         assert!(inside.is_some(), "{character:?} sleeps indoors");
@@ -554,7 +554,7 @@ fn word_of_a_gift_reaches_family_and_friends() {
     let ripple = settlement
         .population
         .reputation_ripple(state.character, gained);
-    assert!(!ripple.is_empty());
+    assert_ne!(ripple, []);
     for (other, share) in ripple {
         assert_eq!(
             world.people().affinity(other, PLAYER),
@@ -770,7 +770,7 @@ fn wanderers_at_a_camp_appear_and_talk() {
     // Away from the camp its wanderers leave (rebuilt from the seed next time).
     world.player_mut(PLAYER).expect("rig").x = column_x(camp.column + 400);
     run(&mut world, 40);
-    assert!(npcs_of(&world, camp.id).is_empty());
+    assert_eq!(npcs_of(&world, camp.id), []);
 }
 
 #[test]

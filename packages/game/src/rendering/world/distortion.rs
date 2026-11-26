@@ -115,7 +115,7 @@ fn draw_mirror_halls(
             }
         }
         // The axis: a faint line of light down the middle.
-        let axis = (frame.col_px(bounds.min.x) + frame.col_px(bounds.max.x + 1)) * 0.5;
+        let axis = f32::midpoint(frame.col_px(bounds.min.x), frame.col_px(bounds.max.x + 1));
         let pulse = (seconds * 0.6).sin().mul_add(0.5, 0.5);
         draw.draw_rectangle_rec(
             Rectangle::new(axis - ART, top, ART * 2.0, height),

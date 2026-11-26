@@ -220,7 +220,7 @@ pub fn step_top_down(
     body.y = quantize(body.y);
     body.velocity_x = quantize(body.velocity_x);
     body.velocity_y = quantize(body.velocity_y);
-    debug_assert!(state.view == PilotView::TopDown);
+    debug_assert_eq!(state.view, PilotView::TopDown);
 }
 
 /// Moves `body` by `delta` along one axis in pieces, stopping at walls and nudging round a

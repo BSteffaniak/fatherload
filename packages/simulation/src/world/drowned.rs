@@ -134,8 +134,7 @@ impl WorldState {
     pub fn rig_water(&self, player_id: PlayerId) -> RigWater {
         self.players
             .get(&player_id)
-            .map(|player| player.water)
-            .unwrap_or_default()
+            .map_or_default(|player| player.water)
     }
 
     /// Whether `player_id`'s rig (or pilot) is inside Merrow City's bubble.

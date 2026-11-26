@@ -404,8 +404,7 @@ impl AlienState {
     pub fn log(&self, player: PlayerId, species: AlienSpecies) -> SpeciesLog {
         self.players
             .get(&player)
-            .map(|log| log.of(species))
-            .unwrap_or_default()
+            .map_or_default(|log| log.of(species))
     }
 
     /// `player`'s understanding of `species`' tongue.

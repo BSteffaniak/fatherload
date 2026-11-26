@@ -142,7 +142,7 @@ fn the_sunfolk_valley_holds_the_village_hall() {
     let village =
         crate::worldgen::streamed::villages::village(&settings, site.id()).expect("the village");
     assert_eq!(village.name, crate::hollow::SUNFOLK_NAME);
-    assert!(!village.population.characters.is_empty());
+    assert_ne!(village.population.characters, []);
 }
 
 /// An ASCII picture of the Hollow World's strata (`--ignored --nocapture`).

@@ -181,12 +181,7 @@ fn two_seats_at_two_stations_use_their_own_hubs() {
     assert_eq!(game.shell.seat(0).station.abandon_armed, Some(0));
     press_seat(&mut game, 0, confirm_input());
     idle(&mut game, 3);
-    assert!(
-        game.world()
-            .station_ledger()
-            .missions_of(seats[0])
-            .is_empty()
-    );
+    assert_eq!(game.world().station_ledger().missions_of(seats[0]), []);
     // Each seat's view draws its own station headlessly.
     let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
     assert_eq!(snapshot.views.len(), 2);

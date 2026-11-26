@@ -541,7 +541,7 @@ mod tests {
                 culture,
             );
             let offers = offers_of(&character);
-            assert!(!offers.is_empty());
+            assert_ne!(offers, []);
             assert_eq!(offers, offers_of(&character), "deterministic");
             for offer in &offers {
                 kinds.insert(offer.kind);

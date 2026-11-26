@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn playing_alone_every_device_drives_seat_zero() {
         let mut roster = SeatRoster::default();
-        assert!(roster.set_seat_count(1, &pads(&[0, 1])).is_empty());
+        assert_eq!(roster.set_seat_count(1, &pads(&[0, 1])), []);
         assert_eq!(roster.keyboard(0), Some(KeyboardLayout::Full));
         assert_eq!(roster.seat_of(0), Some(0));
         assert_eq!(roster.seat_of(3), Some(0));

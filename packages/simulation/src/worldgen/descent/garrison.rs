@@ -919,8 +919,9 @@ mod tests {
             );
             let way = processional_way(&settings, &hall);
             assert!(lift < way.min.x - 2 || lift > way.max.x + 2, "seed {seed}");
-            assert!(
-                stratum_in(&settings, &layout, hall.center().x, hall.min.y) == Stratum::TheSealGate
+            assert_eq!(
+                stratum_in(&settings, &layout, hall.center().x, hall.min.y),
+                Stratum::TheSealGate
             );
         }
     }

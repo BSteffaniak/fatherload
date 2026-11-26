@@ -149,8 +149,7 @@ impl WorldState {
         let gear = self
             .players
             .get(&player_id)
-            .map(|player| player.hazard_gear.arms)
-            .unwrap_or_default();
+            .map_or_default(|player| player.hazard_gear.arms);
         RigCombat {
             missiles: missile_capacity(gear, self.hostiles.has_tech(BossTech::LanceMissiles)),
             shield: shield_capacity(gear),

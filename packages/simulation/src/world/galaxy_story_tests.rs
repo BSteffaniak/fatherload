@@ -666,7 +666,7 @@ fn an_escape_from_the_warden_brings_it_back_later() {
     // Back at the gate after the rest, it comes out again: no countdown, no loss.
     let _ = warp_to_story(&mut world, PLAYER);
     let _ = wait_for_warden(&mut world);
-    assert!(world.galaxy_story().warden_on == Some(PLAYER));
+    assert_eq!(world.galaxy_story().warden_on, Some(PLAYER));
 }
 
 /// Waits (at most 90 s, the rest after a fight) for the Warden to come out at the gate.

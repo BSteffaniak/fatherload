@@ -174,7 +174,7 @@ fn a_rig_with_the_star_drive_flies_past_the_moon_into_space_and_one_without_does
             assert!(flight.pos.distance(home) > space::tiles(space::HOME_APPROACH_TILES));
         } else {
             assert!(!world.in_space(PLAYER), "no Star Drive, no space");
-            assert!(flights.is_empty());
+            assert_eq!(flights, []);
         }
     }
 }

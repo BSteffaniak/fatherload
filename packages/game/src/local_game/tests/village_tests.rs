@@ -140,7 +140,7 @@ fn a_seat_sells_at_a_trading_post_and_talks_to_the_keeper() {
         .conversation(FIRST)
         .expect("a conversation");
     assert_eq!(conversation.npc, talk.npc);
-    assert!(!conversation.lines.is_empty());
+    assert_ne!(conversation.lines, []);
     // Back returns to the counter, again closes it, again leaves the building.
     press_seat(&mut game, 0, back_input());
     assert_eq!(game.shell.seat(0).modal, Some(ModalScreen::VillageCounter));
@@ -209,7 +209,7 @@ fn a_seat_talks_to_someone_on_the_street_and_opens_their_trade_list() {
         .conversation(FIRST)
         .expect("a conversation")
         .clone();
-    assert!(!conversation.lines.is_empty());
+    assert_ne!(conversation.lines, []);
     assert!(game.world().npc(conversation.npc).is_some());
     let speaker = fatherload_simulation::people::routine::character(
         game.world().world_settings(),

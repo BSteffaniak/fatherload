@@ -614,7 +614,7 @@ mod tests {
             SessionServiceRequest::AcceptExpedition { index: 0 },
             SessionServiceRequest::AbandonExpedition { index: 0 },
         ] {
-            assert!(!super::service_request_zones(request).is_empty());
+            assert_ne!(super::service_request_zones(request), []);
         }
     }
 

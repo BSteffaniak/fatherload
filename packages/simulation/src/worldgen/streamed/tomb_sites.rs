@@ -747,7 +747,7 @@ mod tests {
             generator: GeneratorVersion::V9,
             ..WorldSettings::default()
         };
-        assert!(sites_touching(&v9, &wide()).is_empty());
+        assert_eq!(sites_touching(&v9, &wide()), []);
         for site in &sites {
             let bounds = entrance_bounds(site);
             assert!(!bounds.intersects(&VAULT));

@@ -591,7 +591,7 @@ mod tests {
             .unwrap()
             .id;
         let ripple = population.reputation_ripple(subject, 12);
-        assert!(!ripple.is_empty());
+        assert_ne!(ripple, []);
         assert!(ripple.iter().all(|(id, _)| *id != subject));
     }
 }

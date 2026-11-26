@@ -485,15 +485,13 @@ impl<S: NetSimulation> HostSession<S> {
         let name = self
             .client_player(client)
             .and_then(|player| self.players.get(&player))
-            .map(|slot| slot.name.clone())
-            .unwrap_or_default();
+            .map_or_default(|slot| slot.name.clone());
         let target_name = self
             .world
             .parked_players()
             .into_iter()
             .find(|(player, _)| *player == target)
-            .map(|(_, name)| name)
-            .unwrap_or_default();
+            .map_or_default(|(_, name)| name);
         ClaimRequest {
             client,
             name,

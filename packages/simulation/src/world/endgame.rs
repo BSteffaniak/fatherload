@@ -946,8 +946,7 @@ impl WorldState {
         self.endgame
             .careers
             .get(&player_id)
-            .map(|career| career.themes.clone())
-            .unwrap_or_default()
+            .map_or_default(|career| career.themes.clone())
     }
 
     /// Whether `player_id` speaks `species`' tongue well enough for alien tech `mark`.

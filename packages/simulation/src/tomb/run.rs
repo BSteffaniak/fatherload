@@ -298,9 +298,7 @@ impl Tombs {
     /// `player`'s relic effects (none outside a run).
     #[must_use]
     pub fn effects_of(&self, player: PlayerId) -> RelicEffects {
-        self.member_of(player)
-            .map(RunMember::effects)
-            .unwrap_or_default()
+        self.member_of(player).map_or_default(RunMember::effects)
     }
 
     /// `player`'s permanent unlocks.

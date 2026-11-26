@@ -237,7 +237,7 @@ mod tests {
         );
         // Without the prism the gem stays hidden.
         let plain = world(&[(gem.0, gem.1, TileKind::Deep(DeepTile::LatentGem))]);
-        assert!(refract(&plain, eye, LAMP_REACH_TILES).gems.is_empty());
+        assert_eq!(refract(&plain, eye, LAMP_REACH_TILES).gems, []);
     }
 
     #[test]
@@ -247,7 +247,7 @@ mod tests {
             (2, -1, TileKind::Stone),
         ]);
         let refraction = refract(&tile_at, TilePosition { x: 0, y: -1 }, LAMP_REACH_TILES);
-        assert!(refraction.prisms.is_empty());
+        assert_eq!(refraction.prisms, []);
         // Crystal lets the lamp through.
         let tile_at = world(&[
             (4, -1, TileKind::Deep(DeepTile::Prism)),

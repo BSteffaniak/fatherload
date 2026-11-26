@@ -585,7 +585,7 @@ mod tests {
         assert!(!unlocks.unlock(stealth));
         assert!(unlocks.has(stealth));
         assert!(!unlocks.unlock(CosmeticItem::Paint(PaintColor::Gold)));
-        assert!(unlocks.items.len() == 1);
+        assert_eq!(unlocks.items.len(), 1);
     }
 
     #[test]

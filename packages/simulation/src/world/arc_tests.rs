@@ -432,7 +432,7 @@ fn arcs_run_through_their_beats_to_a_climax_and_an_ending() {
         .find(|run| run.arc() == arc)
         .expect("running");
     assert!(ready.ready());
-    assert!(!ready.journal_text().is_empty());
+    assert_ne!(ready.journal_text(), "");
     // Back to the giver: the endings are on offer.
     let home =
         crate::people::routine::settlement(world.world_settings(), giver.village).expect("home");
@@ -484,11 +484,11 @@ fn arcs_run_through_their_beats_to_a_climax_and_an_ending() {
     assert!(world.player(PLAYER).expect("rig").credits > credits, "paid");
     assert!(world.people().affinity(giver, PLAYER) > affinity, "warmer");
     let log = world.arc_log(PLAYER).expect("log");
-    assert!(log.active.is_empty());
+    assert_eq!(log.active, []);
     assert!(log.finished_with(giver, arc));
     let record = log.history.last().expect("history");
     assert!(!record.abandoned);
-    assert!(!record.epilogue().is_empty());
+    assert_ne!(record.epilogue(), "");
     assert_eq!(
         template.outcomes[usize::from(record.outcome)].when,
         OutcomeWhen::Completed
@@ -814,7 +814,7 @@ fn giving_up_is_remembered_and_journalled() {
         GameplayEventKind::ArcAbandoned { arc: a, .. } if a == arc
     )));
     let log = world.arc_log(PLAYER).expect("log");
-    assert!(log.active.is_empty());
+    assert_eq!(log.active, []);
     assert!(log.history.last().is_some_and(|record| record.abandoned));
     assert!(
         !log.finished_with(giver, arc),

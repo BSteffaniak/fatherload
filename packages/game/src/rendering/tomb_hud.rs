@@ -104,9 +104,7 @@ fn draw_run_banner(
         RunPhase::Exploring if run.on_last_floor() => "THE WAY OUT IS OPEN".to_owned(),
         RunPhase::Exploring => "FIND THE STAIRS".to_owned(),
     };
-    let relics: Vec<Relic> = member
-        .map(|member| member.relics.clone())
-        .unwrap_or_default();
+    let relics: Vec<Relic> = member.map_or_default(|member| member.relics.clone());
     let relic_line = if relics.is_empty() {
         "NO RELICS".to_owned()
     } else {
@@ -394,8 +392,7 @@ pub(super) fn draw_relic_pick(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, 
             let synergy = synergies_of(&held)
                 .into_iter()
                 .find(|synergy| synergy.pair.0 == *relic || synergy.pair.1 == *relic)
-                .map(|synergy| format!("  Synergy: {}!", synergy.name))
-                .unwrap_or_default();
+                .map_or_default(|synergy| format!("  Synergy: {}!", synergy.name));
             let blurb = relic.blurb_in(run.site.style);
             if index == selected {
                 about = Some(format!("{blurb}{synergy}"));

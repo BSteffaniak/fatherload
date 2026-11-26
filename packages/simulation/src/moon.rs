@@ -890,7 +890,7 @@ mod tests {
         player.fuel_tank_level = MOON_FUEL_TANK_TIER;
         player.hazard_gear.altitude_intake = MOON_INTAKE_TIER;
         player.hazard_gear.de_icer = MOON_DE_ICER_TIER;
-        assert!(missing_requirements(&player).is_empty());
+        assert_eq!(missing_requirements(&player), []);
         assert!(approach_checklist(&player).iter().all(|(_, met)| *met));
     }
 

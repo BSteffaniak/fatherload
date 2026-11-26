@@ -314,7 +314,7 @@ mod tests {
         assert_eq!(timers.release_at(a), Some(SimulationTick::new(30)));
         assert_eq!(timers.take_due(SimulationTick::new(25)), vec![b]);
         assert_eq!(timers.held().collect::<Vec<_>>(), vec![a]);
-        assert!(timers.take_due(SimulationTick::new(29)).is_empty());
+        assert_eq!(timers.take_due(SimulationTick::new(29)), []);
         assert_eq!(timers.take_due(SimulationTick::new(30)), vec![a]);
         assert!(timers.is_empty());
     }

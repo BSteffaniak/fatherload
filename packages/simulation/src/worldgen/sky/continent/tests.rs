@@ -53,7 +53,7 @@ fn only_v9_fills_continents_and_keeps_v8_placement() {
             generator: GeneratorVersion::V8,
             ..nine
         };
-        assert!(continents(&eight).is_empty());
+        assert_eq!(continents(&eight), []);
         assert!(!continents(&nine).is_empty(), "seed {seed}");
         // Every continent is placed in the same columns, as wide and as deep; only its
         // altitude (V9's own, taller continent band) and its content differ. (The islands are
@@ -304,7 +304,7 @@ fn temples_open_in_order_on_foot_and_keep_rigs_out() {
 fn sky_cities_are_found_by_id_and_by_place() {
     let settings = v9(0x5EED);
     let cities = sky_cities_between(&settings, -8_000, 8_000);
-    assert!(!cities.is_empty());
+    assert_ne!(cities, []);
     for city in &cities {
         assert!(is_sky_city(city.id));
         assert!(!crate::people::camps::is_camp(city.id));

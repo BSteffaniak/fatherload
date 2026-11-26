@@ -624,7 +624,7 @@ mod tests {
                 .iter()
                 .all(|site| matches!(site.key, SiteKey::Town(_)))
         );
-        assert!(!sites.is_empty());
+        assert_ne!(sites, []);
     }
 
     #[test]

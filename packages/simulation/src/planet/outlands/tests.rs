@@ -100,7 +100,7 @@ fn the_outland_themes_are_registered_and_generate_purely() {
         let hooks = crate::planet::hooks(theme);
         assert_eq!(hooks.id(), theme);
         assert!(hooks.rules_own_hazards());
-        assert!(!hooks.hazard_tags().is_empty());
+        assert_ne!(hooks.hazard_tags(), []);
         assert!(hooks.music_bed().name.starts_with("loop_planet_"));
         let a = ground(theme, 700);
         let b = ground(theme, 700);
@@ -528,13 +528,13 @@ fn every_outland_world_has_a_level_settlement_and_a_builders_outpost() {
             );
         }
     }
-    assert!(
+    assert_eq!(
         builder_outposts(&PlanetGround::new(PlanetParams::new(
             1,
             900,
             PlanetThemeId::JUNGLE
-        )))
-        .is_empty()
+        ))),
+        []
     );
 }
 

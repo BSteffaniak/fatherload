@@ -202,7 +202,7 @@ fn systems_are_well_formed_and_never_overlap() {
     for seed in [DEFAULT_WORLD_SEED, 1, 2, 99] {
         for coords in sectors_around_home(4) {
             let sector = generate_sector(seed, coords);
-            assert!(!sector.systems.is_empty());
+            assert_ne!(sector.systems, []);
             assert!(sector.systems.len() <= 3);
             assert!(
                 sector.systems[0].planet_count() >= 1 || coords == HOME_SECTOR,

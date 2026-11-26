@@ -173,7 +173,10 @@ fn the_fixed_set_pieces_are_carved_where_their_functions_say() {
     assert!(count_in(&settings, &figures, TileKind::Cave(CaveTile::FrozenFigure)) >= 4);
     // The wreck holds its cache.
     let wreck = drowned_sub(&settings, &layout).expect("wreck");
-    assert!(count_in(&settings, &wreck, TileKind::Cave(CaveTile::TreasureCache)) == 1);
+    assert_eq!(
+        count_in(&settings, &wreck, TileKind::Cave(CaveTile::TreasureCache)),
+        1
+    );
 }
 
 #[test]
@@ -236,6 +239,6 @@ fn stamps_are_deterministic_and_absent_from_older_worlds() {
         generator: GeneratorVersion::V10,
         ..WorldSettings::new(4_242)
     };
-    assert!(stamps_with(&classic, &layout, &area).is_empty());
+    assert_eq!(stamps_with(&classic, &layout, &area), []);
     assert!(merrow_city(&classic).is_none());
 }

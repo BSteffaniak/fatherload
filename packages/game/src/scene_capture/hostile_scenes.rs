@@ -113,7 +113,7 @@ fn gather(world: &mut WorldState, range: f32, spread: f32, state: EncounterState
         } else {
             0.0
         };
-        let angle = heading + share * spread;
+        let angle = f32::mul_add(share, spread, heading);
         let reach = ((index % 3) as f32).mul_add(60.0, range);
         let (sin, cos) = angle.sin_cos();
         ship.pos = rig.offset(sin * reach, -cos * reach);

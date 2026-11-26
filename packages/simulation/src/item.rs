@@ -610,7 +610,6 @@ impl ItemContainer {
     }
 
     /// `(kind, count)` in kind order.
-    #[must_use]
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = (ItemKind, u32)> + '_ {
         self.items.iter().map(|(kind, count)| (*kind, *count))
     }
@@ -621,7 +620,6 @@ impl ItemContainer {
     }
 
     /// Entries of one category, in kind order.
-    #[must_use]
     pub fn in_category(
         &self,
         category: ItemCategory,
@@ -631,28 +629,24 @@ impl ItemContainer {
     }
 
     /// Minerals held, in [`MineralKind`] order.
-    #[must_use]
     pub fn minerals(&self) -> impl DoubleEndedIterator<Item = (MineralKind, u32)> + '_ {
         self.iter()
             .filter_map(|(kind, count)| kind.as_mineral().map(|mineral| (mineral, count)))
     }
 
     /// Artifacts held, in [`ArtifactKind`] order.
-    #[must_use]
     pub fn artifacts(&self) -> impl DoubleEndedIterator<Item = (ArtifactKind, u32)> + '_ {
         self.iter()
             .filter_map(|(kind, count)| kind.as_artifact().map(|artifact| (artifact, count)))
     }
 
     /// Strategic materials held, in [`StrategicResourceKind`] order.
-    #[must_use]
     pub fn materials(&self) -> impl DoubleEndedIterator<Item = (StrategicResourceKind, u32)> + '_ {
         self.iter()
             .filter_map(|(kind, count)| kind.as_material().map(|material| (material, count)))
     }
 
     /// Building blocks held, in [`BlockKind`] order.
-    #[must_use]
     pub fn blocks(&self) -> impl DoubleEndedIterator<Item = (BlockKind, u32)> + '_ {
         self.iter()
             .filter_map(|(kind, count)| kind.as_block().map(|block| (block, count)))

@@ -136,7 +136,7 @@ fn a_two_seat_crew_splits_a_delivery_and_both_get_paid() {
     confirm(&mut game);
     assert_eq!(player(&game, PLAYER).credits, lead_credits + 460);
     assert_eq!(player(&game, second).credits, wing_credits + 460 / 4);
-    assert!(game.world().crew_quests().active.is_empty());
+    assert_eq!(game.world().crew_quests().active, []);
 }
 
 #[test]
@@ -171,7 +171,7 @@ fn a_crew_job_can_also_be_taken_solo_while_others_play() {
     );
     select_row(&mut game, crew_row + 1);
     confirm(&mut game);
-    assert!(game.world().crew_quests().active.is_empty());
+    assert_eq!(game.world().crew_quests().active, []);
     assert!(
         player(&game, PLAYER)
             .quests

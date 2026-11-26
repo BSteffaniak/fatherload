@@ -323,13 +323,7 @@ fn crumbling_slabs_fall_a_moment_after_a_step_and_set_again() {
         world.terrain().tile(slab).map(|found| found.kind),
         Some(TileKind::Built(BuiltTile::TombTrap { kind, .. })) if kind == TrapKind::Crumble.index()
     ));
-    assert!(
-        world
-            .tomb_run_of(PLAYER)
-            .expect("a run")
-            .crumbling
-            .is_empty()
-    );
+    assert_eq!(world.tomb_run_of(PLAYER).expect("a run").crumbling, []);
 }
 
 #[test]

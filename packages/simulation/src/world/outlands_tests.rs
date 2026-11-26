@@ -479,7 +479,7 @@ fn the_mycelium_grows_back_once_the_rig_moves_on() {
             planet.generated_tile(*x, *y).kind == TileKind::Outland(OutlandTile::MyceliumMat)
         })
         .collect();
-    assert!(!tunnel.is_empty());
+    assert_ne!(tunnel, [] as [(i32, i32); 0]);
     for (x, y) in &tunnel {
         set(&mut world, *x, *y, TileKind::Air);
     }

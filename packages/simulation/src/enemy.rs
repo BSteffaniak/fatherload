@@ -6903,7 +6903,7 @@ mod tests {
 
     #[test]
     fn rosters_scale_with_depth_and_keep_the_topsoil_safe() {
-        assert!(band_roster(Band::Topsoil).is_empty());
+        assert_eq!(band_roster(Band::Topsoil), []);
         assert!(lair_occupant(Band::Clay, 0).is_none());
         for band in Band::ALL.into_iter().skip(1) {
             assert!(!band_roster(band).is_empty(), "{band:?}");

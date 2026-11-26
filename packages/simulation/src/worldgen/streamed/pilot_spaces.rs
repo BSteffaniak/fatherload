@@ -448,7 +448,7 @@ mod tests {
             generator: GeneratorVersion::V8,
             ..WorldSettings::default()
         };
-        assert!(spaces_touching(&v8, &rect).is_empty());
+        assert_eq!(spaces_touching(&v8, &rect), []);
         let near = nearest_space(&v9(), TilePosition { x: 600, y: 200 }, 3).expect("a space");
         assert!(spaces.contains(&near) || near.origin.y > 1_400);
     }

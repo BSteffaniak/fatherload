@@ -250,7 +250,7 @@ pub(super) fn draw_light_map(draw: &mut impl RaylibDraw, scene: &LightScene<'_>)
     }
     // The wash crossfades between two keyframes' colours: one run pass per colour.
     let cut = (look.darkness / 0.6).clamp(0.0, 1.0);
-    for wash in [look.overlay.0, look.overlay.1] {
+    for wash in <[_; 2]>::from(look.overlay) {
         if wash.alpha == 0 {
             continue;
         }

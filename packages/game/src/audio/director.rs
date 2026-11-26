@@ -3858,7 +3858,7 @@ mod tests {
         let capacity = world
             .player(one)
             .map_or(100.0, |player| player.fuel_capacity);
-        assert!(alarms(&world, &mut Director::new(1)).is_empty());
+        assert_eq!(alarms(&world, &mut Director::new(1)), []);
         if let Some(player) = world.player_mut(one) {
             player.fuel = capacity * 0.2;
         }

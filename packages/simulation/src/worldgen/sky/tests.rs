@@ -61,8 +61,14 @@ fn v9_is_current_and_only_v8_and_v9_have_a_sky() {
         ..WorldSettings::new(3)
     };
     assert!(moon(&v7).is_none());
-    assert!(lands_touching(&v7, &rect(-5_000, -SKY_CEILING_ROWS, 5_000, 0)).is_empty());
-    assert!(updrafts_touching(&v7, &rect(-5_000, -SKY_CEILING_ROWS, 5_000, 0)).is_empty());
+    assert_eq!(
+        lands_touching(&v7, &rect(-5_000, -SKY_CEILING_ROWS, 5_000, 0)),
+        []
+    );
+    assert_eq!(
+        updrafts_touching(&v7, &rect(-5_000, -SKY_CEILING_ROWS, 5_000, 0)),
+        []
+    );
     assert_eq!(streamed::top_row(&v8(3)), -SKY_CEILING_ROWS);
     assert_eq!(SKY_CEILING_ROWS % CHUNK_SIZE_TILES, 0);
 }
@@ -250,7 +256,7 @@ fn sky_chunks_are_seamless_and_empty_sky_is_free() {
         ARCHIPELAGO_BOTTOM_ROWS + 400,
     );
     let lands = lands_touching(&settings, &area);
-    assert!(!lands.is_empty());
+    assert_ne!(lands, []);
     let mut checked = 0;
     for land in lands.iter().take(12) {
         for position in land.bounds().expanded(1).positions() {
@@ -318,7 +324,7 @@ fn sky_lands_are_regional_features() {
     let island =
         streamed::nearest_feature(&settings, town, FeatureKind::SkyIsland, 4_000, |_| true)
             .expect("an island near town");
-    assert!(island.detail != FeatureDetail::None);
+    assert_ne!(island.detail, FeatureDetail::None);
     assert_eq!(streamed::feature(&settings, island.id), Some(island));
     let moon_feature =
         streamed::nearest_feature(&settings, town, FeatureKind::Moon, 8_000, |_| true)
@@ -336,7 +342,7 @@ fn sky_lands_are_regional_features() {
         ARCHIPELAGO_BOTTOM_ROWS,
     );
     let isles = streamed::features_in(&settings, &area, Some(&[FeatureKind::SkyIsland]));
-    assert!(!isles.is_empty());
+    assert_ne!(isles, []);
     assert!(
         isles
             .iter()

@@ -163,8 +163,7 @@ impl WorldState {
     pub fn ship_gear(&self, player_id: PlayerId) -> ShipGear {
         self.players
             .get(&player_id)
-            .map(|player| player.hazard_gear.ship)
-            .unwrap_or_default()
+            .map_or_default(|player| player.hazard_gear.ship)
     }
 
     /// Units `player_id`'s hold carries.

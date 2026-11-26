@@ -136,7 +136,7 @@ pub(super) fn draw_galaxy_journal(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<
                     index,
                     &menu_icons::BOOK,
                     chapter_title(chapter),
-                    world.galaxy_words(chapter).system.clone(),
+                    world.galaxy_words(chapter).system,
                     if done { "DONE" } else { "UNDER WAY" }.to_owned(),
                     chapter_colour(chapter),
                 ));

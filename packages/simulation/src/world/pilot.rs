@@ -346,8 +346,7 @@ impl WorldState {
         let roofs = owner
             .and_then(|owner| self.players.get(&owner))
             .filter(|player| player.hull > 0.0)
-            .map(|player| vec![(player.x, player.y - RIG_ROOF_ABOVE_CENTRE)])
-            .unwrap_or_default();
+            .map_or_default(|player| vec![(player.x, player.y - RIG_ROOF_ABOVE_CENTRE)]);
         // The Gravity Anchor engaged on foot plants the pilot's boots (Wave 10 polish).
         let anchored = owner.is_some_and(|owner| self.pilot_anchored(owner));
         PilotView {
@@ -1251,11 +1250,7 @@ impl WorldState {
             let _moved = self.empty_pack_into_rig(owner);
         }
         if rig_wrecked && let Some((home_x, home_y)) = self.rescue_home(owner) {
-            let gear = self
-                .players
-                .get(&owner)
-                .map(|p| p.pilot_gear)
-                .unwrap_or_default();
+            let gear = self.players.get(&owner).map_or_default(|p| p.pilot_gear);
             let body = Body::at(
                 quantize(home_x),
                 quantize(TILE_SIZE.mul_add(0.5, home_y) - 0.5),

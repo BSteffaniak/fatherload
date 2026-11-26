@@ -137,19 +137,18 @@ impl WorldState {
                 .and_then(|found| found.problem)
                 .into_iter()
                 .collect();
-        let history: Vec<MemoryFact> = self
-            .people
-            .characters
-            .get(&character.id)
-            .map(|state| {
-                state
-                    .memory(player_id)
-                    .events
-                    .into_iter()
-                    .map(|event| event.fact)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let history: Vec<MemoryFact> =
+            self.people
+                .characters
+                .get(&character.id)
+                .map_or_default(|state| {
+                    state
+                        .memory(player_id)
+                        .events
+                        .into_iter()
+                        .map(|event| event.fact)
+                        .collect()
+                });
         let ctx = OfferContext {
             settings: self.terrain.settings(),
             frame: self.frame(),
@@ -185,21 +184,18 @@ impl WorldState {
         };
         if let Some(run) = log.from_giver(character) {
             if run.ready() {
-                let endings = run
-                    .template()
-                    .map(|template| {
-                        template
-                            .turn_in_choices()
-                            .into_iter()
-                            .filter_map(|index| {
-                                Some((
-                                    u8::try_from(index).ok()?,
-                                    template.outcomes.get(index)?.label,
-                                ))
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let endings = run.template().map_or_default(|template| {
+                    template
+                        .turn_in_choices()
+                        .into_iter()
+                        .filter_map(|index| {
+                            Some((
+                                u8::try_from(index).ok()?,
+                                template.outcomes.get(index)?.label,
+                            ))
+                        })
+                        .collect()
+                });
                 return ArcTalk::Ready {
                     arc: run.arc(),
                     endings,

@@ -1613,8 +1613,7 @@ impl WorldState {
     #[must_use]
     pub fn store_chunk(&self, store: StoreKey, chunk: ChunkPosition) -> TileDiffs {
         self.store_terrain(store)
-            .map(|terrain| terrain.chunk_diffs(chunk))
-            .unwrap_or_default()
+            .map_or_default(|terrain| terrain.chunk_diffs(chunk))
     }
 
     /// Overwrites `store`'s `chunk` with a replicated copy.

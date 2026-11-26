@@ -125,7 +125,7 @@ fn ten_thousand_tick_scripted_run_is_deterministic() {
         "scripted run produced {event_count} events"
     );
     assert!(changed_tiles > 0, "scripted run never changed terrain");
-    assert!(!first.final_world.service_transactions().is_empty());
+    assert_ne!(first.final_world.service_transactions(), []);
 }
 
 #[test]

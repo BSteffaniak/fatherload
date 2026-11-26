@@ -569,8 +569,7 @@ fn estates_grow_on_alien_worlds_and_the_neighbours_call_once_a_day() {
         species,
         builder: found
             .keeper(town::BUILDER)
-            .map(|character| character.id)
-            .unwrap_or_default(),
+            .map_or_default(|character| character.id),
         paid: 0,
         bought_millis: 0,
         ready_millis: 0,

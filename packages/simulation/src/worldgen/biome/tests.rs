@@ -94,7 +94,7 @@ fn the_town_stays_flat_at_the_classic_surface() {
             biome_at(&settings, crate::worldgen::SPAWN_TILE_X),
             Biome::Plains
         );
-        assert!(flat_sites_in(&settings, -100, 340).is_empty());
+        assert_eq!(flat_sites_in(&settings, -100, 340), []);
     }
 }
 
@@ -158,7 +158,7 @@ fn flat_sites_are_flat_spaced_and_findable() {
             );
         }
     }
-    assert!(flat_sites_in(&WorldSettings::bounded(1), -1_000, 1_000).is_empty());
+    assert_eq!(flat_sites_in(&WorldSettings::bounded(1), -1_000, 1_000), []);
 }
 
 #[test]

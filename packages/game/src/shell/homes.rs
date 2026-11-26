@@ -1324,8 +1324,7 @@ fn build_view(seat: &SeatUi, screen: HomeScreen, ctx: SeatContext<'_>) -> HomeVi
                 };
                 let shows = piece
                     .display
-                    .map(|item| format!(" (showing {})", item_name(item)))
-                    .unwrap_or_default();
+                    .map_or_default(|item| format!(" (showing {})", item_name(item)));
                 view.rows.push(
                     HomeRow::new(
                         format!("Pick up the {}", piece.furniture.name().to_lowercase()),

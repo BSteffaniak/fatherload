@@ -550,7 +550,7 @@ fn freeing_the_star_core_rains_no_boulders_and_wrecks_nobody() {
     for _ in 0..60 * 125 {
         let _ = tick(&mut world);
         assert!(world.falling_boulders().is_empty(), "a boulder fell");
-        assert!(world.collapse_warnings().is_empty());
+        assert_eq!(world.collapse_warnings(), []);
         for id in [PLAYER, OTHER] {
             let rig = world.player_mut(id).expect("rig");
             assert!(rig.hull > 0.0, "{id:?} was wrecked");

@@ -98,8 +98,7 @@ impl SeatUi {
             .world
             .tombs()
             .member_of(player)
-            .map(|member| member.offers.clone())
-            .unwrap_or_default();
+            .map_or_default(|member| member.offers.clone());
         if offers.is_empty() {
             self.modal = None;
             return;

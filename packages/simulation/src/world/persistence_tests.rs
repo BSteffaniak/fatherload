@@ -61,7 +61,7 @@ fn a_played_world_round_trips_through_its_compact_form() {
 #[test]
 fn a_fresh_world_keyframe_carries_no_tiles() {
     let world = WorldState::new_game(PlayerId::new(1));
-    assert!(world.terrain().generation_diffs().is_empty());
+    assert_eq!(world.terrain().generation_diffs(), []);
     let bytes = postcard::to_allocvec(world.terrain()).expect("encode");
     assert!(bytes.len() < 64, "{} bytes", bytes.len());
     let terrain: Terrain = postcard::from_bytes(&bytes).expect("decode");

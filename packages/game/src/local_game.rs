@@ -884,8 +884,7 @@ impl LocalGame {
                                 .into_iter()
                                 .find(|(_, done)| !done)
                         })
-                        .map(|(line, _)| line)
-                        .unwrap_or_default();
+                        .map_or_default(|(line, _)| line);
                     for (seat, player) in players.iter().enumerate() {
                         if *player != player_id && !crew {
                             continue;
@@ -3999,7 +3998,7 @@ mod tests {
         );
         assert!(!game.shell.seat(1).message.starts_with("Sold"));
         assert_eq!(game.shell.seat(0).depot_receipts.len(), 1);
-        assert!(game.shell.seat(1).depot_receipts.is_empty());
+        assert_eq!(game.shell.seat(1).depot_receipts, [] as [String; 0]);
 
         // Player 2 buys the cargo bay they selected, as their own player.
         let before = player(&game, second);

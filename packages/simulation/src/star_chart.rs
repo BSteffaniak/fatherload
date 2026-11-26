@@ -265,7 +265,7 @@ mod tests {
             for chart in [&near, &far] {
                 let distance = chart.distance();
                 assert!(distance <= u32::try_from(CHART_RING.1).unwrap_or(0) + 1);
-                assert!(chart.sector != HOME_SECTOR);
+                assert_ne!(chart.sector, HOME_SECTOR);
             }
             shallow += near.distance();
             deep += far.distance();

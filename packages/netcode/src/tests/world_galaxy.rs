@@ -178,18 +178,15 @@ fn body_of_theme(theme: Theme) -> SpaceBodyKey {
 }
 
 fn enemies_of(world: &WorldState, store: StoreKey) -> Vec<fatherload_simulation::enemy::EnemyKind> {
-    world
-        .store_entities(store)
-        .map(|entities| {
-            entities
-                .of_kind(EntityKind::Enemy)
-                .filter_map(|entity| match entity.state {
-                    EntityState::Enemy(state) => Some(state.kind),
-                    _ => None,
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    world.store_entities(store).map_or_default(|entities| {
+        entities
+            .of_kind(EntityKind::Enemy)
+            .filter_map(|entity| match entity.state {
+                EntityState::Enemy(state) => Some(state.kind),
+                _ => None,
+            })
+            .collect()
+    })
 }
 
 #[test]

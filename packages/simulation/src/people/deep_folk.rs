@@ -607,7 +607,7 @@ mod tests {
             generator: GeneratorVersion::V10,
             ..settings
         };
-        assert!(settlement_ids(&classic).is_empty());
+        assert_eq!(settlement_ids(&classic), []);
         assert!(routine::settlement(&classic, CATHEDRAL_STATION).is_none());
     }
 

@@ -152,7 +152,7 @@ fn a_client_lands_in_an_alien_town_talks_learns_and_trades_online() {
     let residents = |world: &WorldState| -> Vec<fatherload_simulation::entity::EntityId> {
         world
             .store_entities(store)
-            .map(|entities| {
+            .map_or_default(|entities| {
                 entities
                     .of_kind(EntityKind::Npc)
                     .filter(|entity| {
@@ -161,7 +161,6 @@ fn a_client_lands_in_an_alien_town_talks_learns_and_trades_online() {
                     .map(|entity| entity.id)
                     .collect()
             })
-            .unwrap_or_default()
     };
     let on_host = residents(pair.host.world());
     assert!(on_host.len() >= 4, "residents about on the host");

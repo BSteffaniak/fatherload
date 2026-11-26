@@ -860,7 +860,6 @@ impl EntityStore {
     }
 
     /// Every entity, in id order.
-    #[must_use]
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &Entity> + ExactSizeIterator {
         self.entities.iter()
     }
@@ -958,7 +957,6 @@ impl EntityStore {
     }
 
     /// Ids of every entity of `kind`, in id order.
-    #[must_use]
     pub fn ids_of(&self, kind: EntityKind) -> impl DoubleEndedIterator<Item = EntityId> + '_ {
         self.indices
             .by_kind

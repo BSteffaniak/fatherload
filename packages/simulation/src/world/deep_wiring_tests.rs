@@ -76,7 +76,7 @@ fn v11_strata_generate_their_fluid_pockets_and_older_worlds_none() {
     let flesh = fluids_in(&settings, Stratum::FleshCaverns);
     assert!(flesh.iter().any(|(_, kind)| *kind == FluidKind::Acid));
     // A stratum without rules stays dry.
-    assert!(fluids_in(&settings, Stratum::SlateShelves).is_empty());
+    assert_eq!(fluids_in(&settings, Stratum::SlateShelves), []);
     // Generated fluid rests: every cell has something under it that holds it.
     let world = WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::default());
     for (at, _) in ocean.iter().chain(&core).take(400) {
@@ -158,7 +158,7 @@ fn v11_carves_and_installs_an_outpost_per_descent_on_the_builders_cable() {
         SimulationParams::default(),
     );
     assert!(classic.logistics().outposts.is_empty());
-    assert!(logistics_sites(&WorldSettings::new(1)).lifts.is_empty());
+    assert_eq!(logistics_sites(&WorldSettings::new(1)).lifts, []);
 }
 
 #[test]

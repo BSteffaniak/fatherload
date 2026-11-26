@@ -850,7 +850,7 @@ mod tests {
                 geometry.surface_columns,
                 (std::f32::consts::TAU * radius).round() as u32
             );
-            assert!(!geometry.halvings.is_empty());
+            assert_ne!(geometry.halvings, [] as [i32; 0]);
             for row in geometry.surface_row..=geometry.last_row() {
                 let columns = geometry.columns_at(row) as f32;
                 let top = geometry.radius_of_row(row as f32);

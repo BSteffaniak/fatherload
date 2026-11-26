@@ -248,8 +248,7 @@ fn profile(
     );
     let focus = character
         .focus_name(Some(population))
-        .map(|name| format!(" ({name})"))
-        .unwrap_or_default();
+        .map_or_default(|name| format!(" ({name})"));
     let _ = writeln!(
         out,
         "   values {}; wants to {}{focus}; fears {}.",

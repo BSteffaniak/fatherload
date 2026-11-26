@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn every_moon_has_a_warning_and_dawn_counts_kills() {
         for moon in MoonPhase::ALL {
-            assert!(!moon_warning(moon).is_empty());
+            assert_ne!(moon_warning(moon), "");
         }
         assert!(dawn_detail(3).starts_with('3'));
         assert!(dawn_detail(0).contains("burrow"));

@@ -240,7 +240,7 @@ fn water_lives_only_in_flooded_caves_and_lies_still() {
                 assert!(water.is_empty(), "{:?} holds water", biome.kind);
                 continue;
             }
-            assert!(!water.is_empty());
+            assert_ne!(water, []);
             for position in &water {
                 // Still water: never air under water.
                 let below = biome.cell(position.x, position.y + 1);
@@ -292,13 +292,13 @@ fn older_generators_have_no_caves() {
         generator: GeneratorVersion::V5,
         ..WorldSettings::new(0x0CA7)
     };
-    assert!(
+    assert_eq!(
         features_in(
             &settings,
             &window(&settings, 600),
             Some(&[FeatureKind::Cave])
-        )
-        .is_empty()
+        ),
+        []
     );
     for x in (-600..600).step_by(7) {
         for y in (0..settings.height_tiles()).step_by(5) {

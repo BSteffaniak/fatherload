@@ -178,8 +178,7 @@ pub fn alien_rows(
         }
         AlienPage::Gift => {
             let mut rows: Vec<AlienRow> = rig
-                .map(super::village::gift_items)
-                .unwrap_or_default()
+                .map_or_default(super::village::gift_items)
                 .into_iter()
                 .map(|(item, _)| AlienRow::GiftItem(item))
                 .collect();

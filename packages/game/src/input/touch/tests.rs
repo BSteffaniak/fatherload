@@ -201,7 +201,7 @@ fn a_finger_keeps_what_it_first_touched() {
     let bomb = rig.centre(TouchControl::Bomb);
     rig.frame(&[(1, base)]);
     let over_button = rig.frame(&[(1, bomb)]);
-    assert!(over_button.view.held.is_empty());
+    assert_eq!(over_button.view.held, []);
     let lifted = rig.frame(&[]).input;
     assert!(
         !lifted.bomb,

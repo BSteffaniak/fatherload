@@ -266,7 +266,7 @@ mod tests {
         };
         let controls = gameplay_controls(&input);
         assert_eq!(controls, ControlState::new(1.0, true, true));
-        assert!(gameplay_actions(&input, ExplosiveSelection::new()).is_empty());
+        assert_eq!(gameplay_actions(&input, ExplosiveSelection::new()), []);
     }
 
     #[test]

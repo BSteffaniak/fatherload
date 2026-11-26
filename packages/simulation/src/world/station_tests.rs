@@ -309,7 +309,7 @@ fn docking_opens_the_hub_and_every_service_works() {
         "a fresh mission"
     );
     let _ = hub(&mut world, StationAction::Abandon(0));
-    assert!(world.station_ledger().missions_of(PLAYER).is_empty());
+    assert_eq!(world.station_ledger().missions_of(PLAYER), []);
     // Nothing to turn in yet.
     assert!(refused(
         &hub(&mut world, StationAction::TurnIn),
@@ -830,7 +830,7 @@ fn a_bot_completes_the_starter_board_with_the_players_controls() {
         world.player(PLAYER).expect("rig").credits,
         credits + rewards
     );
-    assert!(world.station_ledger().missions_of(PLAYER).is_empty());
+    assert_eq!(world.station_ledger().missions_of(PLAYER), []);
     assert_eq!(world.station_ledger().completed[&PLAYER], 3);
     assert!(world.station_ledger().scanned.contains(&scan));
     let _ = home_dock(&world);

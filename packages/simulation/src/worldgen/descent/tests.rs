@@ -392,7 +392,7 @@ fn anomaly_rooms_appear_in_the_strange_layers_only() {
     for kind in LandmarkKind::ALL {
         let _ = landmark_generator(kind);
     }
-    assert!(landmarks_in(&WorldSettings::new(13), &area).is_empty());
+    assert_eq!(landmarks_in(&WorldSettings::new(13), &area), []);
 }
 
 #[test]

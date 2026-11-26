@@ -549,18 +549,15 @@ pub(super) fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
         if met.is_some() {
             break;
         }
-        let enemies: Vec<EnemyKind> = world
-            .store_entities(store)
-            .map(|entities| {
-                entities
-                    .of_kind(EntityKind::Enemy)
-                    .filter_map(|entity| match entity.state {
-                        EntityState::Enemy(state) => Some(state.kind),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let enemies: Vec<EnemyKind> = world.store_entities(store).map_or_default(|entities| {
+            entities
+                .of_kind(EntityKind::Enemy)
+                .filter_map(|entity| match entity.state {
+                    EntityState::Enemy(state) => Some(state.kind),
+                    _ => None,
+                })
+                .collect()
+        });
         let rig = world.player(PLAYER).expect("rig");
         eprintln!(
             "{theme:?} attempt {attempt}: enemies {enemies:?}, rig hull {:.0} at ({:.0},{:.0}) in {:?}, tick {}",

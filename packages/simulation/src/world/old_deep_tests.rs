@@ -205,9 +205,9 @@ fn a_prism_splits_the_headlamp_and_lights_a_latent_gem() {
     // A Lumen mutation lights gems near the rig without a prism.
     set(&mut world, FAR + 4, row, TileKind::Stone);
     set(&mut world, FAR - 2, row + 1, deep(DeepTile::LatentGem));
-    assert!(world.refraction_for(PLAYER).gems.is_empty());
+    assert_eq!(world.refraction_for(PLAYER).gems, []);
     world.set_mutation_for_tests(PLAYER, Mutation::Lumen);
-    assert!(!world.refraction_for(PLAYER).gems.is_empty());
+    assert_ne!(world.refraction_for(PLAYER).gems, []);
 }
 
 #[test]
