@@ -819,9 +819,6 @@ fn upload_texture(
     }
 }
 
-/// A frontier world's mark (Wave 12 planets-b) at the origin: a bomb's shadow (a dark ring
-/// closing in, reddening as it falls: the telegraph), a glowing bomb, a beam of light, the
-/// sand's ripple over a wyrm.
 /// A builder waymark on round ground (Wave 13 story), its feet at the origin: a pylon of the
 /// cable's own pale stuff on a plinth with a lamp at its head (teal, warming slowly), a vault
 /// door set in the rock for a buried relic, a broken pillar with an amber lamp for a lead's
@@ -913,6 +910,9 @@ fn draw_waymark(
     );
 }
 
+/// A frontier world's mark (Wave 12 planets-b) at the origin: a bomb's shadow (a dark ring
+/// closing in, reddening as it falls: the telegraph), a glowing bomb, a beam of light, the
+/// sand's ripple over a wyrm.
 fn draw_frontier_mark(
     draw: &mut impl RaylibDraw,
     mark: super::view::FrontierMark,

@@ -2072,8 +2072,6 @@ impl LocalGame {
         }
     }
 
-    /// Space combat for local seats (Wave 12 hostiles): who found them and what they want, the
-    /// fight's turns, salvage, a boss's arrival and defeat, raids on a body.
     /// The galaxy story for local seats (Wave 13 story). The crew shares one road, so a
     /// chapter's card, a log of the road and the Warden go up on every local seat; a line about
     /// what someone did goes to that seat (or everyone, for the crew's own news: the next goal,
@@ -2120,6 +2118,8 @@ impl LocalGame {
         }
     }
 
+    /// Space combat for local seats (Wave 12 hostiles): who found them and what they want, the
+    /// fight's turns, salvage, a boss's arrival and defeat, raids on a body.
     fn announce_hostiles(&mut self, players: &[PlayerId]) {
         use fatherload_simulation::hostiles::{
             Faction, HostileEvent as E, ShipClass, ShipGearKind,
