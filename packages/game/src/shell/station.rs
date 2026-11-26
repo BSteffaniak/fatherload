@@ -150,14 +150,21 @@ fn works_rows(world: &WorldState, player: PlayerId, station: &StationProfile) ->
                 .map(|part| StationRow::Order(WorkOrder::GatePart(part))),
         );
         if endgame.gate_open() {
-            rows.extend(
-                world
-                    .known_systems()
-                    .into_iter()
-                    .filter(|system| *system != fatherload_simulation::flight::space::HOME_SYSTEM)
-                    .take(8)
-                    .map(StationRow::GateJump),
-            );
+            // The farthest known systems first (where a ride saves the most flight; review:
+            // the first eight in chart order left a late crew's far finds off the list).
+            let home = fatherload_simulation::flight::space::HOME_SYSTEM;
+            let mut known: Vec<SystemRef> = world
+                .known_systems()
+                .into_iter()
+                .filter(|system| *system != home)
+                .collect();
+            let reach = |system: &SystemRef| {
+                (system.sector.0 - home.sector.0)
+                    .abs()
+                    .max((system.sector.1 - home.sector.1).abs())
+            };
+            known.sort_by_key(|system| (std::cmp::Reverse(reach(system)), system.id));
+            rows.extend(known.into_iter().take(8).map(StationRow::GateJump));
         }
     }
     if has_outfitter(station) {

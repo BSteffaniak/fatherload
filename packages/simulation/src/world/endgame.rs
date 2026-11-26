@@ -550,7 +550,7 @@ impl WorldState {
         let space = self.space();
         let star = space.system(system)?.star;
         let (dx, dy) = star.delta_f64(from);
-        let length = dx.hypot(dy).max(1.0);
+        let length = crate::polar::trig::hypot(dx, dy).max(1.0);
         let (ux, uy) = (dx / length, dy / length);
         // Clear of the star's own approach (its heat and light) by half again.
         let star_approach = self
@@ -585,7 +585,7 @@ impl WorldState {
         };
         let now = self.millis_at(self.simulation_tick.next());
         let (dx, dy) = origin.delta_f64(arrival);
-        let length = dx.hypot(dy).max(1.0);
+        let length = crate::polar::trig::hypot(dx, dy).max(1.0);
         #[allow(clippy::cast_possible_truncation, reason = "a unit heading")]
         let (hx, hy) = ((dx / length) as f32, (dy / length) as f32);
         if let Some(player) = self.players.get_mut(&player_id) {
@@ -615,7 +615,8 @@ impl WorldState {
 
     // --- Alien estates -----------------------------------------------------------------------
 
-    /// Whether `player_id` stands at their finished home (`town`, `plot`): the refusal if not.
+    /// Whether `player_id` stands in the town of their finished home (`town`, `plot`): the
+    /// refusal if not.
     fn at_own_alien_home(
         &self,
         player_id: PlayerId,
@@ -628,20 +629,18 @@ impl WorldState {
             .home_at(town_id, plot)
             .filter(|home| home.owner == player_id && home.home.is_some())
             .ok_or(EndgameRefusal::NoHome)?;
-        let building = found
-            .buildings
-            .get(usize::from(plot))
-            .copied()
-            .ok_or(EndgameRefusal::NoHome)?;
-        // An estate's wings stand either side of the house: its reach grows with them.
+        if found.buildings.get(usize::from(plot)).is_none() {
+            return Err(EndgameRefusal::NoHome);
+        }
+        // Anywhere in the town: the orders go through the town's builder (the rows sit on the
+        // builder's Homes page, and the builder walks a schedule, rarely at the house's door);
+        // an estate's wings stand either side of the house at the town's edge, so the reach
+        // grows with them.
         let wings = i64::try_from(self.endgame.estate(town_id, plot).expansions.len()).unwrap_or(0);
         let at_home = self.store_of(player_id) == StoreKey::Body(home.body)
             && self.actor_tile_anywhere(player_id).is_some_and(|tile| {
-                town::wrapped_distance(
-                    i64::from(tile.x),
-                    building.door_column(),
-                    found.strip_width(),
-                ) <= i64::from(building.width / 2) + super::aliens::HOME_REACH.0 + wings * 4
+                town::wrapped_distance(i64::from(tile.x), found.site.centre, found.strip_width())
+                    <= i64::from(found.site.half_width) + super::aliens::HOME_REACH.0 + wings * 4
                     && (tile.y - found.ground_row()).abs() <= super::aliens::HOME_REACH.1
             });
         if !at_home {

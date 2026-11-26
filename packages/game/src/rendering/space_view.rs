@@ -931,8 +931,6 @@ fn draw_approach_guide(
     }
 }
 
-/// A station: solar wings, a spar, a ring with lit windows, a hub, and the docking port's
-/// light with its approach guide.
 /// The Halcyon Gate (Wave 13 endgame) beside Halcyon Dock: six ring segments, the lens and
 /// the keystone, each drawn once delivered (the missing ones as faint scaffold arcs). Drawn
 /// with a few rings per segment, cheap on the browser build.
@@ -1030,6 +1028,8 @@ fn draw_halcyon_gate(
     }
 }
 
+/// A station: solar wings, a spar, a ring with lit windows, a hub, and the docking port's
+/// light with its approach guide.
 fn draw_station(
     draw: &mut RaylibDrawHandle<'_>,
     frame: &SpaceFrame,

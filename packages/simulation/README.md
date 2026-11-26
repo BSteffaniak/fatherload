@@ -11209,8 +11209,10 @@ sold) grow into **estates**: `ExpandHome` at the house raises the next of `ESTAT
 the wings so far) and `estate_bill`; the town's builder gains goodwill. `CallNeighbours` once a
 people-clock day: a seeded gift on the doorstep (3-6 common space materials, more with the
 wings; one comet dust in seven), `NEIGHBOUR_UNDERSTANDING` words of the town's tongue, and
-goodwill with the trader and the builder. Both are refused away from the house (its reach grows
-four columns a wing). The polar renderer draws the wings round the house (a paved terrace, an
+goodwill with the trader and the builder. Both are refused outside the home's town (its reach
+grows four columns a wing past the town's edge; review: the rows sit on the builder's Homes page
+and the builder walks a schedule from the workshop near the town's middle, while the plots are
+at its edges, so asking for the house's door made them depend on where the builder had walked). The polar renderer draws the wings round the house (a paved terrace, an
 annex and its upper storey, a chimney breathing smoke, a garage, a greenhouse, a gallery tower
 and an observatory dome).
 

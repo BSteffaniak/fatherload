@@ -636,7 +636,23 @@ fn estates_grow_on_alien_worlds_and_the_neighbours_call_once_a_day() {
     run(&mut world, 2);
     let events = act(&mut world, PlayerCommand::Alien(call));
     assert!(saw(&events, EndgameEvent::NeighboursCalled), "the next day");
-    // Far from the house, nothing happens.
+    // At the town's middle (by the builder's workshop, where the Homes page is opened) the
+    // order is taken: refused only for the purse, not for the place.
+    world
+        .move_to_place(
+            PLAYER,
+            Place::OnBody(BodyId::Space(id)),
+            strip_position(
+                f64::from(found.site.centre) + 0.5,
+                f64::from(found.ground_row()) - 1.0,
+            ),
+        )
+        .expect("on the body");
+    run(&mut world, 2);
+    world.player_mut(PLAYER).expect("rig").credits = 0;
+    let events = act(&mut world, PlayerCommand::Alien(expand));
+    assert!(refused(&events, EndgameRefusal::Credits), "{events:?}");
+    // Far from the town, nothing happens.
     let width = found.strip_width();
     let far = (plot.door_column() + width / 2).rem_euclid(width);
     world
