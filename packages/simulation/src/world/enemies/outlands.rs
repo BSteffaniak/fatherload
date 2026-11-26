@@ -19,16 +19,22 @@
 //!   comes back whole: no countdown, no lost run). Its fall spends the seal and opens the
 //!   reward vault beside the lair. On Peaceful there is no fight: the seal is spent and the
 //!   vault opens when a rig first enters.
+//! * **The Wave 12 worlds' theme bosses** (Wave 14 finish, [`crate::planet::lairs`]: the Bramble
+//!   King, the Tidecaller, the Hoarfrost Wyrm, the Dune Tyrant, the Magma Drake and the Geode
+//!   Colossus) fight the same way in the lairs under their worlds' landmarks
+//!   ([`WorldState::advance_wild_lair`]), telling their beats as
+//!   [`GameplayEventKind::Lair`] events.
 
 use crate::{
     enemy::{EnemyDifficulty, EnemyKind, EnemyMode, EnemyState},
     entity::{Body, EntityKind, EntityState},
-    event::TickOutput,
+    event::{GameplayEventKind, TickOutput},
     ids::{PlayerId, SimulationTick},
     planet::{
         BodyGround, PlanetGround,
+        lairs::{self, LairEvent},
         outlands::{
-            BossLair, LAIR_HALF_WIDTH, OutlandTile, OutlandsEvent, boss_lair,
+            BossLair, LAIR_HALF_WIDTH, LAIR_HEIGHT, OutlandTile, OutlandsEvent, boss_lair,
             life::{self, OutlandTheme},
         },
         wilds::{life::Habitat, wrap_delta},
@@ -424,19 +430,19 @@ impl WorldState {
     // --- The theme boss ------------------------------------------------------------------------
 
     /// The boss of the lair, if it is awake (its entity, body and state).
-    fn lair_boss(&self, lair: &BossLair) -> Option<(crate::entity::EntityId, Body, EnemyState)> {
+    fn lair_boss(&self, lair: &LairView) -> Option<(crate::entity::EntityId, Body, EnemyState)> {
         self.entities
             .of_kind(EntityKind::Enemy)
             .find_map(|entity| match &entity.state {
-                EntityState::Enemy(state) if state.kind == lair.boss.kind => {
+                EntityState::Enemy(state) if state.kind == lair.kind => {
                     Some((entity.id, entity.body, *state))
                 }
                 _ => None,
             })
     }
 
-    /// Wakes, rests and feeds the brood of this body's theme boss (see the module docs).
-    #[allow(clippy::too_many_lines, reason = "the lair's beats in order")]
+    /// Wakes, rests and feeds the brood of this outland body's theme boss (see the module
+    /// docs).
     pub(in crate::world) fn advance_outland_boss(
         &mut self,
         planet: &PlanetGround,
@@ -447,6 +453,80 @@ impl WorldState {
         let Some(lair) = boss_lair(planet) else {
             return;
         };
+        self.advance_lair_view(
+            planet,
+            &LairView::of_outland(&lair),
+            players,
+            next_tick,
+            output,
+        );
+    }
+
+    /// A Wave 12 world's theme boss (Wave 14 finish, [`crate::planet::lairs`]): the outland
+    /// bosses' fight in the lair under the jungle's, ocean's, glacier's, dunes', volcanic or
+    /// crystal world's landmark. Runs on whichever pass holds such a planet's ground.
+    pub(in crate::world) fn advance_wild_lair(
+        &mut self,
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+    ) {
+        let Some(planet) = self.planet().copied() else {
+            return;
+        };
+        let Some(lair) = lairs::lair_of(&planet) else {
+            return;
+        };
+        let players: Vec<PlayerId> = self
+            .players
+            .keys()
+            .copied()
+            .filter(|id| !self.in_space(*id))
+            .collect();
+        self.advance_lair_view(
+            &planet,
+            &LairView::of_wild(&lair),
+            &players,
+            next_tick,
+            output,
+        );
+    }
+
+    /// Whether `tile` is inside the open hall of this planet's theme-boss lair (outland or
+    /// Wave 12): nothing spawns there but the boss's brood, and no rule fills it.
+    #[must_use]
+    pub fn in_theme_lair(&self, tile: TilePosition) -> bool {
+        let Some(planet) = self.planet() else {
+            return false;
+        };
+        let width = i64::from(planet.strip_width());
+        let column = i64::from(tile.x);
+        boss_lair(planet).is_some_and(|lair| lair.contains(column, tile.y, width))
+            || lairs::lair_of(planet).is_some_and(|lair| lair.contains(column, tile.y, width))
+    }
+
+    /// Whether the Wave 12 theme boss of this body is beaten (its lair's seal spent): `None`
+    /// off such a planet or before the lair's ground is loaded.
+    #[must_use]
+    pub fn wild_boss_beaten_here(&self) -> Option<bool> {
+        let lair = lairs::lair_of(self.planet()?)?;
+        let seal = self.terrain.tile(TilePosition {
+            x: lair.seal.0,
+            y: lair.seal.1,
+        })?;
+        Some(seal.kind == TileKind::Outland(OutlandTile::BossSealSpent))
+    }
+
+    /// Wakes, rests and feeds the brood of a theme boss (outland or Wave 12; see the module
+    /// docs).
+    #[allow(clippy::too_many_lines, reason = "the lair's beats in order")]
+    fn advance_lair_view(
+        &mut self,
+        planet: &PlanetGround,
+        lair: &LairView,
+        players: &[PlayerId],
+        next_tick: SimulationTick,
+        output: &mut TickOutput,
+    ) {
         let seal = TilePosition {
             x: lair.seal.0,
             y: lair.seal.1,
@@ -467,17 +547,17 @@ impl WorldState {
             })
         });
         let (middle_x, middle_y) = lair.middle();
-        let boss = self.lair_boss(&lair);
+        let boss = self.lair_boss(lair);
         let every = self.timing.ticks_for_millis(LAIR_MILLIS).max(1);
         if next_tick.get().is_multiple_of(every) {
             match (boss, rig_in_lair) {
                 (None, Some(player_id)) => {
                     if self.enemies.difficulty == EnemyDifficulty::Peaceful {
                         // No fight on Peaceful: the lair yields its vault.
-                        self.boss_lair_won(planet, &lair, Some(player_id), output);
+                        self.boss_lair_won(lair, Some(player_id), output);
                         return;
                     }
-                    let kind = lair.boss.kind;
+                    let kind = lair.kind;
                     let tile = TilePosition {
                         x: i32::try_from(middle_x.rem_euclid(width)).unwrap_or(0),
                         y: lair.floor - 2,
@@ -493,11 +573,7 @@ impl WorldState {
                             state.mode = EnemyMode::Chase;
                         }
                     });
-                    output.push_event(outland_event(
-                        OutlandsEvent::BossWoke,
-                        Some(player_id),
-                        tile,
-                    ));
+                    output.push_event(lair.event(LairBeat::Woke, Some(player_id), tile));
                 }
                 (Some((id, _, _)), None) => {
                     // Nobody near the lair: the boss rests (and comes back whole).
@@ -518,7 +594,7 @@ impl WorldState {
             }
         }
         // The brood: a warning, then the call, on a rhythm of world time.
-        let Some((_, body, state)) = self.lair_boss(&lair) else {
+        let Some((_, body, state)) = self.lair_boss(lair) else {
             return;
         };
         if !state.mode.hostile() {
@@ -537,16 +613,12 @@ impl WorldState {
         let warned =
             (before + BROOD_WARNING_MILLIS) / period != (after + BROOD_WARNING_MILLIS) / period;
         if warned {
-            output.push_event(outland_event(
-                OutlandsEvent::BossSummons,
-                state.target,
-                boss_tile,
-            ));
+            output.push_event(lair.event(LairBeat::Summons, state.target, boss_tile));
         }
         if before / period == after / period {
             return;
         }
-        let brood = brood_of(lair.boss.kind);
+        let brood = brood_of(lair.kind);
         let count = self
             .entities
             .of_kind(EntityKind::Enemy)
@@ -579,13 +651,7 @@ impl WorldState {
     }
 
     /// A theme boss fell (or a Peaceful lair yielded): its seal is spent, its vault opens.
-    fn boss_lair_won(
-        &mut self,
-        planet: &PlanetGround,
-        lair: &BossLair,
-        by: Option<PlayerId>,
-        output: &mut TickOutput,
-    ) {
+    fn boss_lair_won(&mut self, lair: &LairView, by: Option<PlayerId>, output: &mut TickOutput) {
         let seal = TilePosition {
             x: lair.seal.0,
             y: lair.seal.1,
@@ -599,13 +665,12 @@ impl WorldState {
                 .terrain
                 .set_kind_by_rule(TilePosition { x: column, y: row }, TileKind::Air);
         }
-        let _ = planet;
-        output.push_event(outland_event(OutlandsEvent::BossDefeated, by, seal));
+        output.push_event(lair.event(LairBeat::Defeated, by, seal));
         // The endgame's hunt list (Wave 13 integration).
-        self.record_theme_boss(lair.boss.theme.0, by, output);
+        self.record_theme_boss(lair.theme, by, output);
     }
 
-    /// An outland creature died at `tile`: a theme boss's fall wins its lair.
+    /// An outland creature died: a theme boss's fall wins its lair.
     pub(super) fn outlands_kill(
         &mut self,
         kind: EnemyKind,
@@ -615,24 +680,140 @@ impl WorldState {
         if !kind.is_outland_boss() {
             return;
         }
-        let Some((planet, _)) = self.outland_world().map(|(planet, life)| (*planet, life)) else {
+        let Some(planet) = self.outland_world().map(|(planet, _)| *planet) else {
             return;
         };
         let Some(lair) = boss_lair(&planet) else {
             return;
         };
         if lair.boss.kind == kind {
-            self.boss_lair_won(&planet, &lair, by, output);
+            self.boss_lair_won(&LairView::of_outland(&lair), by, output);
+        }
+    }
+
+    /// A Wave 12 world's theme boss died: its fall wins its lair (Wave 14 finish).
+    pub(super) fn wild_lair_kill(
+        &mut self,
+        kind: EnemyKind,
+        by: Option<PlayerId>,
+        output: &mut TickOutput,
+    ) {
+        if !kind.is_lair_boss() {
+            return;
+        }
+        let Some(lair) = self.planet().and_then(lairs::lair_of) else {
+            return;
+        };
+        if lair.boss.kind == kind {
+            self.boss_lair_won(&LairView::of_wild(&lair), by, output);
         }
     }
 }
 
-/// The brood a theme boss calls.
+/// One beat of a lair's fight, told as its world's event.
+#[derive(Clone, Copy)]
+enum LairBeat {
+    Woke,
+    Summons,
+    Defeated,
+}
+
+/// A theme boss's lair as the fight sees it: an outland lair or a Wave 12 world's.
+struct LairView {
+    kind: EnemyKind,
+    /// The planet theme's id (the hunt list's key).
+    theme: u16,
+    centre: i64,
+    top: i32,
+    floor: i32,
+    seal: (i32, i32),
+    door: [(i32, i32); 2],
+    /// Whether it is an outland lair (its events are the outlands').
+    outland: bool,
+}
+
+impl LairView {
+    const fn of_outland(lair: &BossLair) -> Self {
+        Self {
+            kind: lair.boss.kind,
+            theme: lair.boss.theme.0,
+            centre: lair.centre,
+            top: lair.top,
+            floor: lair.floor,
+            seal: lair.seal,
+            door: lair.door,
+            outland: true,
+        }
+    }
+
+    const fn of_wild(lair: &lairs::Lair) -> Self {
+        Self {
+            kind: lair.boss.kind,
+            theme: lair.boss.theme.0,
+            centre: lair.centre,
+            top: lair.top,
+            floor: lair.floor,
+            seal: lair.seal,
+            door: lair.door,
+            outland: false,
+        }
+    }
+
+    const fn contains(&self, column: i64, row: i32, width: i64) -> bool {
+        wrap_delta(column, self.centre, width).abs() <= LAIR_HALF_WIDTH
+            && row >= self.top
+            && row < self.floor
+    }
+
+    const fn middle(&self) -> (i64, i32) {
+        (self.centre, self.top + LAIR_HEIGHT / 2)
+    }
+
+    /// The event telling `beat` at `tile`.
+    const fn event(
+        &self,
+        beat: LairBeat,
+        player_id: Option<PlayerId>,
+        tile: TilePosition,
+    ) -> GameplayEventKind {
+        if self.outland {
+            outland_event(
+                match beat {
+                    LairBeat::Woke => OutlandsEvent::BossWoke,
+                    LairBeat::Summons => OutlandsEvent::BossSummons,
+                    LairBeat::Defeated => OutlandsEvent::BossDefeated,
+                },
+                player_id,
+                tile,
+            )
+        } else {
+            GameplayEventKind::Lair {
+                what: match beat {
+                    LairBeat::Woke => LairEvent::BossWoke,
+                    LairBeat::Summons => LairEvent::BossSummons,
+                    LairBeat::Defeated => LairEvent::BossDefeated,
+                },
+                boss: self.kind,
+                player_id,
+                x: tile.x,
+                y: tile.y,
+            }
+        }
+    }
+}
+
+/// The brood a theme boss calls (the outland bosses' and the Wave 12 worlds').
 #[must_use]
 pub const fn brood_of(boss: EnemyKind) -> EnemyKind {
     match boss {
         EnemyKind::ReactorWarden => EnemyKind::WardDrone,
         EnemyKind::AshenSovereign => EnemyKind::Shade,
+        EnemyKind::BrambleKing => EnemyKind::Mossprowler,
+        EnemyKind::Tidecaller => EnemyKind::Tidesnapper,
+        EnemyKind::HoarfrostWyrm => EnemyKind::Rimewolf,
+        EnemyKind::DuneTyrant => EnemyKind::GlassScorpion,
+        EnemyKind::MagmaDrake => EnemyKind::CinderBat,
+        EnemyKind::GeodeColossus => EnemyKind::ShardCrab,
         _ => EnemyKind::Sporeling,
     }
 }

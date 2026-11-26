@@ -1048,6 +1048,10 @@ pub enum SoundCue {
     SpaceCruiseEngage,
     /// The clamps closing at a station, and its welcome.
     SpaceDocked,
+    /// A Wave 12 world's theme boss wakes in its lair: the music's sting (Wave 14 finish).
+    LairBossWake,
+    /// A Wave 12 world's theme boss falls: the victory sting.
+    LairBossFall,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

@@ -1450,6 +1450,17 @@ pub enum GameplayEventKind {
         player_id: Option<PlayerId>,
         detail: u32,
     },
+    // The Wave 12 worlds' theme bosses (Wave 14 finish; netcode codes 1200-1219).
+    /// A jungle, ocean, glacier, dune, volcanic or crystal world's theme boss `boss` woke,
+    /// called its brood or fell, or its relic was dug out, at tile `(x, y)` of the body's
+    /// ground; `player_id` is whose rig, if anyone's (see [`crate::planet::lairs`]).
+    Lair {
+        what: crate::planet::lairs::LairEvent,
+        boss: crate::enemy::EnemyKind,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

@@ -538,7 +538,10 @@ impl WorldState {
             else {
                 continue;
             };
-            if life::signature_at(planet, centre.x, centre.y) != Some(SignatureRule::SlickIce) {
+            // The ice keeps out of a theme boss's lair (Wave 14 finish).
+            if life::signature_at(planet, centre.x, centre.y) != Some(SignatureRule::SlickIce)
+                || self.in_theme_lair(centre)
+            {
                 continue;
             }
             let night = self.wild_night_at(centre.x);

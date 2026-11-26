@@ -570,7 +570,8 @@ fn tile_color(kind: TileKind, band: Band, y: i32) -> Color {
         | TileKind::Frontier(_)
         | TileKind::Alien(_)
         | TileKind::Outland(_)
-        | TileKind::Exotic(_) => tile_art::material_color(kind, band),
+        | TileKind::Exotic(_)
+        | TileKind::Lair(_) => tile_art::material_color(kind, band),
         TileKind::HardRock => mix(tile_art::material_color(kind, band), palette::INK, 20),
         TileKind::Ore(mineral) => mineral_color(mineral),
         TileKind::Artifact(_) => palette::PINK,

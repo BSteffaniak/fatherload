@@ -329,7 +329,8 @@ impl WorldState {
             if self.entities.count_of(EntityKind::Enemy) >= MAX_ENEMIES {
                 break;
             }
-            if self.in_space(*player_id) {
+            // Nothing comes into a theme boss's lair but its brood (Wave 14 finish).
+            if self.in_space(*player_id) || self.in_theme_lair(*tile) {
                 continue;
             }
             let zone = zone_at(&ground, *tile);

@@ -486,6 +486,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Galaxy {
             what, player_id, ..
         } => (1_040 + what.code() as u32, player_id),
+        // The Wave 12 worlds' theme bosses (wave 14 finish): 1200-1219.
+        GameplayEventKind::Lair {
+            what, player_id, ..
+        } => (1_200 + what.code() as u32, player_id),
     }
 }
 

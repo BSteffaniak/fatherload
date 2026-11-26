@@ -417,6 +417,8 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SpaceWarpArrive => Patch::AaWarpArrive,
         SoundCue::SpaceCruiseEngage => Patch::AaCruiseEngage,
         SoundCue::SpaceDocked => Patch::AaDockChime,
+        SoundCue::LairBossWake => Patch::F14LairWake,
+        SoundCue::LairBossFall => Patch::F14LairFall,
     }
 }
 
@@ -837,6 +839,19 @@ pub const fn outlands_cue(
         E::StormRising => SoundCue::FrontierStormRising,
         E::HazardBite => return None,
     })
+}
+
+/// The sound of a Wave 12 world's theme boss's event (Wave 14 finish; exhaustive): the music's
+/// stings for the wake and the fall, the outland bosses' brood call, a fanfare for the relic.
+#[must_use]
+pub const fn lair_cue(what: fatherload_simulation::planet::lairs::LairEvent) -> SoundCue {
+    use fatherload_simulation::planet::lairs::LairEvent as E;
+    match what {
+        E::BossWoke => SoundCue::LairBossWake,
+        E::BossSummons => SoundCue::OutlandBroodCall,
+        E::BossDefeated => SoundCue::LairBossFall,
+        E::RelicFound => SoundCue::MilestoneFanfare,
+    }
 }
 
 /// The sound of a frontier world's event (Wave 12 planets-b; exhaustive: a new event needs an
@@ -1595,6 +1610,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Wilds { what, .. } => Some(wilds_cue(*what)),
         // The outland worlds (Wave 13 planets-c).
         GameplayEventKind::Outlands { what, .. } => outlands_cue(*what),
+        // The Wave 12 worlds' theme bosses (Wave 14 finish).
+        GameplayEventKind::Lair { what, .. } => Some(lair_cue(*what)),
         GameplayEventKind::Alien { what, species, .. } => Some(alien_cue(*what, *species)),
         // Space stations (Wave 12).
         GameplayEventKind::Station { what, .. } => Some(station_cue(*what)),
@@ -1960,6 +1977,7 @@ mod tests {
             | GameplayEventKind::BodyLife { .. }
             | GameplayEventKind::Wilds { .. }
             | GameplayEventKind::Outlands { .. }
+            | GameplayEventKind::Lair { .. }
             | GameplayEventKind::Frontier { .. }
             | GameplayEventKind::Exotic { .. }
             | GameplayEventKind::Alien { .. }
@@ -2443,6 +2461,15 @@ mod tests {
         for what in fatherload_simulation::planet::outlands::OutlandsEvent::ALL {
             events.push(GameplayEventKind::Outlands {
                 what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+            });
+        }
+        for what in fatherload_simulation::planet::lairs::LairEvent::ALL {
+            events.push(GameplayEventKind::Lair {
+                what,
+                boss: fatherload_simulation::EnemyKind::BrambleKing,
                 player_id: Some(player_id),
                 x: 0,
                 y: 0,
@@ -3286,6 +3313,8 @@ mod tests {
             SoundCue::SpaceWarpArrive,
             SoundCue::SpaceCruiseEngage,
             SoundCue::SpaceDocked,
+            SoundCue::LairBossWake,
+            SoundCue::LairBossFall,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

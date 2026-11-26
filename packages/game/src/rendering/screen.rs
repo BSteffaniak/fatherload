@@ -1217,6 +1217,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Exotic(tile) => super::terrain::tile_art::exotic_color(tile),
         TileKind::Alien(tile) => super::terrain::tile_art::alien_color(tile),
         TileKind::Outland(tile) => super::terrain::tile_art::outland_color(tile),
+        TileKind::Lair(tile) => super::terrain::tile_art::lair_color(tile),
     }
 }
 

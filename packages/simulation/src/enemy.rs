@@ -249,6 +249,19 @@
 //! | [`EnemyKind::Gravewarden`] | creature (tomb guardian, armoured) | the Necropolis's tombs | raises its blade | blasts; bullets glance off |
 //! | [`EnemyKind::Shade`] | creature (ghost) | the Grave Mantle | a cold glow drifting near | anything; light |
 //! | [`EnemyKind::AshenSovereign`] | creature (theme boss) | the tomb beneath the Hollow Throne | raises its staff before each volley of ghost flame; calls shades | dodge, keep shooting |
+//!
+//! The Wave 12 worlds' theme bosses (Wave 14 finish, [`crate::planet::lairs`]) wait in a lair
+//! under each world's landmark and fight like the outland bosses (a told volley, a brood on a
+//! rhythm of world time; `world/enemies/outlands.rs`):
+//!
+//! | Kind | World | Tell | Brood | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::BrambleKing`] | jungle | rears, its thorn crown bristling, then a fan of five thorns | mossprowlers | fire burns its bark |
+//! | [`EnemyKind::Tidecaller`] | ocean archipelago | raises both claws, its pearl lantern brightening, then three slow bubbles | tidesnappers | blasts crack its shell |
+//! | [`EnemyKind::HoarfrostWyrm`] | glacier | rears its frill, its heart glowing, then lobs three ice boulders | rimewolves | fire |
+//! | [`EnemyKind::DuneTyrant`] | desert dunes | its glass sting arches over, then three gobs of venom | glass scorpions | blasts crack its plates |
+//! | [`EnemyKind::MagmaDrake`] | volcanic | its throat glows, then three fireballs | cinder bats | anything but fire |
+//! | [`EnemyKind::GeodeColossus`] | crystal | its quartz core flares, then a fan of five shards | shard crabs | blasts shatter quartz |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -694,6 +707,25 @@ pub enum EnemyKind {
     /// The Ring Warden: the builders' sentinel at the Tether's foot (the ring world's theme
     /// boss).
     RingWarden,
+    // --- The Wave 12 worlds' theme bosses (Wave 14 finish, `crate::planet::lairs`), appended
+    /// The Bramble King: a hulking beast of bark and thorn under the Elder Tree (the jungle's
+    /// theme boss).
+    BrambleKing,
+    /// The Tidecaller: a vast hermit crab under the Drowned Spire, a pearl lantern on its brow
+    /// (the ocean archipelago's theme boss).
+    Tidecaller,
+    /// The Hoarfrost Wyrm: a winged serpent of ice in the cave under the Frozen Titan (the
+    /// glacier world's theme boss).
+    HoarfrostWyrm,
+    /// The Dune Tyrant: a colossal glass-stinged scorpion in the hall under the Sleeping
+    /// Sentinel (the dune world's theme boss).
+    DuneTyrant,
+    /// The Magma Drake: a drake of basalt and fire in the magma hall under the Caldera (the
+    /// volcanic world's theme boss).
+    MagmaDrake,
+    /// The Geode Colossus: a giant of quartz in the geode hall under the Choir Spire (the
+    /// crystal world's theme boss).
+    GeodeColossus,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -1157,7 +1189,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 207] = [
+    pub const ALL: [Self; 213] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1365,6 +1397,12 @@ impl EnemyKind {
         Self::TetherDrone,
         Self::VoidMite,
         Self::RingWarden,
+        Self::BrambleKing,
+        Self::Tidecaller,
+        Self::HoarfrostWyrm,
+        Self::DuneTyrant,
+        Self::MagmaDrake,
+        Self::GeodeColossus,
     ];
 
     /// Whether this is one of the outland worlds' creatures (Wave 13 planets-c), their bosses
@@ -1397,6 +1435,22 @@ impl EnemyKind {
         matches!(
             self,
             Self::Sporemother | Self::ReactorWarden | Self::AshenSovereign
+        )
+    }
+
+    /// Whether this is one of the Wave 12 worlds' theme bosses (Wave 14 finish): the jungle's,
+    /// the ocean's, the glacier's, the dunes', the volcanic and the crystal world's, each in its
+    /// lair ([`crate::planet::lairs`]).
+    #[must_use]
+    pub const fn is_lair_boss(self) -> bool {
+        matches!(
+            self,
+            Self::BrambleKing
+                | Self::Tidecaller
+                | Self::HoarfrostWyrm
+                | Self::DuneTyrant
+                | Self::MagmaDrake
+                | Self::GeodeColossus
         )
     }
 
@@ -1766,6 +1820,11 @@ impl EnemyKind {
             Self::Gasbag => 1.2,
             Self::ScorchMite | Self::TetherDrone => 1.0,
             Self::VoidMite => 0.8,
+            // The Wave 12 worlds' theme bosses (Wave 14): a pearl lantern, a frost heart,
+            // a drake's fire, a colossus's quartz core; they light their lairs.
+            Self::Tidecaller | Self::HoarfrostWyrm | Self::GeodeColossus => 4.5,
+            Self::MagmaDrake => 5.5,
+            Self::BrambleKing | Self::DuneTyrant => 3.0,
             _ => 0.0,
         }
     }
@@ -5027,6 +5086,127 @@ impl EnemyKind {
                 elite: true,
                 ..stats("The Ring Warden", Machine, Flying, AttackStyle::Contact)
             },
+            // --- The Wave 12 worlds' theme bosses (Wave 14 finish) -------------------------
+            Self::BrambleKing => EnemyStats {
+                radius: 22.0,
+                health: 1_200.0,
+                speed: 36.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 16.0,
+                windup_millis: 1_250,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 22.0,
+                knockback: 280.0,
+                elite: true,
+                ..stats(
+                    "The Bramble King",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Thorn, 5),
+                )
+            },
+            Self::Tidecaller => EnemyStats {
+                radius: 22.0,
+                health: 1_250.0,
+                speed: 34.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 16.0,
+                windup_millis: 1_300,
+                cooldown_millis: 3_300,
+                attack_range_tiles: 22.0,
+                knockback: 280.0,
+                elite: true,
+                ..stats(
+                    "The Tidecaller",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::PressureBubble, 3),
+                )
+            },
+            Self::HoarfrostWyrm => EnemyStats {
+                radius: 22.0,
+                health: 1_150.0,
+                speed: 48.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 16.0,
+                windup_millis: 1_200,
+                cooldown_millis: 3_100,
+                attack_range_tiles: 22.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Hoarfrost Wyrm",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Rubble, 3),
+                )
+            },
+            Self::DuneTyrant => EnemyStats {
+                radius: 22.0,
+                health: 1_250.0,
+                speed: 40.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 18.0,
+                windup_millis: 1_300,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 22.0,
+                knockback: 300.0,
+                elite: true,
+                ..stats(
+                    "The Dune Tyrant",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Acid, 3),
+                )
+            },
+            Self::MagmaDrake => EnemyStats {
+                radius: 22.0,
+                health: 1_200.0,
+                speed: 46.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 16.0,
+                windup_millis: 1_200,
+                cooldown_millis: 3_100,
+                attack_range_tiles: 22.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Magma Drake",
+                    Creature,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::Fireball, 3),
+                )
+            },
+            Self::GeodeColossus => EnemyStats {
+                radius: 22.0,
+                health: 1_300.0,
+                speed: 32.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 18.0,
+                windup_millis: 1_300,
+                cooldown_millis: 3_300,
+                attack_range_tiles: 22.0,
+                knockback: 300.0,
+                elite: true,
+                ..stats(
+                    "The Geode Colossus",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::MirrorShard, 5),
+                )
+            },
         }
     }
 
@@ -5341,6 +5521,13 @@ impl EnemyKind {
             Self::TetherDrone => (11.0, 9.0),
             Self::VoidMite => (10.0, 10.0),
             Self::RingWarden => (48.0, 46.0),
+            // The Wave 12 worlds' theme bosses (Wave 14): their drawn bodies at 1.5x.
+            Self::BrambleKing => (54.0, 64.0),
+            Self::Tidecaller => (62.0, 44.0),
+            Self::HoarfrostWyrm => (68.0, 48.0),
+            Self::DuneTyrant => (68.0, 52.0),
+            Self::MagmaDrake => (72.0, 50.0),
+            Self::GeodeColossus => (54.0, 58.0),
         }
     }
 
@@ -5559,6 +5746,14 @@ impl EnemyKind {
             (Self::Gravewarden | Self::AshenSovereign, DamageKind::Explosive) => 1.4,
             (Self::Shade, DamageKind::Kinetic) => 0.7,
             (Self::Capgrazer, DamageKind::Kinetic) => 0.7,
+            // The Wave 12 worlds' theme bosses (Wave 14): bark and ice burn, shells and quartz
+            // turn bullets and crack under blasts, the drake does not burn.
+            (Self::BrambleKing | Self::HoarfrostWyrm, DamageKind::Fire) => 1.5,
+            (Self::MagmaDrake, DamageKind::Fire) => 0.0,
+            (Self::Tidecaller | Self::DuneTyrant | Self::GeodeColossus, DamageKind::Kinetic) => 0.6,
+            (Self::Tidecaller | Self::DuneTyrant | Self::GeodeColossus, DamageKind::Explosive) => {
+                1.5
+            }
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -6758,6 +6953,16 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             if rare < 25 {
                 add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
             }
+        }
+        EnemyKind::BrambleKing
+        | EnemyKind::Tidecaller
+        | EnemyKind::HoarfrostWyrm
+        | EnemyKind::DuneTyrant
+        | EnemyKind::MagmaDrake
+        | EnemyKind::GeodeColossus => {
+            add(richer, 18 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 3);
+            add(ItemKind::Material(StrategicResourceKind::CoreShard), 2);
         }
         EnemyKind::Thunderhead | EnemyKind::Gloamwarden | EnemyKind::RingWarden => {
             add(richer, 14 + extra);

@@ -566,6 +566,7 @@ fn glyph(kind: TileKind) -> char {
         TileKind::Alien(_) => 'a',
         TileKind::Outland(_) => 'O',
         TileKind::Exotic(_) => 'e',
+        TileKind::Lair(_) => 'b',
     }
 }
 

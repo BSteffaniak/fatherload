@@ -446,7 +446,9 @@ impl WorldState {
         let mut grown = None;
         for (_, (x, y)) in self.frontier_rigs() {
             let centre = self.frame().tile_at(x, y);
-            if rule_at(ground, FrontierStyle::Crystal, centre) != Some(StratumRule::Regrowth) {
+            if rule_at(ground, FrontierStyle::Crystal, centre) != Some(StratumRule::Regrowth)
+                || self.in_theme_lair(centre)
+            {
                 continue;
             }
             let mut budget = 2;

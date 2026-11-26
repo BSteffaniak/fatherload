@@ -4,7 +4,9 @@
 //! each in a lair the nav chart can point at) and the theme worlds' bosses, registered in
 //! [`THEME_BOSSES`] (Wave 13 integration: the fungal, machine and dead worlds' from
 //! [`crate::planet::outlands::THEME_BOSSES`], the gas giant's, locked and ring worlds' from
-//! [`crate::exotic::boss::THEME_BOSSES`]); each records itself through
+//! [`crate::exotic::boss::THEME_BOSSES`]; Wave 14 finish: the jungle, ocean, glacier, dune,
+//! volcanic and crystal worlds' from [`crate::planet::lairs::LAIR_BOSSES`]); each records
+//! itself through
 //! [`crate::WorldState::record_theme_boss`] when it falls.
 //! The list, the completion screen and the achievements read the same registry, so a theme
 //! boss counts the moment it is registered.
@@ -57,6 +59,37 @@ pub const THEME_BOSSES: &[ThemeBoss] = &[
         world: Theme::RingWorld,
         name: "The Ring Warden",
     },
+    // Wave 14 finish: the Wave 12 worlds (`crate::planet::lairs`).
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::JUNGLE.0,
+        world: Theme::Jungle,
+        name: "The Bramble King",
+    },
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::OCEAN.0,
+        world: Theme::OceanArchipelago,
+        name: "The Tidecaller",
+    },
+    ThemeBoss {
+        theme: crate::planet::PlanetThemeId::GLACIER.0,
+        world: Theme::Ice,
+        name: "The Hoarfrost Wyrm",
+    },
+    ThemeBoss {
+        theme: crate::frontier::DUNE_WORLD.0,
+        world: Theme::DesertDunes,
+        name: "The Dune Tyrant",
+    },
+    ThemeBoss {
+        theme: crate::frontier::VOLCANIC_WORLD.0,
+        world: Theme::Volcanic,
+        name: "The Magma Drake",
+    },
+    ThemeBoss {
+        theme: crate::frontier::CRYSTAL_WORLD.0,
+        world: Theme::Crystal,
+        name: "The Geode Colossus",
+    },
 ];
 
 /// The hunt list's theme boss of an enemy kind (the theme it rules), if it is one.
@@ -72,6 +105,7 @@ pub fn theme_boss_of(kind: crate::enemy::EnemyKind) -> Option<u16> {
                 .find(|(_, boss, _)| *boss == kind)
                 .map(|(style, ..)| style.theme().0)
         })
+        .or_else(|| crate::planet::lairs::lair_boss_of(kind).map(|boss| boss.theme.0))
 }
 
 /// One entry of the hunt list.

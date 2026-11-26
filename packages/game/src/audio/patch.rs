@@ -20,6 +20,7 @@ mod distortion;
 mod drowned;
 mod exotic;
 mod far_strange;
+mod finish;
 mod frontier;
 mod garrison;
 mod heart;
@@ -653,6 +654,9 @@ patches! {
     AaWarpArrive => "aa_warp_arrive",
     AaCruiseEngage => "aa_cruise_engage",
     AaDockChime => "aa_dock_chime",
+    // Wave 14 finish: the Wave 12 worlds' theme bosses' stings.
+    F14LairWake => "f14_lair_wake",
+    F14LairFall => "f14_lair_fall",
 }
 
 /// Playback metadata of a patch.
@@ -1301,6 +1305,13 @@ impl Patch {
             | Self::AaCombatMachineLoop => PatchInfo::new(Loop),
             Self::AaWarpEngage | Self::AaWarpArrive => PatchInfo::new(Big).send(0.25),
             Self::AaCruiseEngage | Self::AaDockChime => PatchInfo::new(Feedback).send(0.15),
+            // Wave 14 finish: the lair bosses' music stings are set pieces.
+            Self::F14LairWake | Self::F14LairFall => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.2)
+                .ducking(0.3)
+                .priority(8),
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -2165,6 +2176,8 @@ impl Patch {
             Self::AaWarpArrive => space_audio::warp_arrive(rng),
             Self::AaCruiseEngage => space_audio::cruise_engage(rng),
             Self::AaDockChime => space_audio::dock_chime(rng),
+            Self::F14LairWake => finish::lair_wake(rng),
+            Self::F14LairFall => finish::lair_fall(rng),
         }
     }
 }

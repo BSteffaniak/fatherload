@@ -19,6 +19,7 @@ pub mod hollow;
 pub mod hostiles;
 pub mod icons;
 pub mod interior;
+pub mod lairs;
 pub mod living;
 pub mod menu_icons;
 pub mod moon;
@@ -706,6 +707,13 @@ pub const ALL: &[&SpriteDef] = &[
     &exotic::RING_WARDEN,
     // The galaxy story (Wave 13 story): the Harbour's Warden.
     &hostiles::WARDEN,
+    // The Wave 12 worlds' theme bosses (Wave 14 finish).
+    &lairs::BRAMBLE_KING,
+    &lairs::TIDECALLER,
+    &lairs::HOARFROST_WYRM,
+    &lairs::DUNE_TYRANT,
+    &lairs::MAGMA_DRAKE,
+    &lairs::GEODE_COLOSSUS,
 ];
 
 #[cfg(test)]

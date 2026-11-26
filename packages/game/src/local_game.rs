@@ -2392,6 +2392,29 @@ impl LocalGame {
                         }
                     }
                 }
+                // The Wave 12 worlds' theme bosses (Wave 14 finish): named, with their tells.
+                GameplayEventKind::Lair {
+                    what,
+                    boss,
+                    player_id,
+                    ..
+                } => {
+                    use fatherload_simulation::planet::lairs::LairEvent as L;
+                    let text = match what {
+                        L::BossWoke => format!("{} wakes! {}", boss.stats().name, lair_tell(boss)),
+                        L::BossSummons => format!("{} calls its brood!", boss.stats().name),
+                        L::BossDefeated => format!(
+                            "{} falls! Its seal is spent and its vault stands open.",
+                            boss.stats().name
+                        ),
+                        L::RelicFound => "A boss's relic, out of its vault!".to_owned(),
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_none_or(|owner| owner == *player) {
+                            messages.push((seat, text.clone()));
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -3063,6 +3086,24 @@ pub fn world_from_setup(
     world.set_enemy_difficulty(enemies);
     world.set_day_length(day_length);
     world
+}
+
+/// What a Wave 12 world's theme boss does before it strikes (its wake message's hint).
+const fn lair_tell(boss: fatherload_simulation::EnemyKind) -> &'static str {
+    use fatherload_simulation::EnemyKind as K;
+    match boss {
+        K::BrambleKing => "When it rears and its crown bristles gold, thorns fly. Fire burns it.",
+        K::Tidecaller => "When its claw rises and the pearl blazes, bubbles come. Blasts crack it.",
+        K::HoarfrostWyrm => {
+            "When its frill spreads and its heart glows white, ice falls. Fire melts it."
+        }
+        K::DuneTyrant => "When its glass sting arches high, venom flies. Blasts crack its plates.",
+        K::MagmaDrake => "When its throat glows, fire comes. Fire will not hurt it.",
+        K::GeodeColossus => {
+            "When its arms rise and its core flares, shards fly. Blasts shatter it."
+        }
+        _ => "Watch its tells!",
+    }
 }
 
 /// The message for opening a cave cache (and the antique piece it held, WP-HOME).

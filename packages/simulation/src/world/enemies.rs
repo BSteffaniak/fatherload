@@ -757,6 +757,10 @@ impl WorldState {
         if let Some(fits) = self.outlands_habitat(kind, tile) {
             return fits;
         }
+        // A Wave 12 world's theme boss is placed by its lair (Wave 14 finish).
+        if kind.is_lair_boss() {
+            return true;
+        }
         if let Some(fits) = self.hollow_habitat(kind, tile) {
             return fits;
         }
@@ -2874,6 +2878,10 @@ impl WorldState {
             // A theme boss's fall spends its seal and opens its vault (Wave 13).
             self.outlands_kill(state.kind, state.last_attacker, output);
         }
+        if state.kind.is_lair_boss() {
+            // A Wave 12 world's theme boss falls the same way (Wave 14 finish).
+            self.wild_lair_kill(state.kind, state.last_attacker, output);
+        }
         if state.kind.is_exotic() {
             // A theme boss's seal opens into its trophy (Wave 13).
             self.exotic_kill(state.kind, state.last_attacker, output);
@@ -3209,6 +3217,13 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::Gravewarden
         | EnemyKind::Shade
         | EnemyKind::AshenSovereign
+        // The Wave 12 worlds' theme bosses wait in their lairs (Wave 14 finish).
+        | EnemyKind::BrambleKing
+        | EnemyKind::Tidecaller
+        | EnemyKind::HoarfrostWyrm
+        | EnemyKind::DuneTyrant
+        | EnemyKind::MagmaDrake
+        | EnemyKind::GeodeColossus
         => false,
         // The exotic worlds (Wave 13 planets-d) spawn their own, by zone.
         EnemyKind::DriftRay

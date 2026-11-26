@@ -414,6 +414,9 @@ pub enum TileKind {
     /// cities, hardpan, nitrogen ice, vents, lodestone, ring dust and ice, the Tether, live
     /// conduits, builder outposts and the bosses' seals and trophies.
     Exotic(crate::exotic::ExoticTile),
+    /// A tile of a Wave 12 world's theme-boss lair (Wave 14 finish; see
+    /// [`crate::planet::lairs`]): the bosses' relics and the halls' builder lamps.
+    Lair(crate::planet::lairs::LairTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -532,6 +535,7 @@ impl TileKind {
             Self::Alien(tile) => tile.name(),
             Self::Outland(tile) => tile.name(),
             Self::Exotic(tile) => tile.name(),
+            Self::Lair(tile) => tile.name(),
         }
     }
 
@@ -639,6 +643,7 @@ impl Tile {
                 crate::planet::outlands::OUTLAND_TILE_CODE_BASE + tile.code()
             }
             TileKind::Exotic(tile) => crate::exotic::EXOTIC_TILE_CODE_BASE + tile.code(),
+            TileKind::Lair(tile) => crate::planet::lairs::LAIR_TILE_CODE_BASE + tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -2467,6 +2472,7 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Outland(tile) => tile.indestructible(),
         // An exotic world's Tether, outpost beacons and boss seals (Wave 13).
         TileKind::Exotic(tile) => tile.indestructible(),
+        TileKind::Lair(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
         // ... and Descent VII part B's fixtures (Wave 10).
         TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
@@ -2545,6 +2551,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Alien(tile) => tile.hardness(),
         TileKind::Outland(tile) => tile.hardness(),
         TileKind::Exotic(tile) => tile.hardness(),
+        TileKind::Lair(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2597,6 +2604,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Alien(tile) => tile.durability(),
         TileKind::Outland(tile) => tile.durability(),
         TileKind::Exotic(tile) => tile.durability(),
+        TileKind::Lair(tile) => tile.durability(),
     }
 }
 

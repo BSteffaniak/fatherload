@@ -30,6 +30,7 @@
 //! the polar track's own tests and scenes.
 
 pub mod hooks;
+pub mod lairs;
 pub mod landing;
 pub mod look;
 pub mod outlands;
@@ -599,6 +600,8 @@ impl PlanetGround {
             if self.params.folk != 0 {
                 self.overlay_towns(chunk, &mut tiles);
             }
+            // A Wave 12 world's theme-boss lair under its landmark (Wave 14 finish).
+            lairs::overlay(self, chunk, &mut tiles);
             return tiles;
         }
         let caves = self.caves();
@@ -609,6 +612,8 @@ impl PlanetGround {
                 tiles.push(self.generated_with(&caves, x, y));
             }
         }
+        // A frontier world's theme-boss lair under its landmark (Wave 14 finish).
+        lairs::overlay(self, chunk, &mut tiles);
         tiles
     }
 

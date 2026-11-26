@@ -677,6 +677,21 @@ impl WorldState {
                 MineResult::Mined(TileKind::Exotic(tile)) => {
                     self.exotic_mined(player_id, target, tile, &mut output);
                 }
+                // A Wave 12 world's boss relic (Wave 14 finish).
+                MineResult::Mined(TileKind::Lair(tile)) => {
+                    if let Some(boss) = crate::planet::lairs::LAIR_BOSSES
+                        .iter()
+                        .find(|boss| boss.relic == tile)
+                    {
+                        output.push_event(GameplayEventKind::Lair {
+                            what: crate::planet::lairs::LairEvent::RelicFound,
+                            boss: boss.kind,
+                            player_id: Some(player_id),
+                            x: target.x,
+                            y: target.y,
+                        });
+                    }
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -713,6 +728,8 @@ impl WorldState {
             self.advance_wilds(next_tick, &mut output);
             // An outland world's (Wave 13 planets-c), and its theme boss.
             self.advance_outlands(next_tick, &mut output);
+            // A Wave 12 world's theme boss in its lair (Wave 14 finish).
+            self.advance_wild_lair(next_tick, &mut output);
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();
@@ -749,6 +766,8 @@ impl WorldState {
         self.advance_wilds(next_tick, &mut output);
         // Or one outland planet (Wave 13 planets-c).
         self.advance_outlands(next_tick, &mut output);
+        // A Wave 12 world's theme boss in its lair (Wave 14 finish).
+        self.advance_wild_lair(next_tick, &mut output);
         // The distortion strata (Wave 9): mirror halls and their twins, gazes, rot, landmarks.
         self.advance_distortion(next_tick, &mut output);
         // The far Strange Layers (Wave 9): amber, pings, keyed walls, landmarks, The Glitch.

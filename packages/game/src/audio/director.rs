@@ -256,6 +256,14 @@ impl Material {
                     _ => Self::Hard,
                 }
             }
+            // The Wave 12 worlds' lair relics ring; the lamps grind (Wave 14 finish).
+            TileKind::Lair(tile) => {
+                if tile.is_relic() {
+                    Self::Ore
+                } else {
+                    Self::Hard
+                }
+            }
             // The alien towns (Wave 12): paving grinds, a lexicon stone gives.
             TileKind::Alien(tile) => match tile {
                 fatherload_simulation::alien::AlienTile::LexiconStone(_) => Self::Soft,

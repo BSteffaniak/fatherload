@@ -52,6 +52,7 @@ mod frontier_art;
 mod garrison_art;
 mod heart_art;
 mod hollow_art;
+mod lairs_art;
 mod living_art;
 mod lunar_art;
 mod poi_art;
@@ -73,6 +74,7 @@ pub use exotic_art::{exotic_color, exotic_glow};
 pub use frontier_art::{frontier_color, frontier_glow};
 pub use heart_art::{core_color, core_glow};
 pub use hollow_art::hollow_color;
+pub use lairs_art::lair_color;
 pub use lunar_art::lunar_color;
 pub use outlands_art::outland_color;
 pub use poi_art::poi_color;
@@ -452,6 +454,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Alien(tile) => return alien_art::alien_color(tile),
         TileKind::Outland(tile) => return outlands_art::outland_color(tile),
         TileKind::Exotic(tile) => return exotic_art::exotic_color(tile),
+        TileKind::Lair(tile) => return lairs_art::lair_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -644,6 +647,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         TileKind::Frontier(tile) => frontier_art::base_pixel(tile, x, y),
         TileKind::Outland(tile) => outlands_art::rock_pixel(tile, x, y),
         TileKind::Exotic(tile) => exotic_art::base_pixel(tile, x, y),
+        TileKind::Lair(tile) => lairs_art::base_pixel(tile, x, y),
     }
 }
 
@@ -1043,6 +1047,21 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
             &mut canvas,
             terrain,
             position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+    // The Wave 12 worlds' lair relics and lamps (Wave 14 finish).
+    if let TileKind::Lair(tile) = kind {
+        lairs_art::paint(
+            &mut canvas,
             tile,
             &strata,
             Edges {
@@ -1606,6 +1625,7 @@ const fn grows_grass(material: TileKind) -> bool {
             | TileKind::Frontier(_)
             | TileKind::Outland(_)
             | TileKind::Exotic(_)
+            | TileKind::Lair(_)
             | TileKind::Lava
             | TileKind::Lunar(_)
             | TileKind::Deep(_)

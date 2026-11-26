@@ -360,6 +360,10 @@ impl WorldState {
                 continue;
             }
             let rig = frame.tile_at(x, y);
+            // Nothing comes into a theme boss's lair but its brood (Wave 14 finish).
+            if self.in_theme_lair(rig) {
+                continue;
+            }
             let roll = life::life_roll(
                 planet,
                 1,

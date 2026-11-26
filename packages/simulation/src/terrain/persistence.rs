@@ -1003,6 +1003,13 @@ impl Tile {
                 Some(tile) => TileKind::Exotic(tile),
                 None => return None,
             },
+            // Wave 14 finish (the Wave 12 worlds' boss lairs): 0x3A00..=0x3BFF.
+            0x3A00..=0x3BFF => match crate::planet::lairs::LairTile::from_code(
+                kind_code - crate::planet::lairs::LAIR_TILE_CODE_BASE,
+            ) {
+                Some(tile) => TileKind::Lair(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

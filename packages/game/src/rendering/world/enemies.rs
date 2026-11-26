@@ -29,8 +29,9 @@ use crate::rendering::pixel_art::{
         ancient_city as city_art, crypt as crypt_art, distortion as warp_art,
         drowned as drowned_art, enemies as art, exotic as exotic_art, far_strange as far_art,
         frontier as frontier_art, garrison as garrison_art, heart as heart_art,
-        hollow as hollow_art, hostiles as hostile_art, living as living_art, moon as moon_art,
-        old_deep as deep_art, outlands as outland_art, tomb as tomb_art, wilds as wilds_art,
+        hollow as hollow_art, hostiles as hostile_art, lairs as lair_art, living as living_art,
+        moon as moon_art, old_deep as deep_art, outlands as outland_art, tomb as tomb_art,
+        wilds as wilds_art,
     },
 };
 
@@ -247,6 +248,13 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Gravewarden => &outland_art::GRAVEWARDEN,
         EnemyKind::Shade => &outland_art::SHADE,
         EnemyKind::AshenSovereign => &outland_art::ASHEN_SOVEREIGN,
+        // The Wave 12 worlds' theme bosses (Wave 14 finish).
+        EnemyKind::BrambleKing => &lair_art::BRAMBLE_KING,
+        EnemyKind::Tidecaller => &lair_art::TIDECALLER,
+        EnemyKind::HoarfrostWyrm => &lair_art::HOARFROST_WYRM,
+        EnemyKind::DuneTyrant => &lair_art::DUNE_TYRANT,
+        EnemyKind::MagmaDrake => &lair_art::MAGMA_DRAKE,
+        EnemyKind::GeodeColossus => &lair_art::GEODE_COLOSSUS,
         // The exotic worlds (Wave 13 planets-d).
         EnemyKind::DriftRay => &exotic_art::DRIFT_RAY,
         EnemyKind::Gasbag => &exotic_art::GASBAG,
@@ -1115,6 +1123,22 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
         EnemyKind::Thunderhead | EnemyKind::Gloamwarden | EnemyKind::RingWarden => {
             boss_frame(state, sprite.frame_at(phase))
         }
+        // The Wave 12 worlds' theme bosses (Wave 14 finish): the tell pose winding up, the
+        // strike, a stride or wingbeat (fliers beat their wings even at rest).
+        EnemyKind::BrambleKing
+        | EnemyKind::Tidecaller
+        | EnemyKind::HoarfrostWyrm
+        | EnemyKind::DuneTyrant
+        | EnemyKind::MagmaDrake
+        | EnemyKind::GeodeColossus => {
+            let flier = matches!(state.kind, EnemyKind::HoarfrostWyrm | EnemyKind::MagmaDrake);
+            match state.mode {
+                EnemyMode::Windup => 2,
+                EnemyMode::Strike => 3,
+                _ if moving || flier => sprite.frame_at(phase) % 2,
+                _ => 0,
+            }
+        }
     }
 }
 
@@ -1203,6 +1227,13 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::Sporemother
         | EnemyKind::ReactorWarden
         | EnemyKind::AshenSovereign => ART * 1.5,
+        // The Wave 12 worlds' theme bosses (Wave 14 finish).
+        EnemyKind::BrambleKing
+        | EnemyKind::Tidecaller
+        | EnemyKind::HoarfrostWyrm
+        | EnemyKind::DuneTyrant
+        | EnemyKind::MagmaDrake
+        | EnemyKind::GeodeColossus => ART * 1.5,
         // The exotic worlds (Wave 13): the bosses and the megafauna loom, the mites read.
         EnemyKind::Thunderhead
         | EnemyKind::Gloamwarden
