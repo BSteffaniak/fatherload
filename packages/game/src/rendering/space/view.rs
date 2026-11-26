@@ -484,6 +484,8 @@ pub enum GroundThingKind {
     },
     /// A frontier world's mark (Wave 12 planets-b).
     Frontier(FrontierMark),
+    /// An outland world's mark (Wave 13 planets-c).
+    Outland(OutlandMark),
     /// An alien town's resident (Wave 12): the character, the way they face, whether they
     /// walk (`stride`: art pixels walked) and talk.
     AlienFolk {
@@ -522,6 +524,21 @@ pub enum FrontierMark {
     Beam { across: bool },
     /// A dune wyrm's ripple in the sand above it (its wind-up).
     Ripple,
+}
+
+/// What an outland world shows on its round ground (Wave 13 planets-c): every one a pure
+/// function of the world's seed and time (and the ground's tiles), so every seat and client
+/// draws the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OutlandMark {
+    /// A ghost light drifting through the Grave Mantle (its identity keys its flicker).
+    Wisp(u16),
+    /// A spore vent swelling (per mille of its swell): the blast's telegraph.
+    VentSwell(u16),
+    /// A row of a spore vent's blast (per mille of the blast).
+    VentBlast(u16),
+    /// A turning gear throwing sparks.
+    GearSpin,
 }
 
 /// The seat's view of a body's ground.

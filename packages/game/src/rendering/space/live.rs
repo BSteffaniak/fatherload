@@ -610,6 +610,145 @@ pub fn ground_things(
         }
     }
     things.extend(frontier_things(scene, millis));
+    things.extend(outland_things(scene, millis));
+    things
+}
+
+/// An outland world's marks round the seat (Wave 13 planets-c): the Grave Mantle's ghost
+/// lights, the spore vents' swell and blast, the gear works' sparks while they turn.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines,
+    reason = "screen-space marks round the seat, one block per world"
+)]
+fn outland_things(scene: &crate::render_snapshot::PlaceScene<'_>, millis: u64) -> Vec<GroundThing> {
+    use super::view::{GroundThingKind, OutlandMark};
+    use fatherload_simulation::{
+        planet::{
+            PlanetThemeId,
+            outlands::{
+                OutlandTile, fungal,
+                life::{self, GearPhase, VentPhase},
+            },
+        },
+        terrain::{TileKind, TilePosition},
+    };
+    let mut things = Vec::new();
+    let Some(ground) = scene.terrain.planet_ground() else {
+        return things;
+    };
+    let theme = ground.params().theme;
+    if life::outland_theme(theme).is_none() {
+        return things;
+    }
+    let Some(anchor) = scene
+        .rigs
+        .first()
+        .map(|rig| fatherload_simulation::world::strip_point(scene.frame.world(rig.x, rig.y)))
+    else {
+        return things;
+    };
+    let (column, row) = (anchor.0.floor() as i64, anchor.1.floor() as i32);
+    match theme {
+        PlanetThemeId::DEAD => {
+            // The ghost lights of the Grave Mantle round the seat.
+            for wisp in life::wisps_near(ground, column, row, millis) {
+                let (x, y) = wisp.tiles();
+                things.push(GroundThing {
+                    column: f64::from(x),
+                    row: y + 0.5,
+                    kind: GroundThingKind::Outland(OutlandMark::Wisp((wisp.id & 0xFFFF) as u16)),
+                });
+            }
+        }
+        PlanetThemeId::FUNGAL => {
+            // The vents round the seat: their swell, then their blast up the chimney.
+            let mut seen = Vec::new();
+            for dx in [-40, 0, 40] {
+                for dy in [-30, 0, 30] {
+                    let Some(vent) = fungal::vent_in_cell(ground, column + dx, row + dy) else {
+                        continue;
+                    };
+                    if seen.contains(&vent.column) {
+                        continue;
+                    }
+                    seen.push(vent.column);
+                    let at = TilePosition {
+                        x: vent.column as i32,
+                        y: vent.row,
+                    };
+                    if scene.terrain.tile(at).map(|tile| tile.kind)
+                        != Some(TileKind::Outland(OutlandTile::SporeVent))
+                    {
+                        continue;
+                    }
+                    let phase = life::vent_phase(ground, vent.column, millis);
+                    let progress = |length: u64| {
+                        // Where in the phase it is, per mille.
+                        let mut start = millis;
+                        while start > 0
+                            && life::vent_phase(ground, vent.column, start - 50) == phase
+                        {
+                            start -= 50;
+                        }
+                        ((millis - start).min(length) * 1_000 / length) as u16
+                    };
+                    match phase {
+                        VentPhase::Swelling => things.push(GroundThing {
+                            column: vent.column as f64 + 0.5,
+                            row: vent.row as f32,
+                            kind: GroundThingKind::Outland(OutlandMark::VentSwell(progress(
+                                life::VENT_SWELL_MILLIS,
+                            ))),
+                        }),
+                        VentPhase::Blasting => {
+                            let through = progress(life::VENT_BLAST_MILLIS);
+                            for up in 0..vent.chimney + 6 {
+                                things.push(GroundThing {
+                                    column: vent.column as f64 + 0.5,
+                                    row: (vent.row - up) as f32,
+                                    kind: GroundThingKind::Outland(OutlandMark::VentBlast(through)),
+                                });
+                            }
+                        }
+                        VentPhase::Resting => {}
+                    }
+                }
+            }
+        }
+        _ => {
+            // The gear works' sparks while the gears turn.
+            if life::gear_phase(millis) != GearPhase::Turning {
+                return things;
+            }
+            for dy in -14..=14 {
+                for dx in -22..=22 {
+                    let at = TilePosition {
+                        x: (column + dx) as i32,
+                        y: row + dy,
+                    };
+                    if scene.terrain.tile(at).map(|tile| tile.kind)
+                        == Some(TileKind::Outland(OutlandTile::Gear))
+                        && scene
+                            .terrain
+                            .tile(TilePosition {
+                                x: at.x,
+                                y: at.y - 1,
+                            })
+                            .is_some_and(|tile| tile.kind.is_open())
+                    {
+                        things.push(GroundThing {
+                            column: f64::from(at.x) + 0.5,
+                            row: at.y as f32,
+                            kind: GroundThingKind::Outland(OutlandMark::GearSpin),
+                        });
+                    }
+                }
+            }
+        }
+    }
     things
 }
 

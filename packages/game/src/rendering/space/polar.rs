@@ -892,6 +892,92 @@ fn draw_frontier_mark(
     }
 }
 
+/// An outland world's mark (Wave 13 planets-c) at the origin (its feet): a ghost light's soft
+/// glow drifting (a slow pulse, never a flash), a vent's violet swell growing at its mouth (the
+/// telegraph), its blast of spores up the chimney, a turning gear's sparks.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "screen-space marks"
+)]
+fn draw_outland_mark(
+    draw: &mut impl RaylibDraw,
+    mark: super::view::OutlandMark,
+    art: f32,
+    seconds: f32,
+) {
+    use super::view::OutlandMark;
+    let tile = 16.0 * art;
+    match mark {
+        OutlandMark::Wisp(id) => {
+            let phase = f32::from(id % 97) * 0.13;
+            let pulse = 0.75 + 0.25 * (seconds * 1.3 + phase).sin();
+            let centre = Vector2::new(0.0, -tile * 0.5);
+            draw.draw_circle_v(centre, tile * 0.9, fade(palette::MINT, 0.10 * pulse));
+            draw.draw_circle_v(centre, tile * 0.55, fade(palette::MINT, 0.22 * pulse));
+            draw.draw_circle_v(centre, tile * 0.3, fade(palette::ICE, 0.7 * pulse));
+            // A tail of fainter motes behind it.
+            for trail in 1..4_u8 {
+                let t = f32::from(trail);
+                let offset = Vector2::new(
+                    -t * 3.0 * art * (seconds * 0.7 + phase).cos(),
+                    -tile * 0.5 + t * 2.5 * art,
+                );
+                draw.draw_circle_v(offset, art * (3.0 - t * 0.6), fade(palette::MINT, 0.4 / t));
+            }
+        }
+        OutlandMark::VentSwell(progress) => {
+            let t = f32::from(progress) / 1_000.0;
+            let radius = (0.3 + 0.7 * t) * tile * 0.8;
+            draw.draw_circle_v(
+                Vector2::new(0.0, -tile * 0.5),
+                radius,
+                fade(palette::VIOLET, 0.25 + 0.35 * t),
+            );
+            draw.draw_circle_v(
+                Vector2::new(0.0, -tile * 0.5),
+                radius * 0.5,
+                fade(palette::PINK, 0.3 + 0.4 * t),
+            );
+            // Motes rising from the mouth.
+            for mote in 0..4_u8 {
+                let rise = (seconds * 1.2 + f32::from(mote) * 0.25).fract();
+                draw.draw_circle_v(
+                    Vector2::new(
+                        (f32::from(mote) - 1.5) * 3.0 * art,
+                        -tile * (0.5 + rise * 1.5),
+                    ),
+                    art * 1.5,
+                    fade(palette::LAVENDER, (1.0 - rise) * t),
+                );
+            }
+        }
+        OutlandMark::VentBlast(progress) => {
+            let t = f32::from(progress) / 1_000.0;
+            let strength = (1.0 - t).max(0.2);
+            for puff in 0..3_u8 {
+                let wobble = (seconds * 6.0 + f32::from(puff) * 2.1).sin() * 4.0 * art;
+                let rise = (seconds * 3.0 + f32::from(puff) / 3.0).fract();
+                draw.draw_circle_v(
+                    Vector2::new(wobble, -tile * rise),
+                    tile * 0.45,
+                    fade(palette::LAVENDER, 0.28 * strength),
+                );
+            }
+        }
+        OutlandMark::GearSpin => {
+            // Sparks thrown off the turning teeth, round the gear's top.
+            for spark in 0..3_u8 {
+                let angle = seconds * 5.0 + f32::from(spark) * 2.1;
+                let reach = tile * 0.6;
+                let at = Vector2::new(angle.cos() * reach, -tile * 0.2 - angle.sin().abs() * reach);
+                draw.draw_circle_v(at, art * 1.2, fade(palette::AMBER, 0.85));
+                draw.draw_circle_v(at, art * 2.6, fade(palette::ORANGE, 0.25));
+            }
+        }
+    }
+}
+
 /// `colour` at opacity `alpha` (0-1).
 fn fade(colour: Color, alpha: f32) -> Color {
     #[allow(clippy::cast_sign_loss, reason = "clamped to 0..=255")]
@@ -981,6 +1067,7 @@ fn draw_thing(
             );
         }
         GroundThingKind::Frontier(mark) => draw_frontier_mark(draw, mark, art, seconds),
+        GroundThingKind::Outland(mark) => draw_outland_mark(draw, mark, art, seconds),
         GroundThingKind::AlienFolk {
             character,
             facing,

@@ -482,6 +482,8 @@ mod touch_scenes;
 mod wave6_scenes;
 mod weapon_scenes;
 mod wilds_scenes;
+// Wave 13 planets-c: the fungal, machine and dead worlds.
+mod outlands_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -649,6 +651,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(space_scenes::SPACE_SCENES)
         .chain(bodylife_scenes::BODYLIFE_SCENES)
         .chain(wilds_scenes::WILDS_SCENES)
+        .chain(outlands_scenes::OUTLANDS_SCENES)
         .chain(frontier_scenes::FRONTIER_SCENES)
         .chain(alien_scenes::ALIEN_SCENES)
         .chain(station_scenes::STATION_SCENES)
