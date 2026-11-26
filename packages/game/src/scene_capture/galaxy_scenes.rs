@@ -173,40 +173,39 @@ fn chapter_card(stage: &mut SceneStage<'_>) {
     stage.settle(30);
 }
 
+/// Stands `player`'s rig on the current relic's world `off` columns from the relic (before the
+/// story's checks see it there).
+fn beside_relic(world: &mut WorldState, player: PlayerId, off: i32) {
+    let Some((body, site, _)) = world.galaxy_relic() else {
+        return;
+    };
+    let Some(params) = fatherload_simulation::place::planet_params_for(SCENE_SEED, body) else {
+        return;
+    };
+    let ground = fatherload_simulation::planet::PlanetGround::new(params);
+    let column = i32::try_from(site.column).unwrap_or(0) + off;
+    let surface = fatherload_simulation::planet::BodyGround::surface_row(&ground, column);
+    let at = fatherload_simulation::world::strip_position(
+        f64::from(column) + 0.5,
+        f64::from(surface - 1),
+    );
+    let _ = world.move_to_place(
+        player,
+        fatherload_simulation::place::Place::OnBody(fatherload_simulation::place::BodyId::Space(
+            body,
+        )),
+        at,
+    );
+}
+
 /// The first waymark on its world's ground: the pylon lit, the goal on the HUD.
 fn waymark(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
         road(world, seats[0].player, 0, 2);
         let _ = world.stage_story_warp(seats[0].player);
+        beside_relic(world, seats[0].player, -8);
     });
     stage.settle(40);
-    // A few columns off the pylon, looking at it.
-    stage.play_on(|world| {
-        let Some(player) = world.player_ids().next() else {
-            return;
-        };
-        let Some((body, site, _)) = world.galaxy_relic() else {
-            return;
-        };
-        let Some(params) = fatherload_simulation::place::planet_params_for(SCENE_SEED, body) else {
-            return;
-        };
-        let ground = fatherload_simulation::planet::PlanetGround::new(params);
-        let column = i32::try_from(site.column).unwrap_or(0) - 9;
-        let surface = fatherload_simulation::planet::BodyGround::surface_row(&ground, column);
-        let at = fatherload_simulation::world::strip_position(
-            f64::from(column) + 0.5,
-            f64::from(surface - 1),
-        );
-        let _ = world.move_to_place(
-            player,
-            fatherload_simulation::place::Place::OnBody(
-                fatherload_simulation::place::BodyId::Space(body),
-            ),
-            at,
-        );
-    });
-    stage.settle(20);
     stage.seat(0).message.clear();
     stage.settle(2);
 }
@@ -217,19 +216,20 @@ fn hold(stage: &mut SceneStage<'_>) {
         road(world, seats[0].player, 7, 3);
         world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Normal);
         let _ = world.stage_story_warp(seats[0].player);
-    });
-    stage.settle(30);
-    stage.play_on(|world| {
-        let Some(player) = world.player_ids().next() else {
-            return;
-        };
-        let _ = world.stage_raid(player, Faction::Swarm);
+        beside_relic(world, seats[0].player, 6);
         let mut story = world.galaxy_story().clone();
         story.raid_landed = true;
         story.held_millis = 21_000;
         world.set_galaxy_story(story);
     });
-    stage.settle(70);
+    stage.settle(20);
+    stage.play_on(|world| {
+        let Some(player) = world.player_ids().next() else {
+            return;
+        };
+        let _ = world.stage_raid(player, Faction::Swarm);
+    });
+    stage.settle(50);
     stage.seat(0).message.clear();
     stage.settle(2);
 }
@@ -260,7 +260,7 @@ fn warden(stage: &mut SceneStage<'_>) {
         };
         let mut hostiles = world.hostiles().clone();
         for ship in &mut hostiles.ships {
-            ship.pos = rig.offset(40.0, -560.0);
+            ship.pos = rig.offset(30.0, -430.0);
             let (dx, dy) = ship.pos.delta(rig);
             ship.angle = fatherload_simulation::hostiles::combat::bearing(dx, dy);
             ship.mode = ShipMode::Attacking;
@@ -321,24 +321,25 @@ fn choice(stage: &mut SceneStage<'_>) {
     stage.settle(3);
 }
 
-/// The ending `elapsed` ms after the bell was rung.
+/// The ending `elapsed` ms after `choice` was made at the Harbour's gate.
 fn ending(stage: &mut SceneStage<'_>, choice: FinaleChoice, elapsed: u64) {
     stage.play(1, |world, seats| {
-        road(world, seats[0].player, CHAPTER_COUNT, 0);
+        // At the gate with the Warden calm (the warp's own move), then the choice made.
+        road(world, seats[0].player, CHAPTER_COUNT - 1, 1);
         let mut story = world.galaxy_story().clone();
         story.warden_calmed = true;
+        world.set_galaxy_story(story);
+        let _ = world.stage_story_warp(seats[0].player);
+        let mut story = world.galaxy_story().clone();
+        story.chapter = CHAPTER_COUNT;
+        story.step = 0;
         story.choice = Some(choice);
         story.finale_millis = Some(world.world_millis().saturating_sub(elapsed));
         world.set_galaxy_story(story);
-        if let Some(harbour) = world.galaxy_plan().map(|road| road.harbour)
-            && let Some(rig) = world.player_mut(seats[0].player)
-        {
-            rig.flight.place = fatherload_simulation::flight::FlightPlace::Space;
-            rig.flight.pos = harbour.gate.offset(0, 9_000).pos();
-        }
     });
     stage.settle(3);
     stage.seat(0).message.clear();
+    stage.seat(0).story_moment = None;
     stage.settle(1);
 }
 

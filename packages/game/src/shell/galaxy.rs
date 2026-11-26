@@ -133,20 +133,22 @@ pub fn chapter_page(world: &WorldState, chapter: u8) -> String {
         return String::new();
     };
     let words = world.galaxy_words(chapter);
-    let mut page = galaxy_story::fill(def.intro, &words);
+    // The goals first (ticked off), then the chapter's words: the done chapter's close, the
+    // one under way's opening.
+    let mut page = String::new();
     for (index, goal) in def.goals.iter().enumerate() {
         let done =
             chapter < story.chapter || chapter == story.chapter && index < usize::from(story.step);
-        let mark = if done { "[x]" } else { "[ ]" };
-        page.push('\n');
-        page.push_str(mark);
-        page.push(' ');
+        page.push_str(if done { "[x] " } else { "[ ] " });
         page.push_str(&galaxy_story::fill(goal.text, &words));
+        page.push('\n');
     }
-    if chapter < story.chapter {
-        page.push_str("\n\n");
-        page.push_str(&galaxy_story::fill(def.outro, &words));
-    }
+    let close = if chapter < story.chapter {
+        def.outro
+    } else {
+        def.intro
+    };
+    page.push_str(&galaxy_story::fill(close, &words));
     page
 }
 

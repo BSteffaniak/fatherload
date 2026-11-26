@@ -160,7 +160,7 @@ pub static CHAPTERS: [ChapterDef; CHAPTER_COUNT as usize] = [
     },
     ChapterDef {
         title: "The Silent Foundry",
-        intro: "The waymark's script names a foundry on a {theme} world: {world}, in {system}. \
+        intro: "The waymark's script names a foundry on a {theme}: {world}, in {system}. \
                 \"Where the machines sleep,\" the archivist repeats. \"Bring a lamp. And your \
                 guns.\"",
         stop: StopKind::Theme(&[Theme::MachineWorld, Theme::DeadWorld, Theme::Crystal]),
@@ -170,7 +170,7 @@ pub static CHAPTERS: [ChapterDef; CHAPTER_COUNT as usize] = [
             goal(Goal::ReachSystem, "Warp to {system}."),
             goal(
                 Goal::Land,
-                "Land on {world}, the {theme} world the waymark named.",
+                "Land on {world}, the {theme} the waymark named.",
             ),
             goal(
                 Goal::FindRelic,

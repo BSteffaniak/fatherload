@@ -448,9 +448,18 @@ pub fn stop_words(seed: u64, plan: &plan::StoryPlan, chapter: u8) -> StopWords {
             .body
             .and_then(|body| system.as_ref().map(|found| found.body_name(body.body)))
             .unwrap_or_else(|| "its world".to_owned()),
-        theme: stop
-            .theme
-            .map_or_else(|| "strange".to_owned(), |theme| theme.name().to_owned()),
+        // A noun phrase: "machine world", "crystal world", "gas giant".
+        theme: stop.theme.map_or_else(
+            || "strange world".to_owned(),
+            |theme| {
+                let name = theme.name();
+                if name.ends_with("world") || name.ends_with("giant") {
+                    name.to_owned()
+                } else {
+                    format!("{name} world")
+                }
+            },
+        ),
         harbour,
     }
 }

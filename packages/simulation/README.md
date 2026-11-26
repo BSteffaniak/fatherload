@@ -11372,6 +11372,207 @@ Still open, for the integrator or a later pass:
   story register them (the seams above). The Wave 12 theme worlds (ids 3-8) have no bosses yet
   either.
 
+## Wave 13 story: the builders' road and endless exploration (`src/galaxy_story.rs`, `src/galaxy_story/{chapters,plan,discovery,journal,finale}.rs`, `src/world/galaxy_story.rs`)
+
+Expansion plan §16 "Story beyond the Moon": the builders left by the Star Drive, the Archive's
+star charts are their roads, and a long galaxy story follows them, with endless procedural
+exploration after it. Wave 12 left no quest engine for space; this track builds one, writes the
+story on it, and adds the discoveries.
+
+### The quest engine for space
+
+* **One crew, one road.** `GalaxyStory` is a world field (`WorldState::galaxy_story`) and the
+  appended shared section **`SectionKey::GalaxyStory`** (37 shared sections), saved with the
+  world (serde default: no save bump) and hashed only once it has begun (`is_empty`), so older
+  worlds hash as before. Players anywhere (each split-screen seat in its own place, online
+  partners on other worlds) all count; per-player contributions are `crew` (`CrewStats`).
+* **Chapters of goals** (`chapters::CHAPTERS`, ten): each a list of `Goal`s done **in order**
+  by anyone: `ReachSystem`, `Scan` (the stations' `scanned` record: a scanner ping that
+  reaches the world), `Land`, `FindRelic` (an actor within 5 columns and 7 rows above / 3 below
+  the relic's tile, on its surface or dug down to it), `Hold { seconds, raiders }` (someone
+  within 14 columns of the relic for that much world time in total; the faction's raid lands
+  at the site through the hostiles' `land_raid` the moment the hold begins; none on a peaceful
+  world), `MeetSpecies`, `SpeciesChapter` (a crew member finished an elder's chapter: the
+  aliens track's own arc), `BeatBoss(Faction)` (the hostiles' `bosses_beaten`), `ReachHarbour`,
+  `CalmWarden`, `Choose`. Finishing a chapter pays its finisher, opens its space logs and
+  begins the next.
+* **Targets come from the plan** (`plan::StoryPlan`, `plan::plan_for(seed, anchor)`, memoized),
+  a pure function of the world seed and the **anchor**: the crew's first star chart's system
+  (`plan::anchor_of`, resolved by the space generator; a world that read no chart starts from
+  the system the Archive's first plinth would chart), fixed in the state when the story
+  begins. The road runs outward along the heading home → anchor; a theme stop is the nearest
+  landable planet (radius 1,500+, full strata) of one of its themes round its point down the
+  road (cost = ring + 2 × the theme's place in the list; any planet if none), never a world
+  used before; the species stop is the nearest first home; the lair stop is the Concord's
+  lair; the **Harbour** lies 20 sectors past the anchor (at least 24 from home), a red star
+  preferred, its ring of world-ships at 60,000 tiles, its **gate** on the ring facing home.
+  Relics stand at a column hashed from the seed, the world and the chapter, `relic_rows` under
+  the surface of the world's own ground (`PlanetGround::surface_row`, so a theme registered by a
+  later track carries the relic on its own surface).
+* **Where the checks run.** The world pass (`advance_galaxy_story`, once a tick after space
+  combat with every rig back from its store, on a world of stores and of one) begins the story
+  once `Heart::space_unlocked`, then every 250 ms of world time reads the crew's whereabouts
+  (home, flying in a system's reach, docked, landed) and does the goals met anywhere. A body's
+  ground pass (`advance_galaxy_on_ground`) does the goals and lead steps met on that ground,
+  from the actors standing there in the body's own frame (rig or pilot).
+* **Nav waypoints.** `WorldState::galaxy_waypoint()` is the current goal's target (its system,
+  or its world); the crew's shared waypoint follows the story while it pointed at the story's
+  previous target (or had none); `GalaxyCommand::SetCourse` makes it the player's own (the
+  warp's target: a body waypoint warps to its system). `galaxy_point()` is a goal's point in
+  flight (a lair, the gate); `galaxy_relic()` the relic to draw; `galaxy_lead_sites(body)` the
+  open leads' ruin marks.
+* **Commands** (`PlayerCommand::Galaxy(GalaxyCommand)`): `SetCourse`, `SetLeadCourse { lead }`,
+  `AskArchivist` (a remark for the road so far, or after it), `Choose(FinaleChoice)` (only
+  while the goal is `Choose` and the rig is within 45,000 tiles of the gate). Refusals are
+  `GalaxyEvent::Refused` with a `GalaxyRefusal` code.
+* **Events** `GameplayEventKind::Galaxy { what: GalaxyEvent, player_id, detail }`, netcode
+  **1040-1056** (`Begun`, `ChapterBegun`, `GoalDone` (`chapter * 16 + step`), `ChapterDone`,
+  `LogFound`, `RelicFound`, `HoldBegun`, `WardenAppeared`, `WardenCalmed`, `Chosen`,
+  `LeadFound`, `LeadStep`, `LeadDone`, `ArchivistRemark`, `CourseSet`, `Refused`,
+  `FragmentFound`).
+
+### The galaxy story (`chapters`, `journal`, `finale`)
+
+| # | Chapter | Stop | Goals |
+|---|---|---|---|
+| 1 | The First Road | the anchor's biggest world | reach the system, scan the world, find the builders' waymark |
+| 2 | Old Friends of the Road | the nearest species' first home | meet a species, finish an elder's chapter |
+| 3 | The Silent Foundry | machine (else dead, crystal) world | reach, land, dig 30 rows to the foundry door, hold it 60 s against the Concord |
+| 4 | The Quiet World | dead (else machine, ice) world | reach, scan, dig 15 rows to the ruin archive |
+| 5 | The Concord's Captain | the Concord's lair | beat the Arbiter |
+| 6 | The Singing Spires | crystal (else ice, fungal) world | reach, land, find the memory spire |
+| 7 | The Fathers' Load | tidally locked (else ring, dunes) world | reach, land, find the nursery beacon |
+| 8 | The Gathering Light | gas giant (else ring, fungal, jungle) world | reach, scan, take the lamp-key, keep it lit 45 s against the Bloom |
+| 9 | The Long Dark | the Harbour | cross to its star, find the Harbour |
+| 10 | The Harbour | the Harbour's gate | calm the Warden, choose |
+
+The arc (about 28 goals; the first-hour-in-space economy, the warps between far systems, two
+holds, three boss-class fights and an alien chapter put it in the plan's 15-25 h): the
+waymarks of the Long Road; the peoples who saw silent ships pass; a foundry of world-ship
+cradles and the Wardens' never-cancelled order; the builders' last archive (a dying star,
+eleven hollowed worlds, ten that flew, the people they carried called the Load); the Concord as
+the Harbour's lonely pilots; a builder mother's voice in crystal ("Look up"); the
+**revelation** at the nursery beacon: the eleventh world, too heavy to wake, is home; the
+town's first families are the builders' children, left aboard with a lamp lit and a cable to
+climb, and those who stayed to raise them were called the fathers: the Fathers' expedition and
+Bran's "THE FATHERS' LOAD" were the town remembering what it was; the archivist's apology; the
+lamp-key; the long dark; and the Harbour, ten world-ships asleep round a red star, waiting for
+the key.
+
+* **Space logs** (`journal::SPACE_LOGS`, 22, append-only ids `galaxy.log.*`): builder records,
+  Ines Calloway's margin notes on the charts she copied, the archivist's memories, the
+  Concord's plate, the spire's voice and a letter from Wren Varga, two or three opened by each
+  chapter: the road's throughline, like the Descent's expedition logs.
+* **The archivist** (`journal::REMARKS`, 30, `galaxy.archivist.*`) remarks on chapters begun,
+  relics found, leads found and done, when asked, and after the road; its open lines take
+  turns (`remark_for`); at most one remark every 8 s unless it is a chapter's or an asked one.
+* **The finale** (`finale`): the **Warden** is `hostiles::ShipClass::Warden` (appended), a
+  boss of the space combat rules: 2,600 hull, 700 shield, holds 800 px, a cycle of its pods'
+  volleys, a prow lance (three in a fan once its shield breaks or below half), a ring of
+  lamp-light with a gap, and drones; every attack telegraphed (`MIN_TELEGRAPH_STEPS`); its hit
+  circles were fitted to its generated sprite (`sprites::hostiles::WARDEN`, 368 x 336 px; the
+  game's `every_ships_hit_circles_match_its_drawn_body` checks them). It meets a rig in free
+  flight within 40,000 tiles of the gate (not one resting after a fight or an escape jump);
+  if the rig flees or is towed home it waits and comes out again; beating it calms it
+  (`note_warden_calmed`, from the hostiles' destroyed hook) and beats no faction. On a peaceful
+  world it stands aside. The Harbour's space within 120,000 tiles of the gate is calm (no
+  roaming fights, lairs, bounties or patrols) once the crew knows where it is (chapter 8 on).
+  **The choice**: ring the Homecoming Bell (the builders wake and turn for home) or keep the
+  lamp (they sleep on; the road stays lit). The world records the choice and its world time
+  (`finale_millis`), so every peer starts the ending on the same tick; each seat plays it for
+  itself (`finale::FinaleView`: a lead over the Harbour 10 s, credits to 64 s, the choice's
+  six-beat epilogue, its own skips), then play goes on.
+
+### Endless exploration (`discovery`)
+
+`discovery::leads_of(seed, system)` is a pure function: one or two leads per system (none at
+home), picked up into the discovery log (`leads`, at most 1,024) the first time a rig of the
+crew is in the system (`visited`, at most 4,096; worlds landed on are `landed`), then advanced
+step by step: **lost ship** (fly to its transponder: a derelict's, if the system has one),
+**distress call** (fly to the beacon; an ambush of corsairs or the Bloom springs on the rig
+that reached it, composed like a roaming encounter; survive it (its fight over, the rig still
+flying; lost, the beacon waits for another try); dock anywhere), **ruins** (land; stand at, or
+dig 10-20 rows to, the ruin's mark), **survey contract** (have up to three of its worlds
+scanned), **a people's request** (land on a settled world; meet its species). Each pays (more
+out from home) and turns up a builders' fragment (`journal::FRAGMENTS`, 16). Stats:
+`GalaxyStory::stats_of_seed` (chapters, goals, systems visited, worlds landed, leads found and
+done by kind, logs, fragments).
+
+### Formats and codes
+
+* `PROTOCOL_VERSION` 21 (`PlayerCommand::Galaxy`, `TestModeAction::WarpToStory`,
+  `ShipClass::Warden` in the hostiles section, the `galaxy_story` field and section, events
+  1040-1056). Save format unchanged (serde defaults). No world-gen change: V1-V10,
+  `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are unchanged.
+* Additive edits outside the track: `ShipClass::Warden` and its boss cycle (`hostiles`,
+  `hostiles::boss`), the hostiles' destroyed hook (the Warden calms instead of beating a
+  faction), a boss encounter's `BossAppeared` names the boss it calls, the Harbour's calm in
+  `find_encounters`, `combat_step_now` / `pacing_tier` / `land_raid` now `pub(super)`, and the
+  nav chart's warp row for a body waypoint in another system.
+
+### Game side
+
+* `shell/galaxy.rs`: the journal (`ModalScreen::GalaxyJournal`, "The Builders' Road": set
+  course, the choice, ask Index, each chapter's page with goals ticked, logs, the discovery log,
+  stats; after the star charts and "Ask Index" in the page cycle once begun; the nav chart's
+  next page in space), the choice (`ModalScreen::GalaxyChoice`, opens by itself once at the gate
+  with the Warden calm), the words for every event (`event_words`: cards on every local seat,
+  lines for the doer or everyone), the HUD's goal line, the seat's ending view
+  (`SeatUi::galaxy`), and "Warp to the Story" in test mode's pause menu.
+* `rendering/galaxy_hud.rs`: the journal and choice pages (rows by keys, pad, mouse and touch),
+  the goal line (top middle in space under the place plate; on a world's ground), the road's
+  card decoration (waymark lamps lighting across it), builder waymarks on round ground
+  (`GroundThingKind::Waymark`: a lit pylon, a vault door in the rock for a buried relic, a
+  broken pillar for a ruin), the Harbour in the space view (ten world-ships, mooring line, gate
+  pylons; windows waking after the bell, the gate warm after the lamp), and the ending (lead
+  card, credits beside the lit road, the epilogue's beats). Nothing flashes; glows breathe
+  slowly in brightness.
+* New story cards (`StoryMomentKind::{RoadChapter, RoadLog, RoadFound, RoadDiscovery}`), sound
+  cues for every event (`galaxy_cue`: the story's own hook, quill, resolution and climax, the
+  archivist's chirp, the boss's arrival, a fanfare for the Warden calmed).
+* Scenes: `galaxy_journal`, `galaxy_discoveries`, `galaxy_chapter_card`, `galaxy_waymark`,
+  `galaxy_hold`, `galaxy_warden`, `galaxy_harbour`, `galaxy_choice`, `galaxy_finale_lead`,
+  `galaxy_credits`, `galaxy_epilogue_lamp`, `galaxy_harbour_awake`.
+
+### Tests
+
+* `galaxy_story::tests`: ten chapters, every log opened once in order, unique ids, event codes
+  in range; the plan is a pure function (cache = fresh) on three seeds; every stop has the
+  world, relic and system its goals need, no world used twice, the Harbour far with its gate on
+  its ring facing home; the road starts from the first chart; every word filled; leads are
+  deterministic per system, varied, valid, none at home; the archivist has a line for every
+  trigger and spoils nothing; the ending's phases and skips.
+* `world::galaxy_story_tests::a_bot_walks_the_whole_road_to_the_harbour_and_the_game_goes_on`:
+  every goal of every chapter done in turn with the player's controls and test-mode warps
+  between places (`WarpToStory`): scans, landings, a dug relic, two holds against real raids,
+  an alien elder's chapter, the Arbiter and the Warden beaten by the boss bot, the choice; then
+  the archivist talks of what comes next and a second choice is refused.
+  `the_warden_is_beaten_fairly_by_a_bot` (middling gear, no test-mode armour, every attack
+  telegraphed), `an_escape_from_the_warden_brings_it_back_later`,
+  `co_op_partners_share_one_road_from_different_places`,
+  `the_story_survives_a_save_and_replicates_as_a_section` (JSON, postcard, the section),
+  `the_story_is_the_same_at_every_tick_rate`, `a_lead_is_picked_up_and_finished_in_its_system`.
+* netcode `tests::world_galaxy_story`: a client and the host share one road over the wire.
+* game `shell::galaxy::tests` (rows, pages, words for every event).
+
+### Seams (TODO-SEAM) and known limits
+
+* **TODO-SEAM(w13-planets-c, w13-planets-d)**: the machine, dead, crystal, tidally locked,
+  ring and gas giant worlds the road visits are those themes' worlds once their tracks land
+  (until then their space tags with the placeholder grounds). A theme with its own builder
+  landmark (a foundry, ruins, a spire) can name the relic's column through
+  `plan::RelicSite`; the hashed column stands until then. A gas giant with floating cities may
+  want the lamp-key on a city deck rather than the "surface".
+* **TODO-SEAM(w13-endgame)**: post-game systems can read `GalaxyStory::finished()` and
+  `choice` (the bell brings the builders home, the lamp keeps the road lit) for their own
+  rewards; the story pays credits only.
+* **TODO-SEAM(w13-artaudio)**: the story uses existing cues; a Harbour music bed, a bell and a
+  lamp theme for the ending would be the audio track's.
+* **TODO-SEAM(w13-qa)**: the bot test's warps stand in for the long flights between stops.
+* The aliens' trail leads (an elder's fifth chapter) are not story goals (the bot could not
+  reach understanding 600 in a test); their systems still hold leads like any other.
+* A relic under a dug shaft is drawn as a vault door in the rock: the ground is not carved.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

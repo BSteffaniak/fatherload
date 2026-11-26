@@ -1381,6 +1381,41 @@ purse.
   `endgame_starwright_flight`, `endgame_estate`, `endgame_estate_young`,
   `endgame_achievements`, `endgame_split`, `touch_endgame`.
 
+### The builders' road (wave 13 story)
+
+Once the Heart wakes and the sky opens, the **galaxy story** begins: the builders left by the
+Star Drive, and the charts Ines Calloway copied in the Archive of Stars are their roads. The
+road starts at your first chart's star and runs outward through ten chapters: a waymark on a
+world, the peoples of the near stars, a foundry on a machine world, a quiet world's archive,
+the Concord's captain, the singing spires, a nursery beacon (where you learn who the Fathers
+were named for, and who you are), the lamp-key, the long dark, and the **Harbour**, far from
+home, where the Warden waits and you make one choice for the whole crew. The credits roll and
+the game goes on.
+
+- **Goals** are done in order by anyone in the crew: reach a system, scan a world from orbit
+  (the scanner), land, find a relic (a lit builder pylon on the ground, or a vault door you dig
+  down to), hold a site while raiders drop in, meet a species and help an elder, beat the
+  Concord's Arbiter, reach the Harbour, calm the Warden, choose.
+- **The journal** ("The Builders' Road", in the map's page cycle after the star charts; in space
+  the nav chart's next page): set course for the current goal (it becomes your waypoint and the
+  warp's target; the crew's waypoint follows the story by itself), ask Index, each chapter's
+  page with its goals ticked off, the logs of the road, the discovery log and your stats.
+- **The goal line** sits at the top of the screen in space and on other worlds.
+- **The Warden** is a space boss: watch its warnings (volleys from its pods, a lance from its
+  prow, a ring of light with a gap), break its lamps; the warp button always escapes, and it
+  waits for you at its gate. On a peaceful world it lets you pass.
+- **The choice**: ring the Homecoming Bell (the builders wake and come home) or keep the lamp
+  (let them sleep; the road stays lit). Then the ending, the credits and an epilogue play on
+  every seat; each seat skips only its own.
+- **Endless exploration**: every system you enter can hold leads (lost ships, distress calls
+  with an ambush, ruins to dig, survey contracts, a people's request). They go into the
+  discovery log; select one to set course. Each pays and turns up a builders' fragment.
+- Co-op: one road for the whole crew, wherever each of you is (split-screen seats can be on
+  different worlds). Test mode's pause menu has "Warp to the Story".
+- Scenes: `galaxy_journal`, `galaxy_discoveries`, `galaxy_chapter_card`, `galaxy_waymark`,
+  `galaxy_hold`, `galaxy_warden`, `galaxy_harbour`, `galaxy_choice`, `galaxy_finale_lead`,
+  `galaxy_credits`, `galaxy_epilogue_lamp`, `galaxy_harbour_awake`.
+
 ### The Fathers' expedition (wave 8 story)
 
 A generation ago six people from the town went down the builders' cable to find out what hums.

@@ -193,7 +193,7 @@ pub(super) fn draw_view_hud(
             snapshot.world,
             middle,
             y,
-            (rect.width as i32 - 16).min(if wide { 300 } else { 400 }),
+            (rect.width as i32 - 16).min(420),
         );
     }
 

@@ -321,7 +321,10 @@ pub(super) fn draw_goal_strip(
     y: i32,
     max_width: i32,
 ) -> i32 {
-    let _ = view;
+    // In a fight the boss's bar and warnings have the top of the screen.
+    if world.hostiles().engaged(view.player_id).is_some() {
+        return 0;
+    }
     let Some((title, line)) = goal_line(world) else {
         return 0;
     };
@@ -392,6 +395,10 @@ pub(super) fn road_card(
 /// red star, mooring lines between them, and the gate (two great pylons) on the side facing
 /// home. Dark until the choice: the bell wakes their windows, the lamp lights the gate warm.
 /// Drawn only once the crew knows where it is and the seat is in its reach.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the ring, the ships, the gate in drawing order"
+)]
 pub(super) fn draw_harbour(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &crate::render_snapshot::RenderSnapshot<'_>,
@@ -475,8 +482,26 @@ pub(super) fn draw_harbour(
                     Color::new(24, 26, 40, 255)
                 };
                 draw.draw_rectangle(at.x as i32, at.y as i32, 2, 2, window);
+                draw.draw_rectangle(
+                    (at.x - radius * 0.45) as i32,
+                    (at.y + radius * 0.2) as i32,
+                    2,
+                    2,
+                    window,
+                );
             }
         }
+        // The spine's running lights and the bow's lamp (teal asleep, gold awake).
+        let running = if bell { GOLD } else { TEAL_DARK };
+        for light in 0..7 {
+            let t = light as f32 / 6.0 - 0.5;
+            let at = frame.offset_to_screen(centre.0 + tx * t * length, centre.1 + ty * t * length);
+            draw.draw_rectangle(at.x as i32, at.y as i32 - 1, 1, 1, running);
+        }
+        let bow =
+            frame.offset_to_screen(centre.0 + tx * 0.55 * length, centre.1 + ty * 0.55 * length);
+        draw.draw_circle_v(bow, 3.0, with_alpha(if bell { GOLD } else { TEAL }, 90));
+        draw.draw_circle_v(bow, 1.5, if bell { CREAM } else { MINT });
     }
     // The gate: two great pylons on the ring facing home, their lamps.
     for side in [-1.0_f32, 1.0] {
@@ -684,12 +709,13 @@ fn corner_hint(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, text: &str) {
 fn draw_lead(draw: &mut RaylibDrawHandle<'_>, rect: Rectangle, choice: FinaleChoice, since: f32) {
     let alpha = (since / 1.5).clamp(0.0, 1.0);
     let a = (alpha * 255.0) as u8;
-    let width = (rect.width as i32 - 40).min(400);
+    let width = (rect.width as i32 - 40).min(330);
     let x = rect.x as i32 + (rect.width as i32 - width) / 2;
     let text_width = width - 2 * ui_kit::PANEL_PADDING - 8;
     let lines = ui_kit::wrap(finale::lead(choice), text_width, TextStyle::Body);
     let height = 40 + lines.len() as i32 * TextStyle::Body.line_height();
-    let y = rect.y as i32 + rect.height as i32 / 5;
+    // Low in the view: the Harbour and the rig stay in sight above it, the HUD's panels clear.
+    let y = rect.y as i32 + rect.height as i32 * 3 / 5;
     draw.draw_rectangle(
         x - 4,
         y - 4,

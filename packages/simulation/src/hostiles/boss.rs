@@ -46,7 +46,7 @@ pub const QUEEN_RANGE: f32 = 520.0;
 /// The Arbiter's range (px).
 pub const ARBITER_RANGE: f32 = 660.0;
 /// The Warden's range (px; Wave 13 story).
-pub const WARDEN_RANGE: f32 = 720.0;
+pub const WARDEN_RANGE: f32 = 800.0;
 
 /// How a boss moves this step (when not charging).
 #[must_use]
@@ -281,7 +281,7 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
                     let (nx, ny) = nose(angle);
                     // The Warden's ring leaves its rim (Wave 13 story), the Queen's her body.
                     let rim = if ship.class == ShipClass::Warden {
-                        150.0
+                        205.0
                     } else {
                         70.0
                     };
@@ -307,7 +307,7 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
         Attack::Launch => Unleash::Launch(ShipClass::Drone, 2, 4),
         Attack::Lance => {
             let prow_y = if ship.class == ShipClass::Warden {
-                -130.0
+                -175.0
             } else {
                 -150.0
             };
@@ -332,7 +332,7 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
             let mut shots = Vec::new();
             // The Arbiter's two turrets; the Warden's two lower lamp pods (Wave 13 story).
             let (turret_x, turret_y) = if ship.class == ShipClass::Warden {
-                (95.0_f32, 81.0)
+                (127.0_f32, 109.0)
             } else {
                 (62.0, -20.0)
             };

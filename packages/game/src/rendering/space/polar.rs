@@ -835,30 +835,17 @@ fn draw_waymark(
     light: f32,
 ) {
     let px = |value: f32| value * art;
+    let rect = |x: f32, y: f32, w: f32, h: f32| Rectangle::new(px(x), px(y), px(w), px(h));
     let breathe = 0.75 + 0.25 * (seconds * 1.3).sin();
     let lamp = if relic { palette::MINT } else { palette::AMBER };
     if buried {
         // A round vault door in the rock, its ring of lamps.
-        draw.draw_circle_v(
-            Vector2::new(0.0, px(-9.0)),
-            px(14.0),
-            fade(lamp, 0.18 * breathe),
-        );
-        draw.draw_circle_v(
-            Vector2::new(0.0, px(-9.0)),
-            px(9.0),
-            shade(palette::STEEL_DARK, light),
-        );
-        draw.draw_circle_v(
-            Vector2::new(0.0, px(-9.0)),
-            px(7.0),
-            shade(palette::STEEL, light),
-        );
-        draw.draw_circle_v(
-            Vector2::new(0.0, px(-9.0)),
-            px(3.0),
-            shade(palette::GOLD, light),
-        );
+        let middle = Vector2::new(0.0, px(-9.0));
+        draw.draw_circle_v(middle, px(16.0), fade(lamp, 0.18 * breathe));
+        draw.draw_circle_v(middle, px(10.0), shade(palette::INK, light));
+        draw.draw_circle_v(middle, px(9.0), shade(palette::STEEL_DARK, light));
+        draw.draw_circle_v(middle, px(7.0), shade(palette::STEEL, light));
+        draw.draw_circle_v(middle, px(3.0), shade(palette::GOLD, light));
         for index in 0..8 {
             let angle = index as f32 * std::f32::consts::TAU / 8.0;
             draw.draw_rectangle_rec(
@@ -873,57 +860,55 @@ fn draw_waymark(
         }
         return;
     }
-    let height = if relic { 30.0 } else { 18.0 };
+    let height = if relic { 44.0 } else { 22.0 };
+    let lamp_at = Vector2::new(0.0, px(-height - 9.0));
     // The glow round the lamp first (behind).
-    draw.draw_circle_v(
-        Vector2::new(0.0, px(-height - 2.0)),
-        px(12.0),
-        fade(lamp, 0.16 * breathe),
-    );
-    // Plinth, pillar (lit on its left), cap, lamp.
+    draw.draw_circle_v(lamp_at, px(16.0), fade(lamp, 0.16 * breathe));
+    // Plinth, an ink edge, the pillar (lit on its left), cap and lamp.
     draw.draw_rectangle_rec(
-        Rectangle::new(px(-8.0), px(-4.0), px(16.0), px(4.0)),
+        rect(-11.0, -5.0, 22.0, 5.0),
         shade(palette::STONE_DARK, light),
     );
+    draw.draw_rectangle_rec(rect(-10.0, -6.0, 20.0, 1.0), shade(palette::STONE, light));
     draw.draw_rectangle_rec(
-        Rectangle::new(px(-7.0), px(-5.0), px(14.0), px(1.0)),
-        shade(palette::STONE, light),
+        rect(-5.0, -6.0 - height, 10.0, height + 1.0),
+        shade(palette::INK, light),
     );
     draw.draw_rectangle_rec(
-        Rectangle::new(px(-3.0), px(-4.0 - height), px(6.0), px(height)),
+        rect(-4.0, -5.0 - height, 8.0, height),
         shade(palette::BONE, light),
     );
     draw.draw_rectangle_rec(
-        Rectangle::new(px(1.0), px(-4.0 - height), px(2.0), px(height)),
+        rect(1.0, -5.0 - height, 3.0, height),
         shade(palette::STEEL_LIGHT, light),
     );
     draw.draw_rectangle_rec(
-        Rectangle::new(px(-3.0), px(-4.0 - height), px(1.0), px(height)),
+        rect(-4.0, -5.0 - height, 1.0, height),
         shade(palette::CREAM, light),
     );
     if relic {
-        // Script grooves down the face.
-        for row in 0..5 {
+        // Script grooves down the face, and the cap.
+        for row in 0..7 {
             draw.draw_rectangle_rec(
-                Rectangle::new(px(-1.0), px(-9.0 - row as f32 * 4.5), px(2.0), px(1.0)),
+                rect(-2.0, -11.0 - row as f32 * 5.0, 3.0, 1.0),
                 fade(palette::TEAL, 0.5 + 0.5 * breathe),
             );
         }
         draw.draw_rectangle_rec(
-            Rectangle::new(px(-5.0), px(-7.0 - height), px(10.0), px(3.0)),
+            rect(-7.0, -9.0 - height, 14.0, 4.0),
             shade(palette::STEEL_LIGHT, light),
         );
     } else {
         // A broken top.
         draw.draw_rectangle_rec(
-            Rectangle::new(px(-3.0), px(-6.0 - height), px(3.0), px(2.0)),
+            rect(-4.0, -7.0 - height, 4.0, 2.0),
             shade(palette::BONE, light),
         );
     }
-    draw.draw_circle_v(Vector2::new(0.0, px(-height - 2.0)), px(2.5), lamp);
+    draw.draw_circle_v(lamp_at, px(3.5), lamp);
     draw.draw_circle_v(
-        Vector2::new(px(-0.8), px(-height - 2.8)),
-        px(0.9),
+        Vector2::new(px(-1.0), px(-height - 10.0)),
+        px(1.2),
         palette::CREAM,
     );
 }

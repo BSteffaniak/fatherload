@@ -248,17 +248,19 @@ const fn hit(x: f32, y: f32, r: f32) -> HitCircle {
 }
 
 // The Warden (Wave 13 story): fitted to its generated sprite (`sprites::hostiles::WARDEN`).
-const HITS_WARDEN: [HitCircle; 10] = [
-    hit(-1.0, 27.0, 86.8),
-    hit(-1.0, -85.0, 38.6),
-    hit(95.0, 81.0, 39.2),
-    hit(-95.0, 81.0, 39.2),
-    hit(1.0, 25.0, 86.7),
-    hit(1.0, -85.0, 38.6),
-    hit(-1.0, 25.0, 86.7),
-    hit(-99.0, 83.0, 36.2),
-    hit(99.0, 83.0, 36.2),
-    hit(1.0, 27.0, 86.8),
+const HITS_WARDEN: [HitCircle; 12] = [
+    hit(-1.0, 37.0, 116.6),
+    hit(127.0, 109.0, 52.7),
+    hit(-1.0, -113.0, 51.3),
+    hit(-127.0, 109.0, 52.7),
+    hit(1.0, 35.0, 116.4),
+    hit(1.0, -113.0, 51.3),
+    hit(-1.0, 35.0, 116.4),
+    hit(-129.0, 111.0, 51.3),
+    hit(129.0, 111.0, 51.3),
+    hit(1.0, 37.0, 116.6),
+    hit(-7.0, -109.0, 45.6),
+    hit(7.0, -109.0, 45.6),
 ];
 
 const HITS_CUTTER: [HitCircle; 8] = [
@@ -691,7 +693,7 @@ impl ShipClass {
                 contact_damage: 45.0,
                 credits: 12_000,
                 cargo: 40,
-                size: (276.0, 252.0),
+                size: (368.0, 336.0),
             },
         }
     }
