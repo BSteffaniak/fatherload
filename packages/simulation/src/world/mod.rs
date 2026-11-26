@@ -105,6 +105,9 @@ mod flight;
 #[cfg(test)]
 mod station_tests;
 mod stations;
+mod travel;
+#[cfg(test)]
+mod travel_tests;
 pub use stations::station_profile_at;
 mod exotic;
 #[cfg(test)]

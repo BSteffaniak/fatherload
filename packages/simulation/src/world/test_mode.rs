@@ -93,6 +93,13 @@ impl WorldState {
             TestModeAction::RemoveBookmark(index) => {
                 return self.order_travel(player_id, super::TravelOrder::RemoveBookmark(index));
             }
+            // The Wave 14 console's travel and stocking (`world/travel.rs`).
+            TestModeAction::PaletteTravel(destination) => {
+                return self.palette_travel_to(player_id, destination);
+            }
+            TestModeAction::PaletteStock(request) => {
+                return self.apply_stock_request(player_id, request);
+            }
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players
@@ -251,7 +258,7 @@ impl WorldState {
     }
 
     /// The pocket at `(column, top)` with a one-tile margin all round.
-    fn pocket_area(column: i32, top: i32) -> impl Iterator<Item = TilePosition> {
+    pub(super) fn pocket_area(column: i32, top: i32) -> impl Iterator<Item = TilePosition> {
         let columns = column - POCKET_HALF_WIDTH - 1..=column + POCKET_HALF_WIDTH + 1;
         let rows = top - 1..=top + POCKET_HEIGHT + 1;
         rows.flat_map(move |y| columns.clone().map(move |x| TilePosition { x, y }))
@@ -259,7 +266,7 @@ impl WorldState {
 
     /// Carves the warp pocket: open air inside, the band's rock for the floor, and every hazard
     /// in the margin made safe.
-    fn carve_warp_pocket(&mut self, band: Band, column: i32, top: i32) {
+    pub(super) fn carve_warp_pocket(&mut self, band: Band, column: i32, top: i32) {
         let floor = top + POCKET_HEIGHT;
         let rock = band.soft_material();
         for position in Self::pocket_area(column, top) {

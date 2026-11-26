@@ -1124,6 +1124,18 @@ impl WorldState {
                 WorldPos::tile_center(i64::from(tile.x), i64::from(tile.y))
             }
         };
+        self.arrive_at(player_id, place, arrival)
+    }
+
+    /// Puts `player_id`'s rig at `arrival` in `place`, stopped, with full air (the test-mode
+    /// warps' landing: the place warp above and the Wave 14 travel's exact spots).
+    pub(super) fn arrive_at(
+        &mut self,
+        player_id: PlayerId,
+        place: Place,
+        arrival: WorldPos,
+    ) -> crate::summary::PlayerScopedCommandOutcome {
+        use crate::summary::PlayerScopedCommandOutcome;
         // The warp arrives with full air (a round body's life support counts from there).
         let air = self.air_capacity_of(player_id);
         // A rig warped down onto a body stands landed there (the ground code drives it), one
