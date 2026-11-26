@@ -232,6 +232,8 @@ pub fn dispatch(command: Command, ctx: DispatchContext<'_>, seat: &mut SeatTrave
         Command::Help(Some(command)) => Dispatched::default().line(
             help_line(&command).map_or_else(|| format!("no command \"{command}\""), str::to_owned),
         ),
+        // The palette itself switches seats (`Console::run`).
+        Command::Seat(_) => Dispatched::default(),
     }
 }
 

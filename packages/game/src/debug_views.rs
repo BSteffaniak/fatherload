@@ -77,8 +77,14 @@ pub struct FreeCamera {
     pub zoom_out: u8,
 }
 
-/// Most zoom-out steps of the free camera.
+/// Most zoom-out steps of the free camera (1/16 on the desktop). Every step quadruples the
+/// terrain chunks on screen (each a 512x512 texture painted on arrival), so the browser build
+/// stops at 1/4: about two dozen chunks, which WebGL on a phone holds at 60 fps.
+#[cfg(not(target_os = "emscripten"))]
 pub const MAX_ZOOM_OUT: u8 = 4;
+/// Most zoom-out steps of the free camera (the browser build's cap; see the desktop's).
+#[cfg(target_os = "emscripten")]
+pub const MAX_ZOOM_OUT: u8 = 2;
 
 /// Pixels per second the free camera pans at full stick, before zoom.
 const FREE_CAMERA_SPEED: f32 = 900.0;

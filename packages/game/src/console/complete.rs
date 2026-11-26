@@ -44,7 +44,7 @@ fn next_words(before: &[&str], bookmarks: &[String]) -> Vec<String> {
             out
         }
         ["tp", "station"] => own(&["nearest", "next", "prev", "random"]),
-        ["tp", "player"] => own(&["1", "2", "3", "4"]),
+        ["tp", "player"] | ["seat"] => own(&["1", "2", "3", "4"]),
         ["tp", "bookmark"] => bookmarks.to_vec(),
         ["give"] => {
             let mut out = own(&["all"]);

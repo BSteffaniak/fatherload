@@ -661,6 +661,82 @@ fn typing_tab_history_and_closing() {
 }
 
 #[test]
+fn the_touch_menu_buttons_complete_and_recall() {
+    let world = test_world();
+    let players = [PLAYER, MATE];
+    let ctx = ConsoleContext {
+        world: &world,
+        players: &players,
+        online: false,
+    };
+    let mut console = Console {
+        available: true,
+        ..Console::default()
+    };
+    console.open_for(0);
+    for character in "tp mo".chars() {
+        let _ = console.handle(
+            PlayerInput {
+                text_input: Some(character),
+                ..PlayerInput::default()
+            },
+            ctx,
+        );
+    }
+    // The touch menu's `>` (Right) completes: a phone keyboard has no Tab.
+    let right = PlayerInput {
+        menu_right: true,
+        ..PlayerInput::default()
+    };
+    let _ = console.handle(right, ctx);
+    assert_eq!(console.text, "tp moon ");
+    let effects = console.handle(
+        PlayerInput {
+            confirm: true,
+            ..PlayerInput::default()
+        },
+        ctx,
+    );
+    assert_eq!(effects.len(), 1);
+    // Its `<` (Left) brings the last line back.
+    let _ = console.handle(
+        PlayerInput {
+            menu_left: true,
+            ..PlayerInput::default()
+        },
+        ctx,
+    );
+    assert_eq!(console.text, "tp moon");
+}
+
+#[test]
+fn seat_switches_whose_rig_the_palette_acts_for() {
+    let world = test_world();
+    let mut console = Console {
+        available: true,
+        ..Console::default()
+    };
+    console.open_for(0);
+    let players = [PLAYER, MATE];
+    let ctx = ConsoleContext {
+        world: &world,
+        players: &players,
+        online: false,
+    };
+    assert!(console.run("seat 2", ctx).is_empty());
+    assert_eq!(console.acting_seat(), 1);
+    assert_eq!(console.seat, 0, "the keyboard seat still types");
+    let effects = console.run("tp player 1", ctx);
+    assert_eq!(effects, vec![(1, travel(Destination::Player(PLAYER)))]);
+    // No such seat: nothing changes.
+    let _ = console.run("seat 3", ctx);
+    assert_eq!(console.acting_seat(), 1);
+    let _ = console.run("seat 1", ctx);
+    assert_eq!(console.acting_seat(), 0);
+    assert_eq!(console.acting, None);
+}
+
+#[test]
 fn start_at_targets_parse() {
     assert_eq!(
         parse_start_at("descent:5"),

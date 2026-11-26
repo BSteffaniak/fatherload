@@ -78,15 +78,23 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         Rectangle::new(left as f32, top as f32, width as f32, height as f32),
         ui_kit::PanelStyle::Accent,
     );
+    let title = console.acting.map_or_else(
+        || "COMMAND".to_owned(),
+        |seat| format!("COMMAND: SEAT {}", seat + 1),
+    );
     ui_kit::text(
         draw,
-        "COMMAND",
+        &title,
         left + 8,
         top + 5,
         TextStyle::Bold,
         palette::GOLD,
     );
-    let hint = "Tab completes  Up/Down history  Enter runs  Esc closes";
+    let hint = if shell.prompt_device(console.seat).is_touch() {
+        "> completes  < history  Enter runs  Back closes"
+    } else {
+        "Tab completes  Up/Down history  Enter runs  Esc closes"
+    };
     let hint_width = ui_kit::text_width(hint, TextStyle::Body);
     if hint_width + 70 < width {
         ui_kit::text(
@@ -355,11 +363,21 @@ fn draw_grid(draw: &mut impl RaylibDraw, visible: Rectangle, line: f32) {
             );
         }
     }
-    if chunks {
+    // Labels (absolute chunk coordinates) only while few enough to read and cheap to draw.
+    if (last_col - first_col) <= 24 && (last_row - first_row) <= 16 {
+        let chunk = i64::from(CHUNK_SIZE_TILES);
+        let (origin_col, origin_row) = (
+            frame.origin_col().div_euclid(chunk),
+            frame.origin_row().div_euclid(chunk),
+        );
         for col in first_col..=last_col {
             for row in first_row..=last_row {
                 draw.draw_text(
-                    &format!("{col},{row}"),
+                    &format!(
+                        "{},{}",
+                        i64::from(col) + origin_col,
+                        i64::from(row) + origin_row
+                    ),
                     (col as f32 * chunk_px + 2.0) as i32,
                     (row as f32 * chunk_px + 2.0) as i32,
                     (8.0 * line) as i32,

@@ -40,8 +40,10 @@ pub struct Console {
     pub open: bool,
     /// The world is a test-mode world being played (the palette may open).
     pub available: bool,
-    /// The seat it acts for.
+    /// The seat whose keys it reads (and whose rig rests while it is open).
     pub seat: usize,
+    /// Another seat it acts for (`seat N`; split-screen), else `seat`.
+    pub acting: Option<usize>,
     /// The line being typed.
     pub text: String,
     /// Output, oldest first.
@@ -98,13 +100,20 @@ impl Console {
         self.close();
         self.travel.clear();
         self.waiting.clear();
+        self.acting = None;
+    }
+
+    /// The seat whose rig commands act on.
+    #[must_use]
+    pub fn acting_seat(&self) -> usize {
+        self.acting.unwrap_or(self.seat)
     }
 
     /// The bookmark names of the palette's seat (completion).
     #[must_use]
     pub fn bookmarks(&self) -> Vec<String> {
         self.travel
-            .get(self.seat)
+            .get(self.acting_seat())
             .map(|travel| travel.bookmarks.keys().cloned().collect())
             .unwrap_or_default()
     }
@@ -146,13 +155,15 @@ impl Console {
             self.text.push(character);
             self.completion_at = None;
         }
-        if input.inventory {
+        // Tab completes; so does the touch menu's `>` button (Right), since a phone keyboard
+        // has no Tab key, and its `<` button (Left) steps back through the history.
+        if input.inventory || (input.menu_right && input.text_input.is_none()) {
             self.tab_complete();
         } else if input.text_input.is_some() || input.text_backspace {
             self.completions = complete::complete(&self.text, &self.bookmarks());
         }
         if input.text_input.is_none() {
-            if input.menu_up {
+            if input.menu_up || input.menu_left {
                 self.history_step(true);
             } else if input.menu_down {
                 self.history_step(false);
@@ -219,7 +230,7 @@ impl Console {
             // Enter on an empty line travels to the previewed destination.
             if self
                 .travel
-                .get(self.seat)
+                .get(self.acting_seat())
                 .is_some_and(|seat| seat.preview.is_some())
             {
                 return self.run("go", ctx);
@@ -245,7 +256,23 @@ impl Console {
                 return Vec::new();
             }
         };
-        let seat = self.seat;
+        if let parse::Command::Seat(number) = command {
+            // Split-screen: a gamepad seat has no keys to type with, so the keyboard's palette
+            // can act for it instead (it keeps reading the keyboard seat's keys).
+            let index = usize::from(number) - 1;
+            if index < ctx.players.len() {
+                self.acting = Some(index).filter(|index| *index != self.seat);
+                self.print(format!("  acting for seat {number}"));
+            } else {
+                self.print(format!(
+                    "  no seat {number} (there {} {})",
+                    if ctx.players.len() == 1 { "is" } else { "are" },
+                    ctx.players.len()
+                ));
+            }
+            return Vec::new();
+        }
+        let seat = self.acting_seat();
         let Some(player) = ctx.players.get(seat).copied() else {
             self.print("  no rig for this seat");
             return Vec::new();

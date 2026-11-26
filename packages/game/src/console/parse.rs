@@ -115,10 +115,12 @@ pub enum Command {
     Speed(TimeScale),
     /// Help on everything or one command.
     Help(Option<String>),
+    /// Act for another split-screen seat (1-based, as the seats are numbered on screen).
+    Seat(u8),
 }
 
 /// Every command word, in help order.
-pub const COMMANDS: [&str; 17] = [
+pub const COMMANDS: [&str; 18] = [
     "tp",
     "go",
     "bookmark",
@@ -136,6 +138,7 @@ pub const COMMANDS: [&str; 17] = [
     "pause",
     "help",
     "close",
+    "seat",
 ];
 
 /// One line of help per command.
@@ -161,6 +164,7 @@ pub fn help_line(command: &str) -> Option<&'static str> {
         "pause" => "pause: the local time scale stops (speed 1 resumes)",
         "help" => "help [command]",
         "close" => "close: put the palette away (or ` / Esc)",
+        "seat" => "seat N: act for split-screen seat N (travel, give, spawn for that rig)",
         _ => return None,
     })
 }
@@ -246,6 +250,12 @@ pub fn parse(line: &str) -> Result<Option<Command>, String> {
         )?),
         "pause" => Command::Speed(TimeScale::Paused),
         "help" | "?" => Command::Help(args.first().map(|arg| (*arg).to_owned())),
+        "seat" => Command::Seat(
+            args.first()
+                .and_then(|word| word.parse().ok())
+                .filter(|number| *number >= 1)
+                .ok_or_else(|| "seat N (1, 2, ...)".to_owned())?,
+        ),
         other => return Err(format!("unknown command \"{other}\" (try help)")),
     };
     Ok(Some(command))
