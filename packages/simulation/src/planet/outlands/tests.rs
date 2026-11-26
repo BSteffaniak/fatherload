@@ -73,7 +73,7 @@ fn digest(ground: &PlanetGround) -> u64 {
 const GOLDEN_OUTLAND_DIGESTS: [(PlanetThemeId, u32, u64); 6] = [
     (PlanetThemeId::FUNGAL, 600, 0xe365_07f9_a618_a44a),
     (PlanetThemeId::FUNGAL, 3_000, 0xe461_f6fa_0e0e_69eb),
-    (PlanetThemeId::MACHINE, 600, 0x6fdb_a075_02c1_dcbc),
+    (PlanetThemeId::MACHINE, 600, 0xa79d_a782_7fd2_f8f1),
     (PlanetThemeId::MACHINE, 3_000, 0xa934_d5b4_63b7_24c6),
     (PlanetThemeId::DEAD, 600, 0x3d02_7dfc_bfdd_454f),
     (PlanetThemeId::DEAD, 3_000, 0xc0d7_e06b_f1ba_d795),
@@ -328,7 +328,10 @@ fn the_machine_world_has_terraces_belts_gears_and_power_vaults() {
 }
 
 #[test]
-#[allow(clippy::too_many_lines, reason = "each of the world's features in turn")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "each of the world's features in turn"
+)]
 fn the_dead_world_has_cities_tombs_and_the_hollow_throne() {
     let planet = ground(PlanetThemeId::DEAD, 3_000);
     let width = i64::from(planet.strip_width());

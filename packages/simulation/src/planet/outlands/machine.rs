@@ -319,7 +319,12 @@ fn gallery_at(ground: &PlanetGround, first: i64, row: i32) -> Option<Gallery> {
         let length = 24 + pick(hash, 16, 40);
         let floor = cy * GALLERY_CELL.1 + 8 + i32::try_from(pick(hash, 24, 16)).unwrap_or(0);
         let dx = wrap_delta(first, start, width);
-        if !(0..length).contains(&dx) || kept_clear(ground, start, 4) {
+        // Never under the settlement (a shaft from it goes straight down) or the sites.
+        if !(0..length).contains(&dx)
+            || [start, start + length / 2, start + length]
+                .into_iter()
+                .any(|column| kept_clear(ground, column, 4))
+        {
             continue;
         }
         if row == floor {

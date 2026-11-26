@@ -41,16 +41,18 @@ use crate::{
     terrain::{TILE_SIZE, TileKind, TilePosition},
 };
 
-use super::{WorldState, movement::AUTHORITATIVE_PLAYER_RADIUS};
+use super::{
+    WorldState,
+    movement::{AUTHORITATIVE_PLAYER_RADIUS, authoritative_player_collides},
+};
 
 /// A cap throws back a rig falling faster than this (px/s), at this share of its speed and at
 /// least this fast.
 pub const BOUNCE_MIN_SPEED: f32 = 90.0;
 pub const BOUNCE_KEEP: f32 = 0.92;
 pub const BOUNCE_LEAST: f32 = 320.0;
-/// A belt's speed (px/s) and how fast a resting rig takes it up (share a second).
+/// A belt's speed (px/s).
 pub const CONVEYOR_SPEED: f32 = 120.0;
-const CONVEYOR_GRIP: f32 = 6.0;
 /// A spore vent's blast: the lift it gives a rig in its chimney (px/s up), and how far over
 /// the chimney's mouth it still reaches (rows).
 pub const VENT_LIFT: f32 = 430.0;
@@ -355,15 +357,18 @@ impl WorldState {
                 ));
             }
         }
-        // A belt carries a resting rig.
+        // A belt carries a resting rig along (never into rock): a walkway its own motion rides
+        // on. A rig drilling braces against it.
         let under = frame.tile_at(x, y + AUTHORITATIVE_PLAYER_RADIUS + 2.0);
         if !drilling
             && let Some(direction) = outland_at(self, under).and_then(OutlandTile::conveyor)
-            && let Some(rig) = self.players.get_mut(&player_id)
         {
-            let target = f32::from(direction) * CONVEYOR_SPEED;
-            let take = (CONVEYOR_GRIP * dt).min(1.0);
-            rig.velocity_x = quantize((target - rig.velocity_x).mul_add(take, rig.velocity_x));
+            let carried = quantize((f32::from(direction) * CONVEYOR_SPEED).mul_add(dt, x));
+            if !authoritative_player_collides(&self.terrain, carried, y)
+                && let Some(rig) = self.players.get_mut(&player_id)
+            {
+                rig.x = carried;
+            }
         }
         let rule = life::rule_at(planet, tile.x, tile.y);
         let millis = self.millis_at(self.simulation_tick);
@@ -372,7 +377,8 @@ impl WorldState {
         if rule == Some(OutlandRule::GrindingGears)
             && life::gear_phase(millis) == GearPhase::Turning
         {
-            let reach = AUTHORITATIVE_PLAYER_RADIUS + 3.0;
+            // Within a few pixels of a gear's face.
+            let reach = AUTHORITATIVE_PLAYER_RADIUS + 6.0;
             let touching = [
                 (-reach, 0.0),
                 (reach, 0.0),
@@ -713,7 +719,8 @@ impl WorldState {
                     }
                 }
             }
-            if moves > 0 && self.outland_due(*player_id, next_tick, HAZARD_EVENT_MILLIS) {
+            // Told at most twice a second while it pours.
+            if moves > 0 && (next_tick.get() / every).is_multiple_of(2) {
                 output.push_event(outland_event(
                     OutlandsEvent::AshPoured,
                     Some(*player_id),
@@ -883,7 +890,8 @@ impl WorldState {
             // The seals open: every power seal in the vault's roof.
             for dx in 0..machine::VAULT_BOX.0 {
                 let at = TilePosition {
-                    x: i32::try_from((vault.column + dx).rem_euclid(width)).unwrap_or(0),
+                    x: i32::try_from((vault.column + dx * vault.span).rem_euclid(width))
+                        .unwrap_or(0),
                     y: vault.row,
                 };
                 if self
@@ -891,7 +899,8 @@ impl WorldState {
                     .tile(at)
                     .is_some_and(|t| t.kind == TileKind::Outland(OutlandTile::PowerSeal))
                 {
-                    let _ = self.terrain.set_kind(at, TileKind::Air);
+                    // Power opens what no drill can.
+                    let _ = self.terrain.set_kind_by_rule(at, TileKind::Air);
                 }
             }
             output.push_event(outland_event(

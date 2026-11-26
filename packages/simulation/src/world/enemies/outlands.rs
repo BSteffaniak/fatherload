@@ -590,13 +590,14 @@ impl WorldState {
             x: lair.seal.0,
             y: lair.seal.1,
         };
+        // The world's own rule writes over the unbreakable seal and door.
         let _ = self
             .terrain
-            .set_kind(seal, TileKind::Outland(OutlandTile::BossSealSpent));
+            .set_kind_by_rule(seal, TileKind::Outland(OutlandTile::BossSealSpent));
         for (column, row) in lair.door {
             let _ = self
                 .terrain
-                .set_kind(TilePosition { x: column, y: row }, TileKind::Air);
+                .set_kind_by_rule(TilePosition { x: column, y: row }, TileKind::Air);
         }
         let _ = planet;
         output.push_event(outland_event(OutlandsEvent::BossDefeated, by, seal));

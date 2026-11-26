@@ -613,6 +613,7 @@ impl LocalGame {
         self.announce_garrison(&players);
         self.announce_heart(&players);
         self.announce_wild_strata(&players);
+        self.announce_outland_strata(&players);
         self.announce_flight(&players);
         self.announce_systems(&players);
         self.announce_aliens(&players);
@@ -1886,6 +1887,43 @@ impl LocalGame {
         }
     }
 
+    /// An outland world's stratum rule, told to a seat the first time its rig enters that
+    /// stratum (Wave 13 planets-c), like the wild worlds'.
+    fn announce_outland_strata(&mut self, players: &[PlayerId]) {
+        use fatherload_simulation::planet::outlands::life;
+        let world = self.runtime.world();
+        self.wild_strata_told
+            .resize_with(players.len(), Default::default);
+        let mut messages: Vec<(usize, String)> = Vec::new();
+        for (seat, player) in players.iter().enumerate() {
+            let Some(rig) = world.player(*player) else {
+                continue;
+            };
+            let Some(planet) = world
+                .store_terrain(world.store_of(*player))
+                .and_then(|terrain| terrain.planet_ground())
+            else {
+                continue;
+            };
+            let Some(tile) = world
+                .store_frame(world.store_of(*player))
+                .map(|frame| frame.tile_at(rig.x, rig.y))
+            else {
+                continue;
+            };
+            let Some(rule) = life::rule_at(planet, tile.x, tile.y) else {
+                continue;
+            };
+            let name = planet.layer_name(tile.x, tile.y);
+            if self.wild_strata_told[seat].insert((planet.params().seed, name)) {
+                messages.push((seat, format!("{name}: {}.", rule.summary())));
+            }
+        }
+        for (seat, message) in messages {
+            self.shell.seat_mut(seat).message = message;
+        }
+    }
+
     /// The friendly aliens for local seats (Wave 12): first contact, a tongue opening up,
     /// chapters, trades, homes and refusals, told to the seat whose player it was.
     fn announce_aliens(&mut self, players: &[PlayerId]) {
@@ -2224,6 +2262,42 @@ impl LocalGame {
                     };
                     for (seat, player) in players.iter().enumerate() {
                         if seat_hears(self.runtime.world(), gameplay.store, player_id, *player) {
+                            messages.push((seat, text.to_owned()));
+                        }
+                    }
+                }
+                // The outland worlds (Wave 13 planets-c): what the world (or its boss) did.
+                GameplayEventKind::Outlands {
+                    what, player_id, ..
+                } => {
+                    use fatherload_simulation::planet::outlands::OutlandsEvent as O;
+                    let text = match what {
+                        O::CapBounce | O::MyceliumRegrew | O::AshPoured | O::HazardBite => {
+                            continue;
+                        }
+                        O::GlowFlash => "The glowcap flashes: the hunters round it reel, stunned.",
+                        O::VentSwelling => "The spore vent swells under you. Get out, or ride it!",
+                        O::VentBlast => "WHOOSH! The vent blasts you up its chimney.",
+                        O::PuffballBurst => {
+                            "The puffball bursts: spores! (A Bio-Filter keeps them out.)"
+                        }
+                        O::GearsClank => "CLANK. The gears are about to turn: keep clear!",
+                        O::GearGrind => "The gear's teeth grind the hull!",
+                        O::RelayFlipped => "The relay flips (and so do its neighbours).",
+                        O::VaultOpened => "All three relays lit: the vault's seals open.",
+                        O::TombOpened => "The seal breaks... something stirs in the tomb.",
+                        O::WispChill => {
+                            "A ghost light passes through the hull: cold! (Cold gear keeps it out.)"
+                        }
+                        O::RelicFound => "A relic of the builders' worlds!",
+                        O::SecretCache => "A buried cache: this little world's secret.",
+                        O::BossWoke => "Something vast wakes in the dark. Watch its tells!",
+                        O::BossSummons => "It calls its brood!",
+                        O::BossDefeated => "It falls! Its seal is spent and its vault stands open.",
+                        O::StormRising => "A storm is rising.",
+                    };
+                    for (seat, player) in players.iter().enumerate() {
+                        if player_id.is_none_or(|owner| owner == *player) {
                             messages.push((seat, text.to_owned()));
                         }
                     }
