@@ -128,6 +128,25 @@ pub(super) const CONSOLE_SCENES: &[Scene] = &[
         },
     },
     Scene {
+        name: "console_touch_palette",
+        summary: "Wave 14: the palette open on touch: the menu's > completes, < recalls",
+        setup: |stage| {
+            start(stage, &TpTarget::Descent(Descent::Crust));
+            stage.use_devices(&[InputDevice::Touch]);
+            type_line(stage, "give all", true);
+            type_line(stage, "tp str", false);
+            press(
+                stage,
+                PlayerInput {
+                    menu_right: true,
+                    ..PlayerInput::default()
+                },
+            );
+            type_line(stage, "c", false);
+            stage.settle(2);
+        },
+    },
+    Scene {
         name: "debug_hitboxes",
         summary: "Wave 14 debug view: hit circles (red), contact boxes (orange) and the rig's box",
         setup: |stage| {

@@ -43,7 +43,9 @@ pub enum TpTarget {
 }
 
 impl TpTarget {
-    /// The target as the palette's words (`descent v`, `planet random ice`).
+    /// The target as the palette's words (`descent v`, `planet random ice`; `--start-at`'s
+    /// note, desktop only).
+    #[cfg(not(target_os = "emscripten"))]
     #[must_use]
     pub fn words(&self) -> String {
         let step = |step: &Step| match step {
@@ -434,6 +436,7 @@ pub fn parse_target(args: &[&str]) -> Result<TpTarget, String> {
 /// # Errors
 ///
 /// A message naming what was wrong.
+#[cfg(not(target_os = "emscripten"))]
 pub fn parse_start_at(text: &str) -> Result<TpTarget, String> {
     let lowered = text.trim().to_ascii_lowercase();
     let words: Vec<&str> = lowered

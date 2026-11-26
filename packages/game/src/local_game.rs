@@ -2817,6 +2817,7 @@ impl LocalGame {
     /// `start_at`, travels the rig there on the first tick through the same test-mode actions
     /// the palette sends. Returns a warning when the target has no answer in this world (the
     /// rig then starts at the spawn point).
+    #[cfg(not(target_os = "emscripten"))]
     pub fn start_test_world(
         &mut self,
         seed: u64,

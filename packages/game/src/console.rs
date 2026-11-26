@@ -14,6 +14,8 @@ pub mod complete;
 pub mod dispatch;
 pub mod names;
 pub mod parse;
+// Launch flags: the browser build has no command line.
+#[cfg(not(target_os = "emscripten"))]
 pub mod start_at;
 #[cfg(test)]
 mod tests;

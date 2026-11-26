@@ -25,7 +25,10 @@ use crate::{
 /// Lines of output the panel shows.
 const SHOWN_LINES: usize = 10;
 
-/// Draws the palette along the bottom of the screen (UI canvas).
+/// Lines of output the panel shows on touch (it sits above the phone's keyboard).
+const SHOWN_LINES_TOUCH: usize = 6;
+
+/// Draws the palette along the bottom of the screen (UI canvas; the top on touch).
 #[allow(
     clippy::too_many_lines,
     reason = "the panel top to bottom: title, output, completions, the typed line"
@@ -61,9 +64,15 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
             wrapped.push((format!("{}{row}", " ".repeat((pad / 3) as usize)), color));
         }
     }
+    let touch = shell.prompt_device(console.seat).is_touch();
+    let shown_lines = if touch {
+        SHOWN_LINES_TOUCH
+    } else {
+        SHOWN_LINES
+    };
     let shown: Vec<&(String, Color)> = wrapped
         .iter()
-        .skip(wrapped.len().saturating_sub(SHOWN_LINES))
+        .skip(wrapped.len().saturating_sub(shown_lines))
         .collect();
     let completions: Vec<&String> = console
         .completions
@@ -72,7 +81,13 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         .collect();
     let rows = i32::try_from(shown.len() + usize::from(!completions.is_empty())).unwrap_or(0);
     let height = 18 + line_height * rows + 18;
-    let top = canvas.height - height - margin;
+    // On touch the panel sits at the top: a phone's keyboard comes up over the bottom half of
+    // the screen, and the touch menu's < > BACK buttons sit in the bottom corner.
+    let top = if touch {
+        margin
+    } else {
+        canvas.height - height - margin
+    };
     ui_kit::panel(
         draw,
         Rectangle::new(left as f32, top as f32, width as f32, height as f32),
@@ -90,7 +105,7 @@ pub fn draw_console(draw: &mut RaylibDrawHandle<'_>, shell: &ShellState) {
         TextStyle::Bold,
         palette::GOLD,
     );
-    let hint = if shell.prompt_device(console.seat).is_touch() {
+    let hint = if touch {
         "> completes  < history  Enter runs  Back closes"
     } else {
         "Tab completes  Up/Down history  Enter runs  Esc closes"

@@ -12528,7 +12528,10 @@ changes nothing.
   and the world keeps running. Esc, Back or the backtick closes it; the pause menu closes it.
   `seat N` makes the palette act for another split-screen seat (a gamepad seat has no keys to
   type with; the keyboard seat keeps typing, and the panel's title names the seat). On touch
-  the menu's `>` button completes (a phone keyboard has no Tab) and `<` recalls the history.
+  the menu's `>` button completes (a phone keyboard has no Tab) and `<` recalls the history;
+  the panel sits at the top of the screen with six lines of output, clear of the phone's
+  keyboard and the menu's buttons. The launch-flag code is desktop only (`cfg`), so the browser
+  build has no dead code (its strict Clippy run failed on that before review).
 * **Language** (`console/parse.rs`): `tp planet next|prev|nearest|random [theme]`,
   `tp descent N|numeral|name`, `tp depth 4200m|4200|1.5km`, `tp stratum <name>`,
   `tp boss <name>` (also `tp leviathan`), `tp station nearest|next|prev|random`, `tp player N`,
@@ -12596,6 +12599,7 @@ changes nothing.
   the time scale's determinism, and `start_test_world` lands at its target.
 * Scenes (`--screenshot-scenes <dir> --only ...`): `console_palette` (typing with completions,
   a preview card and help), `console_travel`, `console_touch` (the CMD button),
+  `console_touch_palette` (open on touch, mid-completion),
   `debug_hitboxes`, `debug_fields`, `debug_grid`, `debug_reveal`, `debug_freecam`, `debug_fps`.
 
 ### Seams (TODO-SEAM) for the integrator
