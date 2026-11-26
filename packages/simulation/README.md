@@ -12375,8 +12375,9 @@ fall back to short titles ("Towns", "Crew", "Marks") where the full one does not
 ### Cost (browser: GLSL ES 100, 60 fps)
 
 * Previews are generated only while an Atlas is open, three rows a frame for the selection
-  (two in the browser) and the rest of the budget for its Prev/Next neighbours, from the middle
-  out, uploaded row by row (`update_texture_rec`); 24 are cached (least recently shown dropped
+  (two in the browser) and, once the selection is painted, the rest of the budget for its
+  Prev/Next neighbours (one cold preview at a time: a cold one may generate its chunks, ~1.5 ms
+  each natively), from the middle out, uploaded row by row (`update_texture_rec`); 24 are cached (least recently shown dropped
   first), so stepping back shows one at once. Planet grounds for previews are kept for 8
   bodies. The depth map is one 96 x 256 texture per seat, rebuilt only when its window moves;
   the galaxy map's systems are gathered once per map.
@@ -12446,6 +12447,39 @@ Scene capture paints every preview whole before the still (`preview::paint_whole
 * The previews show the ground, the boss and the arrival, not live creatures, rigs or weather.
 * Player positions on another body preview its landing column (the stand-in does not resolve
   a strip column; the index's `Player` ids do).
+
+### Review (w14-atlas-review)
+
+Driving the Atlas as a tester (a flow test now presses Go on one destination of every kind, one
+after another, from wherever the last trip left the rig:
+`go_reaches_every_kind_of_destination_one_after_another`) found and fixed:
+
+* **`WarpToBand` from deep in a floating frame** (simulation, `world/test_mode.rs`): the rig's
+  row was set in absolute tiles while its column was frame-local, so a Deep Descent warp from
+  below the first sector landed 1,024 rows too deep (Basalt three times: rows 881, 1905, 2929).
+  Test mode only; regression test
+  `warping_again_from_deep_in_a_floating_frame_lands_at_the_band_top`.
+* **The wrong Descent:** a Deep Descent world's 41 strata answer `band_at` with their host
+  band, whose warp goes to the one stratum `Stratum::of_band` names, often in another Descent.
+  The stand-in now picks the deepest of the twelve warps whose top is not below the target
+  (`atlas::index::warp_band`): the rig always arrives above the target, never deeper. Those
+  twelve tops all lie above ~2,600 m, so **every target below Descent III arrives at the top of
+  the Mantle Storm Zone** until `TravelTo` is wired. The card's **Arrives** line and the trip
+  message say where today's warps land (`index::arrival_text`; also "the home town" for
+  villages and sky towns away from the spawn, "free flight by home" for space targets).
+* **Depth trips from space or another body** were ignored (`WarpToBand` works on the home
+  ground only): the trip now goes home first (`WarpToPlace(Place::HOME)`) and the warp waits in
+  `SeatAtlas::pending` until the rig is home (`SeatUi::flush_atlas_trip`, every frame, dropped
+  after 600 frames), which also works online where the host answers a round trip later.
+* A planet's preview showed column 0 while its warp lands over its first alien town on a
+  settled world: planets and theme bosses now preview that column (`arrival_column`); the
+  search keeps a planet and its town as two results (they share a spot).
+* The galaxy minimap stays clear of the preview's caption on a short preview (phones), and
+  Prev/Next previews wait for the selection's.
+
+**For the integrator:** `warp_band`, `arrival_text`, `arrival_column`, `SeatAtlas::pending` and
+`flush_atlas_trip` are all stand-ins: delete them when `index::travel_command` becomes
+`TravelTo` (which crosses places and lands exactly).
 
 ## Replication
 

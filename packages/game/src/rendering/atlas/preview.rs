@@ -215,7 +215,13 @@ impl AtlasPreviews {
                 .into_iter()
                 .chain(atlas.neighbours())
                 .collect();
+            // Neighbours wait until the selection is painted: a cold preview may generate
+            // its chunks, and one at a time keeps the browser's frames even.
+            let mut selection_done = true;
             for (rank, destination) in wanted.iter().enumerate() {
+                if rank > 0 && !selection_done && !whole {
+                    break;
+                }
                 let Some((key, tile, body)) = tile_view(world, &destination.target) else {
                     continue;
                 };
@@ -247,6 +253,9 @@ impl AtlasPreviews {
                     };
                     let painted = paint_rows(preview, snapshot.terrain, rows);
                     budget = budget.saturating_sub(painted);
+                    if rank == 0 {
+                        selection_done = preview.done();
+                    }
                 }
             }
             self.sync_space(view.seat_index, atlas, world, snapshot);

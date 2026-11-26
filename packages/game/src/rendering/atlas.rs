@@ -367,7 +367,11 @@ fn draw_preview(
         draw_space_preview(draw, ui, pictures, inner, (centre, reach));
         // A planet's landing site, in its own tile art, in the corner.
         if let Some(tile) = pictures.previews.tile(world, &destination.target) {
-            let inset_width = (inner.width * 0.42).min(150.0).floor();
+            // Inside the preview even when it is short (a phone held sideways).
+            let inset_width = (inner.width * 0.42)
+                .min(150.0)
+                .min((inner.height - 6.0) / 0.55)
+                .floor();
             let inset = Rectangle::new(
                 inner.x + 3.0,
                 inner.y + inner.height - (inset_width * 0.55).floor() - 3.0,
@@ -610,9 +614,14 @@ fn draw_minimap(
     let Some((centre, _)) = space_focus(world, &destination.target) else {
         return;
     };
+    // Clear of the caption along the top on a short preview (a phone held sideways).
     let size = (preview.width.min(preview.height) * 0.36)
         .clamp(40.0, 96.0)
+        .min(preview.height - 20.0)
         .floor();
+    if size < 24.0 {
+        return;
+    }
     let area = Rectangle::new(
         preview.x + preview.width - size - 3.0,
         preview.y + preview.height - size - 3.0,
@@ -650,6 +659,9 @@ fn draw_minimap(
     let (x, y) = (area.x + area.width / 2.0, area.y + area.height / 2.0);
     draw.draw_circle_lines(x as i32, y as i32, 4.0, GOLD);
     ui_kit::end_clip();
+    if ui_kit::text_width("Galaxy", TextStyle::Body) + 4 > size as i32 {
+        return;
+    }
     ui_kit::text(
         draw,
         "Galaxy",
