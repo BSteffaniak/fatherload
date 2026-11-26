@@ -10359,6 +10359,129 @@ hostiles 980-999.
 * Bosses on the theme worlds, hides for alien traders, the story's quest engine for the alien
   chapters, and station music.
 
+## Wave 13 qa-perf: the galaxy made solid (events by place, free flight's frames, body maps by relevance, several wild towns, a cheaper sea, the browser at 60 fps, the co-op soak, every wave's saves)
+
+The Wave 12 integration's technical debt, fixed and tested. `PROTOCOL_VERSION` **21** (one
+bump: `GameplayEvent::store`); the save format stays **15** (nothing new is saved). V1-V10,
+`GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` are unchanged (home and space generation are
+untouched); `GOLDEN_WILDS_DIGESTS` are unchanged (they pin unsettled worlds). No event codes,
+tile codes or sounds.
+
+### Events routed by place (`event.rs`, `world/places.rs`, netcode `world.rs`, game `effects.rs`, `local_game.rs`, `audio/director.rs`)
+
+* Every `GameplayEvent` carries the store whose pass raised it (`store`, serde default
+  `Home`): a body's or free flight's ground pass stamps its events, the space combat pass a
+  fight's rig's store (a ship's own events: free flight's), a `PlaceChanged` its destination.
+  `TickOutput::merge_pass` keeps each event's store.
+* `GameplayEvent::reaches_store(has_player, viewer_store)`: a player's event is that player's
+  (callers route it, as before), a home-pass event reaches everyone (world-wide news
+  included), and a **player-less event of another store reaches only viewers in that store**.
+* Online, `event_visible` filters with it (a spectator still sees every store). In the game,
+  each seat's messages (`seat_hears`: the frontier's, the wild worlds', the round ground's,
+  the hostiles' news and every other broadcast) and each sound: a world cue is tagged with its
+  event's store (`PlacedCue::store`) and only listeners in that store hear it; a body's
+  player-less event makes no sound at all when no local seat is there.
+* Tests: `world::places_tests::every_pass_tags_its_events_with_its_store`, netcode
+  `world_places::a_bodys_player_less_events_reach_only_the_clients_there`, game
+  `space_seat_tests::a_player_less_event_on_a_body_reaches_only_the_seat_there`.
+
+### Free flight's per-group frames (`world/places.rs`: `space_groups`, `player_frame`, `SpaceGroup`)
+
+* Rigs in free flight within `SPACE_GROUP_LINK_SECTORS` (4 sectors, 2,048 tiles, either axis;
+  single linkage) form a group. The group of the store's first rig is measured in the store's
+  own frame, exactly as before (a world with one group behaves bit for bit as it did); every
+  other group has its own frame round its first rig (`Frame::floating_at` of its sector).
+* With more than one group the Space store ticks once per group: the group's rigs (exact from
+  their `RigFlight::pos`) and the store's things in its frame, only the cells round its rigs
+  awake (each thing ticks once a tick), the store's entities moved back to the store's frame
+  after. At the end of the tick each far group's rigs are measured in its frame again; a rig
+  that joins the first group is measured in the store's frame (its position was a whole number
+  of sectors off).
+* Everything that reads a rig's store position uses `player_frame` (`rig_world_pos`, the
+  region cells, netcode's `player_pose` origin, the client's presentation poses).
+  `move_store_frame` on the Space store moves only the first group's rigs.
+* A pure function of the rigs' exact space positions: every peer groups alike, nothing is
+  saved. Tests (`world::space_frame_tests`): three rigs, two near and one three galactic sectors
+  away, each exact (store position = its frame's local of its space position, and small) every
+  tick at 30 and 60 Hz; the far rig joins the others and leaves again; a chain of near rigs is
+  one group; bit-identical runs; a save mid-split reloads and plays on identically.
+
+### Body maps by relevance (`world/places.rs`, `world/visibility.rs`)
+
+* A keyframe (`redacted_for(viewer)`) keeps only the viewer's own map of each body
+  (`Places::keep_maps_of`), as the home map; a spectator gets none. A player's map of a body it
+  left still reaches it (on a rejoin too). Test:
+  `world::body_map_tests::a_keyframe_carries_only_its_viewers_body_maps`.
+
+### Several alien towns on a wild world (`planet/wilds/mod.rs`, `planet/world.rs`, `alien/town.rs`, `world/wilds.rs`)
+
+* A settled wild world holds as many towns as any settled body (`town_count`: two or three on
+  a planet, one on a moon). `settlement_centres` puts the theme's own settlement first and the
+  others three quarters and three eighths of a lap on (clear of the landmark half a lap on and
+  of a small body's secret a quarter on). Every site shapes the ground round it as the first
+  does (`nearest_settlement`): the jungle's clearing (no trees), the archipelago's island over
+  the sea, the glacier's level shelf (no crevasses, spires); `ThemeWorld::settlement_sites`
+  (default: the one site) lists them, the aliens build a town on each, and every site is safe
+  ground (`wilds_safe_zone`).
+* Lexicon stones under a town that straddles the strip's seam are wrapped round it (they never
+  appeared before).
+* Generation changes only on settled wild bodies (the golden digests pin unsettled ones); a
+  Wave 12 save with such a body loads it fresh (the fingerprint check, as Wave 12's re-themes).
+* Test: `alien::tests::a_settled_wild_planet_holds_several_level_towns_spread_round_the_lap`
+  (every theme, species and three radii: level, paved, open sky, an island on the ocean, clear
+  of the landmark, its lexicon stones, spread an eighth of a lap or more; a moon keeps one).
+
+### A cheaper sea (`world/fluids.rs`, `terrain.rs`: `TerrainReader`)
+
+* The fluid step makes exactly the decisions it made before (the old step is kept as
+  `fluid_step_reference` for the tests), faster: its reads go through a `TerrainReader` that
+  remembers the last eight chunks it read (a loaded chunk, or an unloaded one's edits laid over
+  its generated tiles once, as a far planet-wide sea's chunks are), the reaction pass is
+  skipped when no cell of the batch can react (a batch of open sea), and the working copy is a
+  small-hash map sorted once into the writes' position order.
+* `world::sea_drain_tests::the_faster_fluid_step_drains_the_sea_exactly_like_the_reference`: a
+  three-wide shaft sunk 70 rows under the open sea of an R 3,000 ocean world, 240 ticks at 30
+  and 60 Hz, the water round it and the woken cells digest-equal tick for tick.
+* Cost (`sea_drain_cost`, release, a loaded machine, a minute of draining with up to 3,700 woken
+  cells): the reference step 2.1-2.3 ms a tick on average, the faster one 0.9-1.2 ms (about
+  2.5 times cheaper in the same runs; the worst ticks are the machine's load, not the sea).
+
+### The browser at 60 fps on round ground (game `rendering/space/polar/coarse.rs`, `rendering/world/place_view.rs`, `rendering.rs`)
+
+See the game README ("Browser frame timing, Wave 13"). The dune world's 38 fps and 70 ms-2 s
+hitches came from the draw side, not the simulation: profiled in the browser (a
+`--profiling-funcs` build, Chrome's CPU profiler over a rig driving across the dunes), 60 % of
+the frame was the coarse map's repaint (each window step repainted its whole 2,048 x 1,024
+window, generating every chunk it touched: up to 2 s) and the flat place renderer painting the
+seat's round ground flat for nobody (a third of the frame). The coarse map now keeps what a
+moved window holds and paints the rest within 3 ms a frame, nearest rows first (screenshot
+scenes paint it whole); round places skip the flat cache; the home ground is synced only for
+seats at home.
+
+### The co-op soak (netcode `tests::world_soak`)
+
+* A host with its own seat and two clients (lossy 50 ms links) roam the galaxy apart, a leg a
+  simulated minute: the dune, glacier, jungle, ocean, volcanic and crystal worlds, free flight
+  and home, each on its own body at the same time; the clients' bots dig, bomb, fly and fire,
+  the host's rig drives and drills. The host saves (JSON), quits and reloads every leg (every
+  five in the long run) and everyone rejoins its own rig; a client drops and reconnects with
+  its token. After every leg: no hash mismatch (`assert_converged`), every queue, buffer and
+  ledger bounded (`assert_bounded`), at most one store per place visited, the creatures capped,
+  the save and keyframes growing only linearly with what was dug.
+* `world_soak_host_and_two_clients_roam_apart_with_reloads_and_a_reconnect` (three minutes,
+  two reloads, a reconnect) runs in the suite; `world_soak_long` (ignored) is the long run:
+  SOAK_LONG.
+
+### Every wave's saves (game `save/wave_saves_tests.rs`, `save/fixtures/waves/`)
+
+* Save files written by each wave's master build (Waves 6 to 12: `b8386fd`, `041890c`,
+  `f76c418`, `eaf3ee8`, `f33d989`, `ef3c404`, `4ee4e8b`), exported from their own staged scenes
+  (`--export-saves`; Wave 11 and 12 with rigs on bodies and in space, Wave 12 on the theme
+  worlds and in an alien town), are fixtures: each loads, plays a minute with every rig moving,
+  saves in today's format and reloads to the same world, and plays on identically from both.
+  Formats 1-15 stay covered by `every_supported_save_format_loads_plays_and_round_trips` and
+  the v1-v3 fixtures.
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive

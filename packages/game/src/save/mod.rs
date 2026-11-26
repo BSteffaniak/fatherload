@@ -588,6 +588,8 @@ impl Error for SaveError {}
 
 #[cfg(test)]
 mod cross_version_tests;
+#[cfg(test)]
+mod wave_saves_tests;
 
 #[cfg(test)]
 mod tests {
