@@ -229,3 +229,43 @@ fn split_free_flight_is_exact_at_60_hz() {
     }
     assert_eq!(world.space_groups().len(), 2);
 }
+
+/// A thing of free flight near the first group (a pilot on foot, a drop, a target) keeps its
+/// exact position while a far group ticks in its own frame: the far group's pass must not
+/// round it through a frame millions of pixels away.
+#[test]
+fn a_far_group_leaves_the_first_groups_things_exact() {
+    let run = |far: bool| {
+        let mut world = world_at(30);
+        launch(&mut world, ONE, open_space(1, 0.0));
+        launch(&mut world, TWO, open_space(1, 900.0));
+        if far {
+            launch(&mut world, THREE, open_space(4, 0.0));
+        }
+        fly(&mut world, 3);
+        let rig = world.player(ONE).expect("rig");
+        let (x, y) = (rig.x + 3_000.37, rig.y - 1_000.11);
+        let space = world
+            .places
+            .stores
+            .get_mut(&StoreKey::Space)
+            .expect("the space store");
+        let id = space.entities.spawn(
+            world.simulation_tick,
+            crate::entity::Body::at(x, y),
+            crate::entity::EntityState::Target(crate::entity::TargetState {
+                health: crate::combat::Health::new(50.0, 0.0, 13.0),
+            }),
+            None,
+        );
+        fly(&mut world, 30);
+        assert_eq!(world.space_groups().len(), if far { 2 } else { 1 });
+        let body = world
+            .store_entities(StoreKey::Space)
+            .and_then(|entities| entities.get(id))
+            .expect("the target")
+            .body;
+        (body.x, body.y)
+    };
+    assert_eq!(run(true), run(false), "the same place, bit for bit");
+}

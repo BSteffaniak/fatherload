@@ -267,7 +267,7 @@ pub struct Places {
     players: BTreeMap<PlayerId, Place>,
     /// The ground of every store someone has been to.
     #[serde(default, with = "crate::pair_list")]
-    stores: BTreeMap<StoreKey, BodyWorld>,
+    pub(super) stores: BTreeMap<StoreKey, BodyWorld>,
     /// The last store served when more stores were occupied than the per-tick budget allows
     /// ([`MAX_AWAKE_STORES_PER_TICK`]); the next tick starts after it.
     #[serde(default)]
@@ -1309,8 +1309,13 @@ impl WorldState {
         self.place_pass.ground_only = true;
         // A far group of free flight ticks in its own frame round its rigs (exact wherever it
         // is), and only the store's things round it wake (each thing ticks once a tick).
+        // The store's things as they stand: those the far pass leaves alone go back exactly
+        // (a shift of millions of pixels there and back would round them to the far frame's
+        // `f32` grid, every tick).
+        let mut untouched: Vec<Entity> = Vec::new();
         let store_frame = group.and_then(|group| group.frame).map(|frame| {
             let home = self.terrain.frame();
+            untouched = self.entities.iter().cloned().collect();
             self.move_ground_entities(frame);
             for member in &group.map_or_else(Vec::new, |group| group.members.clone()) {
                 if let Some(rig) = self.players.get_mut(member)
@@ -1331,6 +1336,7 @@ impl WorldState {
         let mut output = self.simulate_pass(tick, &store_inputs);
         if let Some(home) = store_frame {
             self.move_ground_entities(home);
+            self.entities.restore_unchanged(&untouched);
         }
         output.discoveries.clear();
         world.discovered = std::mem::replace(&mut self.discovered_tiles, discovered);

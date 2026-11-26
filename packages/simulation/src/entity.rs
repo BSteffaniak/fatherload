@@ -791,6 +791,24 @@ impl EntityStore {
         self.rebuild_indices();
     }
 
+    /// Puts back every entity `before` holds at the same revision (unchanged since, so its
+    /// exact copy), e.g. after a pass that moved every entity to another frame and back
+    /// (Wave 13 QA: free flight's far groups). `before` is in id order.
+    pub(crate) fn restore_unchanged(&mut self, before: &[Entity]) {
+        let mut restored = false;
+        for entity in &mut self.entities {
+            if let Ok(index) = before.binary_search_by_key(&entity.id, |old| old.id)
+                && before[index].revision == entity.revision
+            {
+                *entity = before[index].clone();
+                restored = true;
+            }
+        }
+        if restored {
+            self.rebuild_indices();
+        }
+    }
+
     fn rebuild_indices(&mut self) {
         let mut indices = Indices::default();
         indices.cell_of = self
