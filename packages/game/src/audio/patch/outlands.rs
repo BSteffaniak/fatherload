@@ -282,17 +282,19 @@ pub(super) fn relay_flip(rng: &mut Rng) -> Vec<f32> {
 
 /// A tomb's seal breaks: stone grinding, a low gust out of the dark.
 pub(super) fn tomb_open(rng: &mut Rng) -> Vec<f32> {
-    let mut noise = Noise::new(NoiseColor::Brown, rng.next_u64());
-    let mut filter = Svf::new(FilterMode::LowPass, 500.0, 1.0);
-    let mut out = render(1.6, |t| {
-        filter.process(noise.next())
-            * segments(t, &[(0.0, 0.0), (0.1, 1.0), (1.0, 0.7), (1.6, 0.0)])
+    // The slab grinding open: a rasping band of noise sliding down.
+    let mut noise = Noise::new(NoiseColor::Pink, rng.next_u64());
+    let mut filter = Svf::new(FilterMode::BandPass, 900.0, 1.6);
+    let mut out = render(1.4, |t| {
+        filter.run(noise.next(), 1_400.0 - 600.0 * (t / 1.4), 1.6)
+            * segments(t, &[(0.0, 0.0), (0.08, 1.0), (0.9, 0.7), (1.4, 0.0)])
     });
-    grains(rng, &mut out, 20, (0.0, 1.0), (500.0, 1_600.0), 0.25);
+    grains(rng, &mut out, 26, (0.0, 1.2), (900.0, 3_000.0), 0.3);
+    // A cold breath out of the dark.
     let mut gust = Osc::new(Wave::Saw);
-    let mut gust_filter = Svf::new(FilterMode::LowPass, 300.0, 3.0);
-    let moan = render(1.4, |t| {
-        gust_filter.process(gust.next(82.5 + 8.0 * sine(t, 0.8))) * perc(t, 0.4, 1.3) * 0.3
+    let mut gust_filter = Svf::new(FilterMode::BandPass, 500.0, 3.0);
+    let moan = render(1.3, |t| {
+        gust_filter.process(gust.next(165.0 + 12.0 * sine(t, 0.8))) * perc(t, 0.4, 1.2) * 0.3
     });
     mix_into(&mut out, &moan, 0.2, 1.0);
     out
@@ -347,18 +349,18 @@ pub(super) fn boss_fall(rng: &mut Rng) -> Vec<f32> {
         rng.next_u64(),
         NoiseColor::Brown,
         FilterMode::LowPass,
-        700.0,
+        1_600.0,
         0.8,
         1.6,
     );
     let boom = thump(70.0, 35.0, 0.9, 2.2);
-    mix_into(&mut out, &boom, 0.0, 1.0);
+    mix_into(&mut out, &boom, 0.0, 0.6);
     for (index, note) in [293.75_f32, 369.0, 440.0, 587.25].into_iter().enumerate() {
         let ring = bell(note, 2.0, 0.8, 2.0);
-        mix_into(&mut out, &ring, 0.8 + index as f32 * 0.12, 0.25);
+        mix_into(&mut out, &ring, 0.8 + index as f32 * 0.12, 0.4);
     }
     let mut dust = Vec::new();
-    scatter_grains(rng, &mut dust, 24, (0.1, 1.6), (600.0, 2_400.0), 0.2, true);
+    scatter_grains(rng, &mut dust, 24, (0.1, 1.6), (900.0, 3_600.0), 0.3, true);
     mix_into(&mut out, &dust, 0.0, 1.0);
     out
 }

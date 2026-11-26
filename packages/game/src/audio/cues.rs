@@ -2779,6 +2779,13 @@ mod tests {
                     x: 0,
                     y: 0,
                 },
+                // An outland hazard's bite is the hull hit's (Wave 13 planets-c).
+                GameplayEventKind::Outlands {
+                    what: fatherload_simulation::planet::outlands::OutlandsEvent::HazardBite,
+                    player_id: Some(PlayerId::new(1)),
+                    x: 0,
+                    y: 0,
+                },
                 // A frontier storm passing is the wind bed fading; a hazard's bite is the hull
                 // hit's (Wave 12).
                 GameplayEventKind::Frontier {

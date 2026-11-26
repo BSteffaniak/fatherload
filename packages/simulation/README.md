@@ -10518,6 +10518,214 @@ seats at home.
   60 fps); everything else on the GPU is 1.5-4.7 ms, still or moving.
 * Old saves: a Wave 12 save that dug into a settled wild world loads that body fresh (its ground
   now holds more towns), as Wave 12 did for re-themed Wave 11 bodies.
+## Wave 13 planets-c: the fungal, machine and dead worlds (`src/planet/outlands/`, `src/world/outlands.rs`, `src/world/enemies/outlands.rs`)
+
+Expansion plan §16 WP-SPACE "planet themes" (fungal, machine world, dead worlds with ruins):
+three planet themes, each a world like the home ground level, built the way the Wave 12 wild
+worlds were (and on their generation helpers: `planet::wilds::{chunk_with, Cell,
+settlement_site_of, core_floor_row, ...}`). Every body the space generator tags
+`Theme::Fungal`, `Theme::MachineWorld` or `Theme::DeadWorld` lands on one of them
+(`place::planet_theme_of`; dead worlds were barren before). Space generation is untouched
+(`GOLDEN_SPACE_DIGEST` unchanged), and so is home generation (V1-V10, `GOLDEN_V11_DIGEST`).
+
+### Registration
+
+- **Themes** (append only, the planets-c range 9-11): `PlanetThemeId::{FUNGAL, MACHINE, DEAD}`
+  in `PLANET_THEMES` (`outlands::{fungal, machine, dead}::*_THEME`: palette, crust, three
+  strata with rock, accent and ores, core ore), their hooks in `THEME_HOOKS`
+  (`outlands::hooks::{FUNGAL, MACHINE, DEAD}_HOOKS`, each naming its `ThemeWorld`), their
+  weather in `WEATHER_REGISTRY` (`OUTLAND_WEATHER`, ids 1000-1004).
+- **Tiles**: `TileKind::Outland(OutlandTile)`, kind codes `0x2E00 + code` (50 tiles, append
+  only; the planets-c range `0x2E00..=0x31FF`), with hardness, durability, item, glow,
+  `indestructible` (vault walls, power seals, lair seals and vault doors: only the world's own
+  rules open them, through `Terrain::set_kind_by_rule`), `is_loose`, `is_springy`, `conveyor`.
+- **Depth**: the wild worlds' (`wilds::core_floor_row`): 800 rows at radius 1,500 to 2,500 at
+  8,000 (1,715 at 5,000), three concentric strata down to the core chamber; a small moon or
+  crater rock (radius up to 1,000) is strata to its true core. Deep features (vaults, tombs,
+  gear rooms, grottos, vents) are laid out in ring tiles, so they keep their shape where a
+  ring tile spans several strip columns (`PowerVault::span`, `Tomb::span`).
+
+### The three worlds
+
+| | Fungal World | Machine World | Dead World |
+|---|---|---|---|
+| Surface | puffball mounds; a giant mushroom in most 28-column cells (stalk, springy cap, gills, glowcaps under a glowing one); puffballs | riveted plate terraces in 4-row steps, welded seams, girder pylons with beacons | low ash plains and drifts; petrified cities (towers of 2-4 storeys with floors, holes to fly up through, windows, doors, urns, rooms with back walls) |
+| Strata | Mycelium Mat (mat, hyphae), Glowcap Grottos (gillstone, lumen moss), Sporeheart Deep (sporeheart, hyphae) | Plate Crust (scrap fill, hull plate), Gear Works (cogwork), Reactor Shell (conduit, reactor casing) | Ash Beds (ash stone, loose ash), the Necropolis (ossuary stone, petrified stone), Grave Mantle (grave rock, soulstone) |
+| Landmark | the Mother Cap: a hollow stalk 9 wide, 30 tall, under a 48-wide dome of glowing flesh, a door at its foot | the Reactor Spire: a hazard-striped casing tower 13 wide, 36 tall, lit windows, a beacon crown, a door and a lift shaft | the Hollow Throne: a five-step petrified ziggurat 64 wide, a throne between soulstone braziers on its crown, a stair-shaft through it |
+| Theme boss (lair under the landmark) | the Sporemother (rooted; volleys of spore orbs; calls sporelings) | the Reactor Warden (hovers, leashed to its hall; bolt volleys; calls ward drones) | the Ashen Sovereign (walks its tomb; ghost-flame volleys; calls shades) |
+| Settlement | a mushroom-free clearing (the Tokkari settle fungal worlds) | a level plate (the Tokkari) | a swept stretch of plain (the Siphra keep dead worlds' memory) |
+| Weather | spore drift (fouls the air, stings the suit; spore air bites a rig on the open surface), glowfall at night | ion storms (static crackle over a rig or pilot in the open) | the grey wind (ash on a hard wind: pushes craft, hides the plain, fouls the air), ghostlight at night |
+| Hazard tags (planet gear) | toxic air | heat | cold |
+| Music (`pc_loop_*`) | a wet, wondering kalimba piece in F lydian over a breathing pad, drips and spore puffs | pistons, a clockwork arpeggio in E minor, the reactor's hum, the gear works' clank | a lament: a choir drone and a bowed line in D aeolian over the wind, a far bell |
+
+**Signature rules** (one a stratum, `life::OutlandRule`, its `summary()` the HUD's line; every
+one a pure function of the body and world time or a terrain write, so nothing new saves):
+
+| World | Stratum | Rule |
+|---|---|---|
+| Fungal | Mycelium Mat | `Regrowth`: dug mycelium grows back into the tunnels round a rig every 2 s (one open tile in five, never within 3 tiles of a rig, pilot or creature): keep a way back open, or dig through hyphae |
+| Fungal | Glowcap Grottos | `Glowflash`: a drilled glowcap flashes and stuns every hunter within 8 tiles for 3 s (the fauna start, unharmed): the grottos' lights are a weapon |
+| Fungal | Sporeheart Deep | `SporeVents`: each vent rests, swells for 2 s (a violet glow at its mouth, rising motes, a hiss: the telegraph), then blasts for 2.5 s, throwing a rig in its chimney up at 430 px/s and fouling its air |
+| Machine | Plate Crust | `Conveyors`: conveyor galleries; a belt carries a resting rig along at 120 px/s (never into rock; drilling braces against it) |
+| Machine | Gear Works | `GrindingGears`: the works run on one 8 s rhythm of world time: a 1 s clank (sound, message), 4.5 s of turning (sparks; a gear grinds a rig within 6 px of it and shoves it off), then rest: slip past at rest |
+| Machine | Reactor Shell | `PowerRelays`: power vaults (11 by 6 ring tiles) under a control room, three relays in the roof between power seals; drilling a relay flips it and its neighbours (lights out on three: every start is solvable, never all lit); all three lit, the seals open onto a builders' cache and core ore. Reactor heat bites without heat gear (the Thermal Hull takes three quarters) |
+| Dead | Ash Beds | `Ashfall`: loose ash pours into open space under it round a rig (a sweep every 250 ms, never onto a body) |
+| Dead | The Necropolis | `TombWardens`: sealed tombs of brick (a sarcophagus, urns); breaking a tomb's seal wakes its two gravewardens inside, after the one who broke in (none on Peaceful) |
+| Dead | Grave Mantle | `GhostLights`: wisps drift through the rock on slow triangle paths of world time (`life::wisps_near`, one per 20 by 14 cell in two of three, drawn as a soft glow, seen before they bite); a touch chills the hull (6 x the tier scale, at most every 1.2 s) unless cold gear or the Cryo Hull keeps it out |
+
+Plus every theme's surface: a mushroom cap throws a rig falling onto it back up (92 % of its
+speed, at least 320 px/s); puffballs burst into spore clouds when drilled. Hazards bite
+through `WorldState::planet_gear_counters` (the stations' planet gear, any tier, or the
+Descent's systems: the Bio-Filter for spores, the Cryo Hull for the ghost lights' cold);
+`rules_own_hazards` is set, so the stations' flat drain stands back. The deep bodylife heat
+(the climate's own) still bites every deep rig.
+
+### Creatures (fifteen appended `EnemyKind`s)
+
+| World | Neutral fauna | Hunters | Boss |
+|---|---|---|---|
+| Fungal | capgrazer (megafauna, herds bed down at night, charges only when struck), lanternfly (the symbiont: drifts to the nearest rig and hovers by it, lighting the grottos; struck, it flees) | sporeling (a parasite pack, surface), rotmaw (burrows the soft fungal rock of the Deep) | Sporemother |
+| Machine | scuttlebot (a maintenance crawler) | ward drone (bolts), cogspider (pounces), arc mite (swarms the Reactor Shell) | Reactor Warden |
+| Dead | ashrunner (a scavenger that bolts from a rig) | bonepicker (circles while its dart recharges), gravewarden (tomb guardian, armoured), shade (a ghost of the Mantle) | Ashen Sovereign |
+
+All of them move through the enemy body rules in the planet's local frame (`step_body`,
+`free_from_rock`, `keep_off_bodies`, `site_fits`, contact boxes fitted to their art, the hit
+ellipse over it, line-of-sight noticing scaled by the weather's visibility). The spawner
+(`advance_outland_creatures`, every 2 s round each rig, 16-34 tiles out, at most 6 near a rig,
+gone at 80 tiles) picks from the theme's roster by habitat (surface, the caves or cave air of a
+stratum); Peaceful spawns only the fauna; nothing spawns inside a boss lair. An outland
+world's surface is no refuge (`outlands_safe_zone`: the settlement only). Tiers: 8 at the
+surface, one more per stratum, one more two sectors from home (up to 11), like the wild worlds.
+
+### Theme bosses (`outlands::{THEME_BOSSES, boss_lair}`, `world/enemies/outlands.rs`)
+
+- **The lair** (planets only, not small bodies): a hall 53 wide and 16 tall, 52 rows under the
+  landmark, a shaft down to it from the landmark (the Mother Cap's hollow stalk, the Spire's
+  lift shaft, the Throne's stair), its **seal** (`BossSeal`) on the floor's middle, and the
+  **reward vault** in its east wall behind a two-tile `VaultDoor`, holding the boss's relic
+  (`SporeCrown`: a reactor bloom; `ReactorHeart`: a machine sigil; `ThroneRelic`: the best
+  builder relic, a star core) over a floor of the theme's core ore.
+- **The fight**: a rig entering the hall while the seal stands wakes the boss (`BossWoke`, a
+  roar). Each boss's attack is the generic telegraphed one (a 1.1-1.3 s wind-up with the
+  boss's own pose: the Sporemother swells her spore sacs, the Warden's core flares, the
+  Sovereign raises his staff; then a three-shot volley). On a rhythm of world time (14 s;
+  9 s under half health) it calls two of its brood, with a 1.5 s warning first
+  (`BossSummons`), never more than four at once. Big readable sprites (40 by 34 and 34 by 42
+  art pixels at one and a half times, contact boxes 50 by 44 and 44 by 54, the hit ellipse
+  their drawn bodies; they light their lairs).
+- **Fair**: no countdown and no lost run. Leave the lair and the boss rests (despawns), coming
+  back whole the next time; glowcap flashes and EMPs work on them as on any creature.
+- **Won**: the boss's death spends the seal (`BossSealSpent`), opens the vault door (both by
+  the world's rule) and raises `BossDefeated`; it drops a boss's haul (18+ of the next tier's
+  ore, ancient alloy, core shards) and its vault holds its relic. A spent seal never wakes
+  its boss again (it is a terrain edit, so it saves with the body). On Peaceful there is no
+  fight: entering the lair spends the seal and opens the vault.
+- `WorldState::outland_boss_beaten_here()` reads a loaded body's seal.
+
+### Sites for the other tracks
+
+- **Settlement** (`ThemeWorld::settlement_site`, `PlanetThemeHooks::settlement_site`): the
+  wild worlds' level site, widened for the species' town; the aliens track builds there.
+- **Landmark**: half a lap from the settlement; the boss lair under it.
+- **Builders' outpost** (`outlands::builder_outposts`, one per body, three quarters of a lap
+  round): a three-wide obelisk of dressed builder stone with two glowing builder glyphs on a
+  plinth, a sealed chamber under it holding a builders' cache (an old circuit).
+- **Secret** (small bodies, radius up to 1,000; a quarter lap round): a marker over a chamber
+  18 rows down holding a cache (a void pearl).
+
+### Events (netcode 1000-1019)
+
+`GameplayEventKind::Outlands { what: OutlandsEvent, player_id, x, y }`: cap bounce, mycelium
+regrew, glow flash, vent swelling, vent blast, puffball burst, gears clank, gear grind, relay
+flipped, vault opened, ash poured, tomb opened, wisp chill, hazard bite, relic found, secret
+cache, boss woke, boss summons, boss defeated, storm rising. Every rule's event carries the
+player it reached; a boss's summons names its target and its fall its slayer (either may be
+nobody, and then it is told to every local seat, the Wave 12 limit below).
+
+### Game side
+
+- Tile art (`rendering/terrain/tile_art/outlands_art.rs`): every outland tile in palette
+  ramps (violet spore loam, the mat's pale felt and lilac threads, ribbed stalks, rose caps
+  with cream spots (the Mother Cap's glow teal), gills, puffballs, ribbed gillstone, glowcaps,
+  lumen moss, sporeheart with spore pockets, vents; riveted plate with rust stains, welds,
+  packed scrap, belts with chevrons pointing their way, girders, beacons, cogwork, gear rims,
+  cable conduit, hazard-striped casing, relays dark and lit, power seal bars, vault walls,
+  the reactor heart; ash in ripples, ash stone beds, coursed petrified blocks, dead windows,
+  urns, bone-packed ossuary, tomb brick, tomb seals, sarcophagi, grave rock, soulstone; the
+  builders' stone and glyphs, caches, lair seals lit and spent, vault doors), each stratum's
+  back wall, ore set in the stratum's rock, rooms in the petrified towers, no grass.
+- Sprites (`rendering/pixel_art/sprites/outlands.rs`, names `pc_enemy_*`, drawn by the track's
+  generator): fifteen animated creatures and bosses with attack poses (the bosses' telegraphs
+  are their poses); the capgrazer and the bosses at one and a half times.
+- Round ground marks (`GroundThingKind::Outland(OutlandMark)`): the ghost lights (a soft slow
+  pulse, never a flash), a vent's swell and its blast up the chimney, the turning gears'
+  sparks: all pure functions of the ground and world time.
+- Audio (`audio/patch/outlands.rs`, appended at the end of `patches!`): three music beds woven
+  with their worlds' ambience (`pc_loop_{fungal,machine,dead}_world`, played under the sky and
+  thinning with depth) and twelve one-shots (cap bounce, mycelium creep, glow flash, vent
+  swell and blast, gear clank, relay flip, tomb opening, wisp chill, boss wake, brood call,
+  boss fall); every outland event has a cue (`outlands_cue`) and a message, and each stratum's
+  rule is told the first time a seat's rig enters it.
+- Scenes (`scene_capture/outlands_scenes.rs`, 22, on the nearest planet of each theme to home
+  on the flight scenes' seed, mid-morning): `outland_{fungal,machine,dead}_approach`,
+  `_surface` (with creatures), `_landmark`, `_boss`; `outland_fungal_{settlement,mat,grottos,
+  vent}`, `outland_machine_{gears,vault,outpost}`, `outland_dead_{city,tomb,mantle}`.
+- `--space-report` lists the three worlds and their strata.
+
+### Formats and digests
+
+- `PROTOCOL_VERSION` **21** (this track's one bump: the outland tiles, themes, creatures and
+  events). No save format bump: no new saved field or world section (enum variants and tile
+  codes are additive). A save that dug into a dead-world body while it was barren reloads it
+  fresh (the ground fingerprint changed; the Wave 12 rule).
+- V1-V10, `GOLDEN_V11_DIGEST` and `GOLDEN_SPACE_DIGEST` unchanged. The outland worlds are
+  pinned by `GOLDEN_OUTLAND_DIGESTS` (`planet/outlands/tests.rs`, each theme at R 600 and
+  3,000).
+
+### Tests
+
+- `planet::outlands::tests`: registration and purity, golden digests, strata depth (small and
+  big bodies, every stratum on the way down, the core chamber), each world's features
+  (mushrooms, grottos, vents, the Mother Cap; terraces, pylons, belts, gears, power vaults,
+  the Spire; cities and towers, tombs, ash, the Throne, the ghost lights only in the Mantle),
+  every lair (hall, seal, door, relic, shaft) and none on small bodies, level settlements and
+  outposts, small-body secrets, seamless wrap, weather registration and each theme's storm,
+  hazard tags, the space tags, `--space-report`, the rhythms always telegraphing (a clank
+  before the gears turn, a swell before a vent blasts).
+- `world::outlands_tests`: **a digging bot reaches every stratum and the core chamber of an
+  R 640 body and every stratum of an R 5,000 planet of each theme**; the settlement safe and
+  the surface not; a minute on each world replaying bit for bit and alike at 30 and 60 Hz;
+  fauna never hunting first and answering a blow; the lanternfly keeping company, the
+  ashrunner bolting; spawns from the roster (Peaceful: fauna only); contact boxes and big
+  bosses; a cap's bounce, regrowth, the glowflash's stun, a vent's swell then blast, a belt's
+  carry, the gears' clank, grind and rest, a lights-out vault opening, ash pouring (never onto
+  the rig), a tomb's wardens (none on Peaceful), a ghost light's chill and the cold gear,
+  spore air and reactor heat with and without their gear; each boss waking, calling its
+  brood after its warning, falling and paying (seal spent, vault open, never again), resting
+  whole when the crew leaves, and a Peaceful lair yielding.
+- Game: `the_gear_scene_shows_the_gears_turning`; the art test holds every outland creature's
+  contact box to its drawn body; the cue tests give every outland event an answer.
+
+### Seams (TODO-SEAM) and known limits
+
+- **w13-endgame**: the hunt list reads `outlands::THEME_BOSSES` (theme, boss kind, name, lair,
+  reward); a kill raises `OutlandsEvent::BossDefeated` with the boss's slayer; a loaded body
+  answers `WorldState::outland_boss_beaten_here()`. A beaten-bosses record across unloaded
+  bodies is the endgame's to keep (from the event).
+- **w13-story**: the galaxy story can target `outlands::builder_outposts(ground)` (the glyph
+  and the cache's tiles); the cache's old circuit is a clue's natural carrier.
+- **w13-integrator**: theme ids 9-11 and weather ids 1000-1004 are this track's ranges;
+  collapse `PROTOCOL_VERSION` 21 with the other tracks'. The space generator makes no fungal
+  or machine small moons (as with jungle and ocean in Wave 12), so their secrets show only on
+  bodies tagged so by a later space change.
+- Gameplay events carry no store (the Wave 12 note): the rules' events name their player, so
+  they reach no seat on another body; a boss event with nobody named can.
+- The ghost lights, vent blasts and gear sparks are drawn on the round ground only (like the
+  frontier's marks); the flat lone-planet view (tests and tools) shows the rules' tiles only.
+- Pilots on foot ride no belts and are not thrown by caps or vents (rigs only); the regrowth
+  and ashfall sweeps touch only the tiles round the rigs.
+- Deep down every rig also feels the bodylife climate's heat (a machine world's reactor core
+  runs 140 °C hotter): heat gear matters on all three worlds' deep strata.
 
 ## Replication
 

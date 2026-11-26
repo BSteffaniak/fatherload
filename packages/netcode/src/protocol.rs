@@ -329,6 +329,14 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///
 /// * QA (w13-qa-perf): `GameplayEvent::store` (the store whose pass raised an event: a
 ///   player-less event of a body or of free flight reaches only the clients there).
+/// * Planets-c (the fungal, machine and dead worlds): `TileKind::Outland(OutlandTile)` tiles
+///   (kind codes `0x2E00..=0x31FF`) in terrain ops, store tile ops, chunk refreshes and
+///   keyframes; three appended planet themes (ids 9-11) in `PlanetParams`; fifteen appended
+///   `EnemyKind`s (`Capgrazer` .. `AshenSovereign`, the three theme bosses among them) in
+///   entity records; the outland events 1000-1019 (`GameplayEventKind::Outlands` with
+///   `planet::outlands::OutlandsEvent`). No world field or section: the outland rules keep no
+///   state of their own (the gear works, vents, ghost lights and storms are pure functions of
+///   the planet's seed and world time; a beaten boss's spent seal is a terrain edit).
 pub const PROTOCOL_VERSION: u8 = 21;
 
 /// One client input frame: the controls and actions for exactly one tick.
