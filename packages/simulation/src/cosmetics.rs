@@ -549,7 +549,10 @@ mod tests {
         // At least a third are starters (Wave 10's finale milestones brought the earned paints
         // to about as many as the starter set; Wave 13's space achievements and outfitters
         // added more to earn).
-        assert!(starter * 3 >= all.len(), "a third of the items are starters");
+        assert!(
+            starter * 3 >= all.len(),
+            "a third of the items are starters"
+        );
         assert!(starter < all.len(), "some items are left to unlock");
     }
 

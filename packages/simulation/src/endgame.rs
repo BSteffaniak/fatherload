@@ -11,9 +11,11 @@
 //!   Heartline Drive, the Halcyon Gate, estates, the outfitter) and what they do.
 //! * [`hunt`]: every boss of the galaxy in one list (theme bosses registered by their tracks).
 //! * [`completion`]: the ten categories of a whole game and their share.
+//! * [`curve`]: a bot's career in space from an empty purse and from a post-Heart purse.
 //! * [`state`]: what the crew did, the orders, events and refusals.
 
 pub mod completion;
+pub mod curve;
 pub mod economy;
 pub mod hunt;
 pub mod materials;

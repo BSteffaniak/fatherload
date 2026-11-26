@@ -9,11 +9,11 @@
 //! | Goal | Where | Credits | Materials | What it does |
 //! |---|---|---|---|---|
 //! | Ship line tier 3-5 | any yard of that tier | the line's price | [`line_bill`] | (Wave 12) |
-//! | Alien tech Mk II / III | alien-run stations | 4x / 12x Mk I | [`mark_bill`] | stronger (see [`ShipEffects`]) |
-//! | Starwright Hull | human shipyards (tier 5) | 4,800,000 | 60 iridium, 80 star platinum, 8 voidglass | space damage x0.35 |
-//! | Starwright Engine | human shipyards (tier 5) | 5,200,000 | 200 volatile ice, 40 iridium, 30 comet dust | thrust +90 % |
-//! | Heartline Drive | human shipyards (tier 5) | 12,000,000 | 24 voidglass, 60 comet dust, 80 iridium | warp range x2, spool /2 |
-//! | Halcyon Gate (8 parts) | Halcyon Dock | 1.5-4 million a part | rings of common ore, the lens, the keystone | a gate to any known system |
+//! | Alien tech Mk II / III | alien-run stations | 4x / 8x Mk I | [`mark_bill`] | stronger (see [`ShipEffects`]) |
+//! | Starwright Hull | human shipyards (tier 5) | 3,600,000 | 60 iridium, 80 star platinum, 8 voidglass | space damage x0.35 |
+//! | Starwright Engine | human shipyards (tier 5) | 4,000,000 | 200 volatile ice, 40 iridium, 20 comet dust | thrust +90 % |
+//! | Heartline Drive | human shipyards (tier 5) | 8,000,000 | 24 voidglass, 40 comet dust, 80 iridium | warp range x2, spool /2 |
+//! | Halcyon Gate (8 parts) | Halcyon Dock | 1.2-3.2 million a part | rings of common ore, the lens, the keystone | a gate to any known system |
 //! | Estates | your alien home | grows with each wing | ore by wing | rooms, floors, a bay; the neighbours call |
 //! | Outfitter | trade posts, shipyards | 250,000-1,500,000 | - | paints and a flame |
 //!
@@ -68,7 +68,7 @@ pub const MARK_MAX: u8 = 3;
 /// Credits for `tech`'s mark `mark` (2 or 3).
 #[must_use]
 pub const fn mark_price(tech: AlienTech, mark: u8) -> u32 {
-    let times = if mark >= 3 { 12 } else { 4 };
+    let times = if mark >= 3 { 8 } else { 4 };
     tech.price().saturating_mul(times)
 }
 
@@ -144,8 +144,8 @@ impl StarwrightPart {
     #[must_use]
     pub const fn price(self) -> u32 {
         match self {
-            Self::Hull => space_credits(240_000),
-            Self::Engine => space_credits(260_000),
+            Self::Hull => space_credits(180_000),
+            Self::Engine => space_credits(200_000),
         }
     }
 
@@ -153,7 +153,7 @@ impl StarwrightPart {
     pub const fn bill(self) -> Materials {
         match self {
             Self::Hull => &[(Iridium, 60), (StarPlatinum, 80), (Voidglass, 8)],
-            Self::Engine => &[(VolatileIce, 200), (Iridium, 40), (CometDust, 30)],
+            Self::Engine => &[(VolatileIce, 200), (Iridium, 40), (CometDust, 20)],
         }
     }
 
@@ -168,8 +168,8 @@ impl StarwrightPart {
 }
 
 /// The capstone's price and bill.
-pub const HEARTLINE_PRICE: u32 = space_credits(600_000);
-pub const HEARTLINE_BILL: Materials = &[(Voidglass, 24), (CometDust, 60), (Iridium, 80)];
+pub const HEARTLINE_PRICE: u32 = space_credits(400_000);
+pub const HEARTLINE_BILL: Materials = &[(Voidglass, 24), (CometDust, 40), (Iridium, 80)];
 /// Theme bosses the Heartline asks for at most (as many as the theme tracks registered, up to
 /// this many).
 pub const HEARTLINE_THEME_BOSSES: usize = 3;
@@ -196,9 +196,9 @@ pub const fn gate_part_name(index: u8) -> &'static str {
 #[must_use]
 pub const fn gate_part_price(index: u8) -> u32 {
     match index {
-        0..=5 => space_credits(75_000),
-        6 => space_credits(150_000),
-        _ => space_credits(200_000),
+        0..=5 => space_credits(60_000),
+        6 => space_credits(120_000),
+        _ => space_credits(160_000),
     }
 }
 

@@ -267,6 +267,17 @@ pub fn reward_for(kind: MissionKind, station: &StationProfile, context: &BoardCo
         }
         _ => crate::endgame::economy::space_credits(base),
     };
+    // Wave 13 endgame: far boards pay more (a quarter more a ring of galactic sectors from
+    // home, up to eight rings), so the long curve keeps paying as the rig reaches farther.
+    let ring = u32::try_from(
+        station
+            .id
+            .sector
+            .chebyshev(crate::space::HOME_SECTOR)
+            .clamp(0, 8),
+    )
+    .unwrap_or(0);
+    let base = base * (100 + 25 * ring) / 100;
     if station.kind == StationKind::Outpost {
         base + base / 5
     } else {
