@@ -104,6 +104,26 @@ fn every_wave_13_theme_boss_is_on_the_hunt_list() {
         assert_eq!(hunt::theme_boss_of(kind), Some(style.theme().0));
     }
     assert_eq!(hunt::theme_boss_of(crate::enemy::EnemyKind::CaveBat), None);
+    // Every quarry has somewhere to head for: a lair, or the nearest world of its kind with a
+    // boss's lair on it.
+    let world = story::world_with(&[PLAYER]);
+    for (quarry, beaten, system) in world.hunt() {
+        assert!(!beaten, "{quarry:?}");
+        assert!(system.is_some(), "{quarry:?}: a waypoint");
+        if let hunt::Quarry::Theme(theme) = quarry {
+            let boss = hunt::THEME_BOSSES
+                .iter()
+                .find(|boss| boss.theme == theme)
+                .expect("registered");
+            let id = hunt::nearest_theme_world(SEED, boss.world).expect("a world");
+            let params = crate::place::planet_params_for(SEED, id).expect("landable");
+            assert_eq!(params.theme.0, theme);
+            let ground = PlanetGround::new(params);
+            let has_lair =
+                boss_lair(&ground).is_some() || crate::exotic::boss::arena(&ground).is_some();
+            assert!(has_lair, "{quarry:?}: its world has the boss's lair");
+        }
+    }
 }
 
 /// A space body tagged `tag` near home (rings 0-6), a full planet if one is near.
@@ -328,6 +348,7 @@ fn beat_the_sporemother(world: &mut WorldState) -> Vec<GameplayEventKind> {
             rig.fuel = rig.fuel_capacity;
         }
         if won {
+            eprintln!("the Sporemother fell after {:.1} s", tick as f32 / 30.0);
             break;
         }
     }
@@ -410,6 +431,13 @@ fn buy_a_home_on_a_new_world(world: &mut WorldState) -> Vec<GameplayEventKind> {
         "a home bought from the {species:?} on {:?}",
         planet_theme_of(space.body(id).expect("body").theme)
     );
+    // The town's builder raises it in world time (a quarter of a day).
+    for _ in 0..tour::seconds(3_600.0) {
+        events.extend(tour::run(world, 30));
+        if world.owns_alien_home(PLAYER) {
+            break;
+        }
+    }
     events
 }
 

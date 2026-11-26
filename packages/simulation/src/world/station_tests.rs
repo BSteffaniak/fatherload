@@ -539,8 +539,10 @@ fn alien_stations_sell_alien_tech_and_derelicts_are_stripped_once() {
 fn world_with(world: &WorldState, hazard: PlanetHazard) -> Option<(SpaceBodyId, u8)> {
     let galaxy = world.space();
     let space = galaxy.space();
-    for y in -3..=3 {
-        for x in -3..=3 {
+    // Six rings round home: the Wave 13 theme worlds own their hazards too, so the generic
+    // worlds near home are fewer.
+    for y in -6..=6 {
+        for x in -6..=6 {
             let sector = space.sector(SpaceSector::new(x, y));
             for system in &sector.systems {
                 for body in &system.bodies {
@@ -660,7 +662,12 @@ fn planet_gear_counters_the_hazard_tags() {
         );
         checked += 1;
     }
-    assert!(checked >= 2, "at least two hazards found near home");
+    // Every §16 theme owns its hazards since Wave 13, so only the barren moons and crater rocks
+    // still feel the flat drain (heat near a hot star, cold far out).
+    assert!(
+        checked >= 1,
+        "a hazard found on a generic world near home ({checked})"
+    );
 }
 
 /// Missions on Halcyon's starter board the bot flies: (scan body, mine body, delivery target).

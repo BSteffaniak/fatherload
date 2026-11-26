@@ -117,15 +117,32 @@ impl WorldState {
     }
 
     /// The hunt list with each quarry's state: beaten, and the system to head for (a faction
-    /// boss's lair; theme bosses are found on their worlds).
+    /// boss's lair; a theme boss's nearest world of its kind round home, Wave 13 integration).
     #[must_use]
     pub fn hunt(&self) -> Vec<(Quarry, bool, Option<SystemRef>)> {
+        let seed = self.world_seed();
         hunt_list()
             .into_iter()
             .map(|quarry| {
                 let lair = match quarry {
                     Quarry::Faction(faction) => self.boss_lair(faction).map(|lair| lair.system),
-                    Quarry::Theme(_) => None,
+                    Quarry::Theme(theme) => THEME_BOSSES
+                        .iter()
+                        .find(|boss| boss.theme == theme)
+                        .and_then(|boss| {
+                            crate::endgame::hunt::nearest_theme_world(seed, boss.world)
+                        })
+                        .and_then(|id| {
+                            let space = crate::space::Space::shared(seed);
+                            let sector = space.sector(id.sector);
+                            let system = sector
+                                .systems
+                                .iter()
+                                .find(|found| found.index == id.system)?;
+                            Some(crate::flight::space::GeneratedSpace::reference(
+                                id.sector, system,
+                            ))
+                        }),
                 };
                 (quarry, self.quarry_beaten(quarry), lair)
             })

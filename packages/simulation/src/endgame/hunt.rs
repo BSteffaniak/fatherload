@@ -129,6 +129,74 @@ pub const fn faction_boss_name(faction: Faction) -> &'static str {
     }
 }
 
+/// How far round home (sectors, rings) [`nearest_theme_world`] looks.
+pub const THEME_WORLD_SEARCH_RINGS: i32 = 8;
+
+/// The nearest full planet of space theme `world` round home, in the world of `seed`.
+///
+/// Ring by ring, the biggest of a ring: a theme boss's lair is on every full planet of its
+/// theme (small bodies have none). Memoized: the hunt list asks every frame it shows.
+#[must_use]
+pub fn nearest_theme_world(seed: u64, world: Theme) -> Option<crate::space::SpaceBodyId> {
+    use std::{
+        collections::BTreeMap,
+        sync::{Mutex, PoisonError},
+    };
+    type Cache = Mutex<BTreeMap<(u64, Theme), Option<crate::space::SpaceBodyId>>>;
+    static CACHE: Cache = Mutex::new(BTreeMap::new());
+    if let Some(found) = CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&(seed, world))
+    {
+        return *found;
+    }
+    let space = crate::space::Space::shared(seed);
+    let home = crate::space::HOME_SECTOR;
+    let mut found = None;
+    'rings: for ring in 0..=THEME_WORLD_SEARCH_RINGS {
+        let mut best: Option<(u32, crate::space::SpaceBodyId)> = None;
+        for y in -ring..=ring {
+            for x in -ring..=ring {
+                if x.abs().max(y.abs()) != ring {
+                    continue;
+                }
+                let sector = crate::space::SpaceSector::new(home.x + x, home.y + y);
+                for system in &space.sector(sector).systems {
+                    for body in &system.bodies {
+                        let id = crate::space::SpaceBodyId {
+                            sector,
+                            system: system.index,
+                            body: body.index,
+                        };
+                        if body.theme != world
+                            || best.is_some_and(|(radius, _)| radius >= body.radius)
+                        {
+                            continue;
+                        }
+                        let Some(params) = crate::place::planet_params_for(seed, id) else {
+                            continue;
+                        };
+                        if !crate::planet::wilds::is_small_body(&params) {
+                            best = Some((body.radius, id));
+                        }
+                    }
+                }
+            }
+        }
+        if let Some((_, id)) = best {
+            found = Some(id);
+            break 'rings;
+        }
+    }
+    let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+    if cache.len() > 64 {
+        cache.clear();
+    }
+    cache.insert((seed, world), found);
+    found
+}
+
 /// The whole hunt list, in order: the faction bosses, then the theme bosses.
 #[must_use]
 pub fn hunt_list() -> Vec<Quarry> {

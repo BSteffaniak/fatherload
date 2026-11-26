@@ -455,24 +455,34 @@ pub(super) fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
     // theme's own rules see it blowing too.
     let life = world.body_life(store).expect("the body's life");
     let table = hooks.weather_table();
-    let storm_kind = table
-        .iter()
-        .find(|odds| odds.kind != crate::bodylife::WeatherId::CLEAR)
-        .expect("a storm in the table")
-        .kind;
+    let theme_id = ground.params().theme;
     let spell = crate::bodylife::weather::SPELL_MILLIS;
-    let millis = (1..400)
-        .map(|index| index * spell + spell / 2)
-        .find(|millis| {
-            crate::bodylife::weather::forecast(
-                life.seed,
-                table,
-                life.climate.atmosphere,
-                *millis,
-                false,
-            )
+    let forecast = |millis: u64, night: bool| {
+        crate::bodylife::weather::forecast(life.seed, table, life.climate.atmosphere, millis, night)
             .kind
-                == storm_kind
+    };
+    // The theme's storm: an exotic world's own kind (the locked world's first is its
+    // night-only snow, never in a day-side forecast); else the first of its table that blows
+    // on this body by day or by night (an airless dead world never feels its grey wind, only
+    // its ghost lights after dark).
+    let exotic = crate::exotic::style_of(theme_id);
+    let (storm_kind, millis) = (1..2_000)
+        .map(|index| index * spell + spell / 2)
+        .find_map(|millis| {
+            let kind = forecast(millis, false);
+            let kind = if exotic.is_none() && kind == crate::bodylife::WeatherId::CLEAR {
+                forecast(millis, true)
+            } else {
+                kind
+            };
+            let wanted = crate::exotic::style_of(theme_id).map_or_else(
+                || {
+                    kind != crate::bodylife::WeatherId::CLEAR
+                        && table.iter().any(|odds| odds.kind == kind)
+                },
+                |style| kind == crate::exotic::hooks::storm_kind(style),
+            );
+            wanted.then_some((kind, millis))
         })
         .expect("a storm spell");
     let params = *ground.params();
@@ -482,11 +492,11 @@ pub(super) fn tour_theme(world: &mut WorldState, theme: Theme) -> EnemyKind {
             crate::frontier::rules::WeatherPhase::Storm,
             "{theme:?}: the frontier storm is the forecast's"
         );
-    } else if let Some(outland) = crate::planet::outlands::life::outland_theme(params.theme) {
+    } else if crate::planet::outlands::life::outland_theme(params.theme).is_some() {
         // The outland worlds' storms are bodylife kinds with their own effects (Wave 13).
-        assert_eq!(
-            outland.storm, storm_kind,
-            "{theme:?}: the outland storm is the forecast's"
+        assert!(
+            (1_000..=1_019).contains(&storm_kind.0),
+            "{theme:?}: the outland storm is the forecast's ({storm_kind:?})"
         );
     } else if let Some(style) = crate::exotic::style_of(params.theme) {
         assert!(

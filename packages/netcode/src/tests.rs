@@ -13,6 +13,7 @@ mod world_galaxy;
 mod world_galaxy_story;
 mod world_hostiles;
 mod world_keyframes;
+mod world_part3;
 mod world_places;
 mod world_planet;
 mod world_soak;

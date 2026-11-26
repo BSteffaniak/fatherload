@@ -351,12 +351,16 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   `SectionKey::Endgame` section (careers, the Halcyon Gate, theme bosses, estates), the
 ///   appended milestones and cosmetics, and the endgame events 1060-1079
 ///   (`GameplayEventKind::Endgame`).
-/// * Story (w13-galaxy-story): `PlayerCommand::Galaxy` (`galaxy_story::GalaxyCommand`: set course, ask the archivist,
-///   the finale's choice), `TestModeAction::WarpToStory`, the appended
-///   `hostiles::ShipClass::Warden` in the `Hostiles` section, the `galaxy_story` world field
-///   and the appended `SectionKey::GalaxyStory` section (the road's chapter and goal, logs,
-///   fragments, the Warden, the choice, the discovery log, systems visited, worlds landed on,
-///   each player's part), and the galaxy events 1040-1059 (`GameplayEventKind::Galaxy`).
+/// * Story (w13-galaxy-story): `PlayerCommand::Galaxy` (`galaxy_story::GalaxyCommand`: set
+///   course, ask the archivist, the finale's choice), `TestModeAction::WarpToStory`, the
+///   appended `hostiles::ShipClass::Warden` in the `Hostiles` section, the `galaxy_story` world
+///   field and the appended `SectionKey::GalaxyStory` section (the road's chapter and goal,
+///   logs, fragments, the Warden, the choice, the discovery log, systems visited, worlds landed
+///   on, each player's part), and the galaxy events 1040-1059 (`GameplayEventKind::Galaxy`).
+/// * Art-audio (w13-art-audio): the fighters' hit circles, reach and size at 1.5 times their
+///   art (`ShipClass::hull_scale`): host and client must agree on every hit.
+/// * Integration: a relic's `RelicSite::base` (an outpost's floor; derived, never sent) and the
+///   theme bosses recorded on the endgame's hunt list (in the `Endgame` section).
 pub const PROTOCOL_VERSION: u8 = 21;
 
 /// One client input frame: the controls and actions for exactly one tick.

@@ -22,7 +22,7 @@ use crate::harness::{Harness, HarnessConfig};
 use crate::world::to_sim_player;
 use crate::{LinkConditions, PlayerId, ProfileId, SeatId, SessionParams};
 
-type WorldHarness = Harness<WorldState>;
+pub(super) type WorldHarness = Harness<WorldState>;
 
 const SEED: u64 = 0x50A4_0013;
 const HOST: SeatId = SeatId(0);
@@ -32,7 +32,7 @@ const SAM: ProfileId = ProfileId(0x5a3a_0000_0000_0013);
 
 /// A Deep Descent world with the stars open, test mode on (the roamers warp) and creatures
 /// about.
-fn galaxy_world() -> WorldState {
+pub(super) fn galaxy_world() -> WorldState {
     let first = fatherload_simulation::PlayerId::new(0);
     let mut world = WorldState::new_game_with_settings(
         first,
@@ -58,7 +58,7 @@ fn galaxy_world() -> WorldState {
 }
 
 /// A landable body near home whose space theme is `theme`.
-fn body_of_theme(theme: Theme) -> Place {
+pub(super) fn body_of_theme(theme: Theme) -> Place {
     let space = Space::shared(SEED);
     for ring in 0..=8_i32 {
         for y in -ring..=ring {
@@ -111,11 +111,11 @@ fn itineraries() -> [Vec<Place>; 3] {
     ]
 }
 
-fn warp(place: Place) -> PlayerCommand {
+pub(super) fn warp(place: Place) -> PlayerCommand {
     PlayerCommand::TestMode(TestModeAction::WarpToPlace(place))
 }
 
-fn harness() -> WorldHarness {
+pub(super) fn harness() -> WorldHarness {
     let link = LinkConditions {
         latency: Duration::from_millis(50),
         jitter: Duration::from_millis(10),
@@ -129,7 +129,7 @@ fn harness() -> WorldHarness {
     harness
 }
 
-fn wait_in_game(harness: &mut WorldHarness) {
+pub(super) fn wait_in_game(harness: &mut WorldHarness) {
     let mut guard = 0;
     while !harness.all_in_game() {
         harness.step();
@@ -139,7 +139,7 @@ fn wait_in_game(harness: &mut WorldHarness) {
 }
 
 /// The host's seat (the saved rig of its profile after a reload, else a new one).
-fn seat_host(harness: &mut WorldHarness, saved: Option<PlayerId>) -> PlayerId {
+pub(super) fn seat_host(harness: &mut WorldHarness, saved: Option<PlayerId>) -> PlayerId {
     let player = match saved {
         Some(player) => {
             assert!(

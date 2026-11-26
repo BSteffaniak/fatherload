@@ -397,6 +397,14 @@ fn the_starwright_ship_and_the_heartline_drive() {
     let mut hostiles = world.hostiles.clone();
     hostiles.bosses_beaten.extend(Faction::ALL);
     world.set_hostiles(hostiles);
+    // ... and three of the theme worlds' bosses (Wave 13 integration: six are registered).
+    assert_eq!(world.heartline_theme_bosses(), 3);
+    let events = works(&mut world, WorkOrder::Heartline);
+    assert!(refused(&events, EndgameRefusal::Locked), "{events:?}");
+    let mut output = crate::event::TickOutput::default();
+    for boss in &crate::endgame::hunt::THEME_BOSSES[..3] {
+        assert!(world.record_theme_boss(boss.theme, Some(PLAYER), &mut output));
+    }
     let events = works(&mut world, WorkOrder::Heartline);
     assert!(saw(&events, EndgameEvent::HeartlineFitted), "{events:?}");
     let capstone = world.ship_effects(PLAYER);

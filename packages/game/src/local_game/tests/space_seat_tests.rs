@@ -379,3 +379,94 @@ fn a_player_less_event_on_a_body_reaches_only_the_seat_there() {
     );
     assert!(home_only.is_empty(), "nobody local is there: {home_only:?}");
 }
+
+/// Split screen across Part III (Wave 13 integration): the two seats stand on two of the
+/// Wave 13 worlds at once (fungal and gas giant, dead and ring, machine and tidally locked),
+/// each seat's view its own body's round ground and theme, with the galaxy story's one road
+/// open for both.
+#[test]
+fn split_screen_seats_on_two_wave_13_worlds_each_see_their_own() {
+    use fatherload_simulation::space::Theme;
+    let settings = WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(SEED)
+    };
+    let world = WorldState::new_game_with_settings(
+        PLAYER,
+        &settings,
+        fatherload_simulation::SimulationParams::new(30),
+    );
+    let mut game = playing(world, 2, "part3-seats");
+    let seats: Vec<PlayerId> = game
+        .runtime
+        .local_seats()
+        .iter()
+        .map(|seat| seat.player)
+        .collect();
+    game.edit_world(|world| {
+        world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Normal);
+        world.enable_test_mode();
+        let mut heart = world.heart().clone();
+        heart.space_unlocked = true;
+        world.set_heart(heart);
+        for player in &seats {
+            if let Some(rig) = world.player_mut(*player) {
+                fatherload_simulation::economy::max_out_upgrades(rig);
+                rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
+                rig.hull = rig.max_hull();
+            }
+        }
+    });
+    for pair in [
+        [Theme::Fungal, Theme::GasGiant],
+        [Theme::DeadWorld, Theme::RingWorld],
+        [Theme::MachineWorld, Theme::TidallyLocked],
+    ] {
+        let places = pair.map(|theme| body_of_theme(SEED, theme));
+        game.edit_world(|world| {
+            for (player, place) in seats.iter().zip(places) {
+                let mut inputs = TickInputs::default().hold_as(*player, ControlState::default());
+                inputs.act_as(
+                    *player,
+                    PlayerCommand::TestMode(fatherload_simulation::TestModeAction::WarpToPlace(
+                        place,
+                    )),
+                );
+                let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+            }
+        });
+        idle(&mut game, 60);
+        let world = game.world();
+        assert!(world.galaxy_story().begun, "the road is open for the crew");
+        for (player, place) in seats.iter().zip(places) {
+            assert_eq!(
+                world.place_of(*player),
+                place,
+                "{pair:?}: each seat on its world"
+            );
+        }
+        let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
+        assert_eq!(snapshot.views.len(), 2);
+        let themes: Vec<_> = snapshot
+            .views
+            .iter()
+            .zip(places)
+            .map(|(view, place)| {
+                let scene = view.place_scene.as_ref().expect("each seat sees its place");
+                assert_eq!(scene.store, place.store(), "its own store");
+                scene
+                    .terrain
+                    .planet_ground()
+                    .expect("round ground")
+                    .params()
+                    .theme
+            })
+            .collect();
+        assert_eq!(
+            themes,
+            pair.map(fatherload_simulation::place::planet_theme_of)
+                .to_vec(),
+            "each seat draws its own world"
+        );
+    }
+}
