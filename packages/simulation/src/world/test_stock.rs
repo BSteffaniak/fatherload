@@ -198,6 +198,14 @@ impl WorldState {
         self.test_mode.and_then(|state| state.weather)
     }
 
+    /// Every rig of the crew: the running pass's and, during another store's pass, the ones
+    /// set aside at home or elsewhere (a switch flipped from a planet reaches the whole crew).
+    fn whole_crew(&self) -> Vec<PlayerId> {
+        let mut crew: BTreeSet<PlayerId> = self.place_pass_set_aside();
+        crew.extend(self.players.keys().copied());
+        crew.into_iter().collect()
+    }
+
     // --- Stocking --------------------------------------------------------------------------
 
     /// Stocks the player template, every rig and the world with everything (a new test-mode
@@ -261,7 +269,8 @@ impl WorldState {
         let settings = self.home_settings();
         if settings.generator.has_descents() {
             self.crust.deep_claim = true;
-            self.crust.drill_ii.extend(self.players.keys().copied());
+            let crew = self.whole_crew();
+            self.crust.drill_ii.extend(crew);
         }
         if self.space_enabled() {
             self.heart.space_unlocked = true;
@@ -612,7 +621,8 @@ impl WorldState {
             DescentBoss::TheSinkhole => {
                 self.crust.deep_claim = cleared;
                 if cleared {
-                    self.crust.drill_ii.extend(self.players.keys().copied());
+                    let crew = self.whole_crew();
+                    self.crust.drill_ii.extend(crew);
                 }
             }
             DescentBoss::StarCore => {
@@ -673,8 +683,8 @@ impl WorldState {
                 self.heart.cable_lit_millis = now.checked_sub(ENDING_SHIELD_MILLIS + 1_000);
             }
             self.heart.space_unlocked = true;
-            let players: Vec<PlayerId> = self.players.keys().copied().collect();
-            self.heart.star_drive.extend(players);
+            let crew = self.whole_crew();
+            self.heart.star_drive.extend(crew);
             self.expedition.cable_lit = true;
         } else {
             self.put_heart_to_sleep();
@@ -697,8 +707,7 @@ impl WorldState {
                 .fold(0, |bits, kind| bits | kind.bit());
             self.crust.logs = (0..u8::try_from(CRUST_LOGS.len()).unwrap_or(u8::MAX)).collect();
             self.old_deep.logs_read = (0..=LOG_CORE_REVEAL).collect();
-            let players: Vec<PlayerId> = self.players.keys().copied().collect();
-            for player_id in players {
+            for player_id in self.whole_crew() {
                 self.unlock_tomb_codex(player_id);
             }
         } else {

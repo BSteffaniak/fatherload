@@ -659,3 +659,38 @@ fn the_toolkit_state_replicates_and_round_trips() {
     assert_eq!(client.test_mode(), world.test_mode());
     assert!(client.clock().is_held());
 }
+
+#[test]
+fn a_switch_flipped_from_another_place_reaches_the_whole_crew() {
+    use crate::{
+        place::{BodyId, Place, SpaceBodyKey},
+        position::WorldPos,
+    };
+    let mut world = deep_test_world();
+    world.add_player(GUEST);
+    // The guest stands on a body: its commands run in that store's pass, with the home rig
+    // set aside.
+    let body = Place::OnBody(BodyId::Space(SpaceBodyKey::new(3, -2, 1, 0)));
+    world
+        .move_to_place(GUEST, body, WorldPos::tile_center(10, -2))
+        .expect("arrives");
+    let mut heart = world.heart().clone();
+    heart.star_drive.clear();
+    world.set_heart(heart);
+    let output = act(&mut world, GUEST, TestModeAction::SetEndingDone(true));
+    assert_eq!(outcome(&output), PlayerScopedCommandOutcome::Applied);
+    assert!(world.ending_done());
+    assert!(
+        world.has_star_drive(PLAYER) && world.has_star_drive(GUEST),
+        "the home rig gets the Star Drive too"
+    );
+    let _ = act(&mut world, GUEST, TestModeAction::SetStoryUnlocked(true));
+    for player in [PLAYER, GUEST] {
+        let unlocks = world.tombs().unlocks.get(&player).expect("tomb unlocks");
+        assert_eq!(
+            unlocks.codex.len(),
+            crate::tomb::relic::Relic::ALL.len(),
+            "{player:?}"
+        );
+    }
+}
