@@ -917,8 +917,25 @@ impl WorldState {
         };
         // The warp arrives with full air (a round body's life support counts from there).
         let air = self.air_capacity_of(player_id);
+        // A rig warped down onto a body stands landed there (the ground code drives it), one
+        // warped home flies no more: a warp out of flight left it "away" on the ground, where
+        // the body's rules never ran for it (Wave 12 integration).
+        let landed = match place {
+            Place::OnBody(crate::place::BodyId::Space(key)) => self
+                .space()
+                .body_ref(key)
+                .map(crate::flight::FlightPlace::Landed),
+            Place::OnBody(_) => Some(crate::flight::FlightPlace::Home),
+            Place::Space => Some(crate::flight::FlightPlace::Space),
+        };
         if let Some(player) = self.players.get_mut(&player_id) {
             player.flight.air = player.flight.air.max(air);
+            if let Some(landed) = landed {
+                player.flight.place = landed;
+                player.flight.drive = crate::flight::StarDrive::Off;
+                player.flight.velocity_x = 0.0;
+                player.flight.velocity_y = 0.0;
+            }
         }
         match self.move_to_place(player_id, place, arrival) {
             Ok(()) => PlayerScopedCommandOutcome::Applied,

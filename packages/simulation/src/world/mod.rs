@@ -137,6 +137,8 @@ mod body_map_tests;
 mod bodylife;
 #[cfg(test)]
 mod bodylife_tests;
+#[cfg(test)]
+mod galaxy_tour_tests;
 pub use bodylife::{BodyLifeEvent, body_life_of};
 mod hollow;
 #[cfg(test)]

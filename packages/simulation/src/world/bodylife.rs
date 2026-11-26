@@ -263,8 +263,15 @@ impl WorldState {
     #[must_use]
     pub fn body_heat_units_at(&self, tile: TilePosition) -> Option<u8> {
         let (x, y) = self.frame().centre_of(tile.x, tile.y);
+        // A frontier world's zones carry their own heat (its lava tubes, magma chambers):
+        // the hotter of the two (Wave 12 integration).
+        let zone = self
+            .terrain
+            .planet_ground()
+            .and_then(|ground| crate::frontier::rules::heat_units(ground, tile))
+            .unwrap_or(0);
         self.body_reading_here(x, y)
-            .map(|reading| reading.climate.heat_units)
+            .map(|reading| reading.climate.heat_units.max(zone))
     }
 
     /// Cold levels at strip tile `tile` of the body swapped in (`None` off a body).

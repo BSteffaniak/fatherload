@@ -337,7 +337,9 @@ impl LiveSpace {
                 reach_tiles.clamp(0, MAX_ROCK_REACH_TILES),
             )
             .iter()
-            .filter(|rock| mined.mined_from(rock.id) < rock.yield_units)
+            .filter(|rock| {
+                mined.mined_from(rock.id) < fatherload_simulation::flight::systems::rock_yield(rock)
+            })
             .map(|rock| AsteroidView {
                 centre: rock.centre.pos(),
                 radius_tiles: f32::from(rock.radius),

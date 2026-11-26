@@ -575,10 +575,36 @@ pub fn in_comet_tail(bodies: &[FlightBody], pos: WorldPos) -> Option<usize> {
     })
 }
 
+/// Most units a rock of `ore` gives up, whatever its size.
+///
+/// The rare ores (which stand in for deep home ores until space items exist) run out fast, so
+/// one boulder near home never fills a late rig's bay with deep-tier ore (Wave 12
+/// integration's balance pass).
+#[must_use]
+pub const fn ore_yield_cap(ore: AsteroidOre) -> u16 {
+    match ore {
+        AsteroidOre::Platinum => 40,
+        AsteroidOre::Iridium => 20,
+        AsteroidOre::Voidglass => 12,
+        _ => u16::MAX,
+    }
+}
+
+/// What a rock gives up in all: its size's yield, under its ore's cap.
+#[must_use]
+pub const fn rock_yield(rock: &crate::space::Asteroid) -> u16 {
+    let cap = ore_yield_cap(rock.ore);
+    if rock.yield_units < cap {
+        rock.yield_units
+    } else {
+        cap
+    }
+}
+
 /// A rock as a flight body (`None` once mined out).
 #[must_use]
 pub fn rock_body(rock: &crate::space::Asteroid, mined: u16) -> Option<FlightBody> {
-    if mined >= rock.yield_units {
+    if mined >= rock_yield(rock) {
         return None;
     }
     let system = SystemRef {
@@ -602,7 +628,7 @@ pub fn rock_body(rock: &crate::space::Asteroid, mined: u16) -> Option<FlightBody
         extra: BodyExtra::Rock(RockFacts {
             id: rock.id,
             ore: rock.ore,
-            yield_units: rock.yield_units,
+            yield_units: rock_yield(rock),
         }),
     })
 }

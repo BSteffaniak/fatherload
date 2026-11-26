@@ -175,3 +175,110 @@ fn split_screen_seats_in_two_places_each_see_their_own() {
     assert!(!life.name.is_empty());
     assert!(snapshot.views[1].player.flight.away(), "seat 1 flies");
 }
+
+/// A landable body near home whose space theme is `theme` (the first found).
+fn body_of_theme(seed: u64, theme: fatherload_simulation::space::Theme) -> Place {
+    let space = fatherload_simulation::space::Space::shared(seed);
+    for ring in 0..=6_i32 {
+        for y in -ring..=ring {
+            for x in -ring..=ring {
+                if x.abs().max(y.abs()) != ring {
+                    continue;
+                }
+                let sector = fatherload_simulation::space::SpaceSector::new(x, y);
+                for system in &space.sector(sector).systems {
+                    for body in &system.bodies {
+                        let id = fatherload_simulation::place::SpaceBodyKey {
+                            sector,
+                            system: system.index,
+                            body: body.index,
+                        };
+                        if body.theme == theme
+                            && fatherload_simulation::place::planet_params_for(seed, id).is_some()
+                        {
+                            return Place::OnBody(BodyId::Space(id));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    panic!("no {theme:?} body near home");
+}
+
+/// Split screen with the two seats on two theme worlds (Wave 12 integration): each seat's
+/// view is its own body's round ground, with its own theme and its own life.
+#[test]
+fn split_screen_seats_on_a_jungle_and_a_volcanic_world_each_see_their_own() {
+    use fatherload_simulation::space::Theme;
+    let settings = WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(SEED)
+    };
+    let world = WorldState::new_game_with_settings(
+        PLAYER,
+        &settings,
+        fatherload_simulation::SimulationParams::new(30),
+    );
+    let mut game = playing(world, 2, "qa-theme-seats");
+    let seats: Vec<PlayerId> = game
+        .runtime
+        .local_seats()
+        .iter()
+        .map(|seat| seat.player)
+        .collect();
+    let places = [
+        body_of_theme(SEED, Theme::Jungle),
+        body_of_theme(SEED, Theme::Volcanic),
+    ];
+    game.edit_world(|world| {
+        world.set_enemy_difficulty(fatherload_simulation::enemy::EnemyDifficulty::Normal);
+        world.enable_test_mode();
+        for (player, place) in seats.iter().zip(places) {
+            if let Some(rig) = world.player_mut(*player) {
+                fatherload_simulation::economy::max_out_upgrades(rig);
+                rig.hazard_gear = fatherload_simulation::protection::HazardGear::MAXED;
+                rig.hull = rig.max_hull();
+            }
+            let mut inputs = TickInputs::default().hold_as(*player, ControlState::default());
+            inputs.act_as(
+                *player,
+                PlayerCommand::TestMode(fatherload_simulation::TestModeAction::WarpToPlace(place)),
+            );
+            let _ = world.simulate_tick(world.simulation_tick(), &inputs);
+        }
+    });
+    idle(&mut game, 60);
+    let world = game.world();
+    for (player, place) in seats.iter().zip(places) {
+        assert_eq!(world.place_of(*player), place, "each seat on its own world");
+        assert!(world.body_reading_of(*player).is_some(), "its own reading");
+    }
+    let snapshot = game.snapshot((SCREEN_WIDTH, SCREEN_HEIGHT));
+    assert_eq!(snapshot.views.len(), 2);
+    let themes: Vec<_> = snapshot
+        .views
+        .iter()
+        .zip(places)
+        .map(|(view, place)| {
+            let scene = view.place_scene.as_ref().expect("each seat sees its place");
+            assert_eq!(scene.store, place.store(), "its own store");
+            let ground = scene.terrain.planet_ground().expect("round ground");
+            let life = scene
+                .body
+                .as_ref()
+                .and_then(|body| body.life.as_ref())
+                .expect("the body's life for its seat");
+            assert!(!life.name.is_empty());
+            ground.params().theme
+        })
+        .collect();
+    assert_eq!(
+        themes,
+        vec![
+            fatherload_simulation::place::planet_theme_of(Theme::Jungle),
+            fatherload_simulation::place::planet_theme_of(Theme::Volcanic),
+        ],
+        "each seat draws its own world"
+    );
+}
