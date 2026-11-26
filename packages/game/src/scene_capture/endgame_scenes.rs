@@ -273,7 +273,7 @@ fn estate(stage: &mut SceneStage<'_>, wings: usize) {
             player,
             Place::OnBody(BodyId::Space(id)),
             strip_position(
-                f64::from(plot.door_column() - 14) + 0.5,
+                f64::from(plot.door_column() - 9) + 0.5,
                 f64::from(found.ground_row() - 2),
             ),
         );

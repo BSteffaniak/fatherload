@@ -1253,14 +1253,16 @@ fn draw_monument(
 
 /// An estate's wings round a home on an alien world (Wave 13 endgame), in the order they are
 /// raised: a bedroom annex right, a kitchen with its chimney left, a garage right, a glass
-/// greenhouse left, an upper storey, a gallery's tall windows right and an observatory's dome
-/// on top. Walls take the species' stone, roofs its accent.
+/// greenhouse left, an upper storey over the bedroom annex, a gallery's tall windows right and
+/// an observatory's dome on the gallery. A paved terrace joins them to the house. Walls take
+/// the species' stone, roofs its accent.
+#[allow(clippy::too_many_lines, reason = "one block per wing, in order")]
 fn draw_estate_wings(
     draw: &mut impl RaylibDraw,
     pen: ArtPen,
     species: AlienSpecies,
     w: i32,
-    h: i32,
+    _h: i32,
     wings: u8,
     seconds: f32,
 ) {
@@ -1273,84 +1275,120 @@ fn draw_estate_wings(
         AlienSpecies::Siphra => (Color::new(0x8c, 0x84, 0xb0, 255), MINT),
     };
     let window = lit(AMBER, 0.9);
-    let half = w / 2 - 4;
+    // A Siphra home is a slender pylon: its wings gather close round its foot.
+    let half = match species {
+        AlienSpecies::Siphra => 18,
+        AlienSpecies::Vessi | AlienSpecies::Tokkari => w / 2 - 4,
+    };
     let has = |wing: u8| wings > wing;
+    let right_end = half
+        + if has(5) {
+            58
+        } else if has(2) {
+            42
+        } else {
+            18
+        };
+    let left_end = -half - if has(3) { 40 } else { 18 };
+    // The terrace under it all.
+    pen.rect(
+        draw,
+        left_end - 2,
+        -2,
+        right_end - left_end + 4,
+        2,
+        lit(wall, 0.6),
+    );
+    pen.rect(
+        draw,
+        left_end - 2,
+        -3,
+        right_end - left_end + 4,
+        1,
+        lit(wall, 0.9),
+    );
     // 0: a bedroom annex on the right.
     if has(0) {
-        pen.rect(draw, half, -30, 18, 30, wall);
-        pen.rect(draw, half, -30, 18, 2, lit(wall, 1.2));
-        pen.rect(draw, half - 1, -34, 20, 4, roof);
-        pen.rect(draw, half + 6, -22, 6, 6, window);
+        pen.rect(draw, half, -32, 18, 30, wall);
+        pen.rect(draw, half, -32, 18, 2, lit(wall, 1.2));
+        pen.rect(draw, half + 17, -32, 1, 30, lit(wall, 0.7));
+        pen.rect(draw, half + 6, -24, 6, 6, window);
+        pen.rect(draw, half + 6, -21, 6, 1, lit(wall, 0.8));
+        if !has(4) {
+            pen.rect(draw, half - 1, -36, 20, 4, roof);
+        }
     }
     // 1: a kitchen on the left, its chimney breathing smoke.
     if has(1) {
-        pen.rect(draw, -half - 18, -26, 18, 26, wall);
-        pen.rect(draw, -half - 19, -30, 20, 4, roof);
-        pen.rect(draw, -half - 14, -40, 4, 10, lit(wall, 0.7));
+        pen.rect(draw, -half - 18, -28, 18, 26, wall);
+        pen.rect(draw, -half - 18, -28, 1, 26, lit(wall, 0.7));
+        pen.rect(draw, -half - 19, -32, 20, 4, roof);
+        pen.rect(draw, -half - 14, -42, 4, 10, lit(wall, 0.7));
         let rise = ((seconds * 0.6) % 6.0) as i32;
         pen.rect(
             draw,
             -half - 14 + rise / 3,
-            -44 - rise,
+            -46 - rise,
             3,
             3,
             alpha(FOG, 140),
         );
-        pen.rect(draw, -half - 10, -18, 5, 5, window);
+        pen.rect(draw, -half - 11, -20, 6, 5, window);
     }
     // 2: a garage bay on the right, past the annex.
     if has(2) {
-        pen.rect(draw, half + 18, -20, 24, 20, lit(wall, 0.85));
-        pen.rect(draw, half + 17, -23, 26, 3, roof);
-        pen.rect(draw, half + 22, -16, 16, 16, lit(STEEL_DARK, 1.0));
-        for slat in (-15..0).step_by(3) {
+        pen.rect(draw, half + 18, -22, 24, 20, lit(wall, 0.85));
+        pen.rect(draw, half + 17, -25, 26, 3, roof);
+        pen.rect(draw, half + 22, -18, 16, 16, STEEL_DARK);
+        for slat in (-17..-2).step_by(3) {
             pen.rect(draw, half + 22, slat, 16, 1, STEEL);
         }
     }
     // 3: a glass greenhouse on the left, past the kitchen.
     if has(3) {
-        pen.rect(draw, -half - 40, -22, 22, 22, alpha(MINT, 110));
-        pen.rect(draw, -half - 40, -22, 22, 1, ICE);
+        pen.rect(draw, -half - 40, -24, 22, 22, alpha(MINT, 110));
+        pen.rect(draw, -half - 40, -24, 22, 1, ICE);
         for mullion in (-half - 40..-half - 18).step_by(5) {
-            pen.rect(draw, mullion, -22, 1, 22, alpha(ICE, 180));
+            pen.rect(draw, mullion, -24, 1, 22, alpha(ICE, 180));
         }
         for plant in 0..4 {
-            pen.rect(draw, -half - 37 + plant * 5, -8, 2, 8, LEAF);
-            pen.rect(draw, -half - 38 + plant * 5, -10, 4, 3, MOSS);
+            pen.rect(draw, -half - 37 + plant * 5, -10, 2, 8, LEAF);
+            pen.rect(draw, -half - 38 + plant * 5, -12, 4, 3, MOSS);
         }
     }
-    // 4: an upper storey across the house.
-    if has(4) {
-        pen.rect(draw, -half + 6, -h - 18, w - 20, 18, wall);
-        pen.rect(draw, -half + 4, -h - 21, w - 16, 3, roof);
-        for x in (-half + 12..half - 14).step_by(12) {
-            pen.rect(draw, x, -h - 13, 5, 6, window);
-        }
+    // 4: an upper storey over the bedroom annex.
+    if has(4) && has(0) {
+        pen.rect(draw, half, -52, 18, 20, wall);
+        pen.rect(draw, half + 17, -52, 1, 20, lit(wall, 0.7));
+        pen.rect(draw, half - 1, -56, 20, 4, roof);
+        pen.rect(draw, half + 6, -46, 6, 6, window);
     }
-    // 5: a gallery on the far right, tall windows.
+    // 5: a gallery tower on the far right, tall windows.
     if has(5) {
         let x = half + if has(2) { 42 } else { 18 };
-        pen.rect(draw, x, -40, 16, 40, lit(wall, 1.05));
-        pen.rect(draw, x - 1, -44, 18, 4, roof);
-        pen.rect(draw, x + 3, -34, 3, 20, alpha(SKY_LIGHT, 200));
-        pen.rect(draw, x + 10, -34, 3, 20, alpha(SKY_LIGHT, 200));
-    }
-    // 6: an observatory dome on top, its slit facing the sky.
-    if has(6) {
-        let top = -h - if has(4) { 21 } else { 3 };
-        for dy in 0..10 {
-            let r = 10 - dy * dy / 10;
-            pen.rect(
-                draw,
-                -r,
-                top - dy,
-                r * 2,
-                1,
-                lit(STEEL_LIGHT, 1.0 - dy as f32 * 0.03),
-            );
+        pen.rect(draw, x, -44, 16, 42, lit(wall, 1.05));
+        pen.rect(draw, x + 15, -44, 1, 42, lit(wall, 0.7));
+        pen.rect(draw, x + 3, -36, 3, 20, alpha(SKY_LIGHT, 200));
+        pen.rect(draw, x + 10, -36, 3, 20, alpha(SKY_LIGHT, 200));
+        // 6: an observatory dome on the gallery, its slit to the sky.
+        if has(6) {
+            let cx = x + 8;
+            for dy in 0..10 {
+                let r = 10 - dy * dy / 10;
+                pen.rect(
+                    draw,
+                    cx - r,
+                    -45 - dy,
+                    r * 2,
+                    1,
+                    lit(STEEL_LIGHT, 1.0 - dy as f32 * 0.03),
+                );
+            }
+            pen.rect(draw, cx - 1, -55, 2, 8, NIGHT);
+            pen.rect(draw, cx + 3, -54, 7, 2, STEEL_DARK);
+        } else {
+            pen.rect(draw, x - 1, -48, 18, 4, roof);
         }
-        pen.rect(draw, -1, top - 10, 2, 8, NIGHT);
-        pen.rect(draw, 3, top - 9, 6, 2, STEEL_DARK);
     }
 }
 

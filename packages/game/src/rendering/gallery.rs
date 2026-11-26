@@ -223,7 +223,11 @@ fn draw_sprites(draw: &mut RaylibDrawHandle<'_>, x: i32, y: i32) {
         ix += 13;
     }
     let mut ix = x;
-    for mineral in MINERALS {
+    // Home minerals, then the space materials (Wave 13 endgame).
+    for mineral in MINERALS
+        .into_iter()
+        .chain(fatherload_simulation::endgame::materials::SPACE_MATERIALS)
+    {
         ui_kit::icon(draw, icons::mineral(mineral), ix, y + 26);
         ix += 13;
     }

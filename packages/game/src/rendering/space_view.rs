@@ -981,15 +981,19 @@ fn draw_halcyon_gate(
                 STEEL_DARK,
             );
         } else {
-            draw.draw_ring(
-                at,
-                radius - 1.0,
-                radius,
-                start,
-                end,
-                24,
-                with_alpha(SLATE_LIGHT, 90),
-            );
+            // Scaffold: a dashed girder where the segment will go.
+            for dash in 0..9_u8 {
+                let from = f32::from(dash).mul_add(6.0, start);
+                draw.draw_ring(
+                    at,
+                    radius - thickness * 0.5,
+                    radius,
+                    from,
+                    from + 3.0,
+                    4,
+                    with_alpha(AMBER, 150),
+                );
+            }
         }
     }
     let open = parts.count_ones() >= u32::from(GATE_PARTS);
@@ -1185,6 +1189,7 @@ fn draw_rig_at(
     turn: f32,
     zoom: f32,
     ticks: u64,
+    trim: Trim,
 ) {
     let mut rig = presentation.clone();
     rig.x = 0.0;
@@ -1199,7 +1204,99 @@ fn draw_rig_at(
         zoom,
     };
     let mut scene = draw.begin_mode2D(camera);
+    let centre = Vector2::new(0.0, RIG_SKY_Y + super::world::RIG_BODY_CENTRE_Y);
+    trim.draw_under(&mut scene, centre, ticks);
     super::world::draw_rig(&mut scene, terrain, &rig, facings, ticks);
+    trim.draw_over(&mut scene, centre);
+}
+
+/// The Starwright ship's look (Wave 13 endgame), drawn in the rig's own frame so it turns and
+/// scales with it: swept white-gold hull plates either side and a gold sill once the
+/// Starwright Hull is fitted, twin gold engine bells under the thrusters with a steady glow
+/// once the Starwright Engine is, and the Heartline Drive's red-gold keel line. Nothing flashes
+/// (the glow breathes over seconds).
+#[derive(Clone, Copy, Debug, Default)]
+struct Trim {
+    hull: bool,
+    engine: bool,
+    heartline: bool,
+}
+
+impl Trim {
+    fn of(
+        world: &fatherload_simulation::WorldState,
+        player: fatherload_simulation::PlayerId,
+    ) -> Self {
+        use fatherload_simulation::endgame::StarwrightPart;
+        let career = world.career(player);
+        Self {
+            hull: career.has_starwright(StarwrightPart::Hull),
+            engine: career.has_starwright(StarwrightPart::Engine),
+            heartline: career.heartline,
+        }
+    }
+
+    /// The engine bells' glow and the hull plates, behind the rig.
+    fn draw_under(self, draw: &mut impl RaylibDraw, centre: Vector2, ticks: u64) {
+        if self.engine {
+            let breath = ((ticks as f32 / 60.0) * std::f32::consts::TAU / 3.0)
+                .sin()
+                .mul_add(0.5, 0.5);
+            for side in [-1.0_f32, 1.0] {
+                let x = centre.x + side * 9.0;
+                let y = centre.y + 13.0;
+                draw.draw_circle_v(
+                    Vector2::new(x, y + 10.0),
+                    7.0,
+                    with_alpha(GOLD, (50.0 + 60.0 * breath) as u8),
+                );
+                draw.draw_circle_v(
+                    Vector2::new(x, y + 7.0),
+                    3.5,
+                    with_alpha(CREAM, (90.0 + 80.0 * breath) as u8),
+                );
+                draw.draw_rectangle_v(Vector2::new(x - 4.0, y - 2.0), Vector2::new(8.0, 6.0), GOLD);
+                draw.draw_rectangle_v(
+                    Vector2::new(x - 3.0, y + 3.0),
+                    Vector2::new(6.0, 2.0),
+                    AMBER,
+                );
+            }
+        }
+        if self.hull {
+            for side in [-1.0_f32, 1.0] {
+                let root_top = Vector2::new(centre.x + side * 14.0, centre.y - 6.0);
+                let root_low = Vector2::new(centre.x + side * 14.0, centre.y + 10.0);
+                let tip = Vector2::new(centre.x + side * 30.0, centre.y + 14.0);
+                if side > 0.0 {
+                    draw.draw_triangle(root_top, root_low, tip, CREAM);
+                } else {
+                    draw.draw_triangle(root_top, tip, root_low, CREAM);
+                }
+                draw.draw_line_ex(root_top, tip, 2.0, GOLD);
+                draw.draw_line_ex(root_low, tip, 1.0, AMBER);
+            }
+        }
+    }
+
+    /// The gold sill and the Heartline's keel line, over the rig.
+    fn draw_over(self, draw: &mut impl RaylibDraw, centre: Vector2) {
+        if self.hull {
+            draw.draw_rectangle_v(
+                Vector2::new(centre.x - 15.0, centre.y + 9.0),
+                Vector2::new(30.0, 2.0),
+                GOLD,
+            );
+        }
+        if self.heartline {
+            draw.draw_line_ex(
+                Vector2::new(centre.x - 15.0, centre.y + 4.0),
+                Vector2::new(centre.x + 15.0, centre.y + 4.0),
+                1.0,
+                with_alpha(RED, 220),
+            );
+        }
+    }
 }
 
 /// Another flyer: its rig (and a streak while it warps or cruises fast).
@@ -1240,15 +1337,6 @@ fn draw_flyer(
         return;
     };
     let roll = frame.roll;
-    draw_starwright_trim(
-        draw,
-        snapshot,
-        flyer.player_id,
-        at,
-        flyer.orientation - roll,
-        frame.rig_zoom,
-        ticks,
-    );
     draw_rig_at(
         draw,
         terrain,
@@ -1258,82 +1346,8 @@ fn draw_flyer(
         flyer.orientation - roll,
         frame.rig_zoom,
         ticks,
+        Trim::of(snapshot.space.world, flyer.player_id),
     );
-}
-
-/// The Starwright ship's look (Wave 13 endgame), drawn under the rig: swept white-gold hull
-/// plates either side once the Starwright Hull is fitted, twin gold engine bells with a steady
-/// glow behind once the Starwright Engine is, and the Heartline Drive's red-gold keel line.
-/// Nothing flashes (the glow breathes over seconds).
-fn draw_starwright_trim(
-    draw: &mut RaylibDrawHandle<'_>,
-    snapshot: &RenderSnapshot<'_>,
-    player_id: fatherload_simulation::PlayerId,
-    at: Vector2,
-    turn: f32,
-    zoom: f32,
-    ticks: u64,
-) {
-    use fatherload_simulation::endgame::StarwrightPart;
-    let career = snapshot.space.world.career(player_id);
-    let hull = career.has_starwright(StarwrightPart::Hull);
-    let engine = career.has_starwright(StarwrightPart::Engine);
-    if !(hull || engine || career.heartline) {
-        return;
-    }
-    let (sin, cos) = turn.sin_cos();
-    // The rig's own axes on screen: `up` toward its nose, `side` to its right.
-    let up = Vector2::new(sin, -cos);
-    let side = Vector2::new(cos, sin);
-    let point = |forward: f32, right: f32| {
-        Vector2::new(
-            at.x + (up.x * forward + side.x * right) * zoom,
-            at.y + (up.y * forward + side.y * right) * zoom,
-        )
-    };
-    if engine {
-        let breath = ((ticks as f32 / 60.0) * std::f32::consts::TAU / 3.0)
-            .sin()
-            .mul_add(0.5, 0.5);
-        for right in [-5.0_f32, 5.0] {
-            let bell = point(-9.0, right);
-            fill_disc_screen(
-                draw,
-                point(-14.0, right),
-                4.0 * zoom,
-                with_alpha(GOLD, (60.0 + 60.0 * breath) as u8),
-            );
-            draw.draw_line_ex(bell, point(-12.0, right), 3.0 * zoom, GOLD);
-            draw.draw_line_ex(bell, point(-11.0, right), 1.5 * zoom, CREAM);
-        }
-    }
-    if hull {
-        for right in [-1.0_f32, 1.0] {
-            let root = point(3.0, 7.0 * right);
-            let tip = point(-7.0, 15.0 * right);
-            let back = point(-6.0, 8.0 * right);
-            draw.draw_triangle(
-                if right > 0.0 { root } else { tip },
-                if right > 0.0 { tip } else { root },
-                back,
-                CREAM,
-            );
-            draw.draw_line_ex(root, tip, 1.5 * zoom, GOLD);
-        }
-    }
-    if career.heartline {
-        draw.draw_line_ex(
-            point(8.0, 0.0),
-            point(-10.0, 0.0),
-            1.0 * zoom,
-            with_alpha(RED, 200),
-        );
-    }
-}
-
-/// A plain screen disc (no culling against a frame).
-fn fill_disc_screen(draw: &mut RaylibDrawHandle<'_>, at: Vector2, radius: f32, colour: Color) {
-    draw.draw_circle_v(at, radius.max(0.5), colour);
 }
 
 /// The seat's own rig in the middle, upright (or turned, chart-up), with its drive's glow and
@@ -1392,15 +1406,6 @@ fn draw_own_rig(
         }
         StarDrive::Off | StarDrive::Warp(_) | StarDrive::Transit(_) => {}
     }
-    draw_starwright_trim(
-        draw,
-        snapshot,
-        view.player_id,
-        frame.centre,
-        turn,
-        zoom,
-        ticks,
-    );
     if let Some(presentation) = presentation_of(snapshot, view, view.player_id) {
         draw_rig_at(
             draw,
@@ -1411,6 +1416,7 @@ fn draw_own_rig(
             turn,
             zoom,
             ticks,
+            Trim::of(snapshot.space.world, view.player_id),
         );
     }
     if flight.heat > 0.15 {

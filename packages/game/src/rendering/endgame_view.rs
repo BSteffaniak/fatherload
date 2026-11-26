@@ -86,7 +86,17 @@ pub fn draw_works(
     let width = (stage.width - 24.0).clamp(110.0, 260.0);
     // The centrepiece first, the crates in front of it.
     if profile.halcyon {
-        draw_gate_model(draw, left + width * 0.5, floor_y - 92.0, world, seconds);
+        // Sized to the stage (a split-screen sheet is short).
+        let room = (floor_y - stage.y - 56.0) * 0.5;
+        let radius = (width * 0.22).clamp(30.0, 50.0).min(room.max(18.0));
+        draw_gate_model(
+            draw,
+            left + width * 0.5,
+            floor_y - radius - 46.0,
+            radius,
+            world,
+            seconds,
+        );
     } else if builds_starwright(profile) {
         draw_starwright_cradle(draw, left, floor_y, width, world, player_id, seconds);
     } else if profile.alien_tech {
@@ -142,13 +152,31 @@ fn draw_material_crates(
 
 /// The Halcyon Gate's model on a stand: six ring segments, the lens in the middle and the
 /// keystone on top; each delivered part lit.
-fn draw_gate_model(draw: &mut impl RaylibDraw, cx: f32, cy: f32, world: &WorldState, seconds: f32) {
+fn draw_gate_model(
+    draw: &mut impl RaylibDraw,
+    cx: f32,
+    cy: f32,
+    radius: f32,
+    world: &WorldState,
+    seconds: f32,
+) {
     let endgame = world.endgame();
-    let radius = 34.0;
-    // The stand.
-    block(draw, cx - 3.0, cy + radius, 6.0, 52.0, STEEL_DARK);
-    block(draw, cx - 18.0, cy + radius + 46.0, 36.0, 6.0, STEEL);
-    block(draw, cx - 18.0, cy + radius + 46.0, 36.0, 1.0, STEEL_LIGHT);
+    // The stand: a post from the ring's foot to a plinth on the deck.
+    block(draw, cx - 3.0, cy + radius - 2.0, 6.0, 40.0, STEEL_DARK);
+    block(draw, cx - 2.0, cy + radius - 2.0, 1.0, 40.0, STEEL);
+    block(draw, cx - 20.0, cy + radius + 36.0, 40.0, 8.0, STEEL);
+    block(draw, cx - 20.0, cy + radius + 36.0, 40.0, 1.0, STEEL_LIGHT);
+    // A placard: parts delivered.
+    let label = format!("{}/8", endgame.gate_parts_done());
+    ui_kit::text_shadowed(
+        draw,
+        &label,
+        (cx - 8.0) as i32,
+        (cy + radius + 37.0) as i32,
+        TextStyle::Body,
+        INK,
+        None,
+    );
     draw_gate_ring(
         draw,
         cx,
@@ -199,14 +227,14 @@ pub fn draw_gate_ring(
             );
         }
         // Rivets on a lit segment, the outline of a missing one dotted.
-        if !lit && step % 3 == 0 {
+        if !lit && step % 4 == 0 {
             block(
                 draw,
                 angle.cos().mul_add(radius + 2.0, cx),
                 angle.sin().mul_add(radius + 2.0, cy),
-                1.0,
-                1.0,
-                FOG,
+                2.0,
+                2.0,
+                AMBER,
             );
         }
     }
@@ -288,29 +316,52 @@ fn draw_starwright_cradle(
         block(draw, arm - 6.0, y + h - 2.0, 16.0, 3.0, STEEL);
     }
     if hull {
-        // A long, tapered white-gold hull with a gold spine and a dark canopy.
+        // A long white-gold hull: highlit top, cream flanks, a sand belly, a gold keel band,
+        // panel seams, a swept dorsal and ventral fin aft and a dark canopy forward, the nose
+        // a pointed taper.
+        let nose = 28.0;
         for row in 0..h as i32 {
-            let t = row as f32 / h;
-            let inset = (t - 0.5).abs() * 18.0;
-            let colour = if row < 3 {
+            let r = row as f32;
+            let off = (r - h * 0.5).abs() / (h * 0.5);
+            let reach = w - nose * off;
+            let colour = if row < 2 {
                 BONE
-            } else if row as f32 > h - 4.0 {
+            } else if r < h * 0.45 {
+                CREAM
+            } else if r < h - 6.0 {
+                SAND
+            } else if r < h - 3.0 {
                 GOLD
             } else {
-                CREAM
+                AMBER
             };
+            block(draw, x, y + r, reach, 1.0, colour);
+        }
+        // Panel seams.
+        let mut seam = x + 14.0;
+        while seam < x + w - nose - 4.0 {
+            block(draw, seam, y + 2.0, 1.0, h - 8.0, lit_sand());
+            seam += 18.0;
+        }
+        // A gold stripe down the flank.
+        block(draw, x + 4.0, y + h * 0.42, w - nose - 6.0, 2.0, GOLD);
+        // Fins aft.
+        for step in 0..12 {
+            let s = step as f32;
             block(
                 draw,
-                x + inset,
-                y + row as f32,
-                w - inset * 2.5,
+                x + 6.0 + s,
+                y - 12.0 + s,
+                20.0 - s,
                 1.0,
-                colour,
+                if step < 2 { CREAM } else { GOLD },
             );
+            block(draw, x + 6.0 + s, y + h + 11.0 - s, 20.0 - s, 1.0, AMBER);
         }
-        block(draw, x + 8.0, y + h * 0.5 - 1.0, w - 30.0, 2.0, GOLD);
-        block(draw, x + w - 34.0, y + 7.0, 12.0, 6.0, DEEP_BLUE);
-        block(draw, x + w - 33.0, y + 8.0, 4.0, 1.0, SKY_LIGHT);
+        // The canopy.
+        block(draw, x + w - nose - 18.0, y + 5.0, 16.0, 7.0, DEEP_BLUE);
+        block(draw, x + w - nose - 17.0, y + 6.0, 6.0, 1.0, SKY_LIGHT);
+        block(draw, x + w - nose - 18.0, y + 12.0, 16.0, 1.0, GOLD);
     } else {
         // Ribs on the jig.
         let mut rib = x + 6.0;
@@ -351,6 +402,11 @@ fn draw_starwright_cradle(
     }
 }
 
+/// A darker sand for panel seams.
+const fn lit_sand() -> Color {
+    Color::new(0xb0, 0x92, 0x62, 255)
+}
+
 /// An alien-run station's grown vat: a pod per alien tech, ringed once per mark.
 fn draw_tech_vat(
     draw: &mut impl RaylibDraw,
@@ -361,9 +417,22 @@ fn draw_tech_vat(
     seconds: f32,
 ) {
     let top = floor_y - 120.0;
-    block(draw, cx - 40.0, top, 80.0, 100.0, TEAL_DARK.alpha(0.6));
-    block(draw, cx - 42.0, top - 4.0, 84.0, 6.0, VIOLET);
-    block(draw, cx - 42.0, floor_y - 24.0, 84.0, 6.0, VIOLET);
+    // Glass walls, the liquid with a lighter surface, the grown rims top and bottom.
+    block(draw, cx - 40.0, top, 80.0, 100.0, NIGHT.alpha(0.55));
+    block(draw, cx - 40.0, top + 14.0, 80.0, 82.0, TEAL.alpha(0.45));
+    block(draw, cx - 40.0, top + 14.0, 80.0, 2.0, MINT.alpha(0.8));
+    block(draw, cx - 41.0, top, 1.0, 100.0, ICE.alpha(0.7));
+    block(draw, cx + 40.0, top, 1.0, 100.0, ICE.alpha(0.7));
+    block(draw, cx - 34.0, top + 4.0, 2.0, 88.0, ICE.alpha(0.35));
+    block(draw, cx - 44.0, top - 6.0, 88.0, 7.0, VIOLET);
+    block(draw, cx - 44.0, top - 6.0, 88.0, 2.0, LAVENDER);
+    block(draw, cx - 44.0, floor_y - 24.0, 88.0, 7.0, VIOLET);
+    // Slow bubbles.
+    for index in 0..6 {
+        let rise = (seconds * 6.0 + index as f32 * 17.0) % 80.0;
+        let bx = cx - 30.0 + index as f32 * 11.0;
+        block(draw, bx, floor_y - 28.0 - rise, 2.0, 2.0, ICE.alpha(0.6));
+    }
     for (index, tech) in AlienTech::ALL.into_iter().enumerate() {
         let px = cx - 27.0 + index as f32 * 18.0;
         let py = top + 30.0 + (index % 2) as f32 * 18.0;
@@ -439,7 +508,8 @@ pub fn draw_records(
     let hunt = world.hunt();
     let banner_w = 34.0;
     let gap = 8.0;
-    let top = floor_y - 150.0;
+    // Below the stage's top on a short split-screen sheet.
+    let top = (floor_y - 150.0).max(stage.y + 8.0);
     for (index, (quarry, beaten, _)) in hunt.iter().enumerate().take(6) {
         let x = left + index as f32 * (banner_w + gap);
         if x + banner_w > stage.x + stage.width - 4.0 {

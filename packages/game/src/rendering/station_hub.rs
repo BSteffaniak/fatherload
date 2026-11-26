@@ -792,9 +792,10 @@ fn works_entry(
         match order {
             WorkOrder::AlienMark(tech) => {
                 let mark = career.mark(tech);
+                let shown = (mark + 1).min(fatherload_simulation::endgame::works::MARK_MAX);
                 (
                     &menu_icons::SIGNAL,
-                    format!("{} Mk {}", tech.name(), roman(mark + 1)),
+                    format!("{} Mk {}", tech.name(), roman(shown)),
                     format!("a stronger {}", tech.effect()),
                 )
             }
