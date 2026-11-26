@@ -128,6 +128,8 @@ mod heart;
 #[cfg(test)]
 mod heart_tests;
 #[cfg(test)]
+mod sea_drain_tests;
+#[cfg(test)]
 mod star_flight_tests;
 pub use flight::warp_arrival as flight_warp_arrival;
 pub use heart::CablePath;

@@ -20,7 +20,7 @@
 //!   take its damage, and creatures that cannot swim turn back at its edge
 //!   ([`WorldState::keep_out_of_fluid`]).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -36,7 +36,7 @@ use crate::{
     },
     ids::{PlayerId, SimulationTick},
     quantize::quantize_simulation_scalar as quantize,
-    terrain::{TILE_SIZE, Tile, TileKind, TilePosition},
+    terrain::{TILE_SIZE, TerrainReader, Tile, TileKind, TilePosition},
     worldgen::TileRect,
 };
 
@@ -44,6 +44,18 @@ use super::{
     WorldState,
     movement::{AUTHORITATIVE_PLAYER_RADIUS, AUTHORITATIVE_RIG_GRAVITY},
 };
+
+#[cfg(test)]
+thread_local! {
+    /// Tests: run the reference fluid step instead of the faster one.
+    static REFERENCE_STEP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Tests: run the reference fluid step (`true`) or the faster one on this thread.
+#[cfg(test)]
+pub fn use_reference_step(reference: bool) {
+    REFERENCE_STEP.with(|cell| cell.set(reference));
+}
 
 /// The four neighbours, in a fixed order (up, down, left, right).
 const NEIGHBOURS: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
@@ -331,17 +343,17 @@ impl WorldState {
             .map(|change| change.position)
             .collect();
         let mut breach: Option<(FluidKind, TilePosition)> = None;
+        let mut reader = self.terrain.reader();
         for position in changed {
-            let opened = self
-                .terrain
+            let opened = reader
                 .tile(position)
                 .is_some_and(|tile| tile.kind == TileKind::Air);
-            if self.terrain.fluid_at(position).is_some() {
+            if reader.fluid_at(position).is_some() {
                 let _ = self.fluids.wake(position);
             }
             for step in NEIGHBOURS {
                 let next = offset(position, step);
-                if let Some(cell) = self.terrain.fluid_at(next)
+                if let Some(cell) = reader.fluid_at(next)
                     && self.fluids.wake(next)
                     && opened
                     && breach.is_none()
@@ -365,12 +377,124 @@ impl WorldState {
             if self.fluids.is_idle() {
                 break;
             }
+            #[cfg(test)]
+            if REFERENCE_STEP.with(std::cell::Cell::get) {
+                self.fluid_step_reference(before + step, output);
+                continue;
+            }
             self.fluid_step(before + step, output);
         }
     }
 
-    /// One fluid step (see the module docs).
+    /// One fluid step (see the module docs). Wave 13 QA made it cheaper without changing a
+    /// single decision (the reference step it replaced is kept for the tests): its reads go
+    /// through a [`TerrainReader`] that remembers the chunks it just read, and its working
+    /// copy is a hash map sorted once into the writes' position order.
     fn fluid_step(&mut self, step: u64, output: &mut TickOutput) {
+        let batch = self.fluids.take_batch(FLUID_STEP_BUDGET);
+        let mut log = StepLog::default();
+        // Reactions and density swaps, in order, straight on the terrain: only when one may
+        // happen at all (a batch of open sea has none, and reading changes nothing).
+        let reacts = {
+            let mut reader = self.terrain.reader();
+            batch
+                .iter()
+                .any(|position| may_react(&mut reader, *position))
+        };
+        if reacts {
+            for &position in &batch {
+                self.fluid_react(position, step, &mut log, output);
+            }
+        }
+        let mut changed = log.changed;
+        // Flows from one snapshot.
+        let mut flows: Vec<Flow> = Vec::new();
+        let mut held: Vec<TilePosition> = Vec::new();
+        let mut writes: Vec<(TilePosition, Working)> = Vec::new();
+        {
+            let mut reader = self.terrain.reader();
+            for &position in &batch {
+                propose_flows(&mut reader, position, step, &mut flows);
+            }
+            // Each touched cell: (as it was, as the flows leave it).
+            let mut working: HashMap<TilePosition, (Working, Working), CellHash> =
+                HashMap::with_capacity_and_hasher(flows.len() * 2, CellHash);
+            for flow in flows {
+                for at in [flow.from, flow.to] {
+                    working.entry(at).or_insert_with(|| {
+                        let cell = working_of(reader.fluid_at(at));
+                        (cell, cell)
+                    });
+                }
+                let source = working[&flow.from].1;
+                let target = working[&flow.to].1;
+                let compatible = target.kind.is_none_or(|kind| kind == flow.kind);
+                if source.kind != Some(flow.kind) || !compatible {
+                    held.push(flow.from);
+                    continue;
+                }
+                let room = u16::from(FLUID_MAX).saturating_sub(target.level);
+                let amount = flow.amount.min(room).min(source.level);
+                if amount < flow.amount {
+                    held.push(flow.from);
+                }
+                if amount == 0 {
+                    continue;
+                }
+                if let Some((_, cell)) = working.get_mut(&flow.from) {
+                    cell.level -= amount;
+                    if cell.level == 0 {
+                        cell.kind = None;
+                    }
+                }
+                if let Some((_, cell)) = working.get_mut(&flow.to) {
+                    cell.level += amount;
+                    cell.kind = Some(flow.kind);
+                }
+            }
+            writes.extend(
+                working
+                    .into_iter()
+                    .filter(|(_, (original, cell))| original != cell)
+                    .map(|(position, (_, cell))| (position, cell)),
+            );
+        }
+        // The writes in position order (the op log's order, as the reference step wrote them).
+        writes.sort_unstable_by_key(|(position, _)| *position);
+        for (position, cell) in writes {
+            let tile = match cell.kind {
+                Some(kind) if cell.level > 0 => FluidCell {
+                    kind,
+                    level: u8::try_from(cell.level).unwrap_or(FLUID_MAX),
+                }
+                .tile(),
+                _ => AIR,
+            };
+            let _ = self
+                .terrain
+                .set_tile_from_network(position, tile.kind, tile.durability);
+            let _ = changed.insert(position);
+        }
+        // Wake what changed and its fluid neighbours; held-back cells try again.
+        let mut reader = self.terrain.reader();
+        for position in held {
+            if reader.fluid_at(position).is_some() {
+                let _ = self.fluids.wake(position);
+            }
+        }
+        for position in changed {
+            for at in std::iter::once(position).chain(NEIGHBOURS.map(|step| offset(position, step)))
+            {
+                if reader.fluid_at(at).is_some() {
+                    let _ = self.fluids.wake(at);
+                }
+            }
+        }
+    }
+
+    /// The fluid step as it was before Wave 13 (the faster step must match it exactly).
+    #[cfg(test)]
+    fn fluid_step_reference(&mut self, step: u64, output: &mut TickOutput) {
         let batch = self.fluids.take_batch(FLUID_STEP_BUDGET);
         let mut log = StepLog::default();
         // Reactions and density swaps, in order, straight on the terrain.
@@ -383,8 +507,10 @@ impl WorldState {
         for &position in &batch {
             self.propose_flows(position, step, &mut flows);
         }
-        let mut working: BTreeMap<TilePosition, Working> = BTreeMap::new();
-        let mut original: BTreeMap<TilePosition, Working> = BTreeMap::new();
+        let mut working: std::collections::BTreeMap<TilePosition, Working> =
+            std::collections::BTreeMap::new();
+        let mut original: std::collections::BTreeMap<TilePosition, Working> =
+            std::collections::BTreeMap::new();
         let mut held: BTreeSet<TilePosition> = BTreeSet::new();
         for flow in flows {
             for at in [flow.from, flow.to] {
@@ -453,94 +579,16 @@ impl WorldState {
         }
     }
 
+    #[cfg(test)]
     fn working_cell(&self, position: TilePosition) -> Working {
-        self.terrain.fluid_at(position).map_or(
-            Working {
-                kind: None,
-                level: 0,
-            },
-            |cell| Working {
-                kind: Some(cell.kind),
-                level: u16::from(cell.level),
-            },
-        )
-    }
-
-    /// Whether fluid of `kind` may move into `position`: open air, or the same fluid.
-    fn fluid_room(&self, position: TilePosition, kind: FluidKind) -> Option<u16> {
-        let tile = self.terrain.tile(position)?;
-        match tile.kind {
-            TileKind::Air => Some(0),
-            TileKind::Fluid(other) if other == kind => Some(u16::from(tile.durability)),
-            _ => None,
-        }
+        working_of(self.terrain.fluid_at(position))
     }
 
     /// The moves `position`'s fluid wants this step, read from the terrain as it stands.
+    #[cfg(test)]
     fn propose_flows(&self, position: TilePosition, step: u64, flows: &mut Vec<Flow>) {
-        let Some(cell) = self.terrain.fluid_at(position) else {
-            return;
-        };
-        let kind = cell.kind;
-        let level = u16::from(cell.level);
-        let mut remaining = level;
-        // Fall.
-        let below = offset(position, (0, 1));
-        if let Some(under) = self.fluid_room(below, kind) {
-            let want = stable_lower(remaining + under).saturating_sub(under);
-            let amount = want.min(remaining).min(kind.fall_per_step());
-            if amount > 0 {
-                flows.push(Flow {
-                    from: position,
-                    to: below,
-                    kind,
-                    amount,
-                });
-                remaining -= amount;
-            }
-        }
-        // Spread towards lower neighbours (from the same base, so neither side is favoured).
-        let base = remaining;
-        let sides = if step.is_multiple_of(2) {
-            [(-1, 0), (1, 0)]
-        } else {
-            [(1, 0), (-1, 0)]
-        };
-        for side in sides {
-            let next = offset(position, side);
-            let Some(there) = self.fluid_room(next, kind) else {
-                continue;
-            };
-            if base > there + 1 {
-                let amount = (base - there + 1) / kind.viscosity();
-                let amount = amount.min(remaining);
-                if amount > 0 {
-                    flows.push(Flow {
-                        from: position,
-                        to: next,
-                        kind,
-                        amount,
-                    });
-                    remaining -= amount;
-                }
-            }
-        }
-        // Climb when compressed past a full tile.
-        if remaining > u16::from(FLUID_FULL) {
-            let above = offset(position, (0, -1));
-            if let Some(over) = self.fluid_room(above, kind) {
-                let keep = stable_lower(remaining + over);
-                let amount = remaining.saturating_sub(keep);
-                if amount > 0 {
-                    flows.push(Flow {
-                        from: position,
-                        to: above,
-                        kind,
-                        amount,
-                    });
-                }
-            }
-        }
+        let mut reader = self.terrain.reader();
+        propose_flows(&mut reader, position, step, flows);
     }
 
     /// `position`'s reactions and density swap for this step, applied in place.
@@ -813,4 +861,160 @@ impl WorldState {
             body.velocity_y = body.velocity_y.min(0.0);
         }
     }
+}
+
+/// A cell as the step's working copy holds it.
+const fn working_of(cell: Option<FluidCell>) -> Working {
+    match cell {
+        Some(cell) => Working {
+            kind: Some(cell.kind),
+            level: cell.level as u16,
+        },
+        None => Working {
+            kind: None,
+            level: 0,
+        },
+    }
+}
+
+/// Whether fluid of `kind` may move into a cell holding `tile`: open air, or the same fluid.
+fn room_in(tile: Option<Tile>, kind: FluidKind) -> Option<u16> {
+    let tile = tile?;
+    match tile.kind {
+        TileKind::Air => Some(0),
+        TileKind::Fluid(other) if other == kind => Some(u16::from(tile.durability)),
+        _ => None,
+    }
+}
+
+/// The moves `position`'s fluid wants this step, read from the terrain as it stands.
+fn propose_flows(
+    reader: &mut TerrainReader<'_>,
+    position: TilePosition,
+    step: u64,
+    flows: &mut Vec<Flow>,
+) {
+    let Some(cell) = reader.fluid_at(position) else {
+        return;
+    };
+    let kind = cell.kind;
+    let level = u16::from(cell.level);
+    let mut remaining = level;
+    // Fall.
+    let below = offset(position, (0, 1));
+    if let Some(under) = room_in(reader.tile(below), kind) {
+        let want = stable_lower(remaining + under).saturating_sub(under);
+        let amount = want.min(remaining).min(kind.fall_per_step());
+        if amount > 0 {
+            flows.push(Flow {
+                from: position,
+                to: below,
+                kind,
+                amount,
+            });
+            remaining -= amount;
+        }
+    }
+    // Spread towards lower neighbours (from the same base, so neither side is favoured).
+    let base = remaining;
+    let sides = if step.is_multiple_of(2) {
+        [(-1, 0), (1, 0)]
+    } else {
+        [(1, 0), (-1, 0)]
+    };
+    for side in sides {
+        let next = offset(position, side);
+        let Some(there) = room_in(reader.tile(next), kind) else {
+            continue;
+        };
+        if base > there + 1 {
+            let amount = (base - there + 1) / kind.viscosity();
+            let amount = amount.min(remaining);
+            if amount > 0 {
+                flows.push(Flow {
+                    from: position,
+                    to: next,
+                    kind,
+                    amount,
+                });
+                remaining -= amount;
+            }
+        }
+    }
+    // Climb when compressed past a full tile.
+    if remaining > u16::from(FLUID_FULL) {
+        let above = offset(position, (0, -1));
+        if let Some(over) = room_in(reader.tile(above), kind) {
+            let keep = stable_lower(remaining + over);
+            let amount = remaining.saturating_sub(keep);
+            if amount > 0 {
+                flows.push(Flow {
+                    from: position,
+                    to: above,
+                    kind,
+                    amount,
+                });
+            }
+        }
+    }
+}
+
+/// The fluid step's working map's hasher (Wave 13 QA): a tile position mixed into one word,
+/// cheaper than the default hasher for the many small lookups of a step. Nothing iterates the
+/// map in its hash order (its writes are sorted by position first).
+#[derive(Clone, Copy, Default)]
+struct CellHash;
+
+impl std::hash::BuildHasher for CellHash {
+    type Hasher = CellHasher;
+
+    fn build_hasher(&self) -> CellHasher {
+        CellHasher(0)
+    }
+}
+
+/// See [`CellHash`].
+#[derive(Default)]
+struct CellHasher(u64);
+
+impl std::hash::Hasher for CellHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0.rotate_left(5) ^ u64::from(*byte)).wrapping_mul(0x517c_c1b7_2722_0a95);
+        }
+    }
+
+    fn write_i32(&mut self, value: i32) {
+        self.0 = (self.0.rotate_left(5) ^ u64::from(value.cast_unsigned()))
+            .wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+/// Whether the fluid at `position` may react or sink this step (`fluid_react` writes nothing
+/// when this is `false` for every cell of a batch): water beside lava, liquid metal, biting
+/// acid, or a denser fluid over a lighter one.
+fn may_react(reader: &mut TerrainReader<'_>, position: TilePosition) -> bool {
+    let Some(cell) = reader.fluid_at(position) else {
+        return false;
+    };
+    let reacts = match cell.kind {
+        FluidKind::Water => NEIGHBOURS.iter().any(|side| {
+            reader
+                .tile(offset(position, *side))
+                .is_some_and(|tile| tile.kind == TileKind::Lava)
+        }),
+        FluidKind::LiquidMetal => true,
+        FluidKind::Acid => cell.level >= ACID_MIN_LEVEL,
+        FluidKind::Brine => false,
+    };
+    reacts
+        || reader
+            .fluid_at(offset(position, (0, 1)))
+            .is_some_and(|under| {
+                under.kind != cell.kind && under.kind.density() < cell.kind.density()
+            })
 }

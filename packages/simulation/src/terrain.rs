@@ -499,7 +499,7 @@ pub struct Tile {
     pub durability: u8,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct TilePosition {
     pub x: i32,
     pub y: i32,
@@ -2069,6 +2069,100 @@ impl Terrain {
                     ChunkPosition::local_index(position),
                 ))
             }
+        }
+    }
+}
+
+/// How many chunks a [`TerrainReader`] remembers.
+const READER_CHUNKS: usize = 8;
+
+/// A read-only view of the terrain that remembers the last few chunks it read (Wave 13 QA:
+/// the fluid step reads every woken cell's neighbours, nearly always in a chunk it has just
+/// read; a streamed world's chunk maps are a search per read, and a chunk nobody keeps loaded,
+/// such as a planet-wide sea's far reaches, is its edits over the generator's cached chunk).
+/// Reads exactly what [`Terrain::tile`] reads.
+pub(crate) struct TerrainReader<'a> {
+    terrain: &'a Terrain,
+    recent: [Option<(ChunkPosition, ReadChunk<'a>)>; READER_CHUNKS],
+    next: usize,
+}
+
+/// A chunk a [`TerrainReader`] remembers.
+#[derive(Clone)]
+enum ReadChunk<'a> {
+    Loaded(&'a LoadedChunk),
+    /// Not loaded and never edited: the generator's tiles.
+    Generated(Arc<GeneratedChunk>),
+    /// Not loaded: its edits laid over its generated tiles once, for every read after.
+    Edited(Arc<[Tile]>),
+}
+
+impl ReadChunk<'_> {
+    fn tile(&self, local: usize) -> Tile {
+        match self {
+            Self::Loaded(loaded) => loaded.tile(local),
+            Self::Generated(base) => base.tile(local),
+            Self::Edited(tiles) => tiles[local],
+        }
+    }
+}
+
+impl TerrainReader<'_> {
+    /// The tile at `position` ([`Terrain::tile`]).
+    pub(crate) fn tile(&mut self, position: TilePosition) -> Option<Tile> {
+        let slot = self.terrain.slot(position)?;
+        if let (Slot::Streamed(chunk, local), Storage::Streamed(streamed)) =
+            (slot, &self.terrain.storage)
+        {
+            for (known, read) in self.recent.iter().flatten() {
+                if *known == chunk {
+                    return Some(read.tile(local));
+                }
+            }
+            let read = streamed.loaded.get(&chunk).map_or_else(
+                || {
+                    let base = base_chunk(
+                        &self.terrain.settings,
+                        self.terrain.body.as_deref(),
+                        self.terrain.planet.as_ref(),
+                        chunk,
+                    );
+                    match streamed.edits.get(&chunk) {
+                        Some(edits) if !edits.is_empty() => {
+                            let mut tiles = base.tiles().to_vec();
+                            for (key, tile) in edits {
+                                if let Some(slot) = tiles.get_mut(usize::from(*key)) {
+                                    *slot = *tile;
+                                }
+                            }
+                            ReadChunk::Edited(tiles.into())
+                        }
+                        _ => ReadChunk::Generated(base),
+                    }
+                },
+                ReadChunk::Loaded,
+            );
+            let tile = read.tile(local);
+            self.recent[self.next] = Some((chunk, read));
+            self.next = (self.next + 1) % READER_CHUNKS;
+            return Some(tile);
+        }
+        Some(self.terrain.read(slot))
+    }
+
+    /// The fluid at `position` ([`Terrain::fluid_at`]).
+    pub(crate) fn fluid_at(&mut self, position: TilePosition) -> Option<crate::fluid::FluidCell> {
+        self.tile(position).and_then(crate::fluid::FluidCell::of)
+    }
+}
+
+impl Terrain {
+    /// A reader of this terrain that remembers the chunks it read (see [`TerrainReader`]).
+    pub(crate) const fn reader(&self) -> TerrainReader<'_> {
+        TerrainReader {
+            terrain: self,
+            recent: [None, None, None, None, None, None, None, None],
+            next: 0,
         }
     }
 }
