@@ -515,6 +515,8 @@ mod lair_scenes;
 mod outlands_scenes;
 // Wave 14 stock: the god-mode toolkit.
 mod toolkit_scenes;
+// Wave 14 index: where travel by the destination index lands.
+mod travel_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -691,6 +693,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(station_scenes::STATION_SCENES)
         .chain(endgame_scenes::ENDGAME_SCENES)
         .chain(toolkit_scenes::TOOLKIT_SCENES)
+        .chain(travel_scenes::TRAVEL_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.
