@@ -30,7 +30,7 @@ use crate::rendering::pixel_art::{
         drowned as drowned_art, enemies as art, far_strange as far_art, frontier as frontier_art,
         garrison as garrison_art, heart as heart_art, hollow as hollow_art,
         hostiles as hostile_art, living as living_art, moon as moon_art, old_deep as deep_art,
-        outlands as outland_art, tomb as tomb_art, wilds as wilds_art,
+        outlands as outland_art, tomb as tomb_art, wilds as wilds_art, exotic as exotic_art,
     },
 };
 
@@ -247,6 +247,22 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::Gravewarden => &outland_art::GRAVEWARDEN,
         EnemyKind::Shade => &outland_art::SHADE,
         EnemyKind::AshenSovereign => &outland_art::ASHEN_SOVEREIGN,
+        // The exotic worlds (Wave 13 planets-d).
+        EnemyKind::DriftRay => &exotic_art::DRIFT_RAY,
+        EnemyKind::Gasbag => &exotic_art::GASBAG,
+        EnemyKind::StormEel => &exotic_art::STORM_EEL,
+        EnemyKind::VaporStinger => &exotic_art::VAPOR_STINGER,
+        EnemyKind::Thunderhead => &exotic_art::THUNDERHEAD,
+        EnemyKind::DuskGrazer => &exotic_art::DUSK_GRAZER,
+        EnemyKind::Sunbasker => &exotic_art::SUNBASKER,
+        EnemyKind::ScorchMite => &exotic_art::SCORCH_MITE,
+        EnemyKind::FrostStalker => &exotic_art::FROST_STALKER,
+        EnemyKind::Gloamwarden => &exotic_art::GLOAMWARDEN,
+        EnemyKind::Ringhopper => &exotic_art::RINGHOPPER,
+        EnemyKind::Shardback => &exotic_art::SHARDBACK,
+        EnemyKind::TetherDrone => &exotic_art::TETHER_DRONE,
+        EnemyKind::VoidMite => &exotic_art::VOID_MITE,
+        EnemyKind::RingWarden => &exotic_art::RING_WARDEN,
     }
 }
 
@@ -1070,6 +1086,68 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
                 0
             }
         }
+        // The exotic worlds (Wave 13): wings, sacs and spines loop; walkers stride while
+        // moving; the eel crackles and the stalker crouches to strike; the drone's lens glows.
+        EnemyKind::DriftRay
+        | EnemyKind::Gasbag
+        | EnemyKind::VaporStinger
+        | EnemyKind::ScorchMite
+        | EnemyKind::VoidMite => sprite.frame_at(phase),
+        EnemyKind::DuskGrazer
+        | EnemyKind::Sunbasker
+        | EnemyKind::Ringhopper
+        | EnemyKind::Shardback => {
+            if moving {
+                sprite.frame_at(phase)
+            } else {
+                0
+            }
+        }
+        EnemyKind::StormEel | EnemyKind::FrostStalker => {
+            if attacking {
+                2
+            } else {
+                sprite.frame_at(phase) % 2
+            }
+        }
+        EnemyKind::TetherDrone => usize::from(attacking),
+        // A boss shows its fight's step (`exotic::boss`).
+        EnemyKind::Thunderhead | EnemyKind::Gloamwarden | EnemyKind::RingWarden => {
+            boss_frame(state, sprite.frame_at(phase))
+        }
+    }
+}
+
+/// The frame of an exotic boss: its idle loop, its tell (the Gloamwarden's sun or frost arm),
+/// its open weak point.
+#[allow(clippy::match_same_arms, reason = "one row per boss and step")]
+fn boss_frame(state: &EnemyState, idle: usize) -> usize {
+    use fatherload_simulation::exotic::{
+        ExoticStyle,
+        boss::{BossAttack, pattern},
+    };
+    let style = match state.kind {
+        EnemyKind::Thunderhead => ExoticStyle::GasGiant,
+        EnemyKind::Gloamwarden => ExoticStyle::Locked,
+        _ => ExoticStyle::Ring,
+    };
+    let list = pattern(style);
+    let attack = list[usize::from(state.pattern) % list.len()];
+    match (state.kind, state.volley) {
+        (EnemyKind::Thunderhead, 1 | 2) => 2,
+        (EnemyKind::Thunderhead, 3) => 3,
+        (EnemyKind::Thunderhead, _) => idle % 2,
+        (EnemyKind::Gloamwarden, 1 | 2) => {
+            if attack == BossAttack::SunSlam {
+                1
+            } else {
+                2
+            }
+        }
+        (EnemyKind::Gloamwarden, 3) => 3,
+        (EnemyKind::RingWarden, 1 | 2) => 1,
+        (EnemyKind::RingWarden, 3) => 2,
+        _ => 0,
     }
 }
 
@@ -1125,6 +1203,15 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::Sporemother
         | EnemyKind::ReactorWarden
         | EnemyKind::AshenSovereign => ART * 1.5,
+        // The exotic worlds (Wave 13): the bosses and the megafauna loom, the mites read.
+        EnemyKind::Thunderhead
+        | EnemyKind::Gloamwarden
+        | EnemyKind::RingWarden
+        | EnemyKind::Gasbag
+        | EnemyKind::DuskGrazer
+        | EnemyKind::Shardback
+        | EnemyKind::ScorchMite
+        | EnemyKind::VoidMite => ART * 1.5,
         _ => ART,
     }
 }
@@ -1228,6 +1315,18 @@ const fn faces(kind: EnemyKind) -> bool {
             | EnemyKind::Rimeskipper
             | EnemyKind::Rimewolf
             | EnemyKind::Crevassewyrm
+            // The exotic worlds' (Wave 13 planets-d) asymmetric kinds.
+            | EnemyKind::DriftRay
+            | EnemyKind::Gasbag
+            | EnemyKind::StormEel
+            | EnemyKind::VaporStinger
+            | EnemyKind::DuskGrazer
+            | EnemyKind::Sunbasker
+            | EnemyKind::FrostStalker
+            | EnemyKind::Gloamwarden
+            | EnemyKind::Ringhopper
+            | EnemyKind::Shardback
+            | EnemyKind::TetherDrone
     )
 }
 

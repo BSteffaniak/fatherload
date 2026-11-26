@@ -200,6 +200,7 @@ impl WorldState {
                     || Self::hollow_peaceful(state)
                     || Self::wilds_peaceful(state)
                     || Self::outlands_peaceful(state)
+                    || Self::exotic_peaceful(state)
                     || self.far_unseen_by(player_id, id, state))
             {
                 // A lens wraith outside its colour of light is unseen too (Wave 9).

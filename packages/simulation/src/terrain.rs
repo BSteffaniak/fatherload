@@ -371,6 +371,11 @@ pub enum TileKind {
     /// vents; plate, belts, gears, relays and vaults; ash, petrified cities, tombs and
     /// soulstone; the builders' outposts and the theme bosses' seals and vaults.
     Outland(crate::planet::outlands::OutlandTile),
+    /// A tile of an exotic world's ground (Wave 13 planets-d: the gas giant, the tidally
+    /// locked world and the ring world; see [`crate::exotic`]): clouds and gas pockets, sky
+    /// cities, hardpan, nitrogen ice, vents, lodestone, ring dust and ice, the Tether, live
+    /// conduits, builder outposts and the bosses' seals and trophies.
+    Exotic(crate::exotic::ExoticTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -488,6 +493,7 @@ impl TileKind {
             Self::Frontier(tile) => tile.name(),
             Self::Alien(tile) => tile.name(),
             Self::Outland(tile) => tile.name(),
+            Self::Exotic(tile) => tile.name(),
         }
     }
 
@@ -594,6 +600,7 @@ impl Tile {
             TileKind::Outland(tile) => {
                 crate::planet::outlands::OUTLAND_TILE_CODE_BASE + tile.code()
             }
+            TileKind::Exotic(tile) => crate::exotic::EXOTIC_TILE_CODE_BASE + tile.code(),
         };
         (kind << 8) | self.durability as u64
     }
@@ -1210,7 +1217,8 @@ impl Terrain {
     ) -> &'static [(crate::enemy::EnemyKind, u32)] {
         // A frontier world's creatures come from its own spawner (Wave 12 planets-b).
         if let Some(planet) = &self.planet
-            && crate::frontier::style_of(planet.params().theme).is_some()
+            && (crate::frontier::style_of(planet.params().theme).is_some()
+                || crate::exotic::style_of(planet.params().theme).is_some())
         {
             return &[];
         }
@@ -2419,6 +2427,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Frontier(tile) => tile.indestructible(),
         // An outland world's vault walls, power seals and boss seals (Wave 13).
         TileKind::Outland(tile) => tile.indestructible(),
+        // An exotic world's Tether, outpost beacons and boss seals (Wave 13).
+        TileKind::Exotic(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
         // ... and Descent VII part B's fixtures (Wave 10).
         TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
@@ -2486,6 +2496,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Frontier(tile) => tile.hardness(),
         TileKind::Alien(tile) => tile.hardness(),
         TileKind::Outland(tile) => tile.hardness(),
+        TileKind::Exotic(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2537,6 +2548,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Frontier(tile) => tile.durability(),
         TileKind::Alien(tile) => tile.durability(),
         TileKind::Outland(tile) => tile.durability(),
+        TileKind::Exotic(tile) => tile.durability(),
     }
 }
 

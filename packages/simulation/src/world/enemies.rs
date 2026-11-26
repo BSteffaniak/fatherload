@@ -70,6 +70,7 @@ mod ancient_city;
 mod crypt;
 mod distortion;
 mod drowned;
+mod exotic;
 mod far_strange;
 mod frontier;
 mod garrison;
@@ -417,6 +418,10 @@ impl WorldState {
         if let Some(safe) = self.outlands_safe_zone(tile) {
             return safe;
         }
+        // An exotic world (Wave 13 planets-d): hostile everywhere but its settlement and bases.
+        if let Some(safe) = self.exotic_safe_zone(tile) {
+            return safe;
+        }
         let surface = self.terrain.surface_row(tile.x);
         if tile.y < surface + SAFE_SURFACE_ROWS {
             // The hostile sky of a V9 world (archipelago and up, T21) is safe only in sky
@@ -463,6 +468,10 @@ impl WorldState {
         }
         // An outland world (Wave 13 planets-c) too.
         if let Some(tier) = self.outland_tier(tile) {
+            return tier;
+        }
+        // And an exotic world (Wave 13 planets-d).
+        if let Some(tier) = self.exotic_tier(tile) {
             return tier;
         }
         if self.terrain.settings().generator.has_descents() {
@@ -1389,6 +1398,9 @@ impl WorldState {
             .or_else(|| self.frontier_notice(body, state))
             // The outland worlds (Wave 13): the fauna never hunt.
             .or_else(|| Self::outlands_notice(state))
+            // The exotic worlds (Wave 13): the fauna and bosses never hunt by sight, the frost
+            // stalker sees only motion.
+            .or_else(|| self.exotic_notice(body, state, || self.perceive(body, state)))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1478,6 +1490,13 @@ impl WorldState {
         // ashrunners bolt, bonepickers circle.
         if state.kind.is_outlands()
             && let Some(intent) = self.outlands_behave(body, state, now)
+        {
+            return intent;
+        }
+        // And the exotic worlds' (Wave 13): shy fauna, drifting rays and gasbags, the bosses'
+        // told fights.
+        if state.kind.is_exotic()
+            && let Some(intent) = self.exotic_behave(id, body, state, now, output)
         {
             return intent;
         }
@@ -2698,7 +2717,9 @@ impl WorldState {
             // The Leviathan's open maw takes double (Wave 9).
             * self.drowned_damage_factor(state.kind)
             // The unbound Colossus's bare core (Wave 10).
-            * self.garrison_damage_factor(state.kind);
+            * self.garrison_damage_factor(state.kind)
+            // An exotic boss's open weak point (Wave 13).
+            * Self::exotic_damage_factor(&state);
         // The Sun Serpent's armour and scales (Wave 9).
         if state.kind.is_hollow()
             && let Some(outcome) = self.hollow_damage(id, &state, amount, output)
@@ -2852,6 +2873,10 @@ impl WorldState {
         if state.kind.is_outlands() {
             // A theme boss's fall spends its seal and opens its vault (Wave 13).
             self.outlands_kill(state.kind, state.last_attacker, output);
+        }
+        if state.kind.is_exotic() {
+            // A theme boss's seal opens into its trophy (Wave 13).
+            self.exotic_kill(state.kind, state.last_attacker, output);
         }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
@@ -3185,5 +3210,21 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         | EnemyKind::Shade
         | EnemyKind::AshenSovereign
         => false,
+        // The exotic worlds (Wave 13 planets-d) spawn their own, by zone.
+        EnemyKind::DriftRay
+        | EnemyKind::Gasbag
+        | EnemyKind::StormEel
+        | EnemyKind::VaporStinger
+        | EnemyKind::Thunderhead
+        | EnemyKind::DuskGrazer
+        | EnemyKind::Sunbasker
+        | EnemyKind::ScorchMite
+        | EnemyKind::FrostStalker
+        | EnemyKind::Gloamwarden
+        | EnemyKind::Ringhopper
+        | EnemyKind::Shardback
+        | EnemyKind::TetherDrone
+        | EnemyKind::VoidMite
+        | EnemyKind::RingWarden => false,
     }
 }

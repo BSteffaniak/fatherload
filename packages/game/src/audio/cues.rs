@@ -397,6 +397,22 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::OutlandBossWake => Patch::PcBossWake,
         SoundCue::OutlandBroodCall => Patch::PcBroodCall,
         SoundCue::OutlandBossFall => Patch::PcBossFall,
+        SoundCue::ExoticCrackle => Patch::PdCrackle,
+        SoundCue::ExoticBolt => Patch::PdBolt,
+        SoundCue::ExoticPressure => Patch::PdPressure,
+        SoundCue::ExoticImpact => Patch::PdImpact,
+        SoundCue::ExoticHiss => Patch::PdHiss,
+        SoundCue::ExoticGeyser => Patch::PdGeyser,
+        SoundCue::ExoticQuake => Patch::PdQuake,
+        SoundCue::ExoticWhistle => Patch::PdWhistle,
+        SoundCue::ExoticVent => Patch::PdVent,
+        SoundCue::ExoticZap => Patch::PdZap,
+        SoundCue::ExoticPowerDown => Patch::PdPowerDown,
+        SoundCue::ExoticStormRising => Patch::PdStormRising,
+        SoundCue::ExoticBossAwake => Patch::PdBossAwake,
+        SoundCue::ExoticBossTell => Patch::PdBossTell,
+        SoundCue::ExoticBossDown => Patch::PdBossDown,
+        SoundCue::ExoticDock => Patch::PdDock,
     }
 }
 
@@ -823,6 +839,34 @@ pub const fn frontier_cue(
         E::DrifterChimed => SoundCue::FrontierChime,
         E::WyrmRipple => SoundCue::FrontierWyrmRipple,
         E::StormEnded | E::HazardBite => return None,
+    })
+}
+
+/// The sound of an exotic world's event (Wave 13 planets-d; exhaustive: a new event needs an
+/// answer). The hazards' bite is the hull's own hit.
+#[must_use]
+pub const fn exotic_cue(what: fatherload_simulation::exotic::ExoticEvent) -> Option<SoundCue> {
+    use fatherload_simulation::exotic::ExoticEvent as E;
+    Some(match what {
+        E::LightningTell => SoundCue::ExoticCrackle,
+        E::LightningStrike => SoundCue::ExoticBolt,
+        E::PressureWarning => SoundCue::ExoticPressure,
+        E::DiamondHail | E::MeteorImpact => SoundCue::ExoticImpact,
+        E::GeyserHiss => SoundCue::ExoticHiss,
+        E::GeyserErupt => SoundCue::ExoticGeyser,
+        E::QuakeRumble => SoundCue::ExoticQuake,
+        E::QuakeShock => SoundCue::StalactiteCrack,
+        E::MeteorIncoming => SoundCue::ExoticWhistle,
+        E::IceVented => SoundCue::ExoticVent,
+        E::ConduitShock => SoundCue::ExoticZap,
+        E::ConduitCut => SoundCue::ExoticPowerDown,
+        E::StormRising => SoundCue::ExoticStormRising,
+        E::BossAwoke => SoundCue::ExoticBossAwake,
+        E::BossTell => SoundCue::ExoticBossTell,
+        E::BossDefeated => SoundCue::ExoticBossDown,
+        E::RelicFound => SoundCue::CacheOpened,
+        E::CityDocked => SoundCue::ExoticDock,
+        E::HazardBite => return None,
     })
 }
 
@@ -1497,6 +1541,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Planet { what, .. } => planet_cue(*what),
         // The frontier worlds (Wave 12 planets-b).
         GameplayEventKind::Frontier { what, .. } => frontier_cue(*what),
+        // The exotic worlds (Wave 13 planets-d).
+        GameplayEventKind::Exotic { what, .. } => exotic_cue(*what),
         // Space flight (Wave 11).
         GameplayEventKind::Flight { what, .. } => Some(flight_cue(*what)),
         // Space's things (Wave 12 systems).
@@ -1868,6 +1914,7 @@ mod tests {
             | GameplayEventKind::Wilds { .. }
             | GameplayEventKind::Outlands { .. }
             | GameplayEventKind::Frontier { .. }
+            | GameplayEventKind::Exotic { .. }
             | GameplayEventKind::Alien { .. }
             | GameplayEventKind::Station { .. }
             | GameplayEventKind::Hostile { .. } => {}
@@ -2354,6 +2401,14 @@ mod tests {
         }
         for what in fatherload_simulation::frontier::FrontierEvent::ALL {
             events.push(GameplayEventKind::Frontier {
+                what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+            });
+        }
+        for what in fatherload_simulation::exotic::ExoticEvent::ALL {
+            events.push(GameplayEventKind::Exotic {
                 what,
                 player_id: Some(player_id),
                 x: 0,
@@ -3141,6 +3196,22 @@ mod tests {
             SoundCue::OutlandBossWake,
             SoundCue::OutlandBroodCall,
             SoundCue::OutlandBossFall,
+            SoundCue::ExoticCrackle,
+            SoundCue::ExoticBolt,
+            SoundCue::ExoticPressure,
+            SoundCue::ExoticImpact,
+            SoundCue::ExoticHiss,
+            SoundCue::ExoticGeyser,
+            SoundCue::ExoticQuake,
+            SoundCue::ExoticWhistle,
+            SoundCue::ExoticVent,
+            SoundCue::ExoticZap,
+            SoundCue::ExoticPowerDown,
+            SoundCue::ExoticStormRising,
+            SoundCue::ExoticBossAwake,
+            SoundCue::ExoticBossTell,
+            SoundCue::ExoticBossDown,
+            SoundCue::ExoticDock,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

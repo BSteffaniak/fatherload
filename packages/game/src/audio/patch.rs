@@ -18,6 +18,7 @@ mod aliens;
 mod ancient_city;
 mod distortion;
 mod drowned;
+mod exotic;
 mod far_strange;
 mod frontier;
 mod garrison;
@@ -609,6 +610,31 @@ patches! {
     PcFungalMusicLoop => "pc_loop_fungal_world",
     PcMachineMusicLoop => "pc_loop_machine_world",
     PcDeadMusicLoop => "pc_loop_dead_world",
+    // The exotic worlds (wave 13 planets-d), appended at the end so every earlier patch keeps
+    // its seeds: their rules' one-shots, the bosses, the music and the beds.
+    PdCrackle => "pd_crackle",
+    PdBolt => "pd_bolt",
+    PdPressure => "pd_pressure_creak",
+    PdImpact => "pd_impact",
+    PdHiss => "pd_geyser_hiss",
+    PdGeyser => "pd_geyser_blow",
+    PdQuake => "pd_quake_rumble",
+    PdWhistle => "pd_meteor_whistle",
+    PdVent => "pd_ice_vent",
+    PdZap => "pd_conduit_zap",
+    PdPowerDown => "pd_power_down",
+    PdStormRising => "pd_storm_rising",
+    PdBossAwake => "pd_boss_awake",
+    PdBossTell => "pd_boss_tell",
+    PdBossDown => "pd_boss_down",
+    PdDock => "pd_dock_chime",
+    PdGasGiantMusicLoop => "pd_loop_gas_giant",
+    PdLockedMusicLoop => "pd_loop_locked_world",
+    PdRingMusicLoop => "pd_loop_ring_world",
+    PdGasWindLoop => "pd_loop_gas_wind",
+    PdLockedAirLoop => "pd_loop_locked_air",
+    PdRingHumLoop => "pd_loop_ring_hum",
+    PdBossLoop => "pd_loop_boss",
 }
 
 /// Playback metadata of a patch.
@@ -1209,6 +1235,34 @@ impl Patch {
             }
             Self::PcFungalMusicLoop | Self::PcMachineMusicLoop | Self::PcDeadMusicLoop => {
                 PatchInfo::new(Loop)
+            }
+            // The exotic worlds (wave 13 planets-d): beds and music loop; the bosses and the
+            // big strikes are big; the tells warn; the rest is the ground's own feedback.
+            Self::PdGasGiantMusicLoop
+            | Self::PdLockedMusicLoop
+            | Self::PdRingMusicLoop
+            | Self::PdGasWindLoop
+            | Self::PdLockedAirLoop
+            | Self::PdRingHumLoop
+            | Self::PdBossLoop => PatchInfo::new(Loop).instances(4).jitter(0.0, 0.0),
+            Self::PdBolt | Self::PdBossAwake | Self::PdBossDown | Self::PdGeyser | Self::PdQuake => {
+                PatchInfo::new(Big)
+                    .instances(2)
+                    .send(0.4)
+                    .jitter(0.03, 0.5)
+                    .priority(7)
+            }
+            Self::PdCrackle
+            | Self::PdHiss
+            | Self::PdWhistle
+            | Self::PdBossTell
+            | Self::PdPressure
+            | Self::PdStormRising => PatchInfo::new(Alarm).instances(2).send(0.3).jitter(0.02, 0.5),
+            Self::PdImpact | Self::PdVent | Self::PdZap | Self::PdPowerDown | Self::PdDock => {
+                PatchInfo::new(Impact)
+                    .instances(3)
+                    .send(0.2)
+                    .jitter(0.04, 1.0)
             }
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
@@ -2036,6 +2090,29 @@ impl Patch {
             Self::PcFungalMusicLoop => outlands::fungal_music_loop(rng),
             Self::PcMachineMusicLoop => outlands::machine_music_loop(rng),
             Self::PcDeadMusicLoop => outlands::dead_music_loop(rng),
+            Self::PdCrackle => exotic::crackle(rng),
+            Self::PdBolt => exotic::bolt(rng),
+            Self::PdPressure => exotic::pressure_creak(rng),
+            Self::PdImpact => exotic::impact(rng),
+            Self::PdHiss => exotic::geyser_hiss(rng),
+            Self::PdGeyser => exotic::geyser_blow(rng),
+            Self::PdQuake => exotic::quake(rng),
+            Self::PdWhistle => exotic::meteor_whistle(rng),
+            Self::PdVent => exotic::ice_vent(rng),
+            Self::PdZap => exotic::conduit_zap(rng),
+            Self::PdPowerDown => exotic::power_down(rng),
+            Self::PdStormRising => exotic::storm_rising(rng),
+            Self::PdBossAwake => exotic::boss_awake(rng),
+            Self::PdBossTell => exotic::boss_tell(rng),
+            Self::PdBossDown => exotic::boss_down(rng),
+            Self::PdDock => exotic::dock_chime(rng),
+            Self::PdGasGiantMusicLoop => exotic::gas_giant_music_loop(rng),
+            Self::PdLockedMusicLoop => exotic::locked_music_loop(rng),
+            Self::PdRingMusicLoop => exotic::ring_music_loop(rng),
+            Self::PdGasWindLoop => exotic::gas_wind_loop(rng),
+            Self::PdLockedAirLoop => exotic::locked_air_loop(rng),
+            Self::PdRingHumLoop => exotic::ring_hum_loop(rng),
+            Self::PdBossLoop => exotic::boss_loop(rng),
         }
     }
 }

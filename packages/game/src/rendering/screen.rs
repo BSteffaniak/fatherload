@@ -1159,6 +1159,7 @@ const fn minimap_color(kind: TileKind) -> Color {
         TileKind::Core(tile) => super::terrain::tile_art::core_color(tile),
         TileKind::Wild(tile) => super::terrain::tile_art::wild_color(tile),
         TileKind::Frontier(tile) => super::terrain::tile_art::frontier_color(tile),
+        TileKind::Exotic(tile) => super::terrain::tile_art::exotic_color(tile),
         TileKind::Alien(tile) => super::terrain::tile_art::alien_color(tile),
         TileKind::Outland(tile) => super::terrain::tile_art::outland_color(tile),
     }

@@ -335,7 +335,22 @@ mod tests {
                 // theme.
                 | Patch::HxShipBoom
                 | Patch::HxBossAppear
-                | Patch::HxBossLoop => (40.0, 3_000.0),
+                | Patch::HxBossLoop
+                // The exotic worlds (wave 13): thunder, quakes, geysers, the deep wind, the
+                // bosses' roar and drums, the locked world's drone, the hull's groan.
+                | Patch::PdBolt
+                | Patch::PdQuake
+                | Patch::PdGeyser
+                | Patch::PdImpact
+                | Patch::PdPressure
+                | Patch::PdBossAwake
+                | Patch::PdBossDown
+                | Patch::PdGasWindLoop
+                | Patch::PdLockedMusicLoop
+                | Patch::PdLockedAirLoop
+                | Patch::PdBossLoop
+                | Patch::PdStormRising
+                | Patch::PdDock => (40.0, 3_000.0),
                 Patch::FuseTick | Patch::DrillGlint | Patch::UiMove | Patch::Pickup => {
                     (1_500.0, 12_000.0)
                 }

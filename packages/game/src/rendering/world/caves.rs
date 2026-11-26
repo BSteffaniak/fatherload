@@ -119,6 +119,8 @@ pub(super) const fn tile_light(kind: TileKind) -> f32 {
         TileKind::Frontier(tile) => tile.glow() as f32 / 255.0 * 3.0,
         // The outland worlds' glowcaps, beacons, relays, glyphs and soulstone (Wave 13).
         TileKind::Outland(tile) => tile.glow() as f32 / 255.0 * 3.0,
+        // The exotic worlds' lanterns, bladders, pockets, conduits and seals (Wave 13).
+        TileKind::Exotic(tile) => tile.glow() as f32 / 255.0 * 3.0,
         _ => 0.0,
     }
 }

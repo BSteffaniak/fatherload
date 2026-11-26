@@ -274,6 +274,7 @@ impl ItemKind {
             TileKind::Wild(tile) => tile.item(),
             TileKind::Frontier(tile) => tile.item(),
             TileKind::Outland(tile) => tile.item(),
+            TileKind::Exotic(tile) => tile.item(),
             _ => match BlockKind::from_tile(kind) {
                 Some(block) => Some(Self::Block(block)),
                 None => None,

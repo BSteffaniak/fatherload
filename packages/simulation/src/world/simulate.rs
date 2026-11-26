@@ -661,6 +661,10 @@ impl WorldState {
                 MineResult::Mined(TileKind::Outland(tile)) => {
                     self.outland_tile_mined(player_id, target, tile, &mut output);
                 }
+                // The exotic worlds (Wave 13 planets-d): junctions, venting ice, relics.
+                MineResult::Mined(TileKind::Exotic(tile)) => {
+                    self.exotic_mined(player_id, target, tile, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -681,6 +685,8 @@ impl WorldState {
             self.apply_test_mode_refills();
             // A frontier world's rules, weather, volcanoes and creatures (Wave 12).
             self.advance_frontier(next_tick, inputs, &mut output);
+            // An exotic world's rules, strikes, boss and creatures (Wave 13 planets-d).
+            self.advance_exotic(next_tick, inputs, &mut output);
             self.advance_fluids(next_tick, &mut output);
             // A body's round ground: take-offs into space and life support (Wave 11).
             self.advance_body_flight(&mut output);
@@ -777,6 +783,8 @@ impl WorldState {
         self.advance_sky_isles(&mut output);
         // A world that is a frontier planet (Wave 12): its rules, weather and creatures.
         self.advance_frontier(next_tick, inputs, &mut output);
+        // A world that is an exotic planet (Wave 13 planets-d).
+        self.advance_exotic(next_tick, inputs, &mut output);
         // Last before the journal closes: every terrain write this tick wakes its fluid.
         self.advance_fluids(next_tick, &mut output);
         output.terrain_ops = self.terrain.finish_journal();

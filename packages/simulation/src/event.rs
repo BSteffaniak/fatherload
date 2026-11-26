@@ -1422,6 +1422,16 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The exotic worlds (Wave 13 planets-d; netcode codes 1020-1039).
+    /// Something happened on a gas giant, locked or ring world at tile `(x, y)` of its ground
+    /// (a bolt, a hailstone or meteor, a geyser, a quake, a vent, a conduit, a hazard, a boss's
+    /// tell or fall, a relic, a docking); `player_id` is whose rig, if anyone's.
+    Exotic {
+        what: crate::exotic::ExoticEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

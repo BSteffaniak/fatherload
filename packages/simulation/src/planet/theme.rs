@@ -177,8 +177,28 @@ const ICE_STRATA: [PlanetStratum; 2] = [
     },
 ];
 
+/// The rocky placeholder (Wave 11).
+const ROCKY_THEME: PlanetTheme = PlanetTheme {
+    id: PlanetThemeId::ROCKY,
+    name: "Rocky World",
+    palette: PlanetPalette {
+        sky: [150, 110, 90],
+        atmosphere: [230, 150, 110],
+        surface: [150, 92, 60],
+        rock: [118, 96, 84],
+        deep: [80, 60, 58],
+        core: [255, 120, 60],
+    },
+    crust: TileKind::Surface(SurfaceMaterial::Sand),
+    crust_rows: 2,
+    strata: &ROCKY_STRATA,
+    core_ore: TileKind::Ore(MineralKind::Ruby),
+    caves_per_256_columns: 2,
+    hill_permille: 28,
+};
+
 /// Every theme, by id (append only).
-pub const PLANET_THEMES: [PlanetTheme; 12] = [
+pub const PLANET_THEMES: [PlanetTheme; 15] = [
     PlanetTheme {
         id: PlanetThemeId::BARREN,
         name: "Barren Moon",
@@ -197,24 +217,7 @@ pub const PLANET_THEMES: [PlanetTheme; 12] = [
         caves_per_256_columns: 1,
         hill_permille: 20,
     },
-    PlanetTheme {
-        id: PlanetThemeId::ROCKY,
-        name: "Rocky World",
-        palette: PlanetPalette {
-            sky: [150, 110, 90],
-            atmosphere: [230, 150, 110],
-            surface: [150, 92, 60],
-            rock: [118, 96, 84],
-            deep: [80, 60, 58],
-            core: [255, 120, 60],
-        },
-        crust: TileKind::Surface(SurfaceMaterial::Sand),
-        crust_rows: 2,
-        strata: &ROCKY_STRATA,
-        core_ore: TileKind::Ore(MineralKind::Ruby),
-        caves_per_256_columns: 2,
-        hill_permille: 28,
-    },
+    ROCKY_THEME,
     PlanetTheme {
         id: PlanetThemeId::ICE,
         name: "Ice World",
@@ -245,6 +248,10 @@ pub const PLANET_THEMES: [PlanetTheme; 12] = [
     crate::planet::outlands::fungal::FUNGAL_THEME,
     crate::planet::outlands::machine::MACHINE_THEME,
     crate::planet::outlands::dead::DEAD_THEME,
+    // Wave 13 planets-d: the exotic worlds (`crate::exotic`), ids 12-14.
+    crate::exotic::gas_giant::THEME,
+    crate::exotic::locked::THEME,
+    crate::exotic::ring::THEME,
 ];
 
 /// The theme with id `id` (an unknown id, from a newer build, reads as the first theme).

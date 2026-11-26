@@ -474,6 +474,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Outlands {
             what, player_id, ..
         } => (1_000 + what.code() as u32, player_id),
+        // The exotic worlds (wave 13 planets-d): 1020-1039.
+        GameplayEventKind::Exotic {
+            what, player_id, ..
+        } => (1020 + what.code() as u32, player_id),
     }
 }
 

@@ -994,6 +994,39 @@ pub enum SoundCue {
     OutlandBroodCall,
     /// A theme boss falling.
     OutlandBossFall,
+    // The exotic worlds (Wave 13 planets-d).
+    /// A charged column flickering (an exotic world's bolt to come).
+    ExoticCrackle,
+    /// A bolt of lightning striking.
+    ExoticBolt,
+    /// The gas giant's pressure groaning on the hull.
+    ExoticPressure,
+    /// A hailstone or meteorite landing.
+    ExoticImpact,
+    /// A geyser vent hissing.
+    ExoticHiss,
+    /// A geyser blowing.
+    ExoticGeyser,
+    /// A tidal quake rumbling.
+    ExoticQuake,
+    /// Ring debris whistling down.
+    ExoticWhistle,
+    /// Buried ring ice venting at the drill.
+    ExoticVent,
+    /// A live conduit shocking a rig.
+    ExoticZap,
+    /// A conduit run going dark.
+    ExoticPowerDown,
+    /// An exotic world's storm rising.
+    ExoticStormRising,
+    /// A theme boss waking.
+    ExoticBossAwake,
+    /// A theme boss telling an attack.
+    ExoticBossTell,
+    /// A theme boss falling.
+    ExoticBossDown,
+    /// A rig docking at a sky city.
+    ExoticDock,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

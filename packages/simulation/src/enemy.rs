@@ -657,6 +657,43 @@ pub enum EnemyKind {
     Shade,
     /// Dead theme boss: the last king of the dead world.
     AshenSovereign,
+    // --- The exotic worlds (Wave 13 planets-d, `crate::exotic`), appended -----------------
+    /// A drift ray: a gliding flier of a gas giant's cloud tops, in loose flocks (neutral
+    /// fauna).
+    DriftRay,
+    /// A gasbag: a great floating bladder-beast that grazes the clouds (neutral fauna).
+    Gasbag,
+    /// A storm eel: a charged eel of the Storm Belt; it crackles, then lunges.
+    StormEel,
+    /// A vapour stinger: a swarm wasp of the cloud tops.
+    VaporStinger,
+    /// The Thunderhead: a living storm in the Eye (the gas giant's theme boss).
+    Thunderhead,
+    /// A dusk grazer: a shaggy herd beast of the locked world's twilight (neutral fauna).
+    DuskGrazer,
+    /// A sunbasker: a mirror-scaled lizard of the day side that bolts from rigs (neutral
+    /// fauna).
+    Sunbasker,
+    /// A scorch mite: a swarm of the day side's glare and its vents.
+    ScorchMite,
+    /// A frost stalker: a pale hunter of the night side; it crouches, then pounces.
+    FrostStalker,
+    /// The Gloamwarden: a colossus half scorched and half frozen at the Gloam Gate (the locked
+    /// world's theme boss).
+    Gloamwarden,
+    /// A ringhopper: a long-legged hopper of the ring world's plains and Skyring (neutral
+    /// fauna).
+    Ringhopper,
+    /// A shardback: an armoured grazer of the ringfall plains (neutral fauna).
+    Shardback,
+    /// A tether drone: a builder machine that guards the conduits; its lens glows before it
+    /// fires.
+    TetherDrone,
+    /// A void mite: a swarm of the breccia's caves and the Skyring.
+    VoidMite,
+    /// The Ring Warden: the builders' sentinel at the Tether's foot (the ring world's theme
+    /// boss).
+    RingWarden,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -1120,7 +1157,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 192] = [
+    pub const ALL: [Self; 207] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1313,6 +1350,21 @@ impl EnemyKind {
         Self::Gravewarden,
         Self::Shade,
         Self::AshenSovereign,
+        Self::DriftRay,
+        Self::Gasbag,
+        Self::StormEel,
+        Self::VaporStinger,
+        Self::Thunderhead,
+        Self::DuskGrazer,
+        Self::Sunbasker,
+        Self::ScorchMite,
+        Self::FrostStalker,
+        Self::Gloamwarden,
+        Self::Ringhopper,
+        Self::Shardback,
+        Self::TetherDrone,
+        Self::VoidMite,
+        Self::RingWarden,
     ];
 
     /// Whether this is one of the outland worlds' creatures (Wave 13 planets-c), their bosses
@@ -1394,6 +1446,52 @@ impl EnemyKind {
                 | Self::GlintMoth
                 | Self::ChimeDrifter
                 | Self::GeodeMimic
+        )
+    }
+
+    /// Whether this is one of the exotic worlds' creatures or bosses (Wave 13 planets-d).
+    #[must_use]
+    pub const fn is_exotic(self) -> bool {
+        matches!(
+            self,
+            Self::DriftRay
+                | Self::Gasbag
+                | Self::StormEel
+                | Self::VaporStinger
+                | Self::Thunderhead
+                | Self::DuskGrazer
+                | Self::Sunbasker
+                | Self::ScorchMite
+                | Self::FrostStalker
+                | Self::Gloamwarden
+                | Self::Ringhopper
+                | Self::Shardback
+                | Self::TetherDrone
+                | Self::VoidMite
+                | Self::RingWarden
+        )
+    }
+
+    /// Whether this is one of the exotic worlds' neutral fauna: it never hunts a rig.
+    #[must_use]
+    pub const fn is_exotic_fauna(self) -> bool {
+        matches!(
+            self,
+            Self::DriftRay
+                | Self::Gasbag
+                | Self::DuskGrazer
+                | Self::Sunbasker
+                | Self::Ringhopper
+                | Self::Shardback
+        )
+    }
+
+    /// Whether this is one of the exotic worlds' theme bosses.
+    #[must_use]
+    pub const fn is_exotic_boss(self) -> bool {
+        matches!(
+            self,
+            Self::Thunderhead | Self::Gloamwarden | Self::RingWarden
         )
     }
 
@@ -1660,6 +1758,14 @@ impl EnemyKind {
             Self::ReactorWarden => 5.5,
             Self::Shade => 2.0,
             Self::AshenSovereign => 5.5,
+            // The exotic worlds (Wave 13): the storm's heart, glowing bladders, embers, lenses.
+            Self::Thunderhead => 5.0,
+            Self::RingWarden => 3.0,
+            Self::Gloamwarden => 2.5,
+            Self::StormEel => 1.6,
+            Self::Gasbag => 1.2,
+            Self::ScorchMite | Self::TetherDrone => 1.0,
+            Self::VoidMite => 0.8,
             _ => 0.0,
         }
     }
@@ -4698,6 +4804,229 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::Wispfire, 3),
                 )
             },
+            // --- The exotic worlds (Wave 13 planets-d) -------------------------------------
+            Self::DriftRay => EnemyStats {
+                radius: 7.0,
+                health: 26.0,
+                speed: 95.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 40.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.4,
+                knockback: 30.0,
+                ..stats("Drift Ray", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Gasbag => EnemyStats {
+                radius: 14.0,
+                health: 220.0,
+                speed: 26.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 60.0,
+                ..stats("Gasbag", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::StormEel => EnemyStats {
+                radius: 8.0,
+                health: 90.0,
+                speed: 115.0,
+                dash_speed: 340.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 34.0,
+                contact_damage: 14.0,
+                windup_millis: 750,
+                cooldown_millis: 2_300,
+                attack_range_tiles: 4.5,
+                knockback: 220.0,
+                ..stats("Storm Eel", Creature, Flying, AttackStyle::Lunge)
+            },
+            Self::VaporStinger => EnemyStats {
+                radius: 6.0,
+                health: 16.0,
+                speed: 160.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 28.0,
+                contact_damage: 6.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Vapour Stinger", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Thunderhead => EnemyStats {
+                radius: 30.0,
+                health: 900.0,
+                speed: 70.0,
+                dash_speed: 300.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 18.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 1.0,
+                knockback: 320.0,
+                elite: true,
+                // Its fight is its own (`world/enemies/exotic.rs`).
+                ..stats("The Thunderhead", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::DuskGrazer => EnemyStats {
+                radius: 12.0,
+                health: 180.0,
+                speed: 34.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 60.0,
+                ..stats("Dusk Grazer", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Sunbasker => EnemyStats {
+                radius: 6.0,
+                health: 30.0,
+                speed: 80.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Sunbasker", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::ScorchMite => EnemyStats {
+                radius: 6.0,
+                health: 14.0,
+                speed: 150.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Scorch Mite", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::FrostStalker => EnemyStats {
+                radius: 9.0,
+                health: 95.0,
+                speed: 80.0,
+                dash_speed: 320.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 30.0,
+                contact_damage: 14.0,
+                windup_millis: 650,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 4.0,
+                knockback: 200.0,
+                ..stats("Frost Stalker", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Gloamwarden => EnemyStats {
+                radius: 30.0,
+                health: 1_000.0,
+                speed: 30.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 20.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 1.0,
+                knockback: 340.0,
+                elite: true,
+                ..stats("The Gloamwarden", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Ringhopper => EnemyStats {
+                radius: 7.0,
+                health: 20.0,
+                speed: 85.0,
+                sight_tiles: 7.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Ringhopper", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Shardback => EnemyStats {
+                radius: 12.0,
+                health: 260.0,
+                speed: 24.0,
+                sight_tiles: 5.0,
+                hearing_tiles: 3.0,
+                leash_tiles: 24.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 60.0,
+                ..stats("Shardback", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::TetherDrone => EnemyStats {
+                radius: 8.0,
+                health: 60.0,
+                speed: 100.0,
+                sight_tiles: 12.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 34.0,
+                contact_damage: 8.0,
+                windup_millis: 650,
+                cooldown_millis: 1_900,
+                attack_range_tiles: 9.0,
+                knockback: 110.0,
+                ..stats(
+                    "Tether Drone",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::SentinelBolt, 1),
+                )
+            },
+            Self::VoidMite => EnemyStats {
+                radius: 7.0,
+                health: 14.0,
+                speed: 150.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                windup_millis: 0,
+                cooldown_millis: 1_000,
+                attack_range_tiles: 0.6,
+                knockback: 90.0,
+                ..stats("Void Mite", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::RingWarden => EnemyStats {
+                radius: 30.0,
+                health: 950.0,
+                speed: 50.0,
+                sight_tiles: 40.0,
+                hearing_tiles: 40.0,
+                leash_tiles: 0.0,
+                contact_damage: 16.0,
+                windup_millis: 0,
+                cooldown_millis: 1_400,
+                attack_range_tiles: 1.0,
+                knockback: 300.0,
+                elite: true,
+                ..stats("The Ring Warden", Machine, Flying, AttackStyle::Contact)
+            },
         }
     }
 
@@ -4996,6 +5325,22 @@ impl EnemyKind {
             Self::Gravewarden => (13.0, 20.0),
             Self::Shade => (13.0, 15.0),
             Self::AshenSovereign => (44.0, 54.0),
+            // The exotic worlds (Wave 13 planets-d): their drawn bodies.
+            Self::DriftRay => (16.0, 7.0),
+            Self::Gasbag => (30.0, 22.0),
+            Self::StormEel => (21.0, 7.0),
+            Self::VaporStinger => (9.0, 7.0),
+            Self::Thunderhead => (54.0, 35.0),
+            Self::DuskGrazer => (27.0, 19.0),
+            Self::Sunbasker => (12.0, 5.5),
+            Self::ScorchMite => (11.0, 8.0),
+            Self::FrostStalker => (16.0, 11.0),
+            Self::Gloamwarden => (40.0, 54.0),
+            Self::Ringhopper => (9.0, 9.0),
+            Self::Shardback => (30.0, 19.0),
+            Self::TetherDrone => (11.0, 9.0),
+            Self::VoidMite => (10.0, 10.0),
+            Self::RingWarden => (48.0, 46.0),
         }
     }
 
@@ -6392,6 +6737,33 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
             }
         }
         EnemyKind::GlassScorpion | EnemyKind::ShardCrab => add(mineral, 1 + extra),
+        // The exotic worlds (Wave 13 planets-d): fauna carry little, hunters pay, a theme
+        // boss drops a hoard (its seal's trophy is the prize).
+        EnemyKind::DriftRay | EnemyKind::Ringhopper | EnemyKind::Sunbasker => {
+            if rare < 15 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::VaporStinger | EnemyKind::ScorchMite | EnemyKind::VoidMite => {
+            if rare < 40 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::Gasbag | EnemyKind::DuskGrazer | EnemyKind::Shardback => {
+            add(richer, 2 + extra);
+        }
+        EnemyKind::StormEel | EnemyKind::FrostStalker => add(richer, 1 + extra),
+        EnemyKind::TetherDrone => {
+            add(richer, 1);
+            if rare < 25 {
+                add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+            }
+        }
+        EnemyKind::Thunderhead | EnemyKind::Gloamwarden | EnemyKind::RingWarden => {
+            add(richer, 14 + extra);
+            add(mineral, 10);
+            add(ItemKind::Material(StrategicResourceKind::CoreShard), 2);
+        }
         EnemyKind::MagmaSlug => {
             add(mineral, 1);
             if rare < 10 {

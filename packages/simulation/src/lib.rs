@@ -34,6 +34,7 @@ pub mod enemy;
 pub mod entity;
 pub mod environment;
 pub mod event;
+pub mod exotic;
 pub mod expedition;
 pub mod explosive;
 pub mod far_strange;

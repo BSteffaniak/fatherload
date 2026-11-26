@@ -35,7 +35,7 @@ use crate::space::Atmosphere;
 ///
 /// Ranges by track (append only): bodylife `0..=63`, planets-a `64..=127`, planets-b
 /// `128..=191`, aliens `192..=223`, stations `224..=239`, hostiles `240..=255`; later waves
-/// from 256 up.
+/// from 256 up (Wave 13 planets-d: `320..=351`).
 #[derive(
     Clone, Copy, Debug, Default, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
 )]
@@ -223,6 +223,8 @@ pub const WEATHER_REGISTRY: &[&[WeatherKind]] = &[
     crate::frontier::hooks::FRONTIER_WEATHER,
     // Wave 13 planets-c: spore drift, glowfall, the ion storm, the grey wind and ghostlight.
     crate::planet::outlands::hooks::OUTLAND_WEATHER,
+    // Wave 13 planets-d: the superstorm, nitrogen snow, terminator gale and ring shower.
+    crate::exotic::hooks::EXOTIC_WEATHER,
 ];
 
 /// The kind with id `id` (an unknown id, from a newer build, reads as clear skies).

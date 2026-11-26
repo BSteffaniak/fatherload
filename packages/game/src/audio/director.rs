@@ -206,6 +206,38 @@ impl Material {
                     _ => Self::Hard,
                 }
             }
+            // The exotic worlds (Wave 13 planets-d): clouds, dust and soil give, gas pockets, hail,
+            // meteorite and the prizes ring, the rest grinds.
+            TileKind::Exotic(tile) => {
+                use fatherload_simulation::exotic::ExoticTile as X;
+                match tile {
+                    X::CloudIce
+                    | X::StormCloud
+                    | X::DeepHaze
+                    | X::SootCloud
+                    | X::EyeWall
+                    | X::LiftBladder
+                    | X::SaltCrust
+                    | X::LichenSoil
+                    | X::Glowmoss
+                    | X::FaultRubble
+                    | X::RingDust => Self::Soft,
+                    X::AmmoniaPocket
+                    | X::StormPocket
+                    | X::DeepPocket
+                    | X::DiamondHail
+                    | X::Meteorite
+                    | X::SunGlass
+                    | X::RingIce
+                    | X::ImpactGlass
+                    | X::StormTrophy
+                    | X::GloamTrophy
+                    | X::AnchorTrophy
+                    | X::RelicCache
+                    | X::LandmarkRelic => Self::Ore,
+                    _ => Self::Hard,
+                }
+            }
             // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
             // rest grinds.
             // The outland worlds (Wave 13): flesh, felt and ash give; glass, relays, crystal
@@ -415,6 +447,10 @@ enum SeatLoop {
     // The frontier worlds (Wave 12 planets-b): each world's music and its ambience bed.
     FrontierMusic,
     FrontierBed,
+    // The exotic worlds (Wave 13 planets-d): each world's music, its bed, the boss's fight.
+    ExoticMusic,
+    ExoticBed,
+    ExoticBossMusic,
     EngineBed,
     StacksBed,
     // Descent VII part B's music and beds (Wave 10 ancients-b): a piece and a bed per
@@ -906,6 +942,78 @@ impl Director {
         );
     }
 
+    /// An exotic world's music and ambience bed (Wave 13 planets-d): the gas giant's drifting
+    /// mallets over its howling bands, the locked world's turning chord over its thin wind,
+    /// the ring world's wheeling bells over its hum; a theme boss awake near the seat swaps the
+    /// music for its fight. A storm swells the bed; depth fades it (but not in a gas giant's
+    /// open bands). Silent off an exotic world.
+    fn exotic_sounds(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        scene: &crate::render_snapshot::PlaceScene<'_>,
+        millis: u64,
+    ) {
+        use fatherload_simulation::exotic::{ExoticStyle, rules};
+        let Some(ground) = scene.terrain.planet_ground() else {
+            return;
+        };
+        let Some(style) = fatherload_simulation::exotic::style_of_ground(ground) else {
+            return;
+        };
+        let (music, bed) = match style {
+            ExoticStyle::GasGiant => (Patch::PdGasGiantMusicLoop, Patch::PdGasWindLoop),
+            ExoticStyle::Locked => (Patch::PdLockedMusicLoop, Patch::PdLockedAirLoop),
+            ExoticStyle::Ring => (Patch::PdRingMusicLoop, Patch::PdRingHumLoop),
+        };
+        let storm = rules::storm_strength(style, ground.params().seed, millis);
+        let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+        let depth = (tile.y
+            - fatherload_simulation::planet::BodyGround::surface_row(ground, tile.x))
+        .max(0);
+        #[allow(clippy::cast_precision_loss, reason = "a few hundred rows")]
+        let open = if style == ExoticStyle::GasGiant {
+            1.0
+        } else {
+            (1.0 - depth as f32 / 40.0).clamp(0.25, 1.0)
+        };
+        let boss_kind = style.boss();
+        let boss = scene.entities.of_kind(fatherload_simulation::entity::EntityKind::Enemy).any(|entity| {
+            matches!(&entity.state, fatherload_simulation::entity::EntityState::Enemy(state) if state.kind == boss_kind)
+                && (entity.body.x - listener.x).hypot(entity.body.y - listener.y) < 2_400.0
+        });
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::ExoticMusic,
+            music,
+            (
+                if boss {
+                    0.0
+                } else {
+                    0.34 * (1.0 - 0.5 * storm)
+                },
+                0.0,
+                1.0,
+                OPEN_CUTOFF,
+            ),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::ExoticBossMusic,
+            Patch::PdBossLoop,
+            (if boss { 0.5 } else { 0.0 }, 0.0, 1.0, OPEN_CUTOFF),
+        );
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::ExoticBed,
+            bed,
+            ((0.22 + 0.4 * storm) * open, listener.pan, 1.0, OPEN_CUTOFF),
+        );
+    }
+
     /// Gain, pan and cutoff for a sound from `source`, or `None` when it is out of earshot.
     fn place(
         source: SoundSource,
@@ -1286,6 +1394,7 @@ impl Director {
             self.frontier_sounds(live, listener, scene.terrain, millis);
             // An outland world's music (Wave 13 planets-c).
             self.outland_music(live, listener, scene.terrain);
+            self.exotic_sounds(live, listener, scene, millis);
             state.initialized = true;
             state.velocity_x = velocity_x;
             state.velocity_y = velocity_y;

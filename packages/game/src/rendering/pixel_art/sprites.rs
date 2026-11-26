@@ -9,6 +9,7 @@ pub mod deep_supplies;
 pub mod distortion;
 pub mod drowned;
 pub mod enemies;
+pub mod exotic;
 pub mod explosives;
 pub mod far_strange;
 pub mod frontier;

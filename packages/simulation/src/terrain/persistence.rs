@@ -988,6 +988,13 @@ impl Tile {
                 Some(tile) => TileKind::Outland(tile),
                 None => return None,
             },
+            // Wave 13 planets-d (the exotic worlds): 0x3200..=0x35FF.
+            0x3200..=0x35FF => match crate::exotic::ExoticTile::from_code(
+                kind_code - crate::exotic::EXOTIC_TILE_CODE_BASE,
+            ) {
+                Some(tile) => TileKind::Exotic(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })

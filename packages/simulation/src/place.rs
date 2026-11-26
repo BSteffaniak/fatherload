@@ -529,7 +529,10 @@ pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme
         Theme::Fungal => PlanetThemeId::FUNGAL,
         Theme::MachineWorld => PlanetThemeId::MACHINE,
         Theme::DeadWorld => PlanetThemeId::DEAD,
-        Theme::GasGiant | Theme::TidallyLocked | Theme::RingWorld => PlanetThemeId::ROCKY,
+        // Wave 13 planets-d: the exotic worlds.
+        Theme::GasGiant => crate::exotic::GAS_GIANT,
+        Theme::TidallyLocked => crate::exotic::LOCKED_WORLD,
+        Theme::RingWorld => crate::exotic::RING_WORLD,
     }
 }
 
