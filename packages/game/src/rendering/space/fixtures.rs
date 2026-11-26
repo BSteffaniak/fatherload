@@ -417,6 +417,8 @@ fn system(fixture: &mut SpaceFixture) {
             centre: at(cos * distance, sin * distance),
             radius_tiles: radius,
             theme,
+            look: None,
+            ring: None,
             atmosphere,
             spin: angle as f32,
             sun: None,
@@ -430,6 +432,8 @@ fn system(fixture: &mut SpaceFixture) {
         centre: at(cos * 36_000.0 + 9_000.0, sin * 36_000.0 - 4_000.0),
         radius_tiles: 400.0,
         theme: BodyTheme::Barren,
+        look: None,
+        ring: None,
         atmosphere: 0.0,
         spin: 0.4,
         sun: None,
@@ -452,6 +456,101 @@ fn system(fixture: &mut SpaceFixture) {
     });
 }
 
+/// Wave 13 art-audio: every registered theme's face from orbit (the jungle, archipelago,
+/// glacier, dunes, volcanic and crystal worlds), the home world, a ringed gas giant and a
+/// ringed rock in daylight; or, for `space_orbit_night`, a settled jungle world, a volcanic
+/// world and the home world with their night sides toward the camera (lights, lava).
+fn orbit_gallery(fixture: &mut SpaceFixture, name: &str) {
+    use fatherload_simulation::planet::{hooks::hooks, theme::PlanetThemeId};
+    let look_of = |id: u16| {
+        hooks(PlanetThemeId(id))
+            .orbital_look()
+            .map(|look| super::view::BodyLook::from_theme(&look))
+    };
+    let night = name == "space_orbit_night";
+    fixture.stars.push(StarView {
+        centre: if night {
+            at(400_000.0, -60_000.0)
+        } else {
+            at(-400_000.0, -20_000.0)
+        },
+        radius_tiles: 1_600.0,
+        class: StarClass::Yellow,
+        seed: 2,
+    });
+    let worlds: Vec<OrbitWorld> = if night {
+        vec![
+            (BodyTheme::Jungle, look_of(3).map(lit_towns), None),
+            (BodyTheme::Volcanic, look_of(7), None),
+            (BodyTheme::Home, None, None),
+        ]
+    } else {
+        (3..=8)
+            .map(|id| (BodyTheme::Barren, look_of(id), None))
+            .chain([
+                (BodyTheme::GasGiant, None, None),
+                (BodyTheme::Home, None, None),
+                (BodyTheme::Machine, None, None),
+                (BodyTheme::Fungal, None, None),
+                (BodyTheme::Dead, None, None),
+                (BodyTheme::Barren, None, Some((1.3, 1.7))),
+            ])
+            .collect()
+    };
+    let (per_row, gap, radius) = if night {
+        (3, 2_400.0, 900.0)
+    } else {
+        (6, 1_800.0, 600.0)
+    };
+    for (index, (theme, look, ring)) in worlds.into_iter().enumerate() {
+        let (column, row) = ((index % per_row) as f64, (index / per_row) as f64);
+        let left = -gap * (per_row as f64 - 1.0) * 0.5;
+        fixture.bodies.push(BodyView {
+            id: 400 + index as u64,
+            centre: at(left + column * gap, -900.0 + row * 2_000.0),
+            radius_tiles: radius,
+            theme,
+            look,
+            ring,
+            atmosphere: if theme == BodyTheme::Barren && look.is_none() {
+                0.0
+            } else {
+                0.1
+            },
+            spin: index as f32 * 0.9 + 0.3,
+            sun: None,
+            seed: 500 + index as u32,
+        });
+    }
+    fixture.camera = camera_at(
+        0.0,
+        if night { -900.0 } else { 100.0 },
+        if night { 0.17 } else { 0.12 },
+    );
+    fixture.craft = None;
+}
+
+/// A gallery world: its tag, its look (`None`: the tag's) and its rings.
+type OrbitWorld = (BodyTheme, Option<super::view::BodyLook>, Option<(f32, f32)>);
+
+/// A look with its towns' lights (a settled world, as `live::body_look` makes it).
+fn lit_towns(mut look: super::view::BodyLook) -> super::view::BodyLook {
+    let (colour, density) = look
+        .lights
+        .unwrap_or((raylib::prelude::Color::new(255, 214, 140, 255), 0.0));
+    look.lights = Some((colour, density.max(0.18)));
+    look
+}
+
+/// A camera at `(x, y)` tiles, upright, at `px_per_tile`.
+fn camera_at(x: f64, y: f64, px_per_tile: f32) -> SpaceCamera {
+    SpaceCamera {
+        centre: at(x, y),
+        roll: 0.0,
+        px_per_tile,
+    }
+}
+
 /// A moon of radius 400 hanging in the fixture system (its body and its strip).
 fn moon_body() -> BodyView {
     BodyView {
@@ -459,6 +558,8 @@ fn moon_body() -> BodyView {
         centre: at(-12_000.0, 30_000.0),
         radius_tiles: 400.0,
         theme: BodyTheme::Barren,
+        look: None,
+        ring: None,
         atmosphere: 0.0,
         // Column 1,200 faces the star in the afternoon.
         spin: -3.7,
@@ -474,6 +575,8 @@ fn jungle_body() -> BodyView {
         centre: at(-21_000.0, 29_000.0),
         radius_tiles: 5_000.0,
         theme: BodyTheme::Jungle,
+        look: None,
+        ring: None,
         atmosphere: 0.08,
         // Column 12,000 faces the star.
         spin: -3.0,
@@ -516,7 +619,7 @@ fn surface_things(strip: &FixtureStrip, column: f64) -> Vec<GroundThing> {
 }
 
 /// Every fixture's scene name, in order.
-pub const NAMES: [&str; 21] = [
+pub const NAMES: [&str; 23] = [
     "space_deep_starfield",
     "space_star_system",
     "space_planet_gallery",
@@ -538,6 +641,9 @@ pub const NAMES: [&str; 21] = [
     "space_warp",
     "space_cruise",
     "space_moon_flyover",
+    // Wave 13 art-audio: the themes' faces from orbit.
+    "space_orbit_themes",
+    "space_orbit_night",
 ];
 
 /// The fixture named `name` (see [`NAMES`]).
@@ -594,6 +700,8 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                     centre: at(-4_400.0 + column * 1_800.0, -900.0 + row * 2_000.0),
                     radius_tiles: 650.0,
                     theme,
+                    look: None,
+                    ring: None,
                     atmosphere: if theme == BodyTheme::Barren {
                         0.0
                     } else {
@@ -607,6 +715,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
             fixture.camera = camera(0.0, 0.0, 0.0, 0.12);
             fixture.craft = None;
         }
+        "space_orbit_themes" | "space_orbit_night" => orbit_gallery(&mut fixture, name),
         "space_approach_moon" | "space_moon_hover" | "space_polar_quads" => {
             moon_sky(&mut fixture);
             let strip = moon(false);

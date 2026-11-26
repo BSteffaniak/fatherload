@@ -158,7 +158,7 @@ pub fn body_view_of<'a>(
     let ground = GroundView {
         body: BodyView {
             sun: live.sun_of(id),
-            ..body_view(&body.body, id)
+            ..body_view(&body.body, id, false)
         },
         strip,
         column: u,

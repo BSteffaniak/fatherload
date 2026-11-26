@@ -663,7 +663,7 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 /// The sky's scale height (tiles; 0 airless) and its colour.
 fn atmosphere(ground: &GroundView<'_>) -> (f32, [f32; 3]) {
     let body = &ground.body;
-    let (_, colour) = body.theme.palette();
+    let colour = body.face().air;
     let height = if body.atmosphere > 0.0 {
         (body.atmosphere * body.radius_tiles).clamp(18.0, 220.0) * 0.5
     } else {

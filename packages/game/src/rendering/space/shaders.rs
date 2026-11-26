@@ -43,18 +43,35 @@ pub fn fragment_source(gles: bool, body: &str) -> String {
 }
 
 /// A round body from space (see the module docs).
+///
+/// Wave 13 art-audio: the theme's whole face: land in three tones over a sea level, polar
+/// caps, a drifting cloud deck lit like the ground, glowing cracks, the night side's lights
+/// on the land, gas giants' bands with a storm, and rings seen face on (the plane of flight
+/// is theirs) with the body's shadow across them. Every layer is one or two octaves of value
+/// noise on the turned sphere at whole art pixels, so a body costs a few noise lookups a
+/// pixel whatever it shows.
 pub const PLANET_BODY: &str = r"
 uniform sampler2D texture0;
-// sun direction in the quad (x right, y down), the disc's share of the quad, light floor
+// sun direction in the quad (x right, y down), unused, light floor
 uniform vec4 uSun;
 // atmosphere share of the radius, surface turn (radians), art pixel (uv), seed (0..1)
 uniform vec4 uLook;
-// banded (0/1), atmosphere strength, unused, unused
+// banded (0/1), atmosphere strength, time (s), the quad's half size (radii)
 uniform vec4 uKind;
 uniform vec3 uDark;
 uniform vec3 uMid;
 uniform vec3 uLight;
 uniform vec3 uAtmos;
+// each layer: colour, amount (0: none)
+uniform vec4 uSea;
+uniform vec4 uCloud;
+uniform vec4 uCaps;
+uniform vec4 uLights;
+uniform vec4 uGlow;
+// rings: inner, outer (radii; 0 0 none), feature size (1..4), unused
+uniform vec4 uRing;
+uniform vec3 uRingA;
+uniform vec3 uRingB;
 
 float hash3(vec3 p) {
     p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -73,44 +90,99 @@ float valueNoise(vec3 x) {
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
+vec3 spin(vec3 n, float turn) {
+    float s = sin(turn);
+    float c = cos(turn);
+    return vec3(n.x * c + n.z * s, n.y, n.z * c - n.x * s);
+}
+
 void main() {
     // Whole art pixels: the disc is pixel art at the game's scale.
     vec2 cell = max(uLook.z, 0.0001) * vec2(1.0);
     vec2 uv = (floor(fragTexCoord / cell) + vec2(0.5)) * cell;
     float atm = uLook.x;
-    vec2 p = (uv * 2.0 - vec2(1.0)) * (1.0 + atm);
+    vec2 p = (uv * 2.0 - vec2(1.0)) * uKind.w;
     float d = length(p);
     vec3 sun = normalize(vec3(uSun.x, uSun.y, 0.42));
     vec2 sun2 = normalize(uSun.xy + vec2(0.0001));
     // Ordered dither on the art grid, so the light steps blend like hand-placed pixels.
     vec2 grid = floor(fragTexCoord / cell);
     float dither = mod(grid.x + grid.y * 2.0, 4.0) * 0.25 - 0.375;
+    vec3 seed = vec3(uLook.w * 37.0, uLook.w * 11.0, uLook.w * 23.0);
     if (d <= 1.0) {
         float z = sqrt(max(1.0 - d * d, 0.0));
         vec3 n = vec3(p.x, p.y, z);
-        float s = sin(uLook.y);
-        float c = cos(uLook.y);
-        vec3 turned = vec3(n.x * c + n.z * s, n.y, n.z * c - n.x * s);
-        vec3 seed = vec3(uLook.w * 37.0, uLook.w * 11.0, uLook.w * 23.0);
-        float h;
-        if (uKind.x > 0.5) {
-            // Weather stripes, gently warped.
-            float warp = valueNoise(turned * 3.0 + seed) * 0.35;
-            h = fract(n.y * 3.2 + warp + uLook.w);
-            h = abs(h * 2.0 - 1.0);
-        } else {
-            h = valueNoise(turned * 2.2 + seed) * 0.6 + valueNoise(turned * 5.0 + seed) * 0.3
-                + valueNoise(turned * 11.0 + seed) * 0.1;
-        }
-        h += dither * 0.05;
-        vec3 surface = h < 0.42 ? uDark : (h < 0.62 ? uMid : uLight);
+        vec3 turned = spin(n, uLook.y);
+        float scale = 1.4 + uRing.z * 0.6;
         float lambert = dot(n, sun);
         // Four light steps with a dithered terminator.
         float light = clamp(lambert * 1.3 + 0.12 + dither * 0.12, 0.0, 1.0);
         light = max(floor(light * 4.0 + 0.5) / 4.0, uSun.w);
-        // The night side keeps a cold trace of its colour (readable: a body seen from its dark
-        // side, the Moon from the departure point, still shows its face).
+        vec3 surface;
+        float land = 1.0;
+        if (uKind.x > 0.5) {
+            // Weather bands, gently warped, and one great storm.
+            float warp = valueNoise(turned * 3.0 + seed) * 0.35;
+            float h = fract(n.y * 3.2 + warp + uLook.w);
+            h = abs(h * 2.0 - 1.0) + dither * 0.05;
+            surface = h < 0.42 ? uDark : (h < 0.62 ? uMid : uLight);
+            vec2 eye = vec2(turned.x - 0.35, (n.y - 0.32) * 2.2);
+            float storm = length(eye);
+            if (turned.z > 0.0 && storm < 0.2) {
+                surface = storm < 0.1 ? uLight : uDark;
+            }
+            land = 0.0;
+        } else {
+            float h = valueNoise(turned * scale + seed) * 0.6
+                + valueNoise(turned * scale * 2.3 + seed) * 0.3
+                + valueNoise(turned * scale * 5.0 + seed) * 0.1;
+            h += dither * 0.04;
+            float level = 0.25 + uSea.w * 0.5;
+            if (uSea.w > 0.0 && h < level) {
+                // Sea: darker deep, a lighter shallow fringe along the coast.
+                float depth = (level - h) / max(level, 0.01);
+                surface = depth < 0.08 ? mix(uSea.rgb, uLight, 0.35) : uSea.rgb * (1.0 - depth * 0.35);
+                land = 0.0;
+            } else {
+                float above = uSea.w > 0.0 ? (h - level) / max(1.0 - level, 0.01) * 1.25 : h;
+                surface = above < 0.42 ? uDark : (above < 0.62 ? uMid : uLight);
+            }
+            // Polar caps, ragged at the edge.
+            float pole = abs(n.y) + (valueNoise(turned * 6.0 + seed) - 0.5) * 0.18;
+            if (uCaps.w > 0.0 && pole > 1.0 - uCaps.w) {
+                surface = uCaps.rgb;
+                land = 0.0;
+            }
+        }
         vec3 colour = surface * (vec3(0.17, 0.18, 0.27) + vec3(0.83, 0.82, 0.73) * light);
+        // Glowing cracks: lava, crystal light. They glow brightest on the night side.
+        if (uGlow.w > 0.0) {
+            float ridge = 1.0 - abs(valueNoise(turned * (scale * 3.0) + seed * 1.7) * 2.0 - 1.0);
+            if (ridge > 1.0 - uGlow.w * 0.22) {
+                colour = mix(colour, uGlow.rgb, 0.35 + 0.6 * (1.0 - light));
+            }
+        }
+        // The night side's lights, on the land only.
+        if (uLights.w > 0.0 && land > 0.5 && light < 0.3) {
+            vec3 town = floor(turned * (26.0 + uRing.z * 8.0));
+            float roll = hash3(town + seed * 3.1);
+            if (roll < uLights.w * 0.45) {
+                float glow = (0.3 - light) / 0.3;
+                colour = mix(colour, uLights.rgb, clamp(glow * (0.6 + roll), 0.0, 1.0));
+            }
+        }
+        // The cloud deck, drifting a little faster than the ground turns.
+        if (uCloud.w > 0.0) {
+            vec3 sky = spin(n, uLook.y + uKind.z * 0.004);
+            float c = valueNoise(sky * vec3(3.0, 5.0, 3.0) + seed * 0.7) * 0.65
+                + valueNoise(sky * 8.0 + seed * 1.3) * 0.35;
+            float cut = mix(0.8, 0.4, uCloud.w);
+            if (c > cut) {
+                float lit = max(light, 0.12);
+                float thick = c > cut + 0.07 ? 1.0 : 0.6;
+                colour = mix(colour, uCloud.rgb * (0.25 + 0.75 * lit), 0.85 * thick);
+            }
+        }
         // The atmosphere's rim, brighter on the day side.
         float rim = pow(1.0 - z, 3.0) * uKind.y;
         float day = clamp(dot(normalize(p + vec2(0.0001)), sun2) * 0.5 + 0.6, 0.0, 1.0);
@@ -118,20 +190,38 @@ void main() {
         OUT = vec4(colour, 1.0) * fragColor;
         return;
     }
-    if (atm <= 0.0) {
+    vec4 outside = vec4(0.0);
+    if (atm > 0.0 && d < 1.0 + atm) {
+        float t = (d - 1.0) / atm;
+        float glow = (1.0 - t) * (1.0 - t);
+        float day = clamp(dot(p / d, sun2) * 0.6 + 0.45, 0.08, 1.0);
+        float level = floor((glow * day * uKind.y + dither * 0.12) * 5.0 + 0.5) / 5.0;
+        if (level > 0.0) {
+            outside = vec4(uAtmos, clamp(level, 0.0, 0.9));
+        }
+    }
+    // Rings, face on: lanes and gaps, lit by the star, the body's shadow across the far side.
+    if (uRing.y > uRing.x && d >= uRing.x && d <= uRing.y) {
+        float across = (d - uRing.x) / (uRing.y - uRing.x);
+        float lane = hash3(vec3(floor(across * 14.0), seed.x, 3.0));
+        float fine = hash3(vec3(floor(across * 46.0), seed.y, 5.0));
+        float gap = fract(across * 2.0 + uLook.w);
+        float density = gap < 0.07 ? 0.1 : 0.6 + lane * 0.3 + fine * 0.1;
+        density *= smoothstep(0.0, 0.06, across) * (1.0 - smoothstep(0.9, 1.0, across));
+        float behind = dot(p, sun2);
+        float side = abs(p.x * sun2.y - p.y * sun2.x);
+        float shade = behind < 0.0 && side < 1.0 ? 0.35 : 1.0;
+        float dust = hash3(vec3(grid, 7.0)) * 0.15;
+        vec3 ring = mix(uRingA, uRingB, lane) * (shade * (0.85 + dust));
+        float alpha = clamp(density * 0.9 + dither * 0.05, 0.0, 0.92);
+        if (alpha > 0.04) {
+            outside = vec4(mix(outside.rgb, ring, alpha), max(outside.a, alpha));
+        }
+    }
+    if (outside.a <= 0.0) {
         discard;
     }
-    float t = (d - 1.0) / atm;
-    if (t >= 1.0) {
-        discard;
-    }
-    float glow = (1.0 - t) * (1.0 - t);
-    float day = clamp(dot(p / d, sun2) * 0.6 + 0.45, 0.08, 1.0);
-    float level = floor((glow * day * uKind.y + dither * 0.12) * 5.0 + 0.5) / 5.0;
-    if (level <= 0.0) {
-        discard;
-    }
-    OUT = vec4(uAtmos, clamp(level, 0.0, 0.9)) * fragColor;
+    OUT = outside * fragColor;
 }
 ";
 
@@ -355,7 +445,8 @@ mod tests {
         check_body(
             PLANET_BODY,
             &[
-                "texture0", "uSun", "uLook", "uKind", "uDark", "uMid", "uLight", "uAtmos",
+                "texture0", "uSun", "uLook", "uKind", "uDark", "uMid", "uLight", "uAtmos", "uSea",
+                "uCloud", "uCaps", "uLights", "uGlow", "uRing", "uRingA", "uRingB",
             ],
         );
         check_body(

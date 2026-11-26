@@ -23,9 +23,9 @@ use raylib::prelude::Color;
 use crate::screen_fx::EffectsIntensity;
 
 use super::view::{
-    AsteroidView, BeltView, BlackHoleView, BodyTheme, BodyView, CometView, CraftView, FlightMotion,
-    GroundThing, GroundView, NebulaView, PolarGeometry, PolarStrip, SpaceCamera, SpaceRenderView,
-    StarView, StructureKind, StructureView, WormholeView,
+    AsteroidView, BeltView, BlackHoleView, BodyLook, BodyTheme, BodyView, CometView, CraftView,
+    FlightMotion, GroundThing, GroundView, NebulaView, PolarGeometry, PolarStrip, SpaceCamera,
+    SpaceRenderView, StarView, StructureKind, StructureView, WormholeView,
 };
 
 /// Space sectors' reach round the camera that is gathered (the generator's sectors are 2^22
@@ -50,6 +50,29 @@ pub const fn body_theme(theme: Theme) -> BodyTheme {
     }
 }
 
+/// A generated body's face from orbit (Wave 13 art-audio): its planet theme's registered look
+/// (`PlanetThemeHooks::orbital_look`) or, for a theme without one, its tag's preset; a world
+/// the aliens settled shows their towns' lights on its night side.
+#[must_use]
+pub fn body_look(body: &SpaceBody, settled: bool) -> BodyLook {
+    let theme = fatherload_simulation::place::planet_theme_of(body.theme);
+    let mut look = if matches!(body.theme, Theme::Home) {
+        BodyTheme::Home.look()
+    } else {
+        fatherload_simulation::planet::hooks::hooks(theme)
+            .orbital_look()
+            .map_or_else(
+                || body_theme(body.theme).look(),
+                |look| BodyLook::from_theme(&look),
+            )
+    };
+    if settled {
+        let (colour, density) = look.lights.unwrap_or((Color::new(255, 214, 140, 255), 0.0));
+        look.lights = Some((colour, density.max(0.18)));
+    }
+    look
+}
+
 /// The air over a body as a share of its radius (0: airless).
 #[must_use]
 pub const fn atmosphere_share(atmosphere: Atmosphere) -> f32 {
@@ -61,14 +84,32 @@ pub const fn atmosphere_share(atmosphere: Atmosphere) -> f32 {
     }
 }
 
+/// Whether aliens settled `body` (its night side shows their towns' lights).
+fn settled(seed: u64, sector: space::SpaceSector, system: u8, body: &SpaceBody) -> bool {
+    fatherload_simulation::alien::atlas::folk_of_body(
+        seed,
+        space::SpaceBodyId {
+            sector,
+            system,
+            body: body.index,
+        },
+        body,
+    ) != 0
+}
+
 /// The renderer's view of a generated body.
 #[must_use]
-pub const fn body_view(body: &SpaceBody, id: u64) -> BodyView {
+pub fn body_view(body: &SpaceBody, id: u64, settled: bool) -> BodyView {
+    let radius = (body.radius as f32).max(1.0);
     BodyView {
         id,
         centre: body.centre.pos(),
         radius_tiles: body.radius as f32,
         theme: body_theme(body.theme),
+        look: Some(body_look(body, settled)),
+        ring: body
+            .ring
+            .map(|ring| (ring.inner as f32 / radius, ring.outer as f32 / radius)),
         atmosphere: atmosphere_share(body.atmosphere),
         spin: 0.0,
         sun: None,
@@ -248,7 +289,8 @@ impl LiveSpace {
                         body: body.index,
                     }
                     .mix();
-                    live.bodies.push(body_view(body, id));
+                    let settled = settled(seed, sector.coords, system.index, body);
+                    live.bodies.push(body_view(body, id, settled));
                     // A ring world's great ring (and a ringed gas giant's): a dense belt of
                     // ice and rock round the body (Wave 13 planets-d).
                     if let Some(ring) = body.ring {

@@ -274,6 +274,12 @@ pub trait PlanetThemeHooks: Sync {
             brightness: 5,
         }
     }
+
+    /// Its face from orbit (Wave 13 art-audio): the look registered for its id in
+    /// [`super::look::ORBITAL_LOOKS`]; `None` draws it from the space generator's tag.
+    fn orbital_look(&self) -> Option<super::look::OrbitalLook> {
+        super::look::registered(self.id())
+    }
 }
 
 /// Weather on a world whose theme gives no table: mostly clear, some storms, an aurora.

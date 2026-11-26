@@ -91,10 +91,12 @@ pub enum BodyTheme {
     GasGiant,
     /// A dead world with ruins.
     Dead,
+    /// The home world: green and brown land, blue seas, white cloud, its towns' lights.
+    Home,
 }
 
 impl BodyTheme {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Barren,
         Self::Ice,
         Self::Desert,
@@ -106,6 +108,7 @@ impl BodyTheme {
         Self::Machine,
         Self::GasGiant,
         Self::Dead,
+        Self::Home,
     ];
 
     /// The surface's three band colours (dark, mid, light) and its atmosphere's colour.
@@ -129,13 +132,187 @@ impl BodyTheme {
             Self::Machine => ([STEEL_DARK, STEEL, STEEL_LIGHT], TEAL),
             Self::GasGiant => ([COPPER, GOLD, CREAM], AMBER),
             Self::Dead => ([SOIL, LOAM, SLATE], MIST),
+            Self::Home => ([PINE, MOSS, CLAY], SKY),
         }
     }
 
-    /// Whether the surface reads as stripes of weather (gas giants) instead of land.
+    /// The look from orbit of a world with no theme look of its own (Wave 13 art-audio): the
+    /// space generator's tag decides it (a theme's registered look,
+    /// `planet::look::ORBITAL_LOOKS`, comes first; see [`super::live::body_view`]).
     #[must_use]
-    pub const fn banded(self) -> bool {
-        matches!(self, Self::GasGiant)
+    #[allow(clippy::too_many_lines, reason = "one preset per tag, in one table")]
+    pub const fn look(self) -> BodyLook {
+        use palette::{
+            AMBER, COPPER, CREAM, LAVENDER, MIST, MOSS, OCEAN, PINE, PINK, SAND, SKY_LIGHT, SLATE,
+            SOIL, STEEL, STEEL_DARK, STEEL_LIGHT, TEAL,
+        };
+        let (land, air) = self.palette();
+        let plain = BodyLook {
+            land,
+            air,
+            sea: None,
+            clouds: None,
+            caps: None,
+            lights: None,
+            glow: None,
+            bands: false,
+            ring: None,
+            detail: 2.0,
+        };
+        let warm = Color::new(255, 214, 140, 255);
+        match self {
+            Self::Barren => BodyLook {
+                detail: 3.0,
+                ..plain
+            },
+            Self::Ice => BodyLook {
+                sea: Some((Color::new(70, 118, 150, 255), 0.25)),
+                clouds: Some((Color::new(246, 250, 255, 255), 0.25)),
+                caps: Some((Color::new(250, 252, 255, 255), 0.5)),
+                ..plain
+            },
+            Self::Desert => BodyLook {
+                clouds: Some((Color::new(226, 196, 150, 255), 0.15)),
+                caps: Some((CREAM, 0.08)),
+                ..plain
+            },
+            Self::Jungle => BodyLook {
+                sea: Some((Color::new(28, 84, 96, 255), 0.3)),
+                clouds: Some((Color::new(236, 244, 236, 255), 0.5)),
+                detail: 3.0,
+                ..plain
+            },
+            Self::Ocean => BodyLook {
+                land: [PINE, SAND, CREAM],
+                sea: Some((OCEAN, 0.8)),
+                clouds: Some((Color::new(240, 246, 252, 255), 0.38)),
+                caps: Some((SKY_LIGHT, 0.12)),
+                detail: 4.0,
+                ..plain
+            },
+            Self::Volcanic => BodyLook {
+                land: [
+                    Color::new(30, 24, 28, 255),
+                    Color::new(72, 40, 40, 255),
+                    SLATE,
+                ],
+                clouds: Some((Color::new(96, 88, 92, 255), 0.3)),
+                glow: Some((Color::new(255, 120, 40, 255), 0.32)),
+                detail: 3.0,
+                ..plain
+            },
+            Self::Crystal => BodyLook {
+                clouds: Some((Color::new(250, 220, 250, 255), 0.14)),
+                glow: Some((Color::new(140, 255, 240, 255), 0.22)),
+                detail: 3.0,
+                ..plain
+            },
+            Self::Fungal => BodyLook {
+                clouds: Some((PINK, 0.3)),
+                glow: Some((Color::new(150, 255, 190, 255), 0.18)),
+                lights: Some((LAVENDER, 0.06)),
+                ..plain
+            },
+            Self::Machine => BodyLook {
+                land: [STEEL_DARK, STEEL, STEEL_LIGHT],
+                lights: Some((TEAL, 0.55)),
+                glow: Some((TEAL, 0.08)),
+                detail: 4.0,
+                ..plain
+            },
+            Self::GasGiant => BodyLook {
+                bands: true,
+                lights: Some((warm, 0.05)),
+                ring: Some(RingTint {
+                    colours: [SAND, COPPER],
+                    decorative: Some((1.4, 1.95)),
+                }),
+                ..plain
+            },
+            Self::Dead => BodyLook {
+                land: [SOIL, Color::new(92, 78, 70, 255), SLATE],
+                clouds: Some((MIST, 0.1)),
+                lights: Some((AMBER, 0.02)),
+                detail: 3.0,
+                ..plain
+            },
+            Self::Home => BodyLook {
+                land: [PINE, MOSS, Color::new(170, 140, 96, 255)],
+                sea: Some((Color::new(30, 76, 150, 255), 0.55)),
+                clouds: Some((Color::new(244, 248, 252, 255), 0.42)),
+                caps: Some((Color::new(244, 248, 252, 255), 0.14)),
+                lights: Some((warm, 0.3)),
+                detail: 2.0,
+                ..plain
+            },
+        }
+    }
+}
+
+/// A ring system's colours, and where decorative rings lie (radii from the centre) round a
+/// body the generator gave none.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RingTint {
+    pub colours: [Color; 2],
+    pub decorative: Option<(f32, f32)>,
+}
+
+/// A body's face from orbit, as the planet shader draws it (Wave 13 art-audio): land in
+/// three tones, and each optional layer's colour and amount (0..1).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BodyLook {
+    pub land: [Color; 3],
+    pub air: Color,
+    /// Seas: colour, share of the surface.
+    pub sea: Option<(Color, f32)>,
+    /// Cloud decks: colour, cover.
+    pub clouds: Option<(Color, f32)>,
+    /// Polar caps: colour, reach toward the equator.
+    pub caps: Option<(Color, f32)>,
+    /// The night side's lights: colour, density.
+    pub lights: Option<(Color, f32)>,
+    /// Glowing cracks: colour, amount.
+    pub glow: Option<(Color, f32)>,
+    /// Weather bands instead of land.
+    pub bands: bool,
+    pub ring: Option<RingTint>,
+    /// Feature size: 1 (continents) to 4 (fine ground).
+    pub detail: f32,
+}
+
+impl BodyLook {
+    /// A theme's registered look (`planet::look`) for the renderer.
+    #[must_use]
+    pub fn from_theme(look: &fatherload_simulation::planet::look::OrbitalLook) -> Self {
+        let rgb = |[r, g, b]: [u8; 3]| Color::new(r, g, b, 255);
+        let layer = |layer: Option<fatherload_simulation::planet::look::Layer>| {
+            layer.map(|layer| {
+                (
+                    rgb(layer.colour),
+                    f32::from(layer.permille.min(1_000)) / 1_000.0,
+                )
+            })
+        };
+        Self {
+            land: look.land.map(rgb),
+            air: rgb(look.air),
+            sea: layer(look.sea),
+            clouds: layer(look.clouds),
+            caps: layer(look.caps),
+            lights: layer(look.lights),
+            glow: layer(look.glow),
+            bands: look.bands,
+            ring: look.ring.map(|ring| RingTint {
+                colours: ring.colours.map(rgb),
+                decorative: (ring.outer_permille > ring.inner_permille).then(|| {
+                    (
+                        f32::from(ring.inner_permille) / 1_000.0,
+                        f32::from(ring.outer_permille) / 1_000.0,
+                    )
+                }),
+            }),
+            detail: f32::from(look.detail.clamp(1, 4)),
+        }
     }
 }
 
@@ -148,6 +325,12 @@ pub struct BodyView {
     /// Surface radius (tiles). Landable bodies are 400 tiles or more.
     pub radius_tiles: f32,
     pub theme: BodyTheme,
+    /// Its face from orbit: its theme's registered look, or `None` for the theme tag's
+    /// preset ([`BodyTheme::look`]).
+    pub look: Option<BodyLook>,
+    /// Its rings (inner and outer radius as multiples of the body's), if the generator gave
+    /// it any.
+    pub ring: Option<(f32, f32)>,
     /// Atmosphere thickness as a share of the radius (0: airless).
     pub atmosphere: f32,
     /// The surface's turn (radians): where column 0 is. Turns the surface bands with it.
@@ -158,6 +341,14 @@ pub struct BodyView {
     pub sun: Option<f32>,
     /// Seeds its surface pattern.
     pub seed: u32,
+}
+
+impl BodyView {
+    /// Its face from orbit (its own look, else its theme tag's).
+    #[must_use]
+    pub fn face(&self) -> BodyLook {
+        self.look.unwrap_or_else(|| self.theme.look())
+    }
 }
 
 /// An asteroid belt: a ring of rocks around `centre` (a star).

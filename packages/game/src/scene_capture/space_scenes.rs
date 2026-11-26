@@ -67,6 +67,16 @@ pub const SPACE_SCENES: &[Scene] = &[
         setup: |stage| stage.space_view("space_planet_gallery"),
     },
     Scene {
+        name: "space_orbit_themes",
+        summary: "Wave 13: every theme's face from orbit: seas, clouds, caps, lava and crystal glow, gas bands, rings",
+        setup: |stage| stage.space_view("space_orbit_themes"),
+    },
+    Scene {
+        name: "space_orbit_night",
+        summary: "Wave 13: night sides from orbit: a settled jungle world's town lights, a volcanic world's lava, home",
+        setup: |stage| stage.space_view("space_orbit_night"),
+    },
+    Scene {
         name: "space_approach_moon",
         summary: "Wave 11: approaching a small moon (radius 400) from 600 tiles up",
         setup: |stage| stage.space_view("space_approach_moon"),
