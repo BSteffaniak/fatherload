@@ -36,6 +36,7 @@ use fatherload_simulation::terrain::{Terrain, TilePosition};
 mod coarse;
 mod fine;
 
+#[cfg(not(target_os = "emscripten"))]
 pub use coarse::paint_whole_frames;
 
 use super::{

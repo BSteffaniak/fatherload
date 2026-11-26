@@ -32,7 +32,8 @@ const TEXELS_PER_CHECK: u32 = 32;
 static PAINT_WHOLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Makes every frame paint the whole coarse map (`true`: scene capture) or keep to
-/// [`FRAME_BUDGET`].
+/// [`FRAME_BUDGET`] (desktop only: the browser has no scene capture).
+#[cfg(not(target_os = "emscripten"))]
 pub fn paint_whole_frames(whole: bool) {
     PAINT_WHOLE.store(whole, std::sync::atomic::Ordering::Relaxed);
 }
