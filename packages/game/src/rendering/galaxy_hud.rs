@@ -36,7 +36,7 @@ use crate::{
     render_snapshot::ViewSnapshot,
     shell::galaxy::{
         CHOICE_ROWS, GalaxyRow, chapter_page, chapter_title, galaxy_rows, goal_line, lead_entry,
-        log_entry, stats_words,
+        log_entry, site_words, stats_words,
     },
 };
 
@@ -325,8 +325,12 @@ pub(super) fn draw_goal_strip(
     if world.hostiles().engaged(view.player_id).is_some() {
         return 0;
     }
-    let Some((title, line)) = goal_line(world) else {
-        return 0;
+    // The ground's compass first: the relic (or a lead's ruin) on this world, then the goal.
+    let (title, line) = match (goal_line(world), site_words(world, view.player_id)) {
+        (Some((title, line)), Some(site)) => (title, format!("{site}. {line}")),
+        (Some(goal), None) => goal,
+        (None, Some(site)) => ("Discovery log".to_owned(), site),
+        (None, None) => return 0,
     };
     let story = world.galaxy_story();
     let colour = chapter_colour(story.chapter);

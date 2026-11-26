@@ -181,20 +181,16 @@ pub(super) fn draw_view_hud(
         )
     {
         let middle = (rect.x + rect.width * 0.5) as i32;
-        let wide = rect.width > 520.0;
-        let y = if wide {
-            rect.y as i32 + 4
+        // Between the stats panel and the credits panel when there is room for a useful
+        // line (the credits panel is never wider than the stats one), else under them.
+        let between = rect.width as i32 - 2 * (stats_panel_width(rect.width) + 8);
+        let (y, max_width) = if between >= 220 {
+            (rect.y as i32 + 4, between.min(420))
         } else {
-            rect.y as i32 + 70
+            (rect.y as i32 + 70, (rect.width as i32 - 16).min(420))
         };
-        let _ = super::galaxy_hud::draw_goal_strip(
-            draw,
-            view,
-            snapshot.world,
-            middle,
-            y,
-            (rect.width as i32 - 16).min(420),
-        );
+        let _ =
+            super::galaxy_hud::draw_goal_strip(draw, view, snapshot.world, middle, y, max_width);
     }
 
     // Stats: hull, fuel, cargo, block hopper.

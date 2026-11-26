@@ -212,6 +212,7 @@ pub use body_flight::{
 #[cfg(test)]
 mod frontier_tests;
 mod galaxy_story;
+pub use galaxy_story::SiteBearing;
 #[cfg(test)]
 mod galaxy_story_tests;
 #[cfg(test)]

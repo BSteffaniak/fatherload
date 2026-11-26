@@ -217,6 +217,46 @@ impl WorldState {
             .collect()
     }
 
+    /// Where the site a player on a world is looking for lies from its actor (outside the
+    /// tick, for the HUD's bearing): the current goal's relic if it is on this world, else the
+    /// nearest open lead's ruin mark here. A world's strip is thousands of columns round, so
+    /// without it a relic is found only by luck.
+    #[must_use]
+    pub fn galaxy_site_bearing(&self, player_id: PlayerId) -> Option<SiteBearing> {
+        let Place::OnBody(BodyId::Space(body)) = self.place_of(player_id) else {
+            return None;
+        };
+        let store = StoreKey::Body(body);
+        let terrain = self.store_terrain(store)?;
+        let ground = terrain.planet_ground()?;
+        let (x, y, _) = self.store_actor_position(player_id)?;
+        let here = terrain.frame().tile_at(x, y);
+        let width = ground.strip_width();
+        let bearing = |site: RelicSite, story: bool| {
+            let column = i32::try_from(site.column).ok()?;
+            let row = ground.surface_row(column) + i32::from(site.rows);
+            let mut columns = (column - here.x).rem_euclid(width.max(1));
+            if columns > width / 2 {
+                columns -= width;
+            }
+            Some(SiteBearing {
+                columns,
+                rows: row - here.y,
+                buried: site.rows > 0,
+                story,
+            })
+        };
+        if let Some((on, site, _)) = self.galaxy_relic()
+            && on == body
+        {
+            return bearing(site, true);
+        }
+        self.galaxy_lead_sites(body)
+            .into_iter()
+            .filter_map(|site| bearing(site, false))
+            .min_by_key(|found| (found.columns.unsigned_abs(), found.rows.unsigned_abs()))
+    }
+
     /// Whether the Harbour's space is calm at `pos` (no roaming fights near its gate once the
     /// crew is on its way there).
     #[must_use]
@@ -364,6 +404,16 @@ impl WorldState {
         let now = self.world_millis();
         if !self.galaxy_story.begun {
             if !self.heart.space_unlocked {
+                return;
+            }
+            // After the Heart wakes, the road opens when a rig of the crew first lifts off, so
+            // its first card never covers the Descent's own ending in the same tick (a world
+            // whose sky was opened another way, as test mode's grant, opens it at once).
+            let lifted_off = self
+                .players
+                .iter()
+                .any(|(id, player)| player.flight.away() || self.place_of(*id) != Place::HOME);
+            if self.heart.cable_lit_millis.is_some() && !lifted_off {
                 return;
             }
             self.begin_galaxy_story(now, output);
@@ -1144,6 +1194,21 @@ impl WorldState {
             Err(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
+}
+
+/// Where a sought site lies from a player's actor on a world
+/// ([`WorldState::galaxy_site_bearing`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SiteBearing {
+    /// Columns to go (positive: the strip's increasing columns, to the right of an upright
+    /// actor; the shorter way round).
+    pub columns: i32,
+    /// Rows to go (positive: down, under the actor).
+    pub rows: i32,
+    /// Whether the site is under the surface (dug down to).
+    pub buried: bool,
+    /// Whether it is the story's relic (else a lead's ruin mark).
+    pub story: bool,
 }
 
 /// From this chapter on (the long dark) the crew knows where the Harbour is.

@@ -125,6 +125,59 @@ pub fn goal_line(world: &WorldState) -> Option<(String, String)> {
     Some((chapter_title(story.chapter), text))
 }
 
+/// Where the site the seat is looking for on this world lies, in words (the story's relic,
+/// else the nearest open lead's ruin mark): "312 columns right to the foundry door, then dig
+/// 30 rows down". A world's strip is thousands of columns round; this is the ground's compass.
+#[must_use]
+pub fn site_words(world: &WorldState, player: PlayerId) -> Option<String> {
+    let bearing = world.galaxy_site_bearing(player)?;
+    let name = if bearing.story {
+        world
+            .galaxy_relic()
+            .map_or("the relic", |(_, _, name)| name)
+            .to_owned()
+    } else {
+        "the ruin's mark".to_owned()
+    };
+    let (above, below) = galaxy_story::RELIC_REACH_ROWS;
+    // A hold counts from further out than a find.
+    let holding = bearing.story
+        && world
+            .galaxy_story()
+            .current_goal()
+            .is_some_and(|goal| matches!(goal.goal, Goal::Hold { .. }));
+    let reach = if holding {
+        galaxy_story::HOLD_REACH_COLUMNS
+    } else {
+        galaxy_story::RELIC_REACH_COLUMNS
+    };
+    let near = bearing.columns.abs() <= reach;
+    let plural = |count: i32, one: &str, many: &str| {
+        if count.abs() == 1 {
+            format!("1 {one}")
+        } else {
+            format!("{} {many}", count.abs())
+        }
+    };
+    Some(if !near {
+        let side = if bearing.columns > 0 { "right" } else { "left" };
+        let mut words = format!(
+            "{} {side} to {name}",
+            plural(bearing.columns, "column", "columns")
+        );
+        if bearing.buried {
+            words.push_str(", then dig down");
+        }
+        words
+    } else if bearing.rows > below {
+        format!("Dig {} down to {name}", plural(bearing.rows, "row", "rows"))
+    } else if bearing.rows < -above {
+        format!("{} up to {name}", plural(bearing.rows, "row", "rows"))
+    } else {
+        format!("At {name}")
+    })
+}
+
 /// A chapter's page: its intro, its goals (ticked off) and, once done, its outro.
 #[must_use]
 pub fn chapter_page(world: &WorldState, chapter: u8) -> String {

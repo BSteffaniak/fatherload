@@ -210,6 +210,19 @@ fn waymark(stage: &mut SceneStage<'_>) {
     stage.settle(2);
 }
 
+/// On the foundry's world, short of its buried door: the ground's compass on the goal line
+/// ("40 columns right to the foundry door, then dig down").
+fn foundry_compass(stage: &mut SceneStage<'_>) {
+    stage.play(1, |world, seats| {
+        road(world, seats[0].player, 2, 2);
+        let _ = world.stage_story_warp(seats[0].player);
+        beside_relic(world, seats[0].player, -40);
+    });
+    stage.settle(30);
+    stage.seat(0).message.clear();
+    stage.settle(2);
+}
+
 /// The lamp-key held while the Bloom drops in: the raid round the waymark, the hold's bar.
 fn hold(stage: &mut SceneStage<'_>) {
     stage.play(1, |world, seats| {
@@ -391,6 +404,11 @@ pub const GALAXY_SCENES: &[Scene] = &[
         name: "galaxy_waymark",
         summary: "The first builders' waymark on its world: the pylon's lamp, the goal on the HUD",
         setup: waymark,
+    },
+    Scene {
+        name: "galaxy_foundry_compass",
+        summary: "Short of the foundry's buried door: the goal line's compass to it on round ground",
+        setup: foundry_compass,
     },
     Scene {
         name: "galaxy_hold",
