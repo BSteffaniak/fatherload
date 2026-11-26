@@ -184,10 +184,16 @@ fn tab(draw: &mut RaylibDrawHandle<'_>, area: Rectangle, label: &str, chosen: bo
 fn draw_categories(draw: &mut RaylibDrawHandle<'_>, layout: &AtlasLayout, atlas: &SeatAtlas) {
     let searching = !atlas.search.trim().is_empty();
     for (category, area) in AtlasCategory::ALL.iter().zip(&layout.categories) {
+        let title =
+            if ui_kit::text_width(category.title(), TextStyle::Bold) + 4 <= area.width as i32 {
+                category.title()
+            } else {
+                category.short_title()
+            };
         tab(
             draw,
             *area,
-            category.title(),
+            title,
             *category == atlas.category && !searching,
         );
         pointer::record_row(*area, *area, AtlasHit::Category(category.index()).encode());
@@ -399,7 +405,7 @@ fn draw_preview(
     }
     let _ = seat;
     // The caption: what this is.
-    let caption = format!("LIVE \u{b7} {}", destination.kind.name().to_uppercase());
+    let caption = format!("LIVE - {}", destination.kind.name().to_uppercase());
     let width = ui_kit::text_width(&caption, TextStyle::Body) + 6;
     draw.draw_rectangle(
         inner.x as i32 + inner.width as i32 - width - 2,
@@ -451,12 +457,19 @@ fn draw_tile_preview(
         .max(area.width / tex_width)
         .max(area.height / tex_height);
     let (crop_width, crop_height) = (area.width / scale, area.height / scale);
+    // Over open sky the arrival sits high, so the ground under it fills the picture.
+    let lift = if tile.backdrop == Backdrop::Underground {
+        0.0
+    } else {
+        crop_height * 0.22
+    };
     let focus = (
         ((tile.target.x - tile.origin.x) * TILE_ART + TILE_ART / 2) as f32,
         ((tile.target.y - tile.origin.y) * TILE_ART + TILE_ART / 2) as f32,
     );
+    let view_y = focus.1 + lift;
     let source_x = (focus.0 - crop_width / 2.0).clamp(0.0, (tex_width - crop_width).max(0.0));
-    let source_y = (focus.1 - crop_height / 2.0).clamp(0.0, (tex_height - crop_height).max(0.0));
+    let source_y = (view_y - crop_height / 2.0).clamp(0.0, (tex_height - crop_height).max(0.0));
     draw.draw_texture_pro(
         texture,
         Rectangle::new(source_x, source_y, crop_width, crop_height),
@@ -846,9 +859,19 @@ fn draw_map(
     } else {
         0.0
     };
+    // A line for the map's title over it.
+    let title_room = 11.0;
+    let (width, height) = if height > inner.height - title_room {
+        (
+            width * (inner.height - title_room) / height,
+            inner.height - title_room,
+        )
+    } else {
+        (width, height)
+    };
     let picture = Rectangle::new(
         (inner.x + (inner.width - width - label_room) / 2.0).floor(),
-        (inner.y + (inner.height - height) / 2.0).floor(),
+        (inner.y + title_room + (inner.height - title_room - height) / 2.0).floor(),
         width.floor(),
         height.floor(),
     );
@@ -926,6 +949,7 @@ fn draw_map(
         }
         MapKind::Galaxy => {
             draw.draw_rectangle_rec(picture, Color::new(6, 8, 18, 255));
+            ui_kit::begin_clip(picture);
             if let Some(found) = pictures.previews.galaxy(seat) {
                 for ((u, v), colour, name, planets) in &found.systems {
                     let (x, y) = to_screen((*u, *v));
@@ -951,6 +975,7 @@ fn draw_map(
             }
             let (x, y) = to_screen(map.galaxy.uv_of(SpaceTile::of_pos(atlas.origin.space)));
             draw.draw_rectangle(x as i32 - 1, y as i32 - 1, 3, 3, PINK);
+            ui_kit::end_clip();
         }
     }
     // The cursor: a crosshair.

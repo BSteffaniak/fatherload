@@ -136,10 +136,14 @@ impl SeatAtlas {
         if self.map.is_some() {
             return Vec::new();
         }
-        [-1, 1]
+        let mut indices: Vec<usize> = [-1, 1]
             .into_iter()
             .filter_map(|step| self.same_kind(step))
             .filter(|index| *index != self.selected)
+            .collect();
+        indices.dedup();
+        indices
+            .into_iter()
             .filter_map(|index| self.shown.get(index))
             .collect()
     }
@@ -349,7 +353,7 @@ fn snap_to_body(
     pos: fatherload_simulation::position::WorldPos,
 ) -> Destination {
     let galaxy = fatherload_simulation::space::Space::shared(world.world_seed());
-    let reach = map.radius / 40;
+    let reach = map.radius / 16;
     let tile = SpaceTile::of_pos(pos);
     if let Some((reference, _)) = galaxy.systems_near(tile, reach).first()
         && let Some(system) = galaxy.system(*reference)
@@ -359,9 +363,9 @@ fn snap_to_body(
         spot.name.clone_from(&system.name);
         spot.kind = DestinationKind::StarSystem;
         spot.subtitle = format!(
-            "{} \u{b7} {} planets",
+            "{} - {}",
             system.class.name(),
-            system.planet_count()
+            index::planets_text(system.planet_count())
         );
         spot.target = AtlasTarget::Space {
             pos: system.centre.pos(),

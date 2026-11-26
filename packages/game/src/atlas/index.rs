@@ -78,6 +78,21 @@ impl AtlasCategory {
         }
     }
 
+    /// A shorter title for narrow tabs.
+    #[must_use]
+    pub const fn short_title(self) -> &'static str {
+        match self {
+            Self::Depth => "Depth",
+            Self::Places => "Places",
+            Self::Bosses => "Bosses",
+            Self::Settlements => "Towns",
+            Self::Space => "Space",
+            Self::Players => "Crew",
+            Self::Bookmarks => "Marks",
+            Self::Recent => "Recent",
+        }
+    }
+
     #[must_use]
     pub fn index(self) -> usize {
         Self::ALL
@@ -507,7 +522,7 @@ pub fn depth_spot(world: &WorldState, tile: TilePosition) -> Destination {
         (
             format!("{} m in {}", thousands(tile.y.into()), stratum.name()),
             format!(
-                "Descent {} \u{b7} {}",
+                "Descent {} - {}",
                 stratum.descent().numeral(),
                 stratum.descent().name()
             ),
@@ -701,7 +716,7 @@ fn depth_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Desti
         let mut destination = Destination::new(
             DestinationKind::Descent,
             AtlasCategory::Depth,
-            format!("Descent {} \u{b7} {}", descent.numeral(), descent.name()),
+            format!("Descent {} - {}", descent.numeral(), descent.name()),
             format!("{} strata", descent.strata().count()),
             AtlasTarget::Home(TilePosition {
                 x: HOME_COLUMN,
@@ -737,7 +752,7 @@ fn depth_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Desti
             DestinationKind::Stratum,
             AtlasCategory::Depth,
             stratum.name(),
-            format!("Descent {} \u{b7} {}", descent.numeral(), descent.name()),
+            format!("Descent {} - {}", descent.numeral(), descent.name()),
             AtlasTarget::Home(TilePosition {
                 x: HOME_COLUMN,
                 y: row + 2,
@@ -879,7 +894,7 @@ fn place_destinations(
                         DestinationKind::Outpost,
                         AtlasCategory::Places,
                         format!("Outpost {}", descent.numeral()),
-                        format!("{} \u{b7} {}", descent.name(), hall.stratum.name()),
+                        format!("{} - {}", descent.name(), hall.stratum.name()),
                         AtlasTarget::Home(TilePosition {
                             x: i32::midpoint(hall.bounds.min.x, hall.bounds.max.x),
                             y: hall.bounds.max.y - 2,
@@ -952,11 +967,7 @@ fn boss_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destin
                 DestinationKind::GateBoss,
                 AtlasCategory::Bosses,
                 gate.boss.name(),
-                format!(
-                    "Gate of Descent {} \u{b7} {}",
-                    descent.numeral(),
-                    descent.name()
-                ),
+                format!("Gate of Descent {} - {}", descent.numeral(), descent.name()),
                 AtlasTarget::Home(TilePosition {
                     x: i32::midpoint(chamber.bounds.min.x, chamber.bounds.max.x),
                     y: chamber.bounds.max.y - 2,
@@ -994,7 +1005,7 @@ fn boss_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<Destin
                 DestinationKind::ThemeBoss,
                 AtlasCategory::Bosses,
                 boss.name,
-                format!("{} world {world_name}", capitalised(boss.world.name())),
+                format!("Lair on {world_name} ({})", boss.world.name()),
                 AtlasTarget::Body { body, column: 0 },
             )
             .fact("Theme", boss.world.name())
@@ -1044,7 +1055,7 @@ fn settlement_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<
                 AtlasCategory::Settlements,
                 place.name(),
                 format!(
-                    "Descent {} \u{b7} {}",
+                    "Descent {} - {}",
                     stratum.descent().numeral(),
                     stratum.name()
                 ),
@@ -1113,6 +1124,16 @@ fn settlement_destinations(world: &WorldState, settings: &WorldSettings) -> Vec<
         }
     }
     out
+}
+
+/// "1 planet", "4 planets".
+#[must_use]
+pub fn planets_text(count: usize) -> String {
+    if count == 1 {
+        "1 planet".to_owned()
+    } else {
+        format!("{count} planets")
+    }
 }
 
 fn gravity_text(milli_g: u16) -> String {
@@ -1184,9 +1205,9 @@ fn space_destinations(world: &WorldState) -> Vec<Destination> {
                 AtlasCategory::Space,
                 system.name.clone(),
                 format!(
-                    "{} \u{b7} {} planets",
+                    "{} - {}",
                     capitalised(system.class.name()),
-                    system.planet_count()
+                    planets_text(system.planet_count())
                 ),
                 AtlasTarget::Space {
                     pos: system.centre.pos(),
@@ -1306,11 +1327,10 @@ fn space_destinations(world: &WorldState) -> Vec<Destination> {
             );
         }
     }
-    // Nebulae overlap their neighbours' lists: keep each once.
-    let mut nebulae = std::collections::BTreeSet::new();
-    out.retain(|destination| {
-        destination.kind != DestinationKind::Nebula || nebulae.insert(destination.name.clone())
-    });
+    // Nebulae overlap their neighbours' lists, and a theme's nearest world may circle home:
+    // keep each place once.
+    let mut listed = std::collections::BTreeSet::new();
+    out.retain(|destination| listed.insert(destination.target.key()));
     out
 }
 
@@ -1330,7 +1350,7 @@ fn planet_destination(
         AtlasCategory::Space,
         name,
         format!(
-            "{} {} \u{b7} {}",
+            "{} {} - {}",
             capitalised(body.theme.name()),
             body.kind.name(),
             system.name
@@ -1343,7 +1363,7 @@ fn planet_destination(
     .fact("Theme", body.theme.name())
     .fact("Gravity", gravity_text(body.gravity_milli_g))
     .fact("Air", body.atmosphere.name())
-    .fact("Temperature", format!("{} \u{b0}C", body.temperature_c))
+    .fact("Temperature", format!("{} C", body.temperature_c))
     .fact("Radius", format!("{} tiles", thousands(body.radius.into())));
     if let Some(boss) = hunt::THEME_BOSSES
         .iter()
@@ -1402,7 +1422,7 @@ mod tests {
     fn categories_step_round_the_side() {
         assert_eq!(AtlasCategory::Depth.step(-1), AtlasCategory::Recent);
         assert_eq!(AtlasCategory::Recent.step(1), AtlasCategory::Depth);
-        assert_eq!(AtlasCategory::Places.step(2), AtlasCategory::Space);
+        assert_eq!(AtlasCategory::Places.step(2), AtlasCategory::Settlements);
     }
 
     #[test]

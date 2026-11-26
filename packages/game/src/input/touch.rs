@@ -216,7 +216,9 @@ pub struct TouchContext {
     pub combat: bool,
     /// Pirates demand tribute: PAY shows.
     pub pay: bool,
-    /// A test-mode world (Wave 14): the ATLAS button shows in the top row.
+    /// Test mode (Wave 14). In play: the ATLAS button shows in the top row. In a menu: the
+    /// menu is the Atlas, which has its own Back, tabs and buttons, so the menu cluster stays
+    /// off it.
     pub atlas: bool,
 }
 
@@ -496,6 +498,8 @@ impl TouchLayout {
                     .controls
                     .push((TouchControl::Back, cluster.place(SIDE)));
             }
+            // The Atlas taps its own buttons (Wave 14).
+            TouchMode::Menu if context.atlas => {}
             TouchMode::Menu => {
                 // Rows are tapped where they are; what is left is backing out and stepping
                 // a row's value or tab left and right. Kept small: they sit over the dialog.

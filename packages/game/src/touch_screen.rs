@@ -178,7 +178,7 @@ impl TouchDevice {
         let waiting_charges = view.map_or(0, |view| world.waiting_remote_charges(view.player_id));
         self.context = touch_context(shell, view, waiting_charges);
         // The ATLAS button (Wave 14) shows in a test-mode world's play.
-        self.context.atlas = world.is_test_mode() && self.context.mode == TouchMode::Play;
+        self.context.atlas = atlas_touch(shell, world, self.context.mode);
     }
 
     /// Hands this frame's controls to rendering while touch is the first seat's device.
@@ -252,7 +252,7 @@ pub fn publish_staged(
     let overlay = shell.prompt_device(0).is_touch().then(|| {
         let waiting = seat_view.map_or(0, |seat| world.waiting_remote_charges(seat.player_id));
         let mut context = touch_context(shell, seat_view, waiting);
-        context.atlas = world.is_test_mode() && context.mode == TouchMode::Play;
+        context.atlas = atlas_touch(shell, world, context.mode);
         TouchOverlay {
             layout: TouchLayout::compute(
                 touch_screen(screen, [0.0; 4]),
@@ -295,6 +295,20 @@ fn touch_screen(screen: ScreenSize, insets: [f32; 4]) -> TouchScreen {
         points_per_ui_pixel: ui_pixel / density,
         unit,
     }
+}
+
+/// The touch controls' Atlas flag (Wave 14): its button in a test-mode world's play, or the
+/// first seat's Atlas open (it brings its own buttons).
+fn atlas_touch(shell: &ShellState, world: &WorldState, mode: TouchMode) -> bool {
+    world.is_test_mode()
+        && match mode {
+            TouchMode::Play => true,
+            TouchMode::Menu => {
+                !shell.global_overlay()
+                    && shell.seat(0).modal == Some(crate::shell::ModalScreen::Atlas)
+            }
+            TouchMode::Build | TouchMode::Interior => false,
+        }
 }
 
 /// What the first seat is doing, as the touch controls see it.

@@ -534,6 +534,8 @@ mod outlands_scenes;
 mod toolkit_scenes;
 // Wave 14 index: where travel by the destination index lands.
 mod travel_scenes;
+// Wave 14 W14-C: the Atlas.
+mod atlas_scenes;
 
 /// One capturable scene.
 pub struct Scene {
@@ -711,6 +713,7 @@ fn all_scenes() -> impl Iterator<Item = &'static Scene> {
         .chain(endgame_scenes::ENDGAME_SCENES)
         .chain(toolkit_scenes::TOOLKIT_SCENES)
         .chain(travel_scenes::TRAVEL_SCENES)
+        .chain(atlas_scenes::ATLAS_SCENES)
 }
 
 /// Same physical bomb scene at successive fixed ticks, for repeatable motion review.

@@ -419,6 +419,19 @@ fn new_preview(
     ground: Ground,
     target: TilePosition,
 ) -> TilePreview {
+    let mut preview = blank_preview(home, ground, target);
+    let (width, height) = (PREVIEW_TILES.0 * TILE_ART, PREVIEW_TILES.1 * TILE_ART);
+    preview.texture = raylib
+        .load_texture_from_image(thread, &sprite::blank_image(width, height))
+        .ok();
+    if let Some(texture) = &preview.texture {
+        texture.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+    }
+    preview
+}
+
+/// A preview of `target` with nothing painted and no texture yet.
+fn blank_preview(home: &Terrain, ground: Ground, target: TilePosition) -> TilePreview {
     let (columns, rows) = PREVIEW_TILES;
     let terrain: &Terrain = match &ground {
         Ground::Home => home,
@@ -445,14 +458,8 @@ fn new_preview(
         Ground::Home => Backdrop::Underground,
     };
     let (width, height) = (columns * TILE_ART, rows * TILE_ART);
-    let texture = raylib
-        .load_texture_from_image(thread, &sprite::blank_image(width, height))
-        .ok();
-    if let Some(texture) = &texture {
-        texture.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
-    }
     TilePreview {
-        texture,
+        texture: None,
         art: vec![TRANSPARENT; (width * height) as usize],
         origin,
         target,
@@ -654,6 +661,124 @@ fn lerp(a: Color, b: Color, t: f32) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atlas::{AtlasCategory, DestinationKind, index};
+    use fatherload_simulation::{
+        PlayerId, SimulationParams,
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+
+    /// A test-mode Deep Descent world with two rigs (so the Players list has one).
+    fn world() -> WorldState {
+        let settings = WorldSettings {
+            generator: GeneratorVersion::DEEP_DESCENT,
+            ..WorldSettings::new(0x0A71_A514)
+        };
+        let mut world = WorldState::new_game_with_settings(
+            PlayerId::new(1),
+            &settings,
+            SimulationParams::new(30),
+        );
+        world.add_player(PlayerId::new(2));
+        world.enable_test_mode();
+        world
+    }
+
+    /// Every kind of destination the Atlas lists gets a preview: a tile picture painted from
+    /// the world (home or a planet's ground, its art filled in), or the space renderer's view
+    /// of it, or (the story's goal) its words.
+    #[test]
+    fn a_preview_is_made_for_every_kind_of_destination() {
+        let world = world();
+        let me = Some(PlayerId::new(1));
+        let mut every: Vec<crate::atlas::Destination> = AtlasCategory::ALL
+            .iter()
+            .flat_map(|category| index::destinations(&world, me, *category))
+            .collect();
+        every.push(index::depth_spot(&world, TilePosition { x: 300, y: 4_000 }));
+        every.push(index::space_spot(
+            &world,
+            fatherload_simulation::position::WorldPos::from_tile(9_000_000, -2_000_000),
+        ));
+        let kinds: std::collections::BTreeSet<DestinationKind> =
+            every.iter().map(|destination| destination.kind).collect();
+        for wanted in [
+            DestinationKind::Surface,
+            DestinationKind::Descent,
+            DestinationKind::Stratum,
+            DestinationKind::DepthSpot,
+            DestinationKind::HomeTown,
+            DestinationKind::Village,
+            DestinationKind::Moon,
+            DestinationKind::Outpost,
+            DestinationKind::StorySite,
+            DestinationKind::GateBoss,
+            DestinationKind::ThemeBoss,
+            DestinationKind::FactionBoss,
+            DestinationKind::DeepSettlement,
+            DestinationKind::AlienTown,
+            DestinationKind::StarSystem,
+            DestinationKind::Planet,
+            DestinationKind::Station,
+            DestinationKind::Belt,
+            DestinationKind::Player,
+            DestinationKind::SpaceSpot,
+        ] {
+            assert!(kinds.contains(&wanted), "the Atlas lists a {wanted:?}");
+        }
+        let mut painted_kinds = std::collections::BTreeSet::new();
+        let mut planets: BTreeMap<SpaceBodyKey, Arc<Terrain>> = BTreeMap::new();
+        for destination in &every {
+            let tile = tile_view(&world, &destination.target);
+            let space = space_focus(&world, &destination.target);
+            assert!(
+                tile.is_some() || space.is_some() || destination.target == AtlasTarget::Story,
+                "{} ({:?}) has a preview",
+                destination.name,
+                destination.kind
+            );
+            // Paint one of each kind's tile pictures on the CPU (the texture comes from the
+            // renderer): real art fills it.
+            let Some((_, at, body)) = tile else {
+                continue;
+            };
+            if !painted_kinds.insert(destination.kind) {
+                continue;
+            }
+            let ground = if body {
+                let AtlasTarget::Body { body: id, .. } = resolve(&world, &destination.target)
+                else {
+                    continue;
+                };
+                let terrain = planets.entry(id).or_insert_with(|| {
+                    let params =
+                        fatherload_simulation::place::planet_params_for(world.world_seed(), id)
+                            .expect("a landable body");
+                    Arc::new(Terrain::planet(params))
+                });
+                Ground::Body(Arc::clone(terrain))
+            } else {
+                Ground::Home
+            };
+            let mut preview = blank_preview(world.terrain(), ground, at);
+            let rows = paint_rows(&mut preview, world.terrain(), usize::MAX);
+            assert_eq!(rows, PREVIEW_TILES.1 as usize);
+            assert!(preview.done());
+            let filled = preview
+                .art
+                .iter()
+                .filter(|index| **index != TRANSPARENT)
+                .count();
+            assert!(
+                filled > preview.art.len() / 8,
+                "{} ({:?}): {filled} of {} art pixels painted",
+                destination.name,
+                destination.kind,
+                preview.art.len()
+            );
+        }
+        assert!(painted_kinds.contains(&DestinationKind::GateBoss));
+        assert!(painted_kinds.contains(&DestinationKind::Planet));
+    }
 
     #[test]
     fn rows_paint_from_the_middle_out_and_cover_the_window() {

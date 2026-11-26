@@ -3208,6 +3208,8 @@ mod tests {
         shell::{ModalScreen, PauseOption, TitleOption, interior_service_x},
     };
 
+    // Wave 14 W14-C: the Atlas.
+    mod atlas_tests;
     mod base_tests;
     mod crew_tests;
     mod expedition_tests;

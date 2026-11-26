@@ -74,9 +74,11 @@ impl AtlasLayout {
     #[allow(clippy::too_many_lines, reason = "one block per shape")]
     pub fn compute(width: f32, height: f32, map_open: bool) -> Self {
         let frame = rect(0.0, 0.0, width.max(1.0), height.max(1.0));
-        let shape = if width >= 420.0 && height >= 236.0 {
+        // A tall canvas (a phone held upright) stacks the preview over the list.
+        let tall = height > width * 1.15;
+        let shape = if width >= 420.0 && height >= 236.0 && !tall {
             AtlasShape::Wide
-        } else if width >= 300.0 && height >= 170.0 {
+        } else if width >= 300.0 && height >= 170.0 && !tall {
             AtlasShape::Compact
         } else {
             AtlasShape::Narrow
@@ -116,7 +118,7 @@ impl AtlasLayout {
         );
         let (categories, list, preview, card, row_height) = match shape {
             AtlasShape::Wide => {
-                let side = 70.0;
+                let side = 80.0;
                 let categories = column_tabs(rect(body.x, body.y, side, body.height));
                 let list_width = (body.width * 0.32).clamp(120.0, 220.0);
                 let list = rect(body.x + side + GAP, body.y, list_width, body.height);
@@ -133,17 +135,20 @@ impl AtlasLayout {
                 (categories, list, preview, card, 20.0)
             }
             AtlasShape::Compact => {
-                let left_width = (body.width * 0.42).floor();
+                // The tabs across the top, then the list beside the preview and card.
                 let tabs_height = 2.0 * 12.0 + GAP;
-                let categories = grid_tabs(rect(body.x, body.y, left_width, tabs_height), 4);
-                let list = rect(
-                    body.x,
-                    body.y + tabs_height + GAP,
-                    left_width,
-                    body.height - tabs_height - GAP,
-                );
+                let categories = grid_tabs(rect(body.x, body.y, body.width, tabs_height), 4);
+                let lower_top = body.y + tabs_height + GAP;
+                let lower_height = body.height - tabs_height - GAP;
+                let left_width = (body.width * 0.4).floor();
+                let list = rect(body.x, lower_top, left_width, lower_height);
                 let right_x = body.x + left_width + GAP;
-                let right = rect(right_x, body.y, body.x + body.width - right_x, body.height);
+                let right = rect(
+                    right_x,
+                    lower_top,
+                    body.x + body.width - right_x,
+                    lower_height,
+                );
                 let preview_height = (right.height * 0.55).floor();
                 let preview = rect(right.x, right.y, right.width, preview_height);
                 let card = rect(
@@ -164,19 +169,38 @@ impl AtlasLayout {
                     body.width,
                     body.height - tabs_height - GAP,
                 );
-                let preview_height = (rest.height * 0.45).floor();
-                let preview = rect(rest.x, rest.y, rest.width, preview_height);
-                let lower_top = rest.y + preview_height + GAP;
-                let lower_height = rest.height - preview_height - GAP;
-                let half = ((rest.width - GAP) / 2.0).floor();
-                let list = rect(rest.x, lower_top, half, lower_height);
-                let card = rect(
-                    rest.x + half + GAP,
-                    lower_top,
-                    rest.width - half - GAP,
-                    lower_height,
-                );
-                (categories, list, preview, card, 12.0)
+                if tall {
+                    // A phone held upright: the preview, its card, then the list, each the
+                    // full width.
+                    let preview_height = (rest.height * 0.36).floor();
+                    let preview = rect(rest.x, rest.y, rest.width, preview_height);
+                    let card_top = rest.y + preview_height + GAP;
+                    let card_height = (rest.height * 0.24).floor();
+                    let card = rect(rest.x, card_top, rest.width, card_height);
+                    let list_top = card_top + card_height + GAP;
+                    let list = rect(
+                        rest.x,
+                        list_top,
+                        rest.width,
+                        rest.y + rest.height - list_top,
+                    );
+                    (categories, list, preview, card, 20.0)
+                } else {
+                    // A small, wide seat: the list beside the preview and card.
+                    let left_width = (rest.width * 0.45).floor();
+                    let list = rect(rest.x, rest.y, left_width, rest.height);
+                    let right_x = rest.x + left_width + GAP;
+                    let right_width = rest.x + rest.width - right_x;
+                    let preview_height = (rest.height * 0.58).floor();
+                    let preview = rect(right_x, rest.y, right_width, preview_height);
+                    let card = rect(
+                        right_x,
+                        rest.y + preview_height + GAP,
+                        right_width,
+                        rest.height - preview_height - GAP,
+                    );
+                    (categories, list, preview, card, 12.0)
+                }
             }
         };
         let (map, list) = if map_open {
