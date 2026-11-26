@@ -13,5 +13,6 @@ mod world_hostiles;
 mod world_keyframes;
 mod world_places;
 mod world_planet;
+mod world_soak;
 mod world_space_journey;
 mod world_stations;
