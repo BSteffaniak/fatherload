@@ -39,6 +39,7 @@ use super::{
         sprite::{self, SpriteDef},
         sprites::hostiles as art,
     },
+    space_hud_layout::{Markers, SpaceHudLayout},
     space_view::SpaceFrame,
     ui_kit::{self, PanelStyle, TextStyle},
 };
@@ -499,11 +500,10 @@ pub(super) fn draw_hostile_hud(
     draw: &mut RaylibDrawHandle<'_>,
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
-    frame: &SpaceFrame,
-    rect: Rectangle,
-    under_meters: f32,
+    layout: &mut SpaceHudLayout,
     top: f32,
 ) -> f32 {
+    let rect = layout.rect;
     let hostiles = snapshot.space.hostiles;
     let player = view.player;
     let step = step_of(snapshot);
@@ -523,12 +523,7 @@ pub(super) fn draw_hostile_hud(
         gear,
         hostiles.has_tech(fatherload_simulation::hostiles::BossTech::LanceMissiles),
     );
-    let panel = Rectangle::new(
-        rect.x + 4.0,
-        under_meters,
-        150.0,
-        if rack > 0 { 26.0 } else { 16.0 },
-    );
+    let panel = layout.combat;
     ui_kit::panel(draw, panel, PanelStyle::Standard);
     let shield = if hostiles.rigs.contains_key(&view.player_id) {
         combat.shield
@@ -572,15 +567,19 @@ pub(super) fn draw_hostile_hud(
         }
     }
     let narrow = rect.width < 420.0;
-    let centre_x = rect.x + rect.width * 0.5;
-    let banner = |draw: &mut RaylibDrawHandle<'_>, text: &str, colour: Color, top: f32| -> f32 {
+    let banner = |draw: &mut RaylibDrawHandle<'_>,
+                  layout: &mut SpaceHudLayout,
+                  text: &str,
+                  colour: Color,
+                  top: f32|
+     -> f32 {
         let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
-        let plate = Rectangle::new(centre_x - width as f32 * 0.5, top, width as f32, 15.0);
+        let plate = layout.banner(top, width as f32, 15.0);
         ui_kit::panel(draw, plate, PanelStyle::Standard);
         ui_kit::text_centred(
             draw,
             text,
-            centre_x as i32,
+            (plate.x + plate.width * 0.5) as i32,
             plate.y as i32 + 4,
             TextStyle::Bold,
             colour,
@@ -593,14 +592,14 @@ pub(super) fn draw_hostile_hud(
         .filter(|boss| boss.pos.distance(player.flight.pos) < 6_000.0)
     {
         let stats = boss.class.stats();
-        let width = (rect.width * 0.5).clamp(160.0, 360.0);
-        let plate = Rectangle::new(centre_x - width * 0.5, top, width, 26.0);
+        let width = (rect.width * 0.5).clamp(160.0, 360.0).min(rect.width - 8.0);
+        let plate = layout.banner(top, width, 26.0);
         ui_kit::panel(draw, plate, PanelStyle::Warning);
         let phase = if boss.phase > 0 { "  ENRAGED" } else { "" };
         ui_kit::text_centred(
             draw,
             &format!("{}{phase}", boss.class.name().to_uppercase()),
-            centre_x as i32,
+            (plate.x + plate.width * 0.5) as i32,
             plate.y as i32 + 4,
             TextStyle::Bold,
             GOLD,
@@ -618,7 +617,7 @@ pub(super) fn draw_hostile_hud(
         }
         top = plate.y + plate.height + 3.0;
         if let Some(telegraph) = boss.telegraph {
-            top = banner(draw, telegraph.attack.warning(), ORANGE, top);
+            top = banner(draw, layout, telegraph.attack.warning(), ORANGE, top);
         }
     }
     // The encounter: a demand, or the fight.
@@ -634,13 +633,13 @@ pub(super) fn draw_hostile_hud(
                         "THE CORSAIRS HAIL: \"{credits} credits or we open fire\"  {seconds:.0}s"
                     )
                 };
-                top = banner(draw, &text, GOLD, top);
+                top = banner(draw, layout, &text, GOLD, top);
             }
             EncounterState::Closing if encounter.faction == Faction::Pirates => {
-                top = banner(draw, "CORSAIRS CLOSING IN", ORANGE, top);
+                top = banner(draw, layout, "CORSAIRS CLOSING IN", ORANGE, top);
             }
             EncounterState::Paid => {
-                top = banner(draw, "PAID OFF: THE CORSAIRS LEAVE", MIST, top);
+                top = banner(draw, layout, "PAID OFF: THE CORSAIRS LEAVE", MIST, top);
             }
             EncounterState::Closing | EncounterState::Fighting => {
                 if hostiles.boss().is_none() {
@@ -649,7 +648,7 @@ pub(super) fn draw_hostile_hud(
                         encounter.faction.name().to_uppercase(),
                         if count == 1 { "SHIP" } else { "SHIPS" }
                     );
-                    top = banner(draw, &text, faction_colour(encounter.faction), top);
+                    top = banner(draw, layout, &text, faction_colour(encounter.faction), top);
                 }
             }
         }
@@ -660,12 +659,12 @@ pub(super) fn draw_hostile_hud(
             / fatherload_simulation::hostiles::ESCAPE_SPOOL_STEPS as f32)
             .clamp(0.0, 1.0);
         let width = 150.0;
-        let plate = Rectangle::new(centre_x - width * 0.5, top, width, 20.0);
+        let plate = layout.banner(top, width, 20.0);
         ui_kit::panel(draw, plate, PanelStyle::Accent);
         ui_kit::text_centred(
             draw,
             "ESCAPE JUMP",
-            centre_x as i32,
+            (plate.x + plate.width * 0.5) as i32,
             plate.y as i32 + 3,
             TextStyle::Bold,
             ICE,
@@ -678,13 +677,21 @@ pub(super) fn draw_hostile_hud(
             0.0,
         );
     }
-    // Arrows to ships and salvage out of view.
-    let lanes = Rectangle::new(
-        rect.x + 6.0,
-        lanes_top + 4.0,
-        rect.width - 12.0,
-        rect.height - (lanes_top - rect.y) - 30.0,
-    );
+    lanes_top
+}
+
+/// Arrows to hostile ships and salvage out of view (after the nav HUD's own markers, clear of
+/// them and of every panel).
+pub(super) fn draw_hostile_markers(
+    draw: &mut RaylibDrawHandle<'_>,
+    snapshot: &RenderSnapshot<'_>,
+    view: &ViewSnapshot<'_>,
+    frame: &SpaceFrame,
+    rect: Rectangle,
+    markers: &mut Markers,
+) {
+    let hostiles = snapshot.space.hostiles;
+    let player = view.player;
     let ui_per_physical = rect.width / frame.rect.width.max(1.0);
     let mut ships: Vec<&HostileShip> = hostiles
         .ships
@@ -715,7 +722,7 @@ pub(super) fn draw_hostile_hud(
             super::space_view::edge_marker(
                 draw,
                 rect,
-                lanes,
+                markers,
                 frame,
                 player.flight.pos,
                 ship.pos,
@@ -746,7 +753,7 @@ pub(super) fn draw_hostile_hud(
             super::space_view::edge_marker(
                 draw,
                 rect,
-                lanes,
+                markers,
                 frame,
                 player.flight.pos,
                 wreck.pos,
@@ -756,7 +763,6 @@ pub(super) fn draw_hostile_hud(
             );
         }
     }
-    lanes_top
 }
 
 /// A ship's short name for its arrow.

@@ -36,6 +36,7 @@ use raylib::prelude::*;
 )]
 use super::pixel_art::palette::*;
 use super::{
+    space_hud_layout::SpaceHudLayout,
     space_view::SpaceFrame,
     ui_kit::{self, PanelStyle, TextStyle},
 };
@@ -402,16 +403,21 @@ pub(super) fn draw_hud(
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     reading: &SystemsReading,
-    rect: Rectangle,
+    layout: &mut SpaceHudLayout,
     top: f32,
 ) -> f32 {
     let flight = view.player.flight;
+    let rect = layout.rect;
     // Long lines only where they clear the meters and the nav panel.
     let narrow = rect.width < 820.0;
     let mut top = top;
-    let banner = |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, text: &str, colour: Color| {
+    let banner = |draw: &mut RaylibDrawHandle<'_>,
+                  layout: &mut SpaceHudLayout,
+                  top: &mut f32,
+                  text: &str,
+                  colour: Color| {
         let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
-        let plate = Rectangle::new(plate_x(rect, width as f32), *top, width as f32, 15.0);
+        let plate = layout.banner(*top, width as f32, 15.0);
         ui_kit::panel(draw, plate, PanelStyle::Standard);
         ui_kit::text_centred(
             draw,
@@ -451,7 +457,7 @@ pub(super) fn draw_hud(
                 RED,
             ),
         };
-        banner(draw, &mut top, text, colour);
+        banner(draw, layout, &mut top, text, colour);
     }
     // The flare forecast.
     if let Some(near) = reading.flare {
@@ -481,7 +487,7 @@ pub(super) fn draw_hud(
             FlarePhase::Quiet { .. } => None,
         };
         if let Some((text, colour)) = text {
-            banner(draw, &mut top, &text, colour);
+            banner(draw, layout, &mut top, &text, colour);
         }
     }
     // Time dilation: how fast the rig's clock runs and how far it has fallen behind.
@@ -496,7 +502,7 @@ pub(super) fn draw_hud(
         } else {
             FOG
         };
-        banner(draw, &mut top, &text, colour);
+        banner(draw, layout, &mut top, &text, colour);
     }
     // Nebula fog.
     if reading.fog >= 60 {
@@ -504,31 +510,35 @@ pub(super) fn draw_hud(
             "SENSORS FOGGED {}%",
             (u32::from(reading.fog.min(1_000)) + 5) / 10
         );
-        banner(draw, &mut top, &text, reading.fog_tint);
+        banner(draw, layout, &mut top, &text, reading.fog_tint);
     }
     // Mining and comet dust: a gauge each.
-    let gauge =
-        |draw: &mut RaylibDrawHandle<'_>, top: &mut f32, label: &str, ratio: f32, colour: Color| {
-            let width = 170.0_f32.min(rect.width - 12.0);
-            let plate = Rectangle::new(plate_x(rect, width), *top, width, 22.0);
-            ui_kit::panel(draw, plate, PanelStyle::Standard);
-            ui_kit::text(
-                draw,
-                label,
-                plate.x as i32 + 5,
-                plate.y as i32 + 3,
-                TextStyle::Bold,
-                colour,
-            );
-            ui_kit::bar(
-                draw,
-                Rectangle::new(plate.x + 5.0, plate.y + 13.0, plate.width - 10.0, 6.0),
-                ratio,
-                ui_kit::BarColors::FUEL,
-                0.0,
-            );
-            *top = plate.y + plate.height + 3.0;
-        };
+    let gauge = |draw: &mut RaylibDrawHandle<'_>,
+                 layout: &mut SpaceHudLayout,
+                 top: &mut f32,
+                 label: &str,
+                 ratio: f32,
+                 colour: Color| {
+        let width = 170.0_f32.min(rect.width - 12.0);
+        let plate = layout.banner(*top, width, 22.0);
+        ui_kit::panel(draw, plate, PanelStyle::Standard);
+        ui_kit::text(
+            draw,
+            label,
+            plate.x as i32 + 5,
+            plate.y as i32 + 3,
+            TextStyle::Bold,
+            colour,
+        );
+        ui_kit::bar(
+            draw,
+            Rectangle::new(plate.x + 5.0, plate.y + 13.0, plate.width - 10.0, 6.0),
+            ratio,
+            ui_kit::BarColors::FUEL,
+            0.0,
+        );
+        *top = plate.y + plate.height + 3.0;
+    };
     let rock = reading
         .drill
         .or(reading.beam)
@@ -550,6 +560,7 @@ pub(super) fn draw_hud(
         );
         gauge(
             draw,
+            layout,
             &mut top,
             &label,
             flight.mining,
@@ -571,23 +582,12 @@ pub(super) fn draw_hud(
         } else {
             format!("COMET DUST  {taken}/{COMET_HARVEST_CAP}")
         };
-        gauge(draw, &mut top, &label, flight.gathering, ICE);
+        gauge(draw, layout, &mut top, &label, flight.gathering, ICE);
     }
     if flight.marks & MARK_HOLDING != 0 {
-        banner(draw, &mut top, "PARKING HOLD", SKY_LIGHT);
+        banner(draw, layout, &mut top, "PARKING HOLD", SKY_LIGHT);
     }
     top
-}
-
-/// Where a readout plate `width` wide sits in `rect`: centred, clear of the meters on the
-/// left where the view is wide enough, and never past the view's right edge (a split-screen
-/// seat's view is narrow: a plate pushed right of the meters was cut off there).
-fn plate_x(rect: Rectangle, width: f32) -> f32 {
-    let centred = (rect.width - width).mul_add(0.5, rect.x);
-    let clear = centred.max(rect.x + 158.0);
-    clear
-        .min(rect.x + rect.width - width - 2.0)
-        .max(rect.x + 2.0)
 }
 
 /// The wormhole mouths round the rig the nav HUD points at: every mouth within two galactic

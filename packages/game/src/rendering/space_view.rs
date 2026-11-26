@@ -52,6 +52,10 @@ use super::{
     pixel_art::sprites::{icons, menu_icons},
     prompts::hint,
     screen::UiFrame,
+    space_hud_layout::{
+        Aim, GAP, HudSpec, MarkerSpot, Markers, NARROW_WIDTH, PROMPT_ROW, RING_RADIUS,
+        SpaceHudLayout,
+    },
     ui_kit::{self, PanelStyle, TextStyle},
 };
 use crate::{
@@ -1402,7 +1406,8 @@ fn thousands(value: f32) -> String {
 
 /// Draws the flight HUD for `view` (UI canvas, after the space world): where the rig is and
 /// the drive (top middle), its meters (top left, like the home HUD's stats), the nav panel
-/// (top right), warnings, the docking guide, edge markers and the prompts.
+/// (top right), warnings, the docking guide, edge markers and the prompts. Every panel's
+/// place comes from [`super::space_hud_layout`], so nothing overlaps at any size.
 #[allow(clippy::too_many_lines, reason = "the flight HUD's panels in order")]
 pub(super) fn draw_space_hud(
     draw: &mut RaylibDrawHandle<'_>,
@@ -1416,12 +1421,78 @@ pub(super) fn draw_space_hud(
     let player = view.player;
     let ui_per_physical = rect.width / frame.rect.width.max(1.0);
     let touch = view.seat_index == 0 && super::touch_controls::active();
-    let narrow = rect.width < 420.0;
+    let narrow = rect.width < NARROW_WIDTH;
+    let galaxy = snapshot.space.galaxy();
+    let bodies = galaxy.bodies_near(flight.pos);
+    let nav = player.hazard_gear.flight.nav_suite > 0;
+    let waypoint = snapshot
+        .space
+        .shared
+        .waypoints
+        .get(&view.player_id)
+        .copied()
+        .or(snapshot.space.shared.crew_waypoint);
+    // What shows decides the layout: the plate's width, the rack, the docking guide, the
+    // missions and the prompt bar's rows.
+    let where_line = place_line(snapshot, &flight);
+    let (drive, drive_colour) = drive_line(snapshot, &flight);
+    let plate_width = (ui_kit::text_width(&where_line, TextStyle::Bold)
+        .max(ui_kit::text_width(&drive, TextStyle::Body))
+        + 16) as f32;
+    let rack = fatherload_simulation::hostiles::missile_capacity(
+        player.hazard_gear.arms,
+        snapshot
+            .space
+            .hostiles
+            .has_tech(fatherload_simulation::hostiles::BossTech::LanceMissiles),
+    ) > 0;
+    let docking = docking_checks(view, &bodies);
+    let missions = snapshot
+        .space
+        .world
+        .station_ledger()
+        .missions_of(view.player_id)
+        .len();
+    let mut hints = super::hostiles_view::combat_hints(view);
+    match flight.drive {
+        StarDrive::Off => hints.push(hint(Prompt::Anchor, "cruise")),
+        StarDrive::Cruise { .. } | StarDrive::Spool { .. } => {
+            hints.push(hint(Prompt::Anchor, "drop cruise"));
+        }
+        StarDrive::Warp(_) | StarDrive::Transit(_) => {}
+    }
+    hints.extend([hint(Prompt::Map, "nav chart"), hint(Prompt::Scan, "ping")]);
+    if nav && matches!(waypoint, Some(NavTarget::System(_))) && !flight.drive.engaged() {
+        hints.push(hint(Prompt::Bomb, "warp"));
+    }
+    if matches!(flight.place, FlightPlace::Docked(_)) {
+        hints.push(hint(Prompt::Use, "undock"));
+    }
+    let device = shell.prompt_device(view.seat_index);
+    let rows = super::prompts::wrap_bar(&hints, device, rect.width as i32 - 12);
+    let prompt_width = rows
+        .iter()
+        .map(|row| super::prompts::bar_width(row, device))
+        .max()
+        .unwrap_or(0) as f32;
+    let mut layout = SpaceHudLayout::new(
+        rect,
+        &HudSpec {
+            touch,
+            nav,
+            plate_width,
+            rack,
+            docking: docking.as_ref().map(|(_, ready)| *ready),
+            missions,
+            prompt_rows: rows.len(),
+            prompt_width,
+        },
+    );
     // The meters, top left.
     // The ship's life support line adds to the tank (Wave 12).
     let capacity = fatherload_simulation::flight::air_capacity(player.hazard_gear.life_support)
         + player.hazard_gear.ship.extra_air();
-    let meters = Rectangle::new(rect.x + 4.0, rect.y + 4.0, 150.0, 60.0);
+    let meters = layout.meters;
     ui_kit::panel(draw, meters, PanelStyle::Standard);
     let (x, mut y) = (meters.x as i32 + 5, meters.y as i32 + 5);
     let row_width = meters.width as i32 - 10;
@@ -1473,31 +1544,9 @@ pub(super) fn draw_space_hud(
         ui_kit::BarColors::DANGER,
         0.0,
     );
-    // Where the rig is and the drive, top middle (below the touch top row on a touch screen).
-    let where_line = place_line(snapshot, &flight);
-    let (drive, drive_colour) = drive_line(snapshot, &flight);
-    let plate_width = (ui_kit::text_width(&where_line, TextStyle::Bold)
-        .max(ui_kit::text_width(&drive, TextStyle::Body))
-        + 16) as f32;
-    let plate_x = if narrow {
-        meters.x + meters.width + 4.0
-    } else {
-        rect.x + (rect.width - plate_width) * 0.5
-    };
-    // A split-screen seat too narrow for both: the plate goes under the meters instead of
-    // over them.
-    let beside = plate_x.min(rect.x + rect.width - plate_width - 4.0);
-    let clears = beside >= meters.x + meters.width + 4.0 || !narrow;
-    let plate = Rectangle::new(
-        if clears { beside } else { meters.x },
-        match (touch, clears) {
-            (_, false) => meters.y + meters.height + 4.0,
-            (true, true) => rect.y + 50.0,
-            (false, true) => rect.y + 4.0,
-        },
-        plate_width,
-        28.0,
-    );
+    // Where the rig is and the drive, top middle (between the meters and the nav panel, or
+    // under them when the view is too narrow; below the touch top row on a touch screen).
+    let plate = layout.plate;
     ui_kit::panel(draw, plate, PanelStyle::Standard);
     let middle = (plate.x + plate.width * 0.5) as i32;
     ui_kit::text_centred(
@@ -1539,15 +1588,10 @@ pub(super) fn draw_space_hud(
     } else {
         None
     };
-    let mut top = plate.y + plate.height + 4.0;
+    let mut top = plate.y + plate.height + GAP;
     if let Some(text) = warning {
         let width = ui_kit::text_width(text, TextStyle::Bold) + 12;
-        let banner = Rectangle::new(
-            rect.x + (rect.width - width as f32) * 0.5,
-            top,
-            width as f32,
-            15.0,
-        );
+        let banner = layout.banner(top, width as f32, 15.0);
         ui_kit::panel(draw, banner, PanelStyle::Standard);
         ui_kit::text_centred(
             draw,
@@ -1557,46 +1601,28 @@ pub(super) fn draw_space_hud(
             TextStyle::Bold,
             ORANGE,
         );
-        top = banner.y + banner.height + 4.0;
+        top = banner.y + banner.height + GAP;
     }
     // Wave 12 systems: holes, flares, dilation, fog, mining, comets, the hold.
     let reading = super::space_systems_view::read(snapshot, view);
-    top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, rect, top);
+    top = super::space_systems_view::draw_hud(draw, snapshot, view, &reading, &mut layout, top);
     let seen = super::space_systems_view::marker_alpha(&reading);
     let faded = |colour: Color| with_alpha(colour, (f32::from(colour.a) * seen) as u8);
     // The fight (Wave 12 hostiles): the deflector and rack under the meters, the encounter's
-    // and a boss's banners under the plate, arrows to ships off screen.
-    let top = super::hostiles_view::draw_hostile_hud(
-        draw,
-        snapshot,
-        view,
-        frame,
-        rect,
-        meters.y + meters.height + 2.0,
-        top,
-    );
-    let galaxy = snapshot.space.galaxy();
-    let bodies = galaxy.bodies_near(flight.pos);
-    draw_docking_guide(draw, rect, meters, view, &bodies);
-    draw_bounties(draw, rect, snapshot, view, touch);
-    let nav = player.hazard_gear.flight.nav_suite > 0;
-    let waypoint = snapshot
-        .space
-        .shared
-        .waypoints
-        .get(&view.player_id)
-        .copied()
-        .or(snapshot.space.shared.crew_waypoint);
-    // Arrows stay clear of the top panels and the bottom prompts.
-    let lanes = Rectangle::new(
-        rect.x + 6.0,
-        top + 4.0,
-        rect.width - 12.0,
-        rect.height - (top - rect.y) - 30.0,
-    );
+    // and a boss's banners low in the view.
+    let top = super::hostiles_view::draw_hostile_hud(draw, snapshot, view, &mut layout, top);
+    if let (Some(panel), Some((checks, ready))) = (layout.docking, docking.as_ref()) {
+        draw_docking_guide(draw, panel, checks, *ready);
+    }
+    if let Some(panel) = layout.bounties {
+        draw_bounties(draw, panel, snapshot, view);
+    }
+    // Markers at the view's edge, clear of every panel above and of each other: the
+    // waypoint first, then the wormholes, the crew, the ships and the salvage.
+    let mut markers = layout.markers(top);
     if nav {
-        if !narrow {
-            draw_nav_panel(draw, rect, snapshot, view, frame, waypoint);
+        if let Some(panel) = layout.nav {
+            draw_nav_panel(draw, panel, snapshot, view, frame, waypoint);
         }
         if let Some(target) = waypoint
             && let Some(pos) = target.position(&galaxy)
@@ -1605,7 +1631,7 @@ pub(super) fn draw_space_hud(
             edge_marker(
                 draw,
                 rect,
-                lanes,
+                &mut markers,
                 frame,
                 flight.pos,
                 pos,
@@ -1618,7 +1644,7 @@ pub(super) fn draw_space_hud(
             edge_marker(
                 draw,
                 rect,
-                lanes,
+                &mut markers,
                 frame,
                 flight.pos,
                 pos,
@@ -1635,7 +1661,7 @@ pub(super) fn draw_space_hud(
             edge_marker(
                 draw,
                 rect,
-                lanes,
+                &mut markers,
                 frame,
                 flight.pos,
                 flyer.flight.pos,
@@ -1644,37 +1670,24 @@ pub(super) fn draw_space_hud(
                 ui_per_physical,
             );
         }
-    } else {
+    } else if let Some(note) = layout.note {
         ui_kit::text(
             draw,
-            "No nav suite: dock at a station to fit one",
-            meters.x as i32,
-            (meters.y + meters.height) as i32 + 3,
+            &ui_kit::truncate(
+                "No nav suite: dock at a station to fit one",
+                note.width as i32,
+                TextStyle::Body,
+            ),
+            note.x as i32,
+            note.y as i32 + 1,
             TextStyle::Body,
             FOG,
         );
     }
+    super::hostiles_view::draw_hostile_markers(draw, snapshot, view, frame, rect, &mut markers);
     // The buttons that mean something out here (a fight's first).
-    let mut hints = super::hostiles_view::combat_hints(view);
-    match flight.drive {
-        StarDrive::Off => hints.push(hint(Prompt::Anchor, "cruise")),
-        StarDrive::Cruise { .. } | StarDrive::Spool { .. } => {
-            hints.push(hint(Prompt::Anchor, "drop cruise"));
-        }
-        StarDrive::Warp(_) | StarDrive::Transit(_) => {}
-    }
-    hints.extend([hint(Prompt::Map, "nav chart"), hint(Prompt::Scan, "ping")]);
-    if nav && matches!(waypoint, Some(NavTarget::System(_))) && !flight.drive.engaged() {
-        hints.push(hint(Prompt::Bomb, "warp"));
-    }
-    if matches!(flight.place, FlightPlace::Docked(_)) {
-        hints.push(hint(Prompt::Use, "undock"));
-    }
-    let device = shell.prompt_device(view.seat_index);
-    if !touch {
-        let rows = super::prompts::wrap_bar(&hints, device, rect.width as i32 - 12);
-        let mut row_y =
-            (rect.y + rect.height - 16.0) as i32 - (rows.len().saturating_sub(1) as i32) * 14;
+    if let Some(bar) = layout.prompts {
+        let mut row_y = bar.y as i32 + 2;
         for row in rows {
             let width = super::prompts::bar_width(&row, device);
             super::prompts::draw_bar(
@@ -1685,35 +1698,22 @@ pub(super) fn draw_space_hud(
                 device,
                 MIST,
             );
-            row_y += 14;
+            row_y += PROMPT_ROW as i32;
         }
     }
 }
 
-/// The docking guide near a station's port: range, speed and alignment, each ticked off
-/// (under the meters).
 /// The missions under way, bottom left (Wave 12): what each asks and how far along it is.
 fn draw_bounties(
     draw: &mut RaylibDrawHandle<'_>,
-    rect: Rectangle,
+    panel: Rectangle,
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
-    touch: bool,
 ) {
     let world = snapshot.space.world;
     let missions = world.station_ledger().missions_of(view.player_id);
-    if missions.is_empty() || touch || rect.height < 200.0 {
-        return;
-    }
     let galaxy = world.space();
-    let width = (rect.width * 0.36).clamp(150.0, 230.0);
-    let height = 14.0 + missions.len() as f32 * 10.0;
-    let panel = Rectangle::new(
-        rect.x + 4.0,
-        rect.y + rect.height - height - 22.0,
-        width,
-        height,
-    );
+    let width = panel.width;
     ui_kit::panel(draw, panel, PanelStyle::Standard);
     ui_kit::text(
         draw,
@@ -1761,25 +1761,21 @@ fn draw_bounties(
     }
 }
 
-fn draw_docking_guide(
-    draw: &mut RaylibDrawHandle<'_>,
-    rect: Rectangle,
-    meters: Rectangle,
+/// The docking guide's checks near a station's port (range, speed, alignment, each met or
+/// not) and whether all are met; `None` away from every port or once docked.
+fn docking_checks(
     view: &ViewSnapshot<'_>,
     bodies: &[FlightBody],
-) {
+) -> Option<([(String, bool); 3], bool)> {
     use fatherload_simulation::flight::{DOCK_ALIGN, DOCK_RANGE, DOCK_SPEED};
     let flight = view.player.flight;
     if matches!(flight.place, FlightPlace::Docked(_)) {
-        return;
+        return None;
     }
-    let Some((station, port)) = bodies
+    let (station, port) = bodies
         .iter()
         .filter_map(|body| Some((body, body.port()?)))
-        .find(|(_, port)| flight.pos.distance(*port) < 40.0 * TILE_SIZE)
-    else {
-        return;
-    };
+        .find(|(_, port)| flight.pos.distance(*port) < 40.0 * TILE_SIZE)?;
     let range = flight.pos.distance(port);
     let speed = flight.speed();
     let lean = fatherload_simulation::field::trig::wrap_angle(
@@ -1797,15 +1793,17 @@ fn draw_docking_guide(
         ),
     ];
     let ready = checks.iter().all(|(_, ok)| *ok);
-    let panel = Rectangle::new(
-        meters.x,
-        meters.y + meters.height + 16.0,
-        meters.width,
-        if ready { 62.0 } else { 50.0 },
-    );
-    if panel.y + panel.height > rect.y + rect.height - 20.0 {
-        return;
-    }
+    Some((checks, ready))
+}
+
+/// The docking guide near a station's port: range, speed and alignment, each ticked off
+/// (under the deflector panel).
+fn draw_docking_guide(
+    draw: &mut RaylibDrawHandle<'_>,
+    panel: Rectangle,
+    checks: &[(String, bool); 3],
+    ready: bool,
+) {
     ui_kit::panel(draw, panel, PanelStyle::Standard);
     ui_kit::text(
         draw,
@@ -1847,13 +1845,14 @@ fn draw_docking_guide(
     }
 }
 
-/// An arrow at the edge of `lanes` toward `to` (or a ring on it when it is in view), with a
-/// name and distance beside it, inside the view.
+/// A marker toward `to`: a ring on it when it is in view, else an arrow at the view's edge,
+/// with a name and distance beside it, placed by `markers` clear of the panels and the
+/// markers before it.
 #[allow(clippy::too_many_arguments, reason = "one marker")]
 pub(super) fn edge_marker(
     draw: &mut RaylibDrawHandle<'_>,
     rect: Rectangle,
-    lanes: Rectangle,
+    markers: &mut Markers,
     frame: &SpaceFrame,
     from: WorldPos,
     to: WorldPos,
@@ -1871,50 +1870,53 @@ pub(super) fn edge_marker(
         rect.x + (at.x - frame.rect.x) * ui_per_physical,
         rect.y + (at.y - frame.rect.y) * ui_per_physical,
     );
-    let label = format!("{name} {}", nav::format_distance(distance));
-    let label_width = ui_kit::text_width(&label, TextStyle::Body) as f32;
-    let inside = ui.x > lanes.x + 12.0
+    // The name and distance, or the distance alone where the full label finds no room.
+    let labels = [
+        format!("{name} {}", nav::format_distance(distance)),
+        nav::format_distance(distance),
+    ];
+    let widths = labels
+        .each_ref()
+        .map(|label| ui_kit::text_width(label, TextStyle::Body) as f32);
+    let lanes = markers.lanes;
+    let in_view = ui.x > lanes.x + 12.0
         && ui.x < lanes.x + lanes.width - 12.0
         && ui.y > lanes.y + 12.0
         && ui.y < lanes.y + lanes.height - 12.0;
-    if inside {
-        draw.draw_ring(ui, 5.0, 6.5, 0.0, 360.0, 24, colour);
-        let text_x = (ui.x + 9.0).min(lanes.x + lanes.width - label_width);
+    let aim = if in_view {
+        Aim::At(ui)
+    } else {
+        let (tx, ty) = frame.turn(dx as f32, dy as f32);
+        Aim::Toward(tx, ty)
+    };
+    let spot = markers.place(aim, &widths);
+    draw_marker(draw, &spot, &labels[spot.variant.min(1)], colour);
+}
+
+/// Draws a placed marker: its ring or arrow and its label.
+pub(super) fn draw_marker(
+    draw: &mut RaylibDrawHandle<'_>,
+    spot: &MarkerSpot,
+    label: &str,
+    colour: Color,
+) {
+    if let Some(at) = spot.ring {
+        draw.draw_ring(at, 5.0, RING_RADIUS, 0.0, 360.0, 24, colour);
+    }
+    if let Some([tip, right, left]) = spot.arrow {
+        draw.draw_triangle(tip, right, left, colour);
+        draw.draw_triangle(tip, left, right, colour);
+    }
+    if let Some(place) = spot.label {
         ui_kit::text(
             draw,
-            &label,
-            text_x as i32,
-            ui.y as i32 - 3,
+            label,
+            place.x as i32,
+            place.y as i32 + 1,
             TextStyle::Body,
             colour,
         );
-        return;
     }
-    let (tx, ty) = frame.turn(dx as f32, dy as f32);
-    let length = tx.hypot(ty).max(1.0);
-    let (ux, uy) = (tx / length, ty / length);
-    let centre = Vector2::new(lanes.x + lanes.width * 0.5, lanes.y + lanes.height * 0.5);
-    let half_w = lanes.width * 0.5 - 8.0;
-    let half_h = lanes.height * 0.5 - 8.0;
-    let reach = (half_w / ux.abs().max(1e-3)).min(half_h / uy.abs().max(1e-3));
-    let tip = Vector2::new(centre.x + ux * reach, centre.y + uy * reach);
-    let left = Vector2::new(tip.x - ux * 9.0 - uy * 5.0, tip.y - uy * 9.0 + ux * 5.0);
-    let right = Vector2::new(tip.x - ux * 9.0 + uy * 5.0, tip.y - uy * 9.0 - ux * 5.0);
-    draw.draw_triangle(tip, right, left, colour);
-    draw.draw_triangle(tip, left, right, colour);
-    // The label inside the arrow, clear of it.
-    let back = 14.0 + label_width * 0.5 * ux.abs() + 4.0 * uy.abs();
-    let label_centre = Vector2::new(tip.x - ux * back, tip.y - uy * (back + 2.0));
-    let text_x =
-        (label_centre.x - label_width * 0.5).clamp(lanes.x, lanes.x + lanes.width - label_width);
-    ui_kit::text(
-        draw,
-        &label,
-        text_x as i32,
-        (label_centre.y - 4.0) as i32,
-        TextStyle::Body,
-        colour,
-    );
 }
 
 /// The nav panel (top right): the systems around on a little chart, the waypoint with its
@@ -1926,7 +1928,7 @@ pub(super) fn edge_marker(
 )]
 fn draw_nav_panel(
     draw: &mut RaylibDrawHandle<'_>,
-    rect: Rectangle,
+    panel: Rectangle,
     snapshot: &RenderSnapshot<'_>,
     view: &ViewSnapshot<'_>,
     frame: &SpaceFrame,
@@ -1934,13 +1936,7 @@ fn draw_nav_panel(
 ) {
     let flight = view.player.flight;
     let size = 92.0;
-    let width = 136.0;
-    let panel = Rectangle::new(
-        rect.x + rect.width - width - 4.0,
-        rect.y + 4.0,
-        width,
-        size + 40.0,
-    );
+    let width = panel.width;
     ui_kit::panel(draw, panel, PanelStyle::Standard);
     let chart = Rectangle::new(panel.x + (width - size) * 0.5, panel.y + 4.0, size, size);
     draw.draw_rectangle_rec(chart, SPACE);

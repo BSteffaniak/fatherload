@@ -59,6 +59,7 @@ pub mod rig_art;
 mod screen;
 mod sky_hud;
 pub mod space;
+mod space_hud_layout;
 mod space_seat;
 mod space_systems_view;
 mod space_view;
