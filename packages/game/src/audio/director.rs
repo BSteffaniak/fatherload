@@ -208,6 +208,22 @@ impl Material {
             }
             // Descent VIII (Wave 10): rails give, dark matter, glass, metal and shards ring, the
             // rest grinds.
+            // The outland worlds (Wave 13): flesh, felt and ash give; glass, relays, crystal
+            // and the prizes ring; plate and stone grind.
+            TileKind::Outland(tile) => {
+                use fatherload_simulation::planet::outlands::OutlandTile as O;
+                match tile {
+                    O::RelayOff
+                    | O::RelayOn
+                    | O::Soulstone
+                    | O::PetrifiedGlass
+                    | O::Glowcap
+                    | O::Beacon => Self::Ore,
+                    _ if tile.is_treasure() => Self::Ore,
+                    _ if tile.hardness() <= 2 => Self::Soft,
+                    _ => Self::Hard,
+                }
+            }
             // The alien towns (Wave 12): paving grinds, a lexicon stone gives.
             TileKind::Alien(tile) => match tile {
                 fatherload_simulation::alien::AlienTile::LexiconStone(_) => Self::Soft,
@@ -422,6 +438,8 @@ enum SeatLoop {
     StarDriveBed,
     // The wild worlds (Wave 12 planets-a): the theme's bed, and the storm.
     WildWorldBed,
+    // The outland worlds (Wave 13 planets-c): each world's music.
+    OutlandMusic,
     WildStormBed,
     // Space combat (Wave 12 hostiles): the dogfight's music and the bosses' theme.
     CombatMusic,
@@ -799,6 +817,44 @@ impl Director {
             SeatLoop::WildStormBed,
             Patch::PlanetStormLoop,
             (storm * surface * 0.45, listener.pan, 1.0, OPEN_CUTOFF),
+        );
+    }
+
+    /// An outland world's music (Wave 13 planets-c): the fungal world's wet wonder, the
+    /// machine world's pistons, the dead world's lament, each with its world's ambience woven
+    /// in; it thins as the seat digs down (40 rows under, a murmur). Silent elsewhere.
+    fn outland_music(
+        &mut self,
+        live: &mut BTreeSet<LoopKey>,
+        listener: &Listener,
+        terrain: &fatherload_simulation::terrain::Terrain,
+    ) {
+        use fatherload_simulation::planet::{BodyGround, PlanetThemeId};
+        let planet = terrain.planet_ground();
+        let patch = match planet.map(|planet| planet.params().theme) {
+            Some(PlanetThemeId::FUNGAL) => Some(Patch::PcFungalMusicLoop),
+            Some(PlanetThemeId::MACHINE) => Some(Patch::PcMachineMusicLoop),
+            Some(PlanetThemeId::DEAD) => Some(Patch::PcDeadMusicLoop),
+            _ => None,
+        };
+        let depth = planet.map_or(0.0, |planet| {
+            let tile = crate::view_frame::frame().tile_at(listener.x, listener.y);
+            #[allow(clippy::cast_precision_loss, reason = "a few hundred rows")]
+            let depth = (tile.y - planet.surface_row(tile.x)).max(0) as f32;
+            depth
+        });
+        let open = (1.0 - depth / 40.0).clamp(0.3, 1.0);
+        self.loop_command(
+            live,
+            listener,
+            SeatLoop::OutlandMusic,
+            patch.unwrap_or(Patch::PcFungalMusicLoop),
+            (
+                if patch.is_some() { 0.36 * open } else { 0.0 },
+                0.0,
+                1.0,
+                OPEN_CUTOFF * open,
+            ),
         );
     }
 
@@ -1228,6 +1284,8 @@ impl Director {
             let millis =
                 snapshot.tick.saturating_mul(1_000) / u64::from(snapshot.tick_rate.hz().max(1));
             self.frontier_sounds(live, listener, scene.terrain, millis);
+            // An outland world's music (Wave 13 planets-c).
+            self.outland_music(live, listener, scene.terrain);
             state.initialized = true;
             state.velocity_x = velocity_x;
             state.velocity_y = velocity_y;

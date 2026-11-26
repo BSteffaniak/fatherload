@@ -221,6 +221,8 @@ pub const WEATHER_REGISTRY: &[&[WeatherKind]] = &[
     crate::planet::wilds::hooks::WILDS_WEATHER,
     // Wave 12 planets-b: the sandstorm, ash fall and glitterfrost.
     crate::frontier::hooks::FRONTIER_WEATHER,
+    // Wave 13 planets-c: spore drift, glowfall, the ion storm, the grey wind and ghostlight.
+    crate::planet::outlands::hooks::OUTLAND_WEATHER,
 ];
 
 /// The kind with id `id` (an unknown id, from a newer build, reads as clear skies).

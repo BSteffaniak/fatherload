@@ -25,6 +25,7 @@ mod heart;
 mod hollow;
 mod hostiles;
 mod old_deep;
+mod outlands;
 mod story_finale;
 mod systems;
 mod wilds;
@@ -591,6 +592,23 @@ patches! {
     HxEnemyShot => "hx_enemy_shot",
     HxCombatLoop => "loop_hx_combat",
     HxBossLoop => "loop_hx_boss",
+    // The outland worlds (wave 13 planets-c), appended at the end: their rules' and bosses'
+    // one-shots and each world's music.
+    PcCapBounce => "pc_cap_bounce",
+    PcMyceliumCreep => "pc_mycelium_creep",
+    PcGlowflash => "pc_glowflash",
+    PcVentSwell => "pc_vent_swell",
+    PcVentBlast => "pc_vent_blast",
+    PcGearClank => "pc_gear_clank",
+    PcRelayFlip => "pc_relay_flip",
+    PcTombOpen => "pc_tomb_open",
+    PcWispChill => "pc_wisp_chill",
+    PcBossWake => "pc_boss_wake",
+    PcBroodCall => "pc_brood_call",
+    PcBossFall => "pc_boss_fall",
+    PcFungalMusicLoop => "pc_loop_fungal_world",
+    PcMachineMusicLoop => "pc_loop_machine_world",
+    PcDeadMusicLoop => "pc_loop_dead_world",
 }
 
 /// Playback metadata of a patch.
@@ -1168,6 +1186,30 @@ impl Patch {
                 .ducking(0.3)
                 .priority(8),
             Self::HxCombatLoop | Self::HxBossLoop => PatchInfo::new(Loop),
+            // The outland worlds (wave 13 planets-c): the bosses' set pieces are big, the
+            // telegraphs alarms, the rules' sounds physical; each world's music loops.
+            Self::PcBossWake | Self::PcBossFall => PatchInfo::new(Big)
+                .instances(1)
+                .send(0.45)
+                .jitter(0.0, 0.4)
+                .ducking(0.25)
+                .priority(8),
+            Self::PcVentSwell | Self::PcGearClank | Self::PcBroodCall => {
+                PatchInfo::new(Alarm).instances(1).send(0.35).jitter(0.02, 0.5)
+            }
+            Self::PcCapBounce | Self::PcVentBlast | Self::PcTombOpen => PatchInfo::new(Impact)
+                .instances(2)
+                .send(0.3)
+                .jitter(0.05, 1.0),
+            Self::PcMyceliumCreep | Self::PcGlowflash | Self::PcRelayFlip | Self::PcWispChill => {
+                PatchInfo::new(Feedback)
+                    .instances(3)
+                    .send(0.4)
+                    .jitter(0.04, 0.8)
+            }
+            Self::PcFungalMusicLoop | Self::PcMachineMusicLoop | Self::PcDeadMusicLoop => {
+                PatchInfo::new(Loop)
+            }
             Self::EchoPing | Self::QuartzRing | Self::KeyedGlass => PatchInfo::new(Feedback)
                 .instances(3)
                 .send(0.55)
@@ -1979,6 +2021,21 @@ impl Patch {
             Self::HxEnemyShot => hostiles::hx_enemy_shot(rng),
             Self::HxCombatLoop => hostiles::hx_combat_loop(rng),
             Self::HxBossLoop => hostiles::hx_boss_loop(rng),
+            Self::PcCapBounce => outlands::cap_bounce(rng),
+            Self::PcMyceliumCreep => outlands::mycelium_creep(rng),
+            Self::PcGlowflash => outlands::glowflash(rng),
+            Self::PcVentSwell => outlands::vent_swell(rng),
+            Self::PcVentBlast => outlands::vent_blast(rng),
+            Self::PcGearClank => outlands::gear_clank(rng),
+            Self::PcRelayFlip => outlands::relay_flip(rng),
+            Self::PcTombOpen => outlands::tomb_open(rng),
+            Self::PcWispChill => outlands::wisp_chill(rng),
+            Self::PcBossWake => outlands::boss_wake(rng),
+            Self::PcBroodCall => outlands::brood_call(rng),
+            Self::PcBossFall => outlands::boss_fall(rng),
+            Self::PcFungalMusicLoop => outlands::fungal_music_loop(rng),
+            Self::PcMachineMusicLoop => outlands::machine_music_loop(rng),
+            Self::PcDeadMusicLoop => outlands::dead_music_loop(rng),
         }
     }
 }

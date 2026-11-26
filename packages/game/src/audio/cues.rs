@@ -384,6 +384,19 @@ pub const fn cue_patch(cue: SoundCue) -> Patch {
         SoundCue::SpaceBossWarn => Patch::HxBossWarn,
         SoundCue::SpaceBossAppear => Patch::HxBossAppear,
         SoundCue::SpaceEnemyShot => Patch::HxEnemyShot,
+        // The outland worlds (Wave 13 planets-c).
+        SoundCue::OutlandCapBounce => Patch::PcCapBounce,
+        SoundCue::OutlandMyceliumCreep => Patch::PcMyceliumCreep,
+        SoundCue::OutlandGlowflash => Patch::PcGlowflash,
+        SoundCue::OutlandVentSwell => Patch::PcVentSwell,
+        SoundCue::OutlandVentBlast => Patch::PcVentBlast,
+        SoundCue::OutlandGearClank => Patch::PcGearClank,
+        SoundCue::OutlandRelayFlip => Patch::PcRelayFlip,
+        SoundCue::OutlandTombOpen => Patch::PcTombOpen,
+        SoundCue::OutlandWispChill => Patch::PcWispChill,
+        SoundCue::OutlandBossWake => Patch::PcBossWake,
+        SoundCue::OutlandBroodCall => Patch::PcBroodCall,
+        SoundCue::OutlandBossFall => Patch::PcBossFall,
     }
 }
 
@@ -753,6 +766,37 @@ pub const fn wilds_cue(what: fatherload_simulation::planet::wilds::WildsEvent) -
         E::StormRising => SoundCue::Thunderclap,
         E::RimeBroke => SoundCue::PickBreak,
     }
+}
+
+/// The sound of an outland world's event (Wave 13 planets-c; exhaustive: a new event needs an
+/// answer). A hazard's bite is the hull's own hit.
+#[must_use]
+pub const fn outlands_cue(
+    what: fatherload_simulation::planet::outlands::OutlandsEvent,
+) -> Option<SoundCue> {
+    use fatherload_simulation::planet::outlands::OutlandsEvent as E;
+    Some(match what {
+        E::CapBounce => SoundCue::OutlandCapBounce,
+        E::MyceliumRegrew => SoundCue::OutlandMyceliumCreep,
+        E::GlowFlash => SoundCue::OutlandGlowflash,
+        E::VentSwelling => SoundCue::OutlandVentSwell,
+        E::VentBlast => SoundCue::OutlandVentBlast,
+        E::PuffballBurst => SoundCue::SmokeBurst,
+        E::GearsClank => SoundCue::OutlandGearClank,
+        E::GearGrind => SoundCue::ImpactRock,
+        E::RelayFlipped => SoundCue::OutlandRelayFlip,
+        E::VaultOpened => SoundCue::FrontierVaultOpen,
+        E::AshPoured => SoundCue::FrontierSandSlide,
+        E::TombOpened => SoundCue::OutlandTombOpen,
+        E::WispChill => SoundCue::OutlandWispChill,
+        E::RelicFound => SoundCue::MilestoneFanfare,
+        E::SecretCache => SoundCue::CacheOpened,
+        E::BossWoke => SoundCue::OutlandBossWake,
+        E::BossSummons => SoundCue::OutlandBroodCall,
+        E::BossDefeated => SoundCue::OutlandBossFall,
+        E::StormRising => SoundCue::FrontierStormRising,
+        E::HazardBite => return None,
+    })
 }
 
 /// The sound of a frontier world's event (Wave 12 planets-b; exhaustive: a new event needs an
@@ -1460,6 +1504,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::BodyLife { what, detail, .. } => Some(body_life_cue(*what, *detail)),
         // The wild worlds (Wave 12 planets-a).
         GameplayEventKind::Wilds { what, .. } => Some(wilds_cue(*what)),
+        // The outland worlds (Wave 13 planets-c).
+        GameplayEventKind::Outlands { what, .. } => outlands_cue(*what),
         GameplayEventKind::Alien { what, species, .. } => Some(alien_cue(*what, *species)),
         // Space stations (Wave 12).
         GameplayEventKind::Station { what, .. } => Some(station_cue(*what)),
@@ -1820,6 +1866,7 @@ mod tests {
             | GameplayEventKind::SpaceSystems { .. }
             | GameplayEventKind::BodyLife { .. }
             | GameplayEventKind::Wilds { .. }
+            | GameplayEventKind::Outlands { .. }
             | GameplayEventKind::Frontier { .. }
             | GameplayEventKind::Alien { .. }
             | GameplayEventKind::Station { .. }
@@ -2291,6 +2338,14 @@ mod tests {
         }
         for what in fatherload_simulation::planet::wilds::WildsEvent::ALL {
             events.push(GameplayEventKind::Wilds {
+                what,
+                player_id: Some(player_id),
+                x: 0,
+                y: 0,
+            });
+        }
+        for what in fatherload_simulation::planet::outlands::OutlandsEvent::ALL {
+            events.push(GameplayEventKind::Outlands {
                 what,
                 player_id: Some(player_id),
                 x: 0,
@@ -3067,6 +3122,18 @@ mod tests {
             SoundCue::SpaceBossWarn,
             SoundCue::SpaceBossAppear,
             SoundCue::SpaceEnemyShot,
+            SoundCue::OutlandCapBounce,
+            SoundCue::OutlandMyceliumCreep,
+            SoundCue::OutlandGlowflash,
+            SoundCue::OutlandVentSwell,
+            SoundCue::OutlandVentBlast,
+            SoundCue::OutlandGearClank,
+            SoundCue::OutlandRelayFlip,
+            SoundCue::OutlandTombOpen,
+            SoundCue::OutlandWispChill,
+            SoundCue::OutlandBossWake,
+            SoundCue::OutlandBroodCall,
+            SoundCue::OutlandBossFall,
         ];
 
         let mut patches: Vec<Patch> = cues.iter().map(|cue| cue_patch(*cue)).collect();

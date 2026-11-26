@@ -56,6 +56,8 @@ mod lunar_art;
 mod poi_art;
 mod sky_art;
 mod wilds_art;
+// Wave 13 planets-c: the fungal, machine and dead worlds.
+mod outlands_art;
 
 pub use alien_art::alien_color;
 pub use built_art::{culture_colors, masonry_near};
@@ -69,6 +71,7 @@ pub use frontier_art::{frontier_color, frontier_glow};
 pub use heart_art::{core_color, core_glow};
 pub use hollow_art::hollow_color;
 pub use lunar_art::lunar_color;
+pub use outlands_art::outland_color;
 pub use poi_art::poi_color;
 pub use sky_art::{sky_color, sky_glow};
 pub use wilds_art::wild_color;
@@ -444,6 +447,7 @@ pub fn material_color(kind: TileKind, band: Band) -> Color {
         TileKind::Wild(tile) => return wilds_art::wild_color(tile),
         TileKind::Frontier(tile) => return frontier_art::frontier_color(tile),
         TileKind::Alien(tile) => return alien_art::alien_color(tile),
+        TileKind::Outland(tile) => return outlands_art::outland_color(tile),
         TileKind::Ore(_)
         | TileKind::Artifact(_)
         | TileKind::ExplosivePocket
@@ -634,6 +638,7 @@ fn base_pixel(kind: TileKind, strata: &Strata, host: TileKind, x: i32, y: i32) -
         | TileKind::Alien(_) => base_pixel(host, strata, host, x, y),
         TileKind::Wild(tile) => wilds_art::rock_pixel(tile, x, y),
         TileKind::Frontier(tile) => frontier_art::base_pixel(tile, x, y),
+        TileKind::Outland(tile) => outlands_art::rock_pixel(tile, x, y),
     }
 }
 
@@ -824,6 +829,8 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     // Ore and artifacts in a biome's ground sit in that ground (mountain ore in granite).
     // On a wild world (Wave 12 planets-a) ore sits in the stratum's own rock.
     let mut host = wilds_art::host_rock(terrain, position)
+        // And on an outland world (Wave 13 planets-c).
+        .or_else(|| outlands_art::host_rock(terrain, position))
         .or(ground)
         .unwrap_or_else(|| host_material(band));
     // A frontier world's tunnels show its stratum's wall and its ore sits in its stratum's
@@ -851,6 +858,10 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
         }
         // The wild worlds (Wave 12 planets-a): vines, the sea and the strata's walls.
         if wilds_art::paint_wilds_air(&mut canvas, terrain, position, up, left, right) {
+            return canvas;
+        }
+        // The outland worlds (Wave 13 planets-c): the strata's walls.
+        if outlands_art::paint_outlands_air(&mut canvas, terrain, position, up, left, right) {
             return canvas;
         }
         if cell_at(terrain, x, y) == Cell::Sky {
@@ -998,6 +1009,23 @@ fn render_tile(terrain: &Terrain, position: TilePosition) -> TileCanvas {
     // The wild worlds' materials (Wave 12 planets-a).
     if let TileKind::Wild(tile) = kind {
         wilds_art::paint(
+            &mut canvas,
+            terrain,
+            position,
+            tile,
+            &strata,
+            Edges {
+                up,
+                down,
+                left,
+                right,
+            },
+        );
+        return canvas;
+    }
+    // The outland worlds' materials (Wave 13 planets-c).
+    if let TileKind::Outland(tile) = kind {
+        outlands_art::paint(
             &mut canvas,
             terrain,
             position,
@@ -1545,6 +1573,7 @@ const fn grows_grass(material: TileKind) -> bool {
         material,
         TileKind::Surface(_)
             | TileKind::Frontier(_)
+            | TileKind::Outland(_)
             | TileKind::Lava
             | TileKind::Lunar(_)
             | TileKind::Deep(_)
@@ -1582,7 +1611,10 @@ const fn grows_grass(material: TileKind) -> bool {
 /// snow and sand, moss on mud, a lit rim on bare mountain and mesa rock.
 fn paint_surface_top(canvas: &mut TileCanvas, terrain: &Terrain, material: TileKind) {
     // Nothing grows on lava, nor on a frontier world's rock (an ore's host there, Wave 12).
-    if matches!(material, TileKind::Lava | TileKind::Frontier(_)) {
+    if matches!(
+        material,
+        TileKind::Lava | TileKind::Frontier(_) | TileKind::Outland(_)
+    ) {
         return;
     }
     let TileKind::Surface(surface) = material else {

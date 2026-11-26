@@ -515,7 +515,7 @@ pub fn planet_params_for(seed: u64, key: SpaceBodyKey) -> Option<crate::planet::
 pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme::PlanetThemeId {
     use crate::{planet::theme::PlanetThemeId, space::Theme};
     match theme {
-        Theme::Barren | Theme::DeadWorld | Theme::Moon | Theme::Home => PlanetThemeId::BARREN,
+        Theme::Barren | Theme::Moon | Theme::Home => PlanetThemeId::BARREN,
         // Wave 12 planets-a: the wild worlds (the Wave 11 ice placeholder stays registered
         // for bodies saved with it).
         Theme::Ice => PlanetThemeId::GLACIER,
@@ -525,11 +525,11 @@ pub const fn planet_theme_of(theme: crate::space::Theme) -> crate::planet::theme
         Theme::DesertDunes => crate::frontier::DUNE_WORLD,
         Theme::Volcanic => crate::frontier::VOLCANIC_WORLD,
         Theme::Crystal => crate::frontier::CRYSTAL_WORLD,
-        Theme::Fungal
-        | Theme::MachineWorld
-        | Theme::GasGiant
-        | Theme::TidallyLocked
-        | Theme::RingWorld => PlanetThemeId::ROCKY,
+        // Wave 13 planets-c: the outland worlds.
+        Theme::Fungal => PlanetThemeId::FUNGAL,
+        Theme::MachineWorld => PlanetThemeId::MACHINE,
+        Theme::DeadWorld => PlanetThemeId::DEAD,
+        Theme::GasGiant | Theme::TidallyLocked | Theme::RingWorld => PlanetThemeId::ROCKY,
     }
 }
 

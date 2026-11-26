@@ -598,6 +598,7 @@ pub const fn base_drill_seconds_per_chip(kind: TileKind) -> f32 {
         },
         TileKind::Frontier(tile) => tile.base_chip_seconds(),
         TileKind::Alien(tile) => tile.base_chip_seconds(),
+        TileKind::Outland(tile) => tile.base_chip_seconds(),
         TileKind::Sky(tile) => match tile.hardness() {
             1 => 0.08,
             2 => 0.12,

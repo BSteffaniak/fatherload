@@ -79,6 +79,8 @@ mod living;
 mod sky;
 mod tomb;
 mod wilds;
+// Wave 13 planets-c: the outland worlds' creatures and theme bosses.
+mod outlands;
 
 pub use crypt::SLAM_REACH;
 pub(super) use distortion::distortion_event;
@@ -283,6 +285,16 @@ const fn diggable_by(enemy: EnemyKind, kind: TileKind) -> bool {
         ),
         // Wave 12: the dune wyrm swims the dune world's sand.
         EnemyKind::DuneWyrm => frontier::wyrm_ground(kind),
+        // Wave 13: a rotmaw bores through the fungal world's soft rock and spore stone.
+        EnemyKind::Rotmaw => matches!(
+            kind,
+            TileKind::Outland(
+                crate::planet::outlands::OutlandTile::MyceliumMat
+                    | crate::planet::outlands::OutlandTile::Hyphae
+                    | crate::planet::outlands::OutlandTile::Gillstone
+                    | crate::planet::outlands::OutlandTile::Sporeheart
+            )
+        ),
         _ => diggable(kind),
     }
 }
@@ -401,6 +413,10 @@ impl WorldState {
         if let Some(safe) = self.frontier_safe_zone(tile) {
             return safe;
         }
+        // An outland world (Wave 13): only its settlement site is safe.
+        if let Some(safe) = self.outlands_safe_zone(tile) {
+            return safe;
+        }
         let surface = self.terrain.surface_row(tile.x);
         if tile.y < surface + SAFE_SURFACE_ROWS {
             // The hostile sky of a V9 world (archipelago and up, T21) is safe only in sky
@@ -443,6 +459,10 @@ impl WorldState {
     pub(super) fn tier_at(&self, tile: TilePosition) -> u8 {
         // A wild world (Wave 12 planets-a) is past the Heart: its own tiers.
         if let Some(tier) = self.wild_tier(tile) {
+            return tier;
+        }
+        // An outland world (Wave 13 planets-c) too.
+        if let Some(tier) = self.outland_tier(tile) {
             return tier;
         }
         if self.terrain.settings().generator.has_descents() {
@@ -723,6 +743,9 @@ impl WorldState {
             return false;
         }
         if let Some(fits) = self.wilds_habitat(kind, tile) {
+            return fits;
+        }
+        if let Some(fits) = self.outlands_habitat(kind, tile) {
             return fits;
         }
         if let Some(fits) = self.hollow_habitat(kind, tile) {
@@ -1364,6 +1387,8 @@ impl WorldState {
             .or_else(|| self.wilds_notice(body, state, || self.perceive(body, state)))
             // The frontier worlds (Wave 12): the fauna never hunt, the wyrm hears drilling.
             .or_else(|| self.frontier_notice(body, state))
+            // The outland worlds (Wave 13): the fauna never hunt.
+            .or_else(|| Self::outlands_notice(state))
             .unwrap_or_else(|| self.perceive(body, state));
         let noticed = self.sky_notice(id, body, state, noticed, output);
         let (home_x, home_y) = self.frame().centre_of(state.home.0, state.home.1);
@@ -1446,6 +1471,13 @@ impl WorldState {
         // drifter rings.
         if state.kind.is_frontier()
             && let Some(intent) = self.frontier_behave(id, body, state, now, output)
+        {
+            return intent;
+        }
+        // And the outland worlds' (Wave 13): herds bed down, lanternflies keep a rig company,
+        // ashrunners bolt, bonepickers circle.
+        if state.kind.is_outlands()
+            && let Some(intent) = self.outlands_behave(body, state, now)
         {
             return intent;
         }
@@ -2817,6 +2849,10 @@ impl WorldState {
             let tile = self.frame().tile_at(body.x, body.y);
             self.heart_kill(id.get(), state.kind, tile, state.last_attacker, output);
         }
+        if state.kind.is_outlands() {
+            // A theme boss's fall spends its seal and opens its vault (Wave 13).
+            self.outlands_kill(state.kind, state.last_attacker, output);
+        }
         self.enemies.kills = self.enemies.kills.saturating_add(1);
         #[allow(clippy::cast_possible_truncation, reason = "bounded world pixels")]
         output.push_event(GameplayEventKind::EnemyKilled {
@@ -3131,6 +3167,23 @@ const fn cave_habitat_fits(kind: EnemyKind, tags: crate::cave::CaveSpawnTags) ->
         // Raiders come only by dropship (Wave 12 hostiles).
         | EnemyKind::RaidCorsair
         | EnemyKind::SwarmSkitter
-        | EnemyKind::MachineTrooper => false,
+        | EnemyKind::MachineTrooper
+        // The outland worlds' creatures and bosses have their own spawner (Wave 13).
+        | EnemyKind::Capgrazer
+        | EnemyKind::Lanternfly
+        | EnemyKind::Sporeling
+        | EnemyKind::Rotmaw
+        | EnemyKind::Sporemother
+        | EnemyKind::Scuttlebot
+        | EnemyKind::WardDrone
+        | EnemyKind::Cogspider
+        | EnemyKind::ArcMite
+        | EnemyKind::ReactorWarden
+        | EnemyKind::Ashrunner
+        | EnemyKind::Bonepicker
+        | EnemyKind::Gravewarden
+        | EnemyKind::Shade
+        | EnemyKind::AshenSovereign
+        => false,
     }
 }

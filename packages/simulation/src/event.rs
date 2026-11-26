@@ -1411,6 +1411,17 @@ pub enum GameplayEventKind {
         player_id: Option<PlayerId>,
         detail: u32,
     },
+    // The outland worlds (Wave 13 planets-c; netcode codes 1000-1019).
+    /// Something happened on a fungal, machine or dead world at tile `(x, y)` of its ground (a
+    /// cap bounced a rig, mycelium regrew, a glowcap flashed, a vent blasted, the gears
+    /// clanked, a relay flipped, a vault or a tomb opened, a ghost light chilled a hull, a
+    /// theme boss woke, called its brood or fell); `player_id` is whose rig, if anyone's.
+    Outlands {
+        what: crate::planet::outlands::OutlandsEvent,
+        player_id: Option<PlayerId>,
+        x: i32,
+        y: i32,
+    },
 }
 
 /// What a weapon shot struck.

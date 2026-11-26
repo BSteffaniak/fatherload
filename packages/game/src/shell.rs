@@ -969,6 +969,31 @@ pub enum SoundCue {
     SpaceBossAppear,
     /// A hostile ship's shot.
     SpaceEnemyShot,
+    // --- The outland worlds (Wave 13 planets-c) ---
+    /// A mushroom cap throwing a rig back up.
+    OutlandCapBounce,
+    /// Mycelium growing back into a tunnel.
+    OutlandMyceliumCreep,
+    /// A glowcap's stunning flash.
+    OutlandGlowflash,
+    /// A spore vent swelling (its blast comes next).
+    OutlandVentSwell,
+    /// A spore vent's blast.
+    OutlandVentBlast,
+    /// The gear works' clank (the gears turn next).
+    OutlandGearClank,
+    /// A power relay flipping.
+    OutlandRelayFlip,
+    /// A tomb's seal breaking.
+    OutlandTombOpen,
+    /// A ghost light's chilling touch.
+    OutlandWispChill,
+    /// A theme boss waking in its lair.
+    OutlandBossWake,
+    /// A theme boss calling its brood.
+    OutlandBroodCall,
+    /// A theme boss falling.
+    OutlandBossFall,
 }
 
 /// Interior service animation after a completed fuel/repair purchase.

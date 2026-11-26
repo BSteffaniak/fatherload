@@ -445,6 +445,10 @@ pub static THEME_HOOKS: &[&dyn PlanetThemeHooks] = &[
     &crate::frontier::hooks::DUNE_HOOKS,
     &crate::frontier::hooks::VOLCANIC_HOOKS,
     &crate::frontier::hooks::CRYSTAL_HOOKS,
+    // Wave 13 planets-c: the outland worlds.
+    &super::outlands::hooks::FUNGAL_HOOKS,
+    &super::outlands::hooks::MACHINE_HOOKS,
+    &super::outlands::hooks::DEAD_HOOKS,
 ];
 
 const fn data_hooks<const N: usize>() -> [DataTheme; N] {

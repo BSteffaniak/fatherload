@@ -31,6 +31,7 @@
 
 pub mod hooks;
 pub mod landing;
+pub mod outlands;
 #[cfg(test)]
 mod tests;
 pub mod theme;

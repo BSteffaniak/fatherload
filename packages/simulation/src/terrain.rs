@@ -366,6 +366,11 @@ pub enum TileKind {
     /// [`crate::alien`]): each species' street paving and the lexicon stones buried under
     /// their towns.
     Alien(crate::alien::AlienTile),
+    /// A tile of an outland world's ground (Wave 13 planets-c: the fungal, machine and dead
+    /// planets; see [`crate::planet::outlands`]): mycelium, mushrooms, glowcaps and spore
+    /// vents; plate, belts, gears, relays and vaults; ash, petrified cities, tombs and
+    /// soulstone; the builders' outposts and the theme bosses' seals and vaults.
+    Outland(crate::planet::outlands::OutlandTile),
 }
 
 /// The ground materials surface biomes are made of ([`crate::worldgen::biome`]).
@@ -482,6 +487,7 @@ impl TileKind {
             Self::Wild(tile) => tile.name(),
             Self::Frontier(tile) => tile.name(),
             Self::Alien(tile) => tile.name(),
+            Self::Outland(tile) => tile.name(),
         }
     }
 
@@ -585,6 +591,9 @@ impl Tile {
             TileKind::Wild(tile) => crate::planet::wilds::WILD_TILE_CODE_BASE | tile.code(),
             TileKind::Frontier(tile) => crate::frontier::FRONTIER_TILE_CODE_BASE + tile.code(),
             TileKind::Alien(tile) => crate::alien::ALIEN_TILE_CODE_BASE | tile.code(),
+            TileKind::Outland(tile) => {
+                crate::planet::outlands::OUTLAND_TILE_CODE_BASE + tile.code()
+            }
         };
         (kind << 8) | self.durability as u64
     }
@@ -2401,6 +2410,8 @@ pub const fn is_unbreakable(kind: TileKind) -> bool {
         TileKind::Core(tile) => tile.indestructible(),
         // A frontier world's light wells: the lens, receptors and vault seals (Wave 12).
         TileKind::Frontier(tile) => tile.indestructible(),
+        // An outland world's vault walls, power seals and boss seals (Wave 13).
+        TileKind::Outland(tile) => tile.indestructible(),
         // The Prism Desert's colour-keyed walls open only to light (Wave 9).
         // ... and Descent VII part B's fixtures (Wave 10).
         TileKind::Cave(tile) => tile.is_keyed_wall() || tile.is_garrison_fixture(),
@@ -2467,6 +2478,7 @@ pub const fn tile_hardness(kind: TileKind) -> u8 {
         TileKind::Wild(tile) => tile.hardness(),
         TileKind::Frontier(tile) => tile.hardness(),
         TileKind::Alien(tile) => tile.hardness(),
+        TileKind::Outland(tile) => tile.hardness(),
         TileKind::Artifact(
             ArtifactKind::CrystalPrism
             | ArtifactKind::RadiantShell
@@ -2517,6 +2529,7 @@ pub const fn tile_durability(kind: TileKind) -> u8 {
         TileKind::Wild(tile) => tile.durability(),
         TileKind::Frontier(tile) => tile.durability(),
         TileKind::Alien(tile) => tile.durability(),
+        TileKind::Outland(tile) => tile.durability(),
     }
 }
 

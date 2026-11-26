@@ -22,6 +22,7 @@ pub mod living;
 pub mod menu_icons;
 pub mod moon;
 pub mod old_deep;
+pub mod outlands;
 pub mod poi;
 pub mod prompts;
 pub mod rig;
@@ -652,6 +653,22 @@ pub const ALL: &[&SpriteDef] = &[
     &frontier::GLINT_MOTH,
     &frontier::CHIME_DRIFTER,
     &frontier::GEODE_MIMIC,
+    // The outland worlds' creatures and theme bosses (Wave 13 planets-c).
+    &outlands::CAPGRAZER,
+    &outlands::LANTERNFLY,
+    &outlands::SPORELING,
+    &outlands::ROTMAW,
+    &outlands::SPOREMOTHER,
+    &outlands::SCUTTLEBOT,
+    &outlands::WARD_DRONE,
+    &outlands::COGSPIDER,
+    &outlands::ARC_MITE,
+    &outlands::REACTOR_WARDEN,
+    &outlands::ASHRUNNER,
+    &outlands::BONEPICKER,
+    &outlands::GRAVEWARDEN,
+    &outlands::SHADE,
+    &outlands::ASHEN_SOVEREIGN,
 ];
 
 #[cfg(test)]

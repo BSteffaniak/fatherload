@@ -193,6 +193,10 @@ mod space_systems_tests;
 mod wilds;
 #[cfg(test)]
 mod wilds_tests;
+// Wave 13 planets-c: the fungal, machine and dead worlds in play.
+mod outlands;
+#[cfg(test)]
+mod outlands_tests;
 pub use aliens::{
     HOME_BUILD_DAY_DIVISOR, alien_species_of, home_price as alien_home_price, trail_system,
 };

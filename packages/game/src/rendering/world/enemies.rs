@@ -30,7 +30,7 @@ use crate::rendering::pixel_art::{
         drowned as drowned_art, enemies as art, far_strange as far_art, frontier as frontier_art,
         garrison as garrison_art, heart as heart_art, hollow as hollow_art,
         hostiles as hostile_art, living as living_art, moon as moon_art, old_deep as deep_art,
-        tomb as tomb_art, wilds as wilds_art,
+        outlands as outland_art, tomb as tomb_art, wilds as wilds_art,
     },
 };
 
@@ -231,6 +231,22 @@ pub const fn enemy_sprite(kind: EnemyKind) -> &'static SpriteDef {
         EnemyKind::RaidCorsair => &hostile_art::RAID_CORSAIR,
         EnemyKind::SwarmSkitter => &hostile_art::SWARM_SKITTER,
         EnemyKind::MachineTrooper => &hostile_art::MACHINE_TROOPER,
+        // The outland worlds (Wave 13 planets-c).
+        EnemyKind::Capgrazer => &outland_art::CAPGRAZER,
+        EnemyKind::Lanternfly => &outland_art::LANTERNFLY,
+        EnemyKind::Sporeling => &outland_art::SPORELING,
+        EnemyKind::Rotmaw => &outland_art::ROTMAW,
+        EnemyKind::Sporemother => &outland_art::SPOREMOTHER,
+        EnemyKind::Scuttlebot => &outland_art::SCUTTLEBOT,
+        EnemyKind::WardDrone => &outland_art::WARD_DRONE,
+        EnemyKind::Cogspider => &outland_art::COGSPIDER,
+        EnemyKind::ArcMite => &outland_art::ARC_MITE,
+        EnemyKind::ReactorWarden => &outland_art::REACTOR_WARDEN,
+        EnemyKind::Ashrunner => &outland_art::ASHRUNNER,
+        EnemyKind::Bonepicker => &outland_art::BONEPICKER,
+        EnemyKind::Gravewarden => &outland_art::GRAVEWARDEN,
+        EnemyKind::Shade => &outland_art::SHADE,
+        EnemyKind::AshenSovereign => &outland_art::ASHEN_SOVEREIGN,
     }
 }
 
@@ -1005,6 +1021,55 @@ fn enemy_frame(entity: &Entity, state: &EnemyState, seconds: f32) -> usize {
             EnemyMode::Windup | EnemyMode::Strike => 2,
             _ => 1,
         },
+        // The outland worlds (Wave 13): wings, sparks and ghosts loop; walkers stride while
+        // moving and show their attack pose winding up; the bosses swell, flare or raise
+        // their staff before each volley (the telegraph is the pose).
+        EnemyKind::Lanternfly | EnemyKind::ArcMite | EnemyKind::Shade | EnemyKind::WardDrone => {
+            if state.kind == EnemyKind::WardDrone && attacking {
+                1
+            } else {
+                sprite.frame_at(phase)
+            }
+        }
+        EnemyKind::Scuttlebot | EnemyKind::Ashrunner => {
+            if moving {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Rotmaw => usize::from(attacking),
+        EnemyKind::Capgrazer
+        | EnemyKind::Sporeling
+        | EnemyKind::Cogspider
+        | EnemyKind::Bonepicker
+        | EnemyKind::Gravewarden => {
+            if attacking {
+                2
+            } else if moving {
+                sprite.frame_at(phase) % 2
+            } else {
+                0
+            }
+        }
+        EnemyKind::Sporemother | EnemyKind::ReactorWarden => {
+            if state.mode == EnemyMode::Windup {
+                1
+            } else if state.mode == EnemyMode::Strike {
+                2
+            } else {
+                0
+            }
+        }
+        EnemyKind::AshenSovereign => {
+            if attacking {
+                2
+            } else if moving {
+                ((phase * 2.0) as usize) % 2
+            } else {
+                0
+            }
+        }
     }
 }
 
@@ -1055,6 +1120,11 @@ const fn sprite_scale(kind: EnemyKind) -> f32 {
         | EnemyKind::GlitchShard => ART * 1.5,
         // The wild worlds' megafauna (Wave 12 planets-a) tower over a rig.
         EnemyKind::Trundlehorn | EnemyKind::Shellstrider | EnemyKind::Woolhorn => ART * 1.5,
+        // The outland worlds' grazer and theme bosses (Wave 13): big and readable.
+        EnemyKind::Capgrazer
+        | EnemyKind::Sporemother
+        | EnemyKind::ReactorWarden
+        | EnemyKind::AshenSovereign => ART * 1.5,
         _ => ART,
     }
 }

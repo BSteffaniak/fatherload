@@ -656,6 +656,11 @@ impl WorldState {
                 MineResult::Mined(TileKind::Wild(tile)) => {
                     self.wild_tile_mined(player_id, target, tile, &mut output);
                 }
+                // The outland worlds (Wave 13 planets-c): puffballs, glowcaps, relays, tomb
+                // seals, relics and caches.
+                MineResult::Mined(TileKind::Outland(tile)) => {
+                    self.outland_tile_mined(player_id, target, tile, &mut output);
+                }
                 MineResult::Activated(lit) => {
                     self.activate_vault_lock(target, lit, next_tick, &mut output);
                 }
@@ -688,6 +693,8 @@ impl WorldState {
             self.advance_body_life(&mut output);
             // A wild world's hazards, rules, weather and creatures (Wave 12 planets-a).
             self.advance_wilds(next_tick, &mut output);
+            // An outland world's (Wave 13 planets-c), and its theme boss.
+            self.advance_outlands(next_tick, &mut output);
             output.terrain_ops = self.terrain.finish_journal();
             self.wake_entities_near(&output.terrain_ops);
             self.stream_ground_near_players();
@@ -722,6 +729,8 @@ impl WorldState {
         // A world that is one wild planet (Wave 12 planets-a; bodies' ground passes run it
         // above).
         self.advance_wilds(next_tick, &mut output);
+        // Or one outland planet (Wave 13 planets-c).
+        self.advance_outlands(next_tick, &mut output);
         // The distortion strata (Wave 9): mirror halls and their twins, gazes, rot, landmarks.
         self.advance_distortion(next_tick, &mut output);
         // The far Strange Layers (Wave 9): amber, pings, keyed walls, landmarks, The Glitch.

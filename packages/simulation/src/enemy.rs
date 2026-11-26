@@ -226,6 +226,29 @@
 //! | [`EnemyKind::RaidCorsair`] | creature (ranged) | set down by a pirate dropship on a body (Wave 12 raids) | raises its rifle before it fires | cover, close in |
 //! | [`EnemyKind::SwarmSkitter`] | creature (lunger) | dropped by the swarm on a body | crouches before it leaps | sidestep, shoot it mid-leap |
 //! | [`EnemyKind::MachineTrooper`] | machine (ranged) | set down by the Concord on a body | its eye glows before a pulse | cover, EMP |
+//!
+//! The outland worlds' creatures (Wave 13 planets-c, [`crate::planet::outlands`]) live on the
+//! fungal, machine and dead planets, in each planet's local frame; `world/enemies/outlands.rs`
+//! spawns them by habitat and gives them their ways. Each world has one theme boss in a lair
+//! under its landmark:
+//!
+//! | Kind | Family | Habitat | Tell | Counter |
+//! |---|---|---|---|---|
+//! | [`EnemyKind::Capgrazer`] | creature (megafauna, neutral) | the fungal world's surface | grazes the caps in herds; charges only once struck | leave it be |
+//! | [`EnemyKind::Lanternfly`] | creature (symbiont, neutral) | the Glowcap Grottos | drifts to a rig and lights its way | harmless; struck, it flees |
+//! | [`EnemyKind::Sporeling`] | creature (parasite pack) | the fungal surface | a hopping pack that latches on and feeds | glowcap flashes, blasts |
+//! | [`EnemyKind::Rotmaw`] | creature (burrower) | the Sporeheart Deep | the rock bulges, then it lunges | keep moving, blasts |
+//! | [`EnemyKind::Sporemother`] | creature (theme boss) | the hollow under the Mother Cap | swells before each volley of spore orbs; calls sporelings | dodge the orbs, flash the brood, keep shooting |
+//! | [`EnemyKind::Scuttlebot`] | machine (neutral) | the machine world's plates | a maintenance crawler mending the plating | leave it be |
+//! | [`EnemyKind::WardDrone`] | machine (ranged) | over the plates | its lens glows before a bolt | cover, EMP |
+//! | [`EnemyKind::Cogspider`] | machine (lunger) | the Gear Works | rears on its back legs, then pounces | sidestep, EMP |
+//! | [`EnemyKind::ArcMite`] | machine (swarmer) | the Reactor Shell | crackling sparks | anything; EMP |
+//! | [`EnemyKind::ReactorWarden`] | machine (theme boss) | the core reactor's hall | its core flares before each bolt volley; calls drones | cover, EMP, keep shooting |
+//! | [`EnemyKind::Ashrunner`] | creature (scavenger, neutral) | the ash plains | bolts from rigs | leave it be |
+//! | [`EnemyKind::Bonepicker`] | creature (scavenger pack) | the ash plains and cities | circles, then darts in | blasts, fire |
+//! | [`EnemyKind::Gravewarden`] | creature (tomb guardian, armoured) | the Necropolis's tombs | raises its blade | blasts; bullets glance off |
+//! | [`EnemyKind::Shade`] | creature (ghost) | the Grave Mantle | a cold glow drifting near | anything; light |
+//! | [`EnemyKind::AshenSovereign`] | creature (theme boss) | the tomb beneath the Hollow Throne | raises its staff before each volley of ghost flame; calls shades | dodge, keep shooting |
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -603,6 +626,37 @@ pub enum EnemyKind {
     SwarmSkitter,
     /// A Concord trooper: a walking machine that fires pulses.
     MachineTrooper,
+    // --- The outland worlds (Wave 13 planets-c, `crate::planet::outlands`), appended ------
+    /// Fungal: a neutral grazer the size of a hill, a garden of caps on its back.
+    Capgrazer,
+    /// Fungal: a glowing symbiont that drifts to a rig and lights its way (neutral).
+    Lanternfly,
+    /// Fungal: a hopping parasite that latches on in packs.
+    Sporeling,
+    /// Fungal: a burrowing maw of the Sporeheart Deep.
+    Rotmaw,
+    /// Fungal theme boss: the rooted mother of the spores.
+    Sporemother,
+    /// Machine: a neutral maintenance crawler.
+    Scuttlebot,
+    /// Machine: a defence drone that fires bolts.
+    WardDrone,
+    /// Machine: a pouncing gear-legged spider of the Gear Works.
+    Cogspider,
+    /// Machine: a crackling swarmer of the Reactor Shell.
+    ArcMite,
+    /// Machine theme boss: the core reactor's warden.
+    ReactorWarden,
+    /// Dead: a neutral scavenger of the ash plains.
+    Ashrunner,
+    /// Dead: a scavenger that hunts in packs.
+    Bonepicker,
+    /// Dead: an armoured tomb guardian.
+    Gravewarden,
+    /// Dead: a cold ghost of the Grave Mantle.
+    Shade,
+    /// Dead theme boss: the last king of the dead world.
+    AshenSovereign,
 }
 
 /// Something a sky enemy did that the game cues (see
@@ -1066,7 +1120,7 @@ const fn stats(
 
 impl EnemyKind {
     /// Every kind, in order.
-    pub const ALL: [Self; 177] = [
+    pub const ALL: [Self; 192] = [
         Self::CaveBat,
         Self::Burrower,
         Self::AcidSpitter,
@@ -1244,7 +1298,64 @@ impl EnemyKind {
         Self::RaidCorsair,
         Self::SwarmSkitter,
         Self::MachineTrooper,
+        Self::Capgrazer,
+        Self::Lanternfly,
+        Self::Sporeling,
+        Self::Rotmaw,
+        Self::Sporemother,
+        Self::Scuttlebot,
+        Self::WardDrone,
+        Self::Cogspider,
+        Self::ArcMite,
+        Self::ReactorWarden,
+        Self::Ashrunner,
+        Self::Bonepicker,
+        Self::Gravewarden,
+        Self::Shade,
+        Self::AshenSovereign,
     ];
+
+    /// Whether this is one of the outland worlds' creatures (Wave 13 planets-c), their bosses
+    /// included.
+    #[must_use]
+    pub const fn is_outlands(self) -> bool {
+        matches!(
+            self,
+            Self::Capgrazer
+                | Self::Lanternfly
+                | Self::Sporeling
+                | Self::Rotmaw
+                | Self::Sporemother
+                | Self::Scuttlebot
+                | Self::WardDrone
+                | Self::Cogspider
+                | Self::ArcMite
+                | Self::ReactorWarden
+                | Self::Ashrunner
+                | Self::Bonepicker
+                | Self::Gravewarden
+                | Self::Shade
+                | Self::AshenSovereign
+        )
+    }
+
+    /// Whether this is one of the outland worlds' theme bosses.
+    #[must_use]
+    pub const fn is_outland_boss(self) -> bool {
+        matches!(
+            self,
+            Self::Sporemother | Self::ReactorWarden | Self::AshenSovereign
+        )
+    }
+
+    /// Whether this is one of the outland worlds' neutral fauna: it never attacks first.
+    #[must_use]
+    pub const fn is_outland_fauna(self) -> bool {
+        matches!(
+            self,
+            Self::Capgrazer | Self::Lanternfly | Self::Scuttlebot | Self::Ashrunner
+        )
+    }
 
     /// Whether this is one of the wild worlds' creatures (Wave 12 planets-a).
     #[must_use]
@@ -1541,6 +1652,14 @@ impl EnemyKind {
             Self::ChimeDrifter => 1.6,
             Self::EmberStrider => 0.8,
             Self::MirageMoth => 0.6,
+            // The outland worlds (Wave 13): lanterns, sparks, ghost light and the bosses' cores.
+            Self::Lanternfly => 3.0,
+            Self::Sporemother => 4.0,
+            Self::ArcMite => 1.2,
+            Self::WardDrone => 0.8,
+            Self::ReactorWarden => 4.5,
+            Self::Shade => 2.0,
+            Self::AshenSovereign => 3.0,
             _ => 0.0,
         }
     }
@@ -4342,6 +4461,243 @@ impl EnemyKind {
                     AttackStyle::Ranged(ShotKind::SentinelBolt, 1),
                 )
             },
+            // --- The outland worlds (Wave 13 planets-c) --------------------------------------
+            Self::Capgrazer => EnemyStats {
+                radius: 13.0,
+                health: 360.0,
+                speed: 30.0,
+                dash_speed: 210.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 14.0,
+                windup_millis: 900,
+                cooldown_millis: 4_000,
+                attack_range_tiles: 3.0,
+                knockback: 280.0,
+                ..stats("Capgrazer", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Lanternfly => EnemyStats {
+                radius: 6.0,
+                health: 16.0,
+                speed: 70.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 30.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 30.0,
+                ..stats("Lanternfly", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::Sporeling => EnemyStats {
+                radius: 7.0,
+                health: 40.0,
+                speed: 85.0,
+                dash_speed: 260.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 28.0,
+                contact_damage: 7.0,
+                windup_millis: 450,
+                cooldown_millis: 1_500,
+                attack_range_tiles: 3.0,
+                knockback: 120.0,
+                ..stats("Sporeling", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Rotmaw => EnemyStats {
+                radius: 9.0,
+                health: 120.0,
+                speed: 50.0,
+                dash_speed: 300.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 20.0,
+                contact_damage: 15.0,
+                windup_millis: 750,
+                cooldown_millis: 2_600,
+                attack_range_tiles: 3.5,
+                knockback: 230.0,
+                ..stats("Rotmaw", Creature, Burrowing, AttackStyle::Lunge)
+            },
+            Self::Sporemother => EnemyStats {
+                radius: 22.0,
+                health: 1_100.0,
+                speed: 0.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 0.0,
+                contact_damage: 16.0,
+                windup_millis: 1_200,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 24.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Sporemother",
+                    Creature,
+                    Stationary,
+                    AttackStyle::Ranged(ShotKind::MindSpore, 3),
+                )
+            },
+            Self::Scuttlebot => EnemyStats {
+                radius: 7.0,
+                health: 60.0,
+                speed: 55.0,
+                dash_speed: 200.0,
+                sight_tiles: 6.0,
+                hearing_tiles: 4.0,
+                leash_tiles: 20.0,
+                contact_damage: 8.0,
+                windup_millis: 700,
+                cooldown_millis: 2_500,
+                attack_range_tiles: 2.0,
+                knockback: 150.0,
+                ..stats("Scuttlebot", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::WardDrone => EnemyStats {
+                radius: 7.0,
+                health: 55.0,
+                speed: 80.0,
+                sight_tiles: 13.0,
+                hearing_tiles: 5.0,
+                leash_tiles: 30.0,
+                contact_damage: 6.0,
+                windup_millis: 750,
+                cooldown_millis: 2_100,
+                attack_range_tiles: 10.0,
+                knockback: 110.0,
+                ..stats(
+                    "Ward Drone",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::SentryBolt, 1),
+                )
+            },
+            Self::Cogspider => EnemyStats {
+                radius: 9.0,
+                health: 95.0,
+                speed: 75.0,
+                dash_speed: 300.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 7.0,
+                leash_tiles: 24.0,
+                contact_damage: 12.0,
+                windup_millis: 550,
+                cooldown_millis: 2_200,
+                attack_range_tiles: 4.0,
+                knockback: 200.0,
+                ..stats("Cogspider", Machine, Walking, AttackStyle::Lunge)
+            },
+            Self::ArcMite => EnemyStats {
+                radius: 6.0,
+                health: 22.0,
+                speed: 120.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 26.0,
+                contact_damage: 5.0,
+                cooldown_millis: 1_200,
+                knockback: 90.0,
+                ..stats("Arc Mite", Machine, Flying, AttackStyle::Contact)
+            },
+            Self::ReactorWarden => EnemyStats {
+                radius: 22.0,
+                health: 1_200.0,
+                speed: 45.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 16.0,
+                windup_millis: 1_100,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 22.0,
+                knockback: 260.0,
+                elite: true,
+                ..stats(
+                    "The Reactor Warden",
+                    Machine,
+                    Flying,
+                    AttackStyle::Ranged(ShotKind::ColossusBolt, 3),
+                )
+            },
+            Self::Ashrunner => EnemyStats {
+                radius: 7.0,
+                health: 30.0,
+                speed: 115.0,
+                sight_tiles: 8.0,
+                hearing_tiles: 6.0,
+                leash_tiles: 20.0,
+                contact_damage: 0.0,
+                windup_millis: 0,
+                cooldown_millis: 3_000,
+                attack_range_tiles: 0.5,
+                knockback: 40.0,
+                ..stats("Ashrunner", Creature, Walking, AttackStyle::Contact)
+            },
+            Self::Bonepicker => EnemyStats {
+                radius: 8.0,
+                health: 70.0,
+                speed: 90.0,
+                dash_speed: 290.0,
+                sight_tiles: 11.0,
+                hearing_tiles: 7.0,
+                leash_tiles: 30.0,
+                contact_damage: 10.0,
+                windup_millis: 500,
+                cooldown_millis: 2_000,
+                attack_range_tiles: 3.5,
+                knockback: 160.0,
+                ..stats("Bonepicker", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Gravewarden => EnemyStats {
+                radius: 10.0,
+                health: 210.0,
+                speed: 40.0,
+                dash_speed: 240.0,
+                sight_tiles: 10.0,
+                hearing_tiles: 8.0,
+                leash_tiles: 18.0,
+                contact_damage: 17.0,
+                windup_millis: 850,
+                cooldown_millis: 2_800,
+                attack_range_tiles: 2.5,
+                knockback: 260.0,
+                ..stats("Gravewarden", Creature, Walking, AttackStyle::Lunge)
+            },
+            Self::Shade => EnemyStats {
+                radius: 8.0,
+                health: 50.0,
+                speed: 65.0,
+                sight_tiles: 9.0,
+                hearing_tiles: 7.0,
+                leash_tiles: 24.0,
+                contact_damage: 9.0,
+                cooldown_millis: 1_800,
+                knockback: 120.0,
+                ..stats("Shade", Creature, Flying, AttackStyle::Contact)
+            },
+            Self::AshenSovereign => EnemyStats {
+                radius: 22.0,
+                health: 1_300.0,
+                speed: 38.0,
+                sight_tiles: 30.0,
+                hearing_tiles: 30.0,
+                leash_tiles: 22.0,
+                contact_damage: 18.0,
+                windup_millis: 1_300,
+                cooldown_millis: 3_200,
+                attack_range_tiles: 22.0,
+                knockback: 300.0,
+                elite: true,
+                ..stats(
+                    "The Ashen Sovereign",
+                    Creature,
+                    Walking,
+                    AttackStyle::Ranged(ShotKind::Wispfire, 3),
+                )
+            },
         }
     }
 
@@ -4623,6 +4979,23 @@ impl EnemyKind {
             Self::RaidCorsair => (8.0, 13.0),
             Self::SwarmSkitter => (11.0, 7.0),
             Self::MachineTrooper => (10.0, 14.0),
+            // The outland worlds (Wave 13): about 85 % of each drawn body (the bosses and the
+            // capgrazer drawn at one and a half times).
+            Self::Capgrazer => (38.0, 22.0),
+            Self::Lanternfly => (11.0, 8.0),
+            Self::Sporeling => (11.0, 9.0),
+            Self::Rotmaw => (18.0, 11.0),
+            Self::Sporemother => (50.0, 44.0),
+            Self::Scuttlebot => (15.0, 10.0),
+            Self::WardDrone => (13.0, 10.0),
+            Self::Cogspider => (18.0, 11.0),
+            Self::ArcMite => (10.0, 8.0),
+            Self::ReactorWarden => (50.0, 44.0),
+            Self::Ashrunner => (15.0, 11.0),
+            Self::Bonepicker => (17.0, 11.0),
+            Self::Gravewarden => (13.0, 20.0),
+            Self::Shade => (13.0, 15.0),
+            Self::AshenSovereign => (44.0, 54.0),
         }
     }
 
@@ -4831,6 +5204,16 @@ impl EnemyKind {
                 Self::MagmaSlug | Self::CinderBat | Self::EmberStrider | Self::BasaltTortoise,
                 DamageKind::Fire,
             ) => 0.0,
+            // The outland worlds (Wave 13): the fungal creatures burn, tomb guardians and the
+            // Sovereign's stone turn bullets, ghosts shrug off blades.
+            (
+                Self::Sporeling | Self::Rotmaw | Self::Capgrazer | Self::Sporemother,
+                DamageKind::Fire,
+            ) => 1.5,
+            (Self::Gravewarden | Self::AshenSovereign, DamageKind::Kinetic) => 0.6,
+            (Self::Gravewarden | Self::AshenSovereign, DamageKind::Explosive) => 1.4,
+            (Self::Shade, DamageKind::Kinetic) => 0.7,
+            (Self::Capgrazer, DamageKind::Kinetic) => 0.7,
             (_, DamageKind::Fire) if machine => 0.4,
             _ => 1.0,
         }
@@ -6026,6 +6409,33 @@ pub fn loot(kind: EnemyKind, tier: u8, roll: u64) -> Vec<ItemStack> {
                     1,
                 );
             }
+        } // The outland worlds (Wave 13): the fauna carry little, the hunters ore; the
+        // machines a little alloy; a theme boss's big haul (its vault holds its relic).
+        EnemyKind::Lanternfly | EnemyKind::Ashrunner | EnemyKind::ArcMite => {
+            if rare < 20 {
+                add(mineral, 1);
+            }
+        }
+        EnemyKind::Sporeling | EnemyKind::Bonepicker | EnemyKind::Shade => add(mineral, 1),
+        EnemyKind::Capgrazer | EnemyKind::Rotmaw | EnemyKind::Gravewarden => {
+            add(richer, 2 + extra);
+            if kind == EnemyKind::Gravewarden && rare < 25 {
+                add(
+                    ItemKind::Artifact(crate::terrain::ArtifactKind::BuriedIdol),
+                    1,
+                );
+            }
+        }
+        EnemyKind::Scuttlebot | EnemyKind::WardDrone | EnemyKind::Cogspider => {
+            add(richer, 1 + extra);
+            if rare < 30 {
+                add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 1);
+            }
+        }
+        EnemyKind::Sporemother | EnemyKind::ReactorWarden | EnemyKind::AshenSovereign => {
+            add(richer, 18 + extra);
+            add(ItemKind::Material(StrategicResourceKind::AncientAlloy), 3);
+            add(ItemKind::Material(StrategicResourceKind::CoreShard), 2);
         }
     }
     drops

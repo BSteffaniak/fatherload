@@ -34,6 +34,15 @@ impl PlanetThemeId {
     /// A glacier world: ice sheets, crevasses, frozen seas and permafrost caves (Wave 12
     /// planets-a, [`crate::planet::wilds::glacier`]; the space generator's ice tag).
     pub const GLACIER: Self = Self(5);
+    /// A fungal world: giant mushroom forests, mycelium that regrows, glowcaps and spore
+    /// vents (Wave 13 planets-c, [`crate::planet::outlands::fungal`]).
+    pub const FUNGAL: Self = Self(9);
+    /// A machine world: a planet-sized ancient machine of plate, conveyors, gears and a core
+    /// reactor (Wave 13 planets-c, [`crate::planet::outlands::machine`]).
+    pub const MACHINE: Self = Self(10);
+    /// A dead world: ash plains, petrified cities, tombs and ghost lights (Wave 13 planets-c,
+    /// [`crate::planet::outlands::dead`]).
+    pub const DEAD: Self = Self(11);
 }
 
 /// Colours the renderer draws a theme's world with (sRGB).
@@ -169,7 +178,7 @@ const ICE_STRATA: [PlanetStratum; 2] = [
 ];
 
 /// Every theme, by id (append only).
-pub const PLANET_THEMES: [PlanetTheme; 9] = [
+pub const PLANET_THEMES: [PlanetTheme; 12] = [
     PlanetTheme {
         id: PlanetThemeId::BARREN,
         name: "Barren Moon",
@@ -232,6 +241,10 @@ pub const PLANET_THEMES: [PlanetTheme; 9] = [
     crate::frontier::desert::THEME,
     crate::frontier::volcanic::THEME,
     crate::frontier::crystal::THEME,
+    // Wave 13 planets-c: the outland worlds (`crate::planet::outlands`).
+    crate::planet::outlands::fungal::FUNGAL_THEME,
+    crate::planet::outlands::machine::MACHINE_THEME,
+    crate::planet::outlands::dead::DEAD_THEME,
 ];
 
 /// The theme with id `id` (an unknown id, from a newer build, reads as the first theme).

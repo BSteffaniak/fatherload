@@ -982,6 +982,12 @@ impl Tile {
                 Some(tile) => TileKind::Alien(tile),
                 None => return None,
             },
+            0x2E00..=0x31FF => match crate::planet::outlands::OutlandTile::from_code(
+                kind_code - crate::planet::outlands::OUTLAND_TILE_CODE_BASE,
+            ) {
+                Some(tile) => TileKind::Outland(tile),
+                None => return None,
+            },
             _ => return None,
         };
         Some(Self { kind, durability })
