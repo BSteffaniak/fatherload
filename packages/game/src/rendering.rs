@@ -70,6 +70,7 @@ mod story;
 pub mod terrain;
 mod title;
 mod tomb_hud;
+mod toolkit_menu;
 pub mod touch_controls;
 mod ui_kit;
 #[cfg(not(target_os = "emscripten"))]

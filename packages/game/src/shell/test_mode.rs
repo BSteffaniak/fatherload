@@ -32,6 +32,7 @@ impl PauseOption {
                     Self::PourTestPools,
                     Self::GrantStarDrive,
                     Self::WarpToStory,
+                    Self::TestToolkit,
                 ],
             );
         }

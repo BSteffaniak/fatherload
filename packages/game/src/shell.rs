@@ -48,6 +48,7 @@ pub mod star_charts;
 pub mod station;
 mod story;
 mod test_mode;
+pub mod test_toolkit;
 pub mod tombs;
 mod village;
 mod world_setup;
@@ -208,6 +209,8 @@ pub enum ModalScreen {
     GalaxyJournal,
     /// The finale's choice at the Harbour's heart (Wave 13 story, `shell/galaxy.rs`).
     GalaxyChoice,
+    /// Test mode (Wave 14): the god-mode toolkit's tools (`shell/test_toolkit.rs`).
+    TestToolkit,
 }
 
 impl ModalScreen {
@@ -225,6 +228,7 @@ impl ModalScreen {
                 | Self::UnsavedExitConfirm
                 | Self::WorldSetup
                 | Self::WarpToLayer
+                | Self::TestToolkit
         )
     }
 }
@@ -272,6 +276,8 @@ pub enum PauseOption {
     /// Test mode (Wave 13 story): move this seat's rig to where the galaxy story's current
     /// goal is done.
     WarpToStory,
+    /// Test mode (Wave 14): open the god-mode toolkit (stock, progress switches, creatures).
+    TestToolkit,
 }
 
 impl PauseOption {
@@ -344,6 +350,7 @@ impl PauseOption {
             Self::PourTestPools => "Pour Test Pools",
             Self::GrantStarDrive => "Grant Star Drive",
             Self::WarpToStory => "Warp to the Story",
+            Self::TestToolkit => "God-Mode Toolkit",
         }
     }
 }
@@ -2189,6 +2196,7 @@ impl SeatUi {
             | ModalScreen::UnsavedExitConfirm
             | ModalScreen::WorldSetup
             | ModalScreen::WarpToLayer
+            | ModalScreen::TestToolkit
             | ModalScreen::Help
             | ModalScreen::Garage
             | ModalScreen::VillageCounter
@@ -2773,6 +2781,8 @@ pub struct ShellState {
     /// Test-mode toggles chosen in the pause menu that the world has not applied yet (a paused
     /// local world applies them when it resumes).
     pub pending_test_mode: Option<TestModeState>,
+    /// The creature the god-mode toolkit spawns (an index into `EnemyKind::ALL`, Wave 14).
+    pub toolkit_creature: usize,
 }
 
 impl Default for ShellState {
@@ -2820,6 +2830,7 @@ impl ShellState {
             paused_by: 0,
             world_setup: None,
             pending_test_mode: None,
+            toolkit_creature: 0,
         }
     }
 
@@ -3052,6 +3063,9 @@ impl ShellState {
                 } else if !self.handle_menu_modal(primary, &mut requests) {
                     self.handle_title_menu(primary, ctx, &mut requests);
                 }
+            }
+            RunMode::Paused if self.modal == Some(ModalScreen::TestToolkit) => {
+                self.handle_toolkit(menu_input, ctx.world, &mut requests);
             }
             RunMode::Paused => {
                 let seed = ctx.world.world_settings().seed_text();
@@ -3544,6 +3558,7 @@ impl ShellState {
             }
             PauseOption::ExitToDesktop => self.request_exit_or_prompt(),
             PauseOption::WarpToLayer => self.open_modal(ModalScreen::WarpToLayer),
+            PauseOption::TestToolkit => self.open_toolkit(),
             PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
                 self.field_zone_action(options[self.selected_pause_item], requests);
             }

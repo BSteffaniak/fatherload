@@ -182,6 +182,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::EnemyDifficulty => &icons::WARNING,
         PauseOption::SleepRule => &icons::MOON,
         PauseOption::PourTestPools => &icons::OXYGEN,
+        PauseOption::TestToolkit => &menu_icons::HAMMER,
     }
 }
 

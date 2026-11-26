@@ -1550,6 +1550,7 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Help => draw_help_ui(draw),
         ModalScreen::WorldSetup => menus::draw_world_setup(draw, ui),
         ModalScreen::WarpToLayer => menus::draw_warp_layers(draw, ui),
+        ModalScreen::TestToolkit => super::toolkit_menu::draw_test_toolkit(draw, ui),
         ModalScreen::QuestDesk => quests::draw_quest_desk(draw, ui),
         ModalScreen::QuestLog => quests::draw_quest_log(draw, ui),
         ModalScreen::Garage => super::garage::draw_garage(draw, ui),
