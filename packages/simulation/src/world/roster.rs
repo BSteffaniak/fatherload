@@ -156,6 +156,8 @@ impl WorldState {
             hostiles,
             // A player's endgame record stays with their id, like their alien tongues (Wave 13).
             endgame: _,
+            // The road is the crew's: a leaving player's part stays in its stats (Wave 13).
+            galaxy_story: _,
         } = self;
         // A removed player's place goes with it; a parked one keeps it (F11: parking is the
         // only removal that keeps charges armed, and the rig comes back where it was parked).

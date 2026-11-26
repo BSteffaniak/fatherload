@@ -1441,6 +1441,15 @@ pub enum GameplayEventKind {
         player_id: Option<PlayerId>,
         detail: u32,
     },
+    // The galaxy story (Wave 13 story; netcode codes 1040-1059).
+    /// Something happened on the builders' road or in the discovery log; `player_id` is whose
+    /// doing (if anyone's), `detail` the event's number (see
+    /// [`crate::galaxy_story::GalaxyEvent`]).
+    Galaxy {
+        what: crate::galaxy_story::GalaxyEvent,
+        player_id: Option<PlayerId>,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1565,7 +1574,8 @@ pub(crate) const fn gameplay_event_for_applied_command(
         | PlayerCommand::Logistics(_)
         | PlayerCommand::Flight(_)
         | PlayerCommand::Alien(_)
-        | PlayerCommand::Combat(_) => {
+        | PlayerCommand::Combat(_)
+        | PlayerCommand::Galaxy(_) => {
             return None;
         }
         PlayerCommand::Service(crate::service::SessionServiceRequest::CustomizeRig { .. }) => {

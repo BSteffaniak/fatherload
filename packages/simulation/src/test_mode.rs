@@ -62,4 +62,7 @@ pub enum TestModeAction {
     SpawnBoss(crate::hostiles::Faction),
     /// Land a `Faction`'s raid by the submitting rig on a body's ground (Wave 12 hostiles).
     SpawnRaid(crate::hostiles::Faction),
+    /// Move the submitting rig to where the galaxy story's current goal is done (Wave 13
+    /// story): the stop's system, its world's relic, the Harbour's gate.
+    WarpToStory,
 }

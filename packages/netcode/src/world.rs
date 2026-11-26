@@ -482,6 +482,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Endgame {
             what, player_id, ..
         } => (1060 + what.code() as u32, player_id),
+        // The galaxy story (wave 13 story): 1040-1059.
+        GameplayEventKind::Galaxy {
+            what, player_id, ..
+        } => (1_040 + what.code() as u32, player_id),
     }
 }
 

@@ -47,7 +47,8 @@ pub const fn command_service_zones(command: &PlayerCommand) -> Option<&'static [
         | PlayerCommand::Logistics(_)
         | PlayerCommand::Flight(_)
         | PlayerCommand::Alien(_)
-        | PlayerCommand::Combat(_) => None,
+        | PlayerCommand::Combat(_)
+        | PlayerCommand::Galaxy(_) => None,
     }
 }
 

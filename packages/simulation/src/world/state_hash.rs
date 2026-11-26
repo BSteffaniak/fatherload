@@ -301,6 +301,10 @@ impl WorldState {
         if !self.endgame.is_empty() {
             hash.write_serialized(&self.endgame);
         }
+        // Absent until the galaxy story begins (Wave 13), so older worlds keep their hashes.
+        if !self.galaxy_story.is_empty() {
+            hash.write_serialized(&self.galaxy_story);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

@@ -1225,6 +1225,8 @@ impl WorldState {
         // The endgame (Wave 13) with every rig back: landings, materials, quarries, the space
         // achievements.
         self.advance_endgame(&mut output);
+        // The galaxy story (Wave 13 story) with every rig back, after the fights.
+        self.advance_galaxy_story(&mut output);
         self.place_pass.running = false;
         self.place_pass.store = StoreKey::Home;
         self.place_pass.ground_only = false;

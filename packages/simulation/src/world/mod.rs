@@ -211,6 +211,9 @@ pub use body_flight::{
 };
 #[cfg(test)]
 mod frontier_tests;
+mod galaxy_story;
+#[cfg(test)]
+mod galaxy_story_tests;
 #[cfg(test)]
 mod hostile_tests;
 pub mod planet;
@@ -670,6 +673,12 @@ pub struct WorldState {
     /// crew's Halcyon Gate, theme bosses beaten and estates on alien worlds.
     #[serde(default)]
     endgame: crate::endgame::EndgameState,
+    /// The galaxy story (Wave 13 story, see [`crate::galaxy_story`]): the chapter and goal under
+    /// way on the builders' road, the space logs and fragments found, the Warden and the
+    /// finale's choice, the discovery log of procedural leads, systems visited and worlds
+    /// landed on, and each player's part.
+    #[serde(default)]
+    galaxy_story: crate::galaxy_story::GalaxyStory,
 }
 
 impl WorldState {

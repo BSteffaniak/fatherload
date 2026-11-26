@@ -112,7 +112,9 @@ pub const fn cost(class: ShipClass) -> u32 {
         ShipClass::Stinger => 3,
         ShipClass::Marauder => 4,
         ShipClass::Lancer => 5,
-        ShipClass::PirateKing | ShipClass::SwarmQueen | ShipClass::Arbiter => 50,
+        ShipClass::PirateKing | ShipClass::SwarmQueen | ShipClass::Arbiter | ShipClass::Warden => {
+            50
+        }
     }
 }
 

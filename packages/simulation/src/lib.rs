@@ -43,6 +43,7 @@ pub mod field;
 pub mod flight;
 pub mod fluid;
 pub mod frontier;
+pub mod galaxy_story;
 pub mod garrison;
 pub mod hash;
 pub mod hazard;

@@ -73,6 +73,7 @@ pub const fn ship_sprite(class: ShipClass) -> &'static SpriteDef {
         ShipClass::Drone => &art::DRONE,
         ShipClass::Lancer => &art::LANCER,
         ShipClass::Arbiter => &art::ARBITER,
+        ShipClass::Warden => &art::WARDEN,
     }
 }
 
@@ -105,8 +106,11 @@ fn ship_frame(ship: &HostileShip, ticks: u64) -> usize {
     match (ship.class, ship.telegraph.map(|telegraph| telegraph.attack)) {
         (ShipClass::PirateKing, Some(Attack::Broadside))
         | (ShipClass::SwarmQueen, Some(Attack::SporeRing | Attack::Brood)) => 2,
-        (ShipClass::Drone | ShipClass::Lancer | ShipClass::Arbiter, Some(_)) => 1,
-        (ShipClass::Drone | ShipClass::Lancer | ShipClass::Arbiter, None) => 0,
+        (
+            ShipClass::Drone | ShipClass::Lancer | ShipClass::Arbiter | ShipClass::Warden,
+            Some(_),
+        ) => 1,
+        (ShipClass::Drone | ShipClass::Lancer | ShipClass::Arbiter | ShipClass::Warden, None) => 0,
         _ => flicker,
     }
 }
@@ -861,6 +865,7 @@ const fn short_name(class: ShipClass) -> &'static str {
         ShipClass::Drone => "DRONE",
         ShipClass::Lancer => "LANCER",
         ShipClass::Arbiter => "ARBITER",
+        ShipClass::Warden => "WARDEN",
     }
 }
 

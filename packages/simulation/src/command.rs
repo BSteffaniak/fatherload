@@ -108,6 +108,9 @@ pub enum PlayerCommand {
     /// A space combat action (Wave 12 hostiles, see [`crate::hostiles::CombatCommand`]):
     /// missiles, paying pirates off, the escape jump, the shipyard.
     Combat(crate::hostiles::CombatCommand),
+    /// A galaxy story action (Wave 13, see [`crate::galaxy_story::GalaxyCommand`]): set course
+    /// for the story or a lead, ask the archivist, the finale's choice.
+    Galaxy(crate::galaxy_story::GalaxyCommand),
 }
 
 /// A command submitted for one tick, with its position in that player's input for the tick.

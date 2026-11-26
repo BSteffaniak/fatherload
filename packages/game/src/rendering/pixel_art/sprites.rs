@@ -704,6 +704,8 @@ pub const ALL: &[&SpriteDef] = &[
     &exotic::TETHER_DRONE,
     &exotic::VOID_MITE,
     &exotic::RING_WARDEN,
+    // The galaxy story (Wave 13 story): the Harbour's Warden.
+    &hostiles::WARDEN,
 ];
 
 #[cfg(test)]

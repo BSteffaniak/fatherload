@@ -281,6 +281,9 @@ pub enum SectionKey {
     Hostiles,
     /// The endgame (Wave 13): careers, the Halcyon Gate, theme bosses beaten and estates.
     Endgame,
+    /// The galaxy story (Wave 13 story): the road's chapter and goal, logs, fragments, the
+    /// Warden and the choice, the discovery log, systems visited and worlds landed on.
+    GalaxyStory,
 }
 
 impl SectionKey {
@@ -300,7 +303,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 37] = [
+    pub const SHARED: [Self; 38] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -349,6 +352,8 @@ impl SectionKey {
         Self::Hostiles,
         // The endgame (Wave 13 endgame).
         Self::Endgame,
+        // The galaxy story (Wave 13 story).
+        Self::GalaxyStory,
     ];
 }
 
@@ -394,6 +399,7 @@ pub enum SectionPayload {
     Stations(Box<crate::station::StationLedger>),
     Hostiles(Box<crate::hostiles::HostileSpace>),
     Endgame(Box<crate::endgame::EndgameState>),
+    GalaxyStory(Box<crate::galaxy_story::GalaxyStory>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -629,6 +635,7 @@ impl WorldState {
             stations,
             hostiles,
             endgame,
+            galaxy_story,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -746,6 +753,7 @@ impl WorldState {
             SectionKey::Stations => SectionPayload::Stations(Box::new(stations.clone())),
             SectionKey::Hostiles => SectionPayload::Hostiles(Box::new(hostiles.clone())),
             SectionKey::Endgame => SectionPayload::Endgame(Box::new(endgame.clone())),
+            SectionKey::GalaxyStory => SectionPayload::GalaxyStory(Box::new(galaxy_story.clone())),
         })
     }
 
@@ -958,6 +966,9 @@ impl WorldState {
             }
             (SectionKey::Endgame, SectionPayload::Endgame(endgame)) => {
                 self.endgame = *endgame;
+            }
+            (SectionKey::GalaxyStory, SectionPayload::GalaxyStory(story)) => {
+                self.galaxy_story = *story;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

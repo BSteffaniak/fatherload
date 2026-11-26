@@ -211,6 +211,8 @@ impl WorldState {
             hostiles: _,
             // The endgame names bodies, towns and systems, never home positions (Wave 13).
             endgame: _,
+            // The galaxy story holds no positions in a frame (Wave 13).
+            galaxy_story: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

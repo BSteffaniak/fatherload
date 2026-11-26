@@ -458,6 +458,26 @@ pub const fn alien_cue(
     }
 }
 
+/// The sound of a galaxy story event (Wave 13 story): the story's own hook, quill, resolution
+/// and climax, the archivist's chirp, the space boss's arrival, a fanfare when the Warden is
+/// calm.
+#[must_use]
+pub const fn galaxy_cue(what: fatherload_simulation::galaxy_story::GalaxyEvent) -> SoundCue {
+    use fatherload_simulation::galaxy_story::GalaxyEvent as E;
+    match what {
+        E::Begun | E::ChapterBegun | E::LeadFound => SoundCue::StoryHook,
+        E::GoalDone | E::LogFound | E::LeadStep | E::FragmentFound => SoundCue::StoryQuill,
+        E::ChapterDone | E::LeadDone => SoundCue::StoryResolved,
+        E::RelicFound | E::Chosen => SoundCue::StoryClimax,
+        E::HoldBegun => SoundCue::StormSiren,
+        E::WardenAppeared => SoundCue::SpaceBossAppear,
+        E::WardenCalmed => SoundCue::MilestoneFanfare,
+        E::ArchivistRemark => SoundCue::CityArchivistChirp,
+        E::CourseSet => SoundCue::UplinkWarp,
+        E::Refused => SoundCue::UiError,
+    }
+}
+
 /// The voice of a side-view tomb creature (WP-TOMBS T28) for its tell and wind-up: a mummy's
 /// groan, an archer's rattling bones, a statue's grinding stone, the guardians' slam and wail.
 /// `None` for every other kind.
@@ -1582,6 +1602,8 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Hostile { what, detail, .. } => hostile_cue(*what, *detail),
         // The endgame (Wave 13).
         GameplayEventKind::Endgame { what, .. } => Some(endgame_cue(*what)),
+        // The galaxy story (Wave 13).
+        GameplayEventKind::Galaxy { what, .. } => Some(galaxy_cue(*what)),
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1943,7 +1965,8 @@ mod tests {
             | GameplayEventKind::Alien { .. }
             | GameplayEventKind::Station { .. }
             | GameplayEventKind::Hostile { .. }
-            | GameplayEventKind::Endgame { .. } => {}
+            | GameplayEventKind::Endgame { .. }
+            | GameplayEventKind::Galaxy { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2450,6 +2473,13 @@ mod tests {
         }
         for what in fatherload_simulation::endgame::EndgameEvent::ALL {
             events.push(GameplayEventKind::Endgame {
+                what,
+                player_id: Some(player_id),
+                detail: 0,
+            });
+        }
+        for what in fatherload_simulation::galaxy_story::GalaxyEvent::ALL {
+            events.push(GameplayEventKind::Galaxy {
                 what,
                 player_id: Some(player_id),
                 detail: 0,

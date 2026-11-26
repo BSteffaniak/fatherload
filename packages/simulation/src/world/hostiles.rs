@@ -249,7 +249,7 @@ impl WorldState {
         })
     }
 
-    const fn combat_step_now(&self) -> u64 {
+    pub(super) const fn combat_step_now(&self) -> u64 {
         step_at_tick(self.simulation_tick.get(), self.tick_rate_hz())
     }
 
@@ -613,10 +613,16 @@ impl WorldState {
             faction.code(),
         ));
         if kind == EncounterKind::Boss {
+            // The boss called (the faction's own, or the Harbour's Warden, Wave 13 story).
+            let boss = ships
+                .iter()
+                .copied()
+                .find(|class| class.is_boss())
+                .unwrap_or_else(|| faction.boss());
             output.push_event(hostile_event(
                 HostileEvent::BossAppeared,
                 Some(player_id),
-                faction.boss().code(),
+                boss.code(),
             ));
         }
         Some(id)
@@ -733,6 +739,10 @@ impl WorldState {
             }
             let ring = danger_ring(rig.pos);
             if ring == 0 {
+                continue;
+            }
+            // The Harbour's space is calm (Wave 13 story): only its Warden meets a rig there.
+            if self.galaxy_calm_at(rig.pos) {
                 continue;
             }
             let combat = self.rig_combat(rig.id);
@@ -870,7 +880,7 @@ impl WorldState {
     }
 
     /// A rig's tier for pacing: its ship gear plus a share of its hull and engine upgrades.
-    fn pacing_tier(&self, player_id: PlayerId) -> u8 {
+    pub(super) fn pacing_tier(&self, player_id: PlayerId) -> u8 {
         self.players.get(&player_id).map_or(0, |player| {
             player
                 .hazard_gear
@@ -1579,7 +1589,11 @@ impl WorldState {
                 ship.hit_by,
                 ship.class.code(),
             ));
-            if ship.class.is_boss() {
+            if ship.class == ShipClass::Warden {
+                // The galaxy story's finale (Wave 13 story): the Harbour's Warden is calm; no
+                // faction's boss is beaten by it.
+                self.note_warden_calmed(ship.hit_by, output);
+            } else if ship.class.is_boss() {
                 self.hostiles.bosses_beaten.insert(faction);
                 output.push_event(hostile_event(
                     HostileEvent::BossDefeated,
@@ -2000,7 +2014,7 @@ impl WorldState {
 
     /// Lands a raid of `faction` on `store`'s ground (swapped in) beside `site`.
     #[allow(clippy::too_many_arguments, reason = "a raid's whole make-up")]
-    fn land_raid(
+    pub(super) fn land_raid(
         &mut self,
         store: crate::place::StoreKey,
         site: raid::RaidSite,

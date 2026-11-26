@@ -100,6 +100,8 @@ impl WorldState {
                 return self.test_spawn_hostiles(player_id, faction, true);
             }
             TestModeAction::SpawnRaid(faction) => return self.test_spawn_raid(player_id, faction),
+            // The galaxy story (Wave 13 story, `world/galaxy_story.rs`).
+            TestModeAction::WarpToStory => return self.warp_to_story(player_id),
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players

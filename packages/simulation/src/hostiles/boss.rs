@@ -45,6 +45,8 @@ pub const KING_RANGE: f32 = 560.0;
 pub const QUEEN_RANGE: f32 = 520.0;
 /// The Arbiter's range (px).
 pub const ARBITER_RANGE: f32 = 660.0;
+/// The Warden's range (px; Wave 13 story).
+pub const WARDEN_RANGE: f32 = 720.0;
 
 /// How a boss moves this step (when not charging).
 #[must_use]
@@ -76,6 +78,7 @@ pub fn order(ship: &HostileShip, rig: &RigView) -> Order {
             (KING_RANGE, face)
         }
         ShipClass::SwarmQueen => (QUEEN_RANGE, at_rig),
+        ShipClass::Warden => (WARDEN_RANGE, at_rig),
         _ => (ARBITER_RANGE, at_rig),
     };
     let (wx, wy) = hold_range(dx, dy, rig.vx, rig.vy, range, stats.top_speed);
@@ -97,7 +100,7 @@ pub fn phase_of(ship: &HostileShip) -> u8 {
     } else {
         0.5
     };
-    let broken = ship.class == ShipClass::Arbiter && ship.shield <= 0.0;
+    let broken = matches!(ship.class, ShipClass::Arbiter | ShipClass::Warden) && ship.shield <= 0.0;
     u8::from(share < line || broken)
 }
 
@@ -130,6 +133,23 @@ pub const fn cycle(class: ShipClass, phase: u8) -> &'static [Attack] {
             Attack::SporeRing,
             Attack::Brood,
             Attack::Lunge,
+        ],
+        // The Warden (Wave 13 story): its pods' volleys, a lance from its prow pod, a ring of
+        // lamp-light with a gap to slip through, and drones; the cycle quickens below half.
+        (ShipClass::Warden, 0) => &[
+            Attack::Volley,
+            Attack::Lance,
+            Attack::SporeRing,
+            Attack::Volley,
+            Attack::Launch,
+        ],
+        (ShipClass::Warden, _) => &[
+            Attack::Lance,
+            Attack::SporeRing,
+            Attack::Volley,
+            Attack::Lance,
+            Attack::Launch,
+            Attack::SporeRing,
         ],
         (_, 0) => &[
             Attack::Volley,
@@ -170,7 +190,7 @@ pub const fn warning(attack: Attack) -> u64 {
 #[must_use]
 pub const fn recovery(class: ShipClass, phase: u8) -> u64 {
     match (class, phase) {
-        (ShipClass::Arbiter, 0) => steps(1.8),
+        (ShipClass::Arbiter | ShipClass::Warden, 0) => steps(1.8),
         (_, 0) => steps(1.6),
         _ => steps(1.1),
     }
@@ -218,6 +238,7 @@ pub enum Unleash {
 /// What `ship`'s `telegraph` does when it fires, with the rig at `rig` (`seed` for the spore
 /// ring's gap).
 #[must_use]
+#[allow(clippy::too_many_lines, reason = "every attack's shots in one match")]
 pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u64) -> Unleash {
     let phase = phase_of(ship);
     match telegraph.attack {
@@ -258,9 +279,15 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
                 .map(|index| {
                     let angle = telegraph.angle + f32::from(index) / f32::from(count) * TAU;
                     let (nx, ny) = nose(angle);
+                    // The Warden's ring leaves its rim (Wave 13 story), the Queen's her body.
+                    let rim = if ship.class == ShipClass::Warden {
+                        150.0
+                    } else {
+                        70.0
+                    };
                     Volley {
                         kind: ShotKind::Spore,
-                        from: (nx * 70.0, ny * 70.0),
+                        from: (nx * rim, ny * rim),
                         angle,
                     }
                 })
@@ -279,13 +306,18 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
         Attack::Brood => Unleash::Launch(ShipClass::Mite, 4, 8),
         Attack::Launch => Unleash::Launch(ShipClass::Drone, 2, 4),
         Attack::Lance => {
-            let prow = from_ship_frame(ship.angle, 0.0, -150.0);
+            let prow_y = if ship.class == ShipClass::Warden {
+                -130.0
+            } else {
+                -150.0
+            };
+            let prow = from_ship_frame(ship.angle, 0.0, prow_y);
             let mut shots = vec![Volley {
                 kind: ShotKind::Lance,
                 from: prow,
                 angle: telegraph.angle,
             }];
-            if phase == 1 && ship.class == ShipClass::Arbiter {
+            if phase == 1 && matches!(ship.class, ShipClass::Arbiter | ShipClass::Warden) {
                 for side in [-0.16_f32, 0.16] {
                     shots.push(Volley {
                         kind: ShotKind::Lance,
@@ -298,8 +330,14 @@ pub fn unleash(ship: &HostileShip, telegraph: &Telegraph, rig: &RigView, seed: u
         }
         Attack::Volley => {
             let mut shots = Vec::new();
-            for turret in [-62.0_f32, 62.0] {
-                let from = from_ship_frame(ship.angle, turret, -20.0);
+            // The Arbiter's two turrets; the Warden's two lower lamp pods (Wave 13 story).
+            let (turret_x, turret_y) = if ship.class == ShipClass::Warden {
+                (95.0_f32, 81.0)
+            } else {
+                (62.0, -20.0)
+            };
+            for turret in [-turret_x, turret_x] {
+                let from = from_ship_frame(ship.angle, turret, turret_y);
                 let (dx, dy) = ship.pos.offset(from.0, from.1).delta(rig.pos);
                 let at = bearing(dx, dy);
                 for index in 0..4_u8 {

@@ -478,7 +478,9 @@ impl WorldState {
             // Friendly aliens (Wave 12): `alien_command` (`world/aliens.rs`).
             | PlayerCommand::Alien(_)
             // Space combat (Wave 12): `combat_command` (`world/hostiles.rs`).
-            | PlayerCommand::Combat(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
+            | PlayerCommand::Combat(_)
+            // The galaxy story (Wave 13): `galaxy_command` (`world/galaxy_story.rs`).
+            | PlayerCommand::Galaxy(_) => PlayerScopedCommandOutcome::IgnoredUnavailable,
         }
     }
 }

@@ -226,6 +226,10 @@ pub enum ShipClass {
     Lancer,
     /// Machine's boss: the capital ship Arbiter.
     Arbiter,
+    /// The Harbour's Warden (Wave 13 story, appended): the builders' door-machine at the end
+    /// of the galaxy story's road, met at the Harbour's gate (`crate::galaxy_story::finale`).
+    /// A boss of the Concord's kind that never waits in a lair.
+    Warden,
 }
 
 /// A hit circle in a ship's frame (px; x right, y toward the tail: the nose is at negative y).
@@ -242,6 +246,20 @@ pub struct HitCircle {
 const fn hit(x: f32, y: f32, r: f32) -> HitCircle {
     HitCircle { x, y, r }
 }
+
+// The Warden (Wave 13 story): fitted to its generated sprite (`sprites::hostiles::WARDEN`).
+const HITS_WARDEN: [HitCircle; 10] = [
+    hit(-1.0, 27.0, 86.8),
+    hit(-1.0, -85.0, 38.6),
+    hit(95.0, 81.0, 39.2),
+    hit(-95.0, 81.0, 39.2),
+    hit(1.0, 25.0, 86.7),
+    hit(1.0, -85.0, 38.6),
+    hit(-1.0, 25.0, 86.7),
+    hit(-99.0, 83.0, 36.2),
+    hit(99.0, 83.0, 36.2),
+    hit(1.0, 27.0, 86.8),
+];
 
 const HITS_CUTTER: [HitCircle; 8] = [
     hit(1.0, -9.0, 5.1),
@@ -413,7 +431,7 @@ pub const HULL_SCALE: f32 = 1.5;
 pub const SHIELD_REGEN_DELAY_STEPS: u64 = 360;
 
 impl ShipClass {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Cutter,
         Self::Marauder,
         Self::PirateKing,
@@ -423,6 +441,7 @@ impl ShipClass {
         Self::Drone,
         Self::Lancer,
         Self::Arbiter,
+        Self::Warden,
     ];
 
     /// Wire code.
@@ -444,6 +463,7 @@ impl ShipClass {
             6 => Some(Self::Drone),
             7 => Some(Self::Lancer),
             8 => Some(Self::Arbiter),
+            9 => Some(Self::Warden),
             _ => None,
         }
     }
@@ -454,14 +474,17 @@ impl ShipClass {
         match self {
             Self::Cutter | Self::Marauder | Self::PirateKing => Faction::Pirates,
             Self::Mite | Self::Stinger | Self::SwarmQueen => Faction::Swarm,
-            Self::Drone | Self::Lancer | Self::Arbiter => Faction::Machine,
+            Self::Drone | Self::Lancer | Self::Arbiter | Self::Warden => Faction::Machine,
         }
     }
 
     /// Whether it is a faction's boss.
     #[must_use]
     pub const fn is_boss(self) -> bool {
-        matches!(self, Self::PirateKing | Self::SwarmQueen | Self::Arbiter)
+        matches!(
+            self,
+            Self::PirateKing | Self::SwarmQueen | Self::Arbiter | Self::Warden
+        )
     }
 
     /// How much bigger than its authored art (two px an art pixel) the ship is drawn and hit
@@ -501,6 +524,7 @@ impl ShipClass {
             Self::Drone => "Concord Drone",
             Self::Lancer => "Concord Lancer",
             Self::Arbiter => "The Arbiter",
+            Self::Warden => "The Warden",
         }
     }
 
@@ -653,6 +677,22 @@ impl ShipClass {
                 cargo: 34,
                 size: (176.0, 320.0),
             },
+            Self::Warden => ShipStats {
+                hull: 2_600.0,
+                shield: 700.0,
+                shield_regen: 18.0,
+                top_speed: 260.0,
+                thrust: 200.0,
+                turn_rate: 0.5,
+                gun: Some(ShotKind::Pulse),
+                fire_steps: 0,
+                burst: 0,
+                range: 1_100.0,
+                contact_damage: 45.0,
+                credits: 12_000,
+                cargo: 40,
+                size: (276.0, 252.0),
+            },
         }
     }
 
@@ -671,6 +711,7 @@ impl ShipClass {
             Self::Drone => &HITS_DRONE,
             Self::Lancer => &HITS_LANCER,
             Self::Arbiter => &HITS_ARBITER,
+            Self::Warden => &HITS_WARDEN,
         }
     }
 

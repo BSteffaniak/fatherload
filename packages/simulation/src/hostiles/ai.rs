@@ -129,7 +129,9 @@ pub fn order(
         ShipClass::Mite | ShipClass::Stinger => swarm(ship, rig, (dx, dy), mates, step, seed),
         ShipClass::Drone | ShipClass::Lancer => machine(ship, rig, (dx, dy), leader, step),
         // Bosses fly their own patterns (`boss::order`).
-        ShipClass::PirateKing | ShipClass::SwarmQueen | ShipClass::Arbiter => drift(ship),
+        ShipClass::PirateKing | ShipClass::SwarmQueen | ShipClass::Arbiter | ShipClass::Warden => {
+            drift(ship)
+        }
     }
 }
 
