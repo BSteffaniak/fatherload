@@ -192,9 +192,10 @@ impl WorldState {
             )]
             let position = (
                 TILE_SIZE.mul_add(self.frame().rel_col(column), TILE_SIZE * 0.5),
-                // Resting on the pocket floor.
+                // Resting on the pocket floor (frame-local like the column: a floating
+                // frame away from the origin row must not push the rig a sector deeper).
                 TILE_SIZE.mul_add(
-                    (top + POCKET_HEIGHT) as f32,
+                    self.frame().rel_row(top + POCKET_HEIGHT),
                     -(AUTHORITATIVE_PLAYER_RADIUS + 0.5),
                 ),
             );

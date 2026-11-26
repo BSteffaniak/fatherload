@@ -355,3 +355,42 @@ fn nothing_drills_or_blasts_through_the_bedrock_floor_even_in_test_mode() {
         Some(TileKind::Bedrock)
     );
 }
+
+/// A Deep Descent world's floating frame leaves the origin row once the rig is deep: a warp
+/// from down there lands at its band's top, not a sector deeper (review of Wave 14's Atlas,
+/// which warps from wherever the rig is: Basalt three times used to land 1,024 rows deeper
+/// each time).
+#[test]
+fn warping_again_from_deep_in_a_floating_frame_lands_at_the_band_top() {
+    use crate::{
+        SimulationParams,
+        worldgen::{GeneratorVersion, WorldSettings},
+    };
+    let settings = WorldSettings {
+        generator: GeneratorVersion::DEEP_DESCENT,
+        ..WorldSettings::new(0x0A71_A514)
+    };
+    let mut world =
+        WorldState::new_game_with_settings(PLAYER, &settings, SimulationParams::new(30));
+    world.enable_test_mode();
+    let mut first = None;
+    for band in [
+        Band::Basalt,
+        Band::Basalt,
+        Band::Deep(DeepStratum::MantleStormZone),
+        Band::Basalt,
+    ] {
+        let output = act(&mut world, PLAYER, TestModeAction::WarpToBand(band));
+        assert_eq!(
+            output.action_outcomes[0].outcome,
+            PlayerScopedCommandOutcome::Applied
+        );
+        idle(&mut world, 6);
+        let at = world.player(PLAYER).expect("player").tile_in(world.frame());
+        assert_eq!(world.terrain().band_at(at), band, "{band:?} at {at:?}");
+        if band == Band::Basalt {
+            let top = *first.get_or_insert(at.y);
+            assert!((at.y - top).abs() <= 2, "Basalt again: {top} -> {}", at.y);
+        }
+    }
+}
