@@ -228,11 +228,12 @@ fn settlement(planet: &PlanetGround) -> (i32, i32) {
     (x, planet.surface_row(x) - 1)
 }
 
-/// Over the gas giant's cloud tops beside a side city.
+/// Just over the gas giant's cloud tops beside a side city (the billows fill the lower
+/// half of the view).
 fn cloud_tops(planet: &PlanetGround) -> (i32, i32) {
     let city = gas_giant::cities(planet)[1];
     let x = i32::try_from(city.centre).unwrap_or(0) + city.half + 22;
-    (x, gas_giant::DECK_ROW + 4)
+    (x, gas_giant::cloud_top(planet, i64::from(x)) - 4)
 }
 
 /// In the boss's arena, at its edge.
@@ -400,7 +401,27 @@ pub const EXOTIC_SCENES: &[Scene] = &[
     Scene {
         name: "exotic_gas_giant_cloud_tops",
         summary: "Over the gas giant's billowing cloud tops beside a side city's keel",
-        setup: |stage| at_place(stage, ExoticStyle::GasGiant, cloud_tops, None, false, 30),
+        setup: |stage| {
+            stage.play(1, |world, seats| {
+                let player = seats[0].player;
+                let Some(body) = stage_world(world, player, ExoticStyle::GasGiant) else {
+                    return;
+                };
+                let Some(planet) = planet_of(world, body) else {
+                    return;
+                };
+                let (x, y) = cloud_tops(&planet);
+                put_on(world, player, body, x, y);
+                // In the giant's afternoon light, so the cloud tops read.
+                if let Some(life) = world.body_life_of_player(player) {
+                    let now = world.simulation_tick().get() * 1_000
+                        / u64::from(world.tick_rate_hz()).max(1);
+                    set_millis(world, life.clock.millis_when(now, i64::from(x), 600));
+                    put_on(world, player, body, x, y);
+                }
+            });
+            stage.settle(30);
+        },
     },
     Scene {
         name: "exotic_gas_giant_eye",

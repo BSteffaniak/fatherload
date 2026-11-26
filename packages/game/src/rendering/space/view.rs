@@ -169,6 +169,9 @@ pub struct BeltView {
     /// Rocks per cell, on average (0..=3).
     pub density: f32,
     pub seed: u32,
+    /// A planet's ring (a ring world's great ring, a ringed gas giant's): drawn as banded
+    /// sheets of ice dust under its rocks, so it reads from far out (Wave 13 planets-d).
+    pub ring_band: bool,
 }
 
 /// One loose asteroid (belts make their own; these are the ones the generator places).

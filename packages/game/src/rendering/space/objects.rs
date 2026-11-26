@@ -493,6 +493,9 @@ fn draw_belt(
     if (distance - radius).abs() > half_width + reach {
         return;
     }
+    if belt.ring_band {
+        draw_ring_band(draw, belt, projection);
+    }
     // Cells about square, a few hundred on screen at any zoom (rocks smaller than a point
     // become dust specks).
     let cell = (reach / 14.0).max(36.0);
@@ -566,6 +569,39 @@ fn draw_belt(
                 }
             }
         }
+    }
+}
+
+/// A planet's ring as sheets of ice dust: three bands split by dark gaps, faint enough that
+/// the rocks and the body read over them. Plain triangles (GLES2-safe), a few hundred.
+fn draw_ring_band(draw: &mut impl RaylibDraw, belt: &BeltView, projection: &Projection) {
+    let centre = projection.project(belt.centre);
+    let inner = projection.tiles(belt.radius_tiles - belt.width_tiles * 0.5);
+    let outer = projection.tiles(belt.radius_tiles + belt.width_tiles * 0.5);
+    // Too small to see, or so close the sheets fill the view: the rocks carry it.
+    if outer < 6.0 || inner > 60_000.0 || !projection.visible(centre, outer) {
+        return;
+    }
+    let segments = (outer * 0.25).clamp(48.0, 720.0) as i32;
+    let width = outer - inner;
+    // (from, to) across the ring, colour, strength: an inner haze, the bright main band, a
+    // thin outer band past a dark gap.
+    let bands = [
+        (0.00_f32, 0.30_f32, palette::SLATE_LIGHT, 0.16_f32),
+        (0.34, 0.74, palette::BONE, 0.30),
+        (0.48, 0.60, palette::CREAM, 0.18),
+        (0.80, 0.97, palette::ICE, 0.22),
+    ];
+    for (from, to, colour, alpha) in bands {
+        draw.draw_ring(
+            v(centre),
+            inner + width * from,
+            inner + width * to,
+            0.0,
+            360.0,
+            segments,
+            fade(colour, alpha),
+        );
     }
 }
 

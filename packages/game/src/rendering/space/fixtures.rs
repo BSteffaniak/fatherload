@@ -441,6 +441,7 @@ fn system(fixture: &mut SpaceFixture) {
         width_tiles: 4_000.0,
         density: 1.6,
         seed: 5,
+        ring_band: false,
     });
     fixture.comets.push(CometView {
         centre: at(-30_000.0, -26_000.0),
@@ -741,6 +742,7 @@ pub fn build(name: &str) -> Option<SpaceFixture> {
                 width_tiles: 4_000.0,
                 density: 2.4,
                 seed: 5,
+                ring_band: false,
             });
             let angle = 0.8_f64;
             fixture.camera = camera(angle.cos() * 63_200.0, angle.sin() * 63_200.0, 0.0, 1.6);

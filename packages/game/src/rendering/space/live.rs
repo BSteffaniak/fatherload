@@ -258,6 +258,7 @@ impl LiveSpace {
                             width_tiles: ring.outer.saturating_sub(ring.inner) as f32,
                             density: 3.0,
                             seed: (id ^ 0x5249_4E47) as u32,
+                            ring_band: true,
                         });
                     }
                     live.days.push((!body.is_home()).then(|| {
@@ -275,6 +276,7 @@ impl LiveSpace {
                         width_tiles: belt.outer.saturating_sub(belt.inner) as f32,
                         density: (f32::from(belt.density) / 8.0).clamp(0.3, 3.0),
                         seed: (system.id ^ u64::from(belt.index)) as u32,
+                        ring_band: false,
                     });
                 }
                 for (index, comet) in system.comets.iter().enumerate() {
