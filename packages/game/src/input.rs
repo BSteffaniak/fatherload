@@ -147,6 +147,12 @@ pub struct PlayerInput {
     /// gravity) or let it go (`/`, the arrow-keys seat's Numpad 9, a controller's scanner
     /// bumper held, the touch ANCHOR button).
     pub anchor: bool,
+    /// Pressed (Wave 14, test mode): open or close the seat's Atlas (F2 without Shift, the
+    /// touch ATLAS button).
+    pub atlas: bool,
+    /// A point of an open menu under the mouse this frame without a click (the Atlas's map:
+    /// its cursor follows the mouse). The app resolves it like [`Self::menu_pick`].
+    pub menu_hover: Option<usize>,
 }
 
 impl PlayerInput {
@@ -243,6 +249,8 @@ impl PlayerInput {
             dpad_rotates: _,
             stick_horizontal: _,
             anchor,
+            atlas,
+            menu_hover: _,
         } = *self;
         horizontal.abs() > f32::EPSILON
             || rotate.abs() > f32::EPSILON
@@ -304,6 +312,7 @@ impl PlayerInput {
                 pointer_primary,
                 pointer_secondary,
                 anchor,
+                atlas,
             ]
             .into_iter()
             .any(|pressed| pressed)
@@ -341,6 +350,10 @@ pub fn release_mouse(input: &mut PlayerInput, raylib: &RaylibHandle) {
 }
 
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one line per input field, so none is forgotten"
+)]
 pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> PlayerInput {
     PlayerInput {
         horizontal: if secondary.horizontal.abs() > primary.horizontal.abs() {
@@ -440,6 +453,8 @@ pub fn combine_player_input(primary: PlayerInput, secondary: PlayerInput) -> Pla
             primary.stick_horizontal
         },
         anchor: primary.anchor || secondary.anchor,
+        atlas: primary.atlas || secondary.atlas,
+        menu_hover: primary.menu_hover.or(secondary.menu_hover),
     }
 }
 
@@ -453,6 +468,10 @@ pub fn read_primary_keyboard_input_with_arrow_aliases(raylib: &mut RaylibHandle)
     read_primary_keyboard_input_with_options(raylib, true)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one line per input field, so none is forgotten"
+)]
 fn read_primary_keyboard_input_with_options(
     raylib: &mut RaylibHandle,
     include_arrow_aliases: bool,
@@ -513,6 +532,11 @@ fn read_primary_keyboard_input_with_options(
             || raylib.is_key_pressed(KeyboardKey::KEY_KP_SUBTRACT),
         fullscreen: raylib.is_key_pressed(KeyboardKey::KEY_F11),
         local_multiplayer_toggle: raylib.is_key_pressed(KeyboardKey::KEY_F2),
+        // A test-mode world's F2 opens the Atlas instead (Shift+F2 still adds a seat).
+        atlas: raylib.is_key_pressed(KeyboardKey::KEY_F2)
+            && !raylib.is_key_down(KeyboardKey::KEY_LEFT_SHIFT)
+            && !raylib.is_key_down(KeyboardKey::KEY_RIGHT_SHIFT),
+        menu_hover: None,
         bomb: raylib.is_key_pressed(KeyboardKey::KEY_B),
         cycle_explosive: raylib.is_key_pressed(KeyboardKey::KEY_Q),
         detonate: raylib.is_key_pressed(KeyboardKey::KEY_F),

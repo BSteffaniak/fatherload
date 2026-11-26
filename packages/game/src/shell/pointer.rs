@@ -20,6 +20,15 @@ impl ShellState {
                 {
                     input.confirm = true;
                 }
+                // The mouse over the Atlas's map moves its cursor (Wave 14).
+                if let Some(row) = input.menu_hover.take()
+                    && let Some(crate::atlas::hit::AtlasHit::Map(u, v)) =
+                        crate::atlas::hit::AtlasHit::decode(row)
+                    && matches!(self.run_mode, RunMode::Playing)
+                    && self.seat(seat).modal == Some(ModalScreen::Atlas)
+                {
+                    self.seat_mut(seat).atlas.hovered = Some((u, v));
+                }
                 input
             })
             .collect()
@@ -66,6 +75,12 @@ impl ShellState {
                 let seat = self.seat_mut(seat);
                 match seat.modal {
                     None => false,
+                    // The Atlas decodes its own picks (a category, a button, a row or a
+                    // point of its map; Wave 14): no confirm.
+                    Some(ModalScreen::Atlas) => {
+                        seat.atlas.pick(row);
+                        false
+                    }
                     // A confirmation shows the one offer being confirmed; the selection stays
                     // on the row that led here. The ending's selection is its page (Wave 10):
                     // a tap anywhere turns it.

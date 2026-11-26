@@ -177,6 +177,8 @@ impl TouchDevice {
     ) {
         let waiting_charges = view.map_or(0, |view| world.waiting_remote_charges(view.player_id));
         self.context = touch_context(shell, view, waiting_charges);
+        // The ATLAS button (Wave 14) shows in a test-mode world's play.
+        self.context.atlas = world.is_test_mode() && self.context.mode == TouchMode::Play;
     }
 
     /// Hands this frame's controls to rendering while touch is the first seat's device.
@@ -249,7 +251,8 @@ pub fn publish_staged(
 ) {
     let overlay = shell.prompt_device(0).is_touch().then(|| {
         let waiting = seat_view.map_or(0, |seat| world.waiting_remote_charges(seat.player_id));
-        let context = touch_context(shell, seat_view, waiting);
+        let mut context = touch_context(shell, seat_view, waiting);
+        context.atlas = world.is_test_mode() && context.mode == TouchMode::Play;
         TouchOverlay {
             layout: TouchLayout::compute(
                 touch_screen(screen, [0.0; 4]),
@@ -370,6 +373,8 @@ pub fn touch_context(
         dock: space_dock_ready(view),
         combat: player.flight.away() && view.space_combat.engaged,
         pay: view.space_combat.demand.is_some(),
+        // Set from the world by the callers (Wave 14: test mode).
+        atlas: false,
     }
 }
 

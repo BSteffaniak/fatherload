@@ -136,6 +136,7 @@ const fn is_top_row(control: TouchControl) -> bool {
             | TouchControl::Map
             | TouchControl::BuildExit
             | TouchControl::ExitRig
+            | TouchControl::Atlas
     )
 }
 
@@ -271,7 +272,8 @@ const fn rim(control: TouchControl) -> Color {
         | TouchControl::Pay
         | TouchControl::BuildPlace
         | TouchControl::Build
-        | TouchControl::Kit(_) => palette::GOLD,
+        | TouchControl::Kit(_)
+        | TouchControl::Atlas => palette::GOLD,
         TouchControl::Tools
         | TouchControl::Thrust
         | TouchControl::Jump
@@ -324,6 +326,7 @@ const fn label(control: TouchControl) -> &'static str {
         TouchControl::Pause => "II",
         TouchControl::Inventory => "BAG",
         TouchControl::Map => "MAP",
+        TouchControl::Atlas => "ATLAS",
         TouchControl::Back => "BACK",
         TouchControl::RotateLeft => "<ROT",
         TouchControl::RotateRight => "ROT>",

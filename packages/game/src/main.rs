@@ -3,6 +3,7 @@
 #![allow(clippy::multiple_crate_versions)]
 
 mod app;
+mod atlas;
 mod audio;
 #[cfg(not(target_os = "emscripten"))]
 mod balance_report;

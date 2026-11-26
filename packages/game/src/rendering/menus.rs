@@ -167,7 +167,7 @@ const fn pause_icon(option: PauseOption) -> &'static SpriteDef {
         PauseOption::Resume => &menu_icons::PLAY,
         PauseOption::Save => &menu_icons::DISK,
         PauseOption::Load => &menu_icons::FOLDER,
-        PauseOption::OpenOnline => &menu_icons::GLOBE,
+        PauseOption::OpenOnline | PauseOption::Atlas => &menu_icons::GLOBE,
         PauseOption::SessionInfo => &menu_icons::SIGNAL,
         PauseOption::EndSession => &menu_icons::OFFLINE,
         PauseOption::LeaveSession | PauseOption::ExitToDesktop => &menu_icons::DOOR,

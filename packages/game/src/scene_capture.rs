@@ -212,6 +212,8 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
     }
     // A still shows the round ground's whole coarse map (play paints it over a few frames).
     crate::rendering::space::polar::paint_whole_frames(true);
+    // Likewise the Atlas's previews (Wave 14).
+    crate::rendering::atlas::preview::paint_whole(true);
     let (width, height) = options.size;
     let (mut raylib, thread) = raylib::init()
         .size(width, height)
@@ -307,7 +309,14 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 let screen = crate::window::DesktopWindow::screen(&raylib);
                 let snapshot = game.snapshot(screen);
                 renderer.sync(&mut raylib, &thread, &snapshot, &FrameReport::default());
-                if renderer.space_ground_settled() {
+                renderer.sync_atlas(
+                    &mut raylib,
+                    &thread,
+                    &game.shell,
+                    &snapshot,
+                    &FrameReport::default(),
+                );
+                if renderer.space_ground_settled() && renderer.atlas_settled() {
                     break;
                 }
             }
@@ -328,6 +337,7 @@ pub fn run(options: &CaptureOptions) -> Result<(), String> {
                 &touch_view,
             );
             renderer.sync(&mut raylib, &thread, &snapshot, &frame_report);
+            renderer.sync_atlas(&mut raylib, &thread, &game.shell, &snapshot, &frame_report);
             if let Some(fixture) = &space {
                 renderer.sync_space(&mut raylib, &thread, &fixture.view(), fixture.force_quads);
             }
@@ -391,6 +401,13 @@ fn time_frames(
         let screen = crate::window::DesktopWindow::screen(raylib);
         let snapshot = game.snapshot(screen);
         renderer.sync(raylib, thread, &snapshot, &FrameReport::default());
+        renderer.sync_atlas(
+            raylib,
+            thread,
+            &game.shell,
+            &snapshot,
+            &FrameReport::default(),
+        );
         let mut draw = raylib.begin_drawing(thread);
         renderer.render(&mut draw, &game.shell, &snapshot);
         times.push(started.elapsed().as_secs_f64() * 1_000.0);

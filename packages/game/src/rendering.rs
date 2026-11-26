@@ -20,6 +20,7 @@ use fatherload_simulation::{
 pub mod alien_art;
 pub mod alien_hud;
 pub mod ancient_city_hud;
+pub mod atlas;
 mod body_life;
 mod body_map;
 mod build;
@@ -153,6 +154,8 @@ pub struct GameRenderer {
     space: space::SpaceRenderer,
     /// Each seat's gathering of the real galaxy round its camera (Wave 11 integration).
     live: Vec<space::live::LiveSpace>,
+    /// The Atlas's previews and maps (Wave 14 W14-C).
+    atlas_previews: atlas::preview::AtlasPreviews,
 }
 
 /// Whose dialogs a [`layout::widgets::UiState`] tracks: the global screens (title, pause,
@@ -272,6 +275,7 @@ impl GameRenderer {
             post: post_process::PostProcess::new(raylib, thread),
             space: space::SpaceRenderer::new(raylib, thread),
             live: Vec::new(),
+            atlas_previews: atlas::preview::AtlasPreviews::default(),
         }
     }
 
@@ -407,6 +411,30 @@ impl GameRenderer {
         self.places
             .sync(raylib, thread, snapshot, &report.changed_store_tiles);
         self.sync_space_seats(raylib, thread, snapshot, report);
+    }
+
+    /// Paints the previews of every open Atlas (Wave 14 W14-C), a few rows a frame (all of
+    /// them for a scene capture's still). Call after [`Self::sync`]; nothing happens while no
+    /// seat has its Atlas open.
+    pub fn sync_atlas(
+        &mut self,
+        raylib: &mut RaylibHandle,
+        thread: &RaylibThread,
+        shell: &ShellState,
+        snapshot: &RenderSnapshot<'_>,
+        report: &FrameReport,
+    ) {
+        if report.world_replaced {
+            self.atlas_previews.clear();
+        }
+        self.atlas_previews.sync(raylib, thread, shell, snapshot);
+    }
+
+    /// Whether every open Atlas's previews are painted (scene capture waits for them).
+    #[cfg(not(target_os = "emscripten"))]
+    #[must_use]
+    pub fn atlas_settled(&self) -> bool {
+        self.atlas_previews.settled()
     }
 
     /// Brings each seat's space view up to date (Wave 11 integration): the galaxy gathered
@@ -818,7 +846,15 @@ impl GameRenderer {
                 self.end_ui(owner);
                 return;
             }
-            if let Some(modal) = seat.modal {
+            if seat.modal == Some(crate::shell::ModalScreen::Atlas) {
+                // The Atlas draws with the renderer's previews and space renderer (Wave 14).
+                let pictures = atlas::AtlasPictures {
+                    previews: &self.atlas_previews,
+                    space: Some(&self.space),
+                    view_clip: split.then_some(view.viewport),
+                };
+                atlas::draw_atlas(draw, &ui, &pictures);
+            } else if let Some(modal) = seat.modal {
                 draw_modal(draw, &ui, modal);
             } else if shell.run_mode == RunMode::Playing
                 && shell.modal.is_none()

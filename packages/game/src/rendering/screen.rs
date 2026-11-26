@@ -1578,6 +1578,17 @@ fn draw_modal_ui(draw: &mut RaylibDrawHandle<'_>, ui: &UiFrame<'_, '_>, modal: M
         ModalScreen::Station => super::station_hub::draw_station_hub(draw, ui),
         ModalScreen::GalaxyJournal => super::galaxy_hud::draw_galaxy_journal(draw, ui),
         ModalScreen::GalaxyChoice => super::galaxy_hud::draw_galaxy_choice(draw, ui),
+        // The renderer draws the Atlas itself (it needs its preview textures); here only a
+        // stand-in without pictures (Wave 14).
+        ModalScreen::Atlas => super::atlas::draw_atlas(
+            draw,
+            ui,
+            &super::atlas::AtlasPictures {
+                previews: &super::atlas::preview::AtlasPreviews::default(),
+                space: None,
+                view_clip: None,
+            },
+        ),
     }
 }
 

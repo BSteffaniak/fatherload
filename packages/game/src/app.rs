@@ -152,6 +152,14 @@ fn sample_frame_input(
         {
             input.primary.menu_pick = Some(row);
         }
+        // The moving mouse over the Atlas's map moves its cursor (Wave 14).
+        if !input.primary.pointer_primary
+            && input.primary.pointer.is_some()
+            && let MenuHit::Row(row) = pointer::hit(mouse.x, mouse.y)
+            && crate::atlas::hit::AtlasHit::is_map(row)
+        {
+            input.primary.menu_hover = Some(row);
+        }
     }
     input
 }
@@ -492,6 +500,7 @@ impl App {
         }
         touch.publish(&game.shell);
         renderer.sync(raylib, thread, &snapshot, &report);
+        renderer.sync_atlas(raylib, thread, &game.shell, &snapshot, &report);
         let mut draw = raylib.begin_drawing(thread);
         renderer.render(&mut draw, &game.shell, &snapshot);
         true

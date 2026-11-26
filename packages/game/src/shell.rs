@@ -27,6 +27,7 @@ use crate::{
 pub mod aliens;
 pub mod archivist;
 pub mod arms;
+pub mod atlas;
 mod build;
 mod colony;
 mod crew;
@@ -211,6 +212,9 @@ pub enum ModalScreen {
     GalaxyChoice,
     /// Test mode (Wave 14): the god-mode toolkit's tools (`shell/test_toolkit.rs`).
     TestToolkit,
+    /// The Atlas (Wave 14 W14-C, `shell/atlas.rs`): a test-mode world's travel browser with
+    /// live previews and map mode; its state is [`SeatUi::atlas`].
+    Atlas,
 }
 
 impl ModalScreen {
@@ -278,6 +282,8 @@ pub enum PauseOption {
     WarpToStory,
     /// Test mode (Wave 14): open the god-mode toolkit (stock, progress switches, creatures).
     TestToolkit,
+    /// Test mode (Wave 14): open this seat's Atlas, the travel browser with previews.
+    Atlas,
 }
 
 impl PauseOption {
@@ -351,6 +357,7 @@ impl PauseOption {
             Self::GrantStarDrive => "Grant Star Drive",
             Self::WarpToStory => "Warp to the Story",
             Self::TestToolkit => "God-Mode Toolkit",
+            Self::Atlas => "Atlas (travel anywhere)",
         }
     }
 }
@@ -1489,6 +1496,8 @@ pub struct SeatUi {
     pub station: station::SeatStation,
     /// The galaxy story: the seat's own view of the ending, the choice's offer (Wave 13).
     pub galaxy: galaxy::SeatGalaxy,
+    /// The seat's Atlas (Wave 14 W14-C): its category, search, map, bookmarks and trips.
+    pub atlas: atlas::SeatAtlas,
 }
 
 /// The state of a seat that does not exist (yet): outdoors with nothing open.
@@ -1544,6 +1553,7 @@ impl SeatUi {
             alien: aliens::SeatAlien::new(),
             station: station::SeatStation::new(),
             galaxy: galaxy::SeatGalaxy::new(),
+            atlas: atlas::SeatAtlas::new(),
         }
     }
 
@@ -1639,6 +1649,16 @@ impl SeatUi {
                     return false;
                 }
             }
+        }
+        // The Atlas (Wave 14) covers the view and takes every key while it is open; F2 (or the
+        // touch ATLAS button) opens it in a test-mode world.
+        if self.modal == Some(ModalScreen::Atlas) {
+            self.handle_atlas(input, delta_seconds, &ctx, cues, requests);
+            return false;
+        }
+        if input.atlas && ctx.world.is_test_mode() && self.build.is_none() {
+            self.open_atlas(&ctx, cues);
+            return false;
         }
         if self.build.is_some() {
             return self.handle_build(input, ctx, cues, requests);
@@ -2221,7 +2241,8 @@ impl SeatUi {
             | ModalScreen::Archivist
             | ModalScreen::AlienTalk
             | ModalScreen::GalaxyJournal
-            | ModalScreen::GalaxyChoice => None,
+            | ModalScreen::GalaxyChoice
+            | ModalScreen::Atlas => None,
             ModalScreen::Inventory
                 if ctx.player().is_some_and(|player| {
                     self.selected_menu_item == hopper::hopper_rows(player).len() + 2
@@ -3045,7 +3066,9 @@ impl ShellState {
         if in_game && inputs.iter().copied().any(input_changes_game) {
             self.save_dirty = true;
         }
-        if primary.local_multiplayer_toggle && in_game {
+        // In a test-mode world F2 opens the seat's Atlas (Wave 14); Shift+F2 still adds a seat.
+        let atlas_key = primary.atlas && ctx.world.is_test_mode();
+        if primary.local_multiplayer_toggle && in_game && !atlas_key {
             requests.push(ShellRequest::AddLocalSeat);
         }
         if primary.volume_up && !text_entry {
@@ -3236,7 +3259,13 @@ impl ShellState {
             );
         let seed_field = self.modal == Some(ModalScreen::WorldSetup)
             && self.world_setup.as_ref().is_some_and(WorldSetup::typing);
-        online_form || seed_field
+        // The Atlas's search box (Wave 14).
+        let atlas_search = matches!(self.run_mode, RunMode::Playing)
+            && self
+                .seats
+                .iter()
+                .any(|seat| seat.modal == Some(ModalScreen::Atlas) && seat.atlas.typing);
+        online_form || seed_field || atlas_search
     }
 
     /// Shows an online screen.
@@ -3567,6 +3596,15 @@ impl ShellState {
             PauseOption::TestToolkit => self.open_toolkit(),
             PauseOption::PlaceFieldZone | PauseOption::ClearFieldZones => {
                 self.field_zone_action(options[self.selected_pause_item], requests);
+            }
+            PauseOption::Atlas => {
+                // The menu seat's own Atlas opens over its view (Wave 14); play resumes
+                // behind it.
+                let seat = self.menu_seat;
+                let seat = self.seat_mut(seat);
+                seat.modal = Some(ModalScreen::Atlas);
+                seat.atlas.reopen();
+                self.run_mode = RunMode::Playing;
             }
             PauseOption::WarpToStory => {
                 requests.push(ShellRequest::Action {

@@ -216,6 +216,8 @@ pub struct TouchContext {
     pub combat: bool,
     /// Pirates demand tribute: PAY shows.
     pub pay: bool,
+    /// A test-mode world (Wave 14): the ATLAS button shows in the top row.
+    pub atlas: bool,
 }
 
 /// Where the first seat's pilot is, as the touch controls see it.
@@ -346,6 +348,8 @@ pub enum TouchControl {
     Escape,
     /// Pirates hail: pay their demand.
     Pay,
+    /// Test mode (Wave 14): open the Atlas, the travel browser with previews.
+    Atlas,
 }
 
 /// Where the controls are this frame.
@@ -439,7 +443,7 @@ impl TouchLayout {
         }
         match context.mode {
             TouchMode::Play => {
-                layout.push_top(screen, settings.left_handed, play_top_row(context));
+                layout.push_top(screen, settings.left_handed, &play_top_row(context));
                 if context.pilot.on_foot() && context.crypt {
                     layout.push_crypt(cluster, context);
                 } else if context.pilot.on_foot() {
@@ -1069,6 +1073,7 @@ impl TouchInput {
             TouchControl::Pause => input.pause = true,
             TouchControl::Inventory => input.inventory = true,
             TouchControl::Map => input.map = true,
+            TouchControl::Atlas => input.atlas = true,
             TouchControl::BuildPlace => input.confirm = true,
             TouchControl::Back => input.back = true,
             // Left and right both switch tabs and adjust the selected row, on every screen.
@@ -1189,22 +1194,20 @@ fn stick_axes(x: f32, y: f32, drill_lock: bool) -> (f32, f32) {
 }
 
 /// The small buttons along the top edge in play: the OUT button joins them while the rig can
-/// let its pilot out.
-const fn play_top_row(context: TouchContext) -> &'static [TouchControl] {
+/// let its pilot out, and the ATLAS button in a test-mode world (Wave 14).
+fn play_top_row(context: TouchContext) -> Vec<TouchControl> {
+    let mut row = vec![
+        TouchControl::Inventory,
+        TouchControl::Pause,
+        TouchControl::Map,
+    ];
     if matches!(context.pilot, TouchPilot::CanExit) {
-        &[
-            TouchControl::Inventory,
-            TouchControl::Pause,
-            TouchControl::Map,
-            TouchControl::ExitRig,
-        ]
-    } else {
-        &[
-            TouchControl::Inventory,
-            TouchControl::Pause,
-            TouchControl::Map,
-        ]
+        row.push(TouchControl::ExitRig);
     }
+    if context.atlas {
+        row.push(TouchControl::Atlas);
+    }
+    row
 }
 
 /// How a controller action is reached by touch.

@@ -326,6 +326,8 @@ mod tests {
         volume_down: false,
         fullscreen: false,
         local_multiplayer_toggle: false,
+        atlas: false,
+        menu_hover: None,
         bomb: false,
         cycle_explosive: false,
         detonate: false,

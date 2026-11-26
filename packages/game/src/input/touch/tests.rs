@@ -28,6 +28,7 @@ const PLAY: TouchContext = TouchContext {
     dock: false,
     combat: false,
     pay: false,
+    atlas: false,
 };
 
 const ARMED: TouchContext = TouchContext {
@@ -570,6 +571,8 @@ fn contexts() -> Vec<TouchContext> {
                     dock: false,
                     combat: false,
                     pay: false,
+                    // Test mode's ATLAS button (Wave 14) joins the top row.
+                    atlas: bits & 8 != 0,
                 });
                 if !pilot.on_foot() && mode == TouchMode::Play {
                     // Space flight (Wave 11): the Star Drive's cluster.
@@ -590,6 +593,7 @@ fn contexts() -> Vec<TouchContext> {
                         dock: bits & 4 != 0,
                         combat: false,
                         pay: false,
+                        atlas: bits & 1 != 0,
                     });
                 }
                 if pilot.on_foot() && mode == TouchMode::Play {
@@ -610,6 +614,7 @@ fn contexts() -> Vec<TouchContext> {
                         dock: false,
                         combat: false,
                         pay: false,
+                        atlas: bits & 1 != 0,
                     });
                 }
             }
@@ -809,6 +814,8 @@ fn every_input_field_has_a_touch_answer() {
         dpad_rotates: _,
         stick_horizontal: _,
         anchor: _,
+        // The top row's ATLAS button in a test-mode world (Wave 14).
+        atlas: _,
         // Taps on the world and on menu rows (the app resolves them) and drags on menus.
         menu_pick: _,
         build_pointer: _,
@@ -820,6 +827,8 @@ fn every_input_field_has_a_touch_answer() {
         pointer: _,
         auto_aim: _,
         pointer_secondary: _,
+        // A finger has no hover: the Atlas's map moves its cursor to a tap (`menu_pick`).
+        menu_hover: _,
         // Not on touch: Esc-style cancel (Back never quits), desktop hotkeys, and the keyboard's
         // text entry and paging keys.
         cancel: _,

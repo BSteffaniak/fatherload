@@ -29,15 +29,20 @@ pub enum MenuHit {
 }
 
 /// One owner's recorded menu: rows and dialog outlines in logical screen points.
+/// Turns a point of a recorded area (`u`, `v` in 0..1 across and down it) into its row index.
+pub(super) type AreaRow = fn(f32, f32) -> usize;
+
 #[derive(Clone, Debug, Default)]
 struct Recorded {
     rows: Vec<(Rectangle, usize)>,
+    /// Areas whose every point is a row of its own (the Atlas's map, Wave 14).
+    areas: Vec<(Rectangle, AreaRow)>,
     dialogs: Vec<Rectangle>,
 }
 
 impl Recorded {
     const fn is_empty(&self) -> bool {
-        self.rows.is_empty() && self.dialogs.is_empty()
+        self.rows.is_empty() && self.dialogs.is_empty() && self.areas.is_empty()
     }
 
     fn hit(&self, x: f32, y: f32) -> MenuHit {
@@ -46,6 +51,11 @@ impl Recorded {
         };
         if let Some((_, index)) = self.rows.iter().find(|(rect, _)| inside(rect)) {
             MenuHit::Row(*index)
+        } else if let Some((rect, row)) = self.areas.iter().find(|(rect, _)| inside(rect)) {
+            MenuHit::Row(row(
+                (x - rect.x) / rect.width.max(1.0),
+                (y - rect.y) / rect.height.max(1.0),
+            ))
         } else if self.dialogs.iter().any(inside) {
             MenuHit::Dialog
         } else if self.dialogs.is_empty() {
@@ -77,8 +87,8 @@ thread_local! {
     static RECORD: RefCell<Record> = const {
         RefCell::new(Record {
             target: Target::Ignored,
-            global: Recorded { rows: Vec::new(), dialogs: Vec::new() },
-            first_seat: Recorded { rows: Vec::new(), dialogs: Vec::new() },
+            global: Recorded { rows: Vec::new(), areas: Vec::new(), dialogs: Vec::new() },
+            first_seat: Recorded { rows: Vec::new(), areas: Vec::new(), dialogs: Vec::new() },
         })
     };
 }
@@ -122,6 +132,13 @@ pub(super) fn record_row(rect: Rectangle, clip: Rectangle, index: usize) {
     let visible = Rectangle::new(left, top, right - left, bottom - top);
     let points = ui_kit::canvas().to_points(visible);
     with_target(|recorded| recorded.rows.push((points, index)));
+}
+
+/// Records an area (current-canvas art pixels) whose every point is a row: `row` names the
+/// row at `(u, v)`, 0..1 across and down it (the Atlas's map, Wave 14).
+pub(super) fn record_area(rect: Rectangle, row: AreaRow) {
+    let points = ui_kit::canvas().to_points(rect);
+    with_target(|recorded| recorded.areas.push((points, row)));
 }
 
 /// Records a dialog's outline (current-canvas art pixels).
