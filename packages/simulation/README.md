@@ -11697,6 +11697,55 @@ Theme ids: planets-c 9-11, planets-d 12-14. Tile codes: `Outland` 0x2E00, `Exoti
 * The outland/exotic creature sprites are generated sketches (the bosses read; the small fauna
   are small on screen).
 
+### Part III complete: the checklist (expansion plan §13-§18)
+
+Each requirement of Part III and where it lives. "Open" marks what is still missing.
+
+| § | Requirement | Where it lives |
+|---|---|---|
+| 13 | ~13,000 rows, 8 Descents, 41 authored strata, a signature rule each | `descent` (`descent/registry.rs`), generator V11; the Wave 8-10 sections above |
+| 13 | Each stratum: materials, palette, ores, layer resource, 2-4 creatures, landmark, music, story beat | `descent/registry.rs`, the Descent modules (`crust`, `old_deep`, `living_dark`, `drowned`, `hollow`, `distortion`, `ancient_city`, `heart`), game `audio/patch/*` |
+| 13 | A gate at the end of every Descent (boss or set piece + part/key) | the Wave 8-10 gate bosses and parts (Star Core, Leviathan, Gatekeeper Colossus, the Heart) |
+| 13 | 2-3 seed variants per stratum, anomaly rooms, events | the Wave 8-10 sections (seed variants, anomaly rooms) |
+| 13 | Something new every 20-40 minutes, measured by bots | `balance::descent` (`--balance-report --only descent`: every target met, re-run this wave on one seed) |
+| 13 | The Fathers' expedition thread, logs, echoes; the Heart wakes the Star Drive and opens space | `expedition` (80 logs), `heart` (Wave 10) |
+| 13 | Lifts, deep outposts, depth beacons, momentum tools | `logistics` (F10), Wave 8-10 outposts and beacons |
+| 13 | Upgrade tiers per Descent, a new rig system each Descent | `economy` tiers, the gate systems (Pressure Hull .. Heart Key) |
+| 13 | Quests, trade, story arcs, tombs per Descent, mini-bosses, logs | `quest`, `tomb`, `people`, the Descent settlements |
+| 13 | Effects intensity setting, photosensitivity-safe limits, per-seat effects | game `effects.rs` (`ScreenEffect`, the accessibility setting) |
+| 14 | Descents I-VIII content map | the Wave 8-10 sections; balance table re-run this wave |
+| 15 F7 | Sector + local positions, camera-relative rendering, relevance, lossless save bump, precision tests | `position` (`WorldPos`), `world/frame.rs`, netcode relevance, save format 15 |
+| 15 F8 | Stratum registry and generator V11 (default), streaming budget | `descent`, `worldgen::streamed` |
+| 15 F9 | Field effects, post-process pipeline (GLSL ES 100 safe), rotating camera, fluids | `field`, game `rendering/post_process.rs`, `world/fluids.rs` |
+| 15 F10 | Depth logistics and progression curves, the balance harness | `logistics`, `balance` |
+| 15 F11 | Many places at once: stores, occupied-store ticking, per-body saves, relevance streaming | `place`, `world/places.rs` (Wave 11), body maps by relevance and events by place (Wave 13 qa-perf) |
+| 15 F12 | Seamless deterministic space, round planets on a polar grid, radial gravity | `space` (`GOLDEN_SPACE_DIGEST`), `polar`, `planet` |
+| 15 F12 | Player-controlled 360° rotation with thrusters, camera locked to the craft, gravity never rotates, upright HUD, pilot stands against gravity, optional assists | `attitude`, `flight`, `world/body_flight.rs`; no Wave 13 track touched rotation |
+| 15 F12 | Cruise and warp, re-entry heat, landing, life support, docking, nav HUD, scanners | `flight` (Wave 11), game `rendering/space_view.rs`, the HUD layout (Wave 13 art-audio) |
+| 16 | Star systems: star classes, orbits, belts, comets, nebulae, black holes, wormholes | `space`, `flight::systems` (Wave 12 systems) |
+| 16 | Twelve planet themes, each a world like home (surface, settlements, 800-2,500 rows of strata, ores, creatures, weather, day, gravity) | jungle/archipelago/ice `planet::wilds`; dunes/volcanic/crystal `frontier`; fungal/machine/dead `planet::outlands`; gas giant/locked/ring `exotic`; `world::part3_tests` checks all twelve, the bot lands on all twelve |
+| 16 | Each theme's face from orbit and its own music | `planet::look::ORBITAL_LOOKS` (all twelve), each theme's `music_bed` and patches |
+| 16 | Craters and small moons, one secret each | barren secret everywhere; **open**: the themed secrets (all nine of Waves 12-13) never appear, since the space generator tags every small body `Barren` |
+| 16 | Friendly species with towns, trade, tongues, quests, homes, story arcs | `alien` (Wave 12); towns on the Wave 13 worlds (`part3_tests`); estates (Wave 13 endgame) |
+| 16 | Neutral fauna per planet | every theme's spawn table (the bot meets a native on each) |
+| 16 | Hostile factions: pirates, swarms, machine fleet; bosses | `hostiles` (Wave 12), the Warden (Wave 13 story) |
+| 16 | Stations: shipyards, markets, bounty boards | `station` (Wave 12), the Works and Records counters (Wave 13 endgame) |
+| 16 | Progression: alien tech, hull and engine line, planet gear; space materials and economy | `station::shipyard`, `endgame` (materials, one credit scale, Mk II/III, Starwright, Heartline, the Halcyon Gate) |
+| 16 | Theme bosses | the six Wave 13 themes' bosses, on the hunt list; **open**: the six Wave 12 themes have none |
+| 16 | The builders' story through the stars, archive keys pointing at the first systems, a long story and endless exploration after it | `galaxy_story` (10 chapters, the finale, leads in every system); relics at the new worlds' builders' outposts |
+| 16 | Co-op: separate or together, shared waypoint, party HUD, meet anywhere | `flight` waypoints, per-seat views, free flight's per-group frames, the netcode soak and `world_part3` |
+| 17 | Waves 7-13 | this README, wave by wave |
+| 18.1 | Polar grid; camera locked to a craft the player rotates; no automatic tilting | `polar`, `attitude` |
+| 18.2 | Effects full by default, reduced/off setting, safe limits always | game `effects.rs` |
+| 18.3 | Star Core is the Descent II gate, no escape countdown | the Descent II gate (Wave 8) |
+| 18.4 | Navigation HUD as a ship upgrade | `station::ShipLine` nav suite |
+| 18.5 | The ending opens space and the game goes on | `heart`, `galaxy_story` (the archivist's after-the-road remarks, leads in fresh systems) |
+
+Also open: space pays less than the Heart near home; the Starwright hull does not soften
+combat; no dedicated Works, gate or Harbour music; the Wave 13 creatures are generated sketches
+(the bosses read, the small fauna are small on screen); hand play-testing of the whole arc was
+not done (bots and screenshots only).
+
 ## Replication
 
 Every field belongs to exactly one section kind (the compiler enforces it through exhaustive
