@@ -25,6 +25,9 @@ use crate::rendering::terrain::tile_art;
 /// Painting time a frame may spend on the coarse map (besides the rows of a changed tile).
 pub const FRAME_BUDGET: Duration = Duration::from_millis(3);
 
+/// Texels painted between looks at the clock.
+const TEXELS_PER_CHECK: u32 = 32;
+
 /// Whether every frame paints the whole map (scene capture: a still shows it all).
 static PAINT_WHOLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -101,7 +104,7 @@ impl CoarseMap {
                 let y = row - window.row0;
                 if (0..window.size.1).contains(&y) {
                     self.unpaint_row(window, y);
-                    self.paint_row(strip, window, y);
+                    let _ = self.paint_row(strip, window, y, None);
                 }
             }
         } else if window.ring && revision != self.revision {
@@ -114,14 +117,18 @@ impl CoarseMap {
         if self.pending.is_empty() && self.has_pending() {
             self.queue(window, camera_row);
         }
-        // At least one row a frame, then as many as the budget allows.
-        let mut first = true;
-        while first || started.elapsed() < budget {
-            first = false;
-            let Some(y) = self.pending.pop() else {
+        // At least a few texels a frame, then as many as the budget allows (checked inside a
+        // row too: a deep row can reach thousands of chunks nobody has generated yet).
+        let deadline = started.checked_add(budget);
+        while let Some(y) = self.pending.pop() {
+            if !self.paint_row(strip, window, y, deadline) {
+                // Out of time: the rest of the row waits for the next frame.
+                self.pending.push(y);
                 break;
-            };
-            self.paint_row(strip, window, y);
+            }
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                break;
+            }
         }
     }
 
@@ -201,7 +208,15 @@ impl CoarseMap {
 
     /// Paints the unpainted texels of window row `y`: one texel per tile (the mean of its art),
     /// the sky and past the core clear.
-    fn paint_row(&mut self, strip: &dyn PolarStrip, window: &Window, y: i32) {
+    /// Paints the unpainted texels of window row `y` until `deadline` (`None`: all of them);
+    /// whether the row is done.
+    fn paint_row(
+        &mut self,
+        strip: &dyn PolarStrip,
+        window: &Window,
+        y: i32,
+        deadline: Option<Instant>,
+    ) -> bool {
         let geometry = strip.geometry();
         let terrain = strip.terrain();
         let width = window.size.0;
@@ -211,7 +226,7 @@ impl CoarseMap {
             .iter()
             .all(|painted| *painted)
         {
-            return;
+            return true;
         }
         let band = geometry.band(row);
         let columns = if row > geometry.last_row() {
@@ -222,10 +237,20 @@ impl CoarseMap {
             width
         };
         let origin = window.origins[(band as usize).min(MAX_HALVINGS)];
+        let mut done = true;
+        let mut since_check = 0_u32;
         for x in 0..width {
             let at = start + x as usize;
             if self.painted[at] {
                 continue;
+            }
+            since_check += 1;
+            if since_check >= TEXELS_PER_CHECK {
+                since_check = 0;
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                    done = false;
+                    break;
+                }
             }
             self.painted[at] = true;
             let texel = if x < columns
@@ -247,6 +272,7 @@ impl CoarseMap {
             self.pixels[at * 4..at * 4 + 4].copy_from_slice(&texel);
         }
         self.upload = self.upload.add_row(y);
+        done
     }
 }
 
@@ -280,22 +306,28 @@ mod tests {
         let window = coarse_window(&ground, geometry);
         assert!(!window.ring, "a big world's window");
         let mut map = CoarseMap::default();
-        // No budget: the first frame paints one row, the nearest the camera.
+        // No budget: the first frame paints a few texels of the row nearest the camera (the
+        // budget is kept inside a row too); the rest waits.
         map.sync(strip, &window, ground.row, 0, Duration::ZERO);
         assert!(map.has_pending(), "the rest waits");
         let width = window.size.0 as usize;
-        let painted: Vec<usize> = (0..window.size.1 as usize)
+        let rows: Vec<usize> = (0..window.size.1 as usize)
             .filter(|y| {
                 map.painted[y * width..(y + 1) * width]
                     .iter()
-                    .all(|done| *done)
+                    .any(|done| *done)
             })
             .collect();
         let camera_y = (ground.row - window.row0 as f32).clamp(0.0, window.size.1 as f32 - 1.0);
-        assert_eq!(painted.len(), 1, "one row");
+        assert_eq!(rows.len(), 1, "one row begun");
         assert!(
-            (painted[0] as f32 - camera_y).abs() <= 1.0,
+            (rows[0] as f32 - camera_y).abs() <= 1.0,
             "the nearest the camera"
+        );
+        let painted = map.painted.iter().filter(|done| **done).count();
+        assert!(
+            (1..width).contains(&painted),
+            "{painted} texels: a slice of the row"
         );
         map.paint_all(strip, &window, ground.row);
         assert!(
@@ -309,7 +341,7 @@ mod tests {
         map.sync(strip, &moved, ground.row, 0, Duration::ZERO);
         let unpainted = map.painted.iter().filter(|painted| !**painted).count();
         assert!(
-            unpainted <= (moved.size.1 as usize) * 512 + width,
+            unpainted <= (moved.size.1 as usize) * 512,
             "{unpainted} texels left of {}",
             map.painted.len()
         );

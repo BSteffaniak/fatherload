@@ -146,15 +146,21 @@ const OTHER_SITE_EIGHTHS: [i64; 2] = [6, 3];
 /// the lap; each is levelled, dry and clear like the first.
 #[must_use]
 pub fn settlement_centres(ground: &PlanetGround) -> Vec<i64> {
+    let (centres, count) = centres_of(ground);
+    centres[..count].to_vec()
+}
+
+/// The settlement centres and how many there are (no allocation: the surface asks per column).
+fn centres_of(ground: &PlanetGround) -> ([i64; 3], usize) {
     let width = i64::from(ground.strip_width());
     let first =
         (settlement_column(ground) + i64::from(settlement_width(ground) / 2)).rem_euclid(width);
-    let towns = usize::from(crate::alien::town::town_count(ground.params())).max(1);
-    let mut centres = vec![first];
-    for eighths in OTHER_SITE_EIGHTHS.iter().take(towns - 1) {
-        centres.push((first + width * eighths / 8).rem_euclid(width));
+    let towns = usize::from(crate::alien::town::town_count(ground.params())).clamp(1, 3);
+    let mut centres = [first; 3];
+    for (slot, eighths) in centres.iter_mut().skip(1).zip(OTHER_SITE_EIGHTHS) {
+        *slot = (first + width * eighths / 8).rem_euclid(width);
     }
-    centres
+    (centres, towns)
 }
 
 /// The settlement site's centre nearest `column` round the lap (each site shapes the ground
@@ -162,9 +168,9 @@ pub fn settlement_centres(ground: &PlanetGround) -> Vec<i64> {
 #[must_use]
 pub fn nearest_settlement(ground: &PlanetGround, column: i64) -> i64 {
     let width = i64::from(ground.strip_width());
-    let centres = settlement_centres(ground);
+    let (centres, count) = centres_of(ground);
     let mut best = centres[0];
-    for centre in centres.into_iter().skip(1) {
+    for centre in centres.into_iter().take(count).skip(1) {
         if wrap_delta(column, centre, width).abs() < wrap_delta(column, best, width).abs() {
             best = centre;
         }
