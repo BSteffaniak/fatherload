@@ -251,9 +251,10 @@ the free camera pans with the stick and zooms with Page Up/Down) and the local t
 `speed pause|0.5|1|2|4` (`pause` alone; online play keeps real time). Launch straight into a
 test world with `fatherload --god`, optionally in place with `--start-at "descent:5"`,
 `"planet:random:ice"`, `"boss:colossus"`, `"depth:4200m"` or `"stratum:crystal_faults"`
-(and `--seed <n>`). Commands act on the rig of the seat that opened the palette and go
-through the same test-mode actions as everything else, so they work online (the host's world
-decides) and are refused in normal worlds.
+(and `--seed <n>`). Commands act on the rig of the seat that opened the palette (`seat 2`
+switches to another split-screen seat, such as a gamepad's) and go through the same test-mode
+actions as everything else, so they work online (the host's world decides) and are refused in
+normal worlds. On touch, the menu's `>` button completes and `<` recalls the last command.
 
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
 basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can

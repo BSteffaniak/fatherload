@@ -12499,7 +12499,8 @@ changes nothing.
   by theme with a `Pick` (`Nth(i)` outward from the rig's sector, wrapping both ways, or
   `Random(seed)`: the seed rides in the action, so every peer picks the same planet), a
   station, another player's rig, or an exact tile of a place (`Spot`: the palette's back-stack
-  and bookmarks).
+  and bookmarks). A depth past the world's floor lands as deep as travel goes (the last
+  Descent's floor less 40 rows, where a boss travel lands) rather than being refused.
 * `WorldState::resolve_destination(player, destination) -> Option<Arrival>` is pure (the
   palette's `tp … ?` preview and the travel both read it): a name, one line of facts and an
   `ArrivalTarget` (`HomeRow`, `Place`, `Spot`). Home rows land in a carved pocket (the existing
@@ -12525,6 +12526,9 @@ changes nothing.
   phone's keyboard through `ShellState::text_entry`). It acts for the seat that opened it
   (seat 1's keyboard or the touch screen); that seat's rig and hotkeys rest while it is open
   and the world keeps running. Esc, Back or the backtick closes it; the pause menu closes it.
+  `seat N` makes the palette act for another split-screen seat (a gamepad seat has no keys to
+  type with; the keyboard seat keeps typing, and the panel's title names the seat). On touch
+  the menu's `>` button completes (a phone keyboard has no Tab) and `<` recalls the history.
 * **Language** (`console/parse.rs`): `tp planet next|prev|nearest|random [theme]`,
   `tp descent N|numeral|name`, `tp depth 4200m|4200|1.5km`, `tp stratum <name>`,
   `tp boss <name>` (also `tp leviathan`), `tp station nearest|next|prev|random`, `tp player N`,
@@ -12547,7 +12551,9 @@ changes nothing.
   time scale. A home-depth travel from a planet or free flight sends `TravelTo(Home)` now and
   the depth travel once the world shows the rig home (`Console::take_ready`). `next`/`prev`
   cursors, the back-stack (every travel pushes where the rig was), bookmarks and the last
-  preview are per seat (`SeatTravel`).
+  preview are per seat (`SeatTravel`). `random` rolls start from the wall clock
+  (`SeatTravel::seeded`), so a session's first random planet differs from the last session's;
+  the roll travels inside the action, so peers still agree.
 * **Launch flags** (`console/start_at.rs`): `--god` starts a new test-mode world (seed
   0x00C0FFEE or `--seed <n>`, the new-world generator) straight from the command line;
   `--start-at "descent:5"`, `"planet:random:ice"`, `"boss:colossus"`, `"station:nearest"`,
@@ -12563,8 +12569,9 @@ changes nothing.
   every damageable entity's hit circle and contact box, small boxes for drops, critters and
   people), field zones (outline, feather and preset name), the chunk grid (16-tile chunks,
   labelled) and region cells (512-tile sectors, gold), map reveal (the world drawn with no fog),
-  the free camera (the seat's stick pans it, Page Up/Down zoom out and in, up to 1/16 scale;
-  the rig gets no movement meanwhile) and the FPS and tick-time overlay. `effective(test_mode)`
+  the free camera (the seat's stick pans it, Page Up/Down zoom out and in, up to 1/16 scale on
+  the desktop and 1/4 in the browser, where every further step would quadruple the 512x512
+  chunk textures; the rig gets no movement meanwhile; touch can pan but not zoom) and the FPS and tick-time overlay. `effective(test_mode)`
   answers "off" for every view outside a test-mode world, so a normal world never draws one.
   Presentation only: nothing reaches the simulation. The world-space views draw on the home
   world's ground (and its post-process path); a seat on a round body or in free flight sees the
@@ -12608,6 +12615,12 @@ changes nothing.
   line each) and delete the stub; `dispatch::stock_stub_applies` marks which the stub already
   does. `give` lists (`console/names.rs::giveables`) can then take stock's registry walk.
 * **Event codes:** none used (1180-1199 stay free); the palette reports in its own lines.
+* **Known stub limits (review):** `tp planet next` re-centres on the rig's sector after every
+  hop, so repeated `next` drifts outward through new planets but `prev` does not retrace them
+  (`tp back` does); a boss travel lands near its Descent's floor, not in the arena; the palette
+  prints a travel line as it sends the action and does not read the action's outcome, so a
+  travel the world refuses (no fixture-free column near the rig) says nothing more. The index's
+  selectors and outcome events should replace all three.
 
 ## Replication
 
