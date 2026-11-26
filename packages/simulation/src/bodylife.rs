@@ -192,14 +192,20 @@ impl BodyLife {
     /// The weather at strip `column` at world time `millis`.
     #[must_use]
     pub fn weather(&self, millis: u64, column: i64) -> WeatherNow {
+        self.weather_with(millis, column, None)
+    }
+
+    /// [`Self::weather`], or `forced` blowing at full strength all the time (the test-mode
+    /// weather switch, Wave 14): the same forecast over a table of that one kind, so it still
+    /// needs air and a night-only kind still shows only at night.
+    #[must_use]
+    pub fn weather_with(&self, millis: u64, column: i64, forced: Option<WeatherId>) -> WeatherNow {
         let night = self.clock.daylight(millis, column, 0) < 300;
-        forecast(
-            self.seed,
-            self.hooks().weather_table(),
-            self.climate.atmosphere,
-            millis,
-            night,
-        )
+        let only = forced.map(|kind| [weather::odds(kind, 1)]);
+        let table = only
+            .as_ref()
+            .map_or_else(|| self.hooks().weather_table(), |only| &only[..]);
+        forecast(self.seed, table, self.climate.atmosphere, millis, night)
     }
 
     /// Everything at strip tile `(column, row)` at world time `millis`, `surface` being the
@@ -213,8 +219,22 @@ impl BodyLife {
         surface: i32,
         exposed: bool,
     ) -> BodyReading {
+        self.reading_with(millis, column, row, surface, exposed, None)
+    }
+
+    /// [`Self::reading`] under `forced` weather (see [`Self::weather_with`]).
+    #[must_use]
+    pub fn reading_with(
+        &self,
+        millis: u64,
+        column: i64,
+        row: i32,
+        surface: i32,
+        exposed: bool,
+        forced: Option<WeatherId>,
+    ) -> BodyReading {
         let elevation = self.clock.elevation(millis, column);
-        let weather = self.weather(millis, column);
+        let weather = self.weather_with(millis, column, forced);
         let reach = if exposed { weather } else { WeatherNow::CLEAR };
         let daylight = i32::from(self.clock.daylight(millis, column, self.night_light()));
         // Weather darkens the day; an aurora lights the night.

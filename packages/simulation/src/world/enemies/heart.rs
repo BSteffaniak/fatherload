@@ -822,7 +822,7 @@ impl WorldState {
     }
 
     /// The fight ends without a winner: everything goes, it heals for next time.
-    fn put_heart_to_sleep(&mut self) {
+    pub(in crate::world) fn put_heart_to_sleep(&mut self) {
         let fight = std::mem::take(&mut self.heart.fight);
         if let Some(entity) = fight.entity {
             self.entities.despawn(EntityId(entity));

@@ -490,6 +490,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::Lair {
             what, player_id, ..
         } => (1_200 + what.code() as u32, player_id),
+        // The god-mode toolkit (wave 14 stock): 1120-1139.
+        GameplayEventKind::TestStock {
+            what, player_id, ..
+        } => (1_120 + what.code() as u32, player_id),
     }
 }
 

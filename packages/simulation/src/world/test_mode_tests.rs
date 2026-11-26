@@ -51,7 +51,20 @@ fn test_mode_starts_every_rig_maxed_with_every_part() {
             assert_eq!(level, MAX_UPGRADE_LEVEL);
         }
         assert_eq!(player.scanner_level, MAX_SCANNER_LEVEL);
-        assert_eq!(player.hazard_gear, HazardGear::MAXED);
+        // Every counter maxed, and the ship's lines too (Wave 14 stocks them; `MAXED` keeps
+        // a stock ship for the bots).
+        assert_eq!(
+            HazardGear {
+                ship: HazardGear::MAXED.ship,
+                ..player.hazard_gear
+            },
+            HazardGear::MAXED
+        );
+        assert!(
+            crate::station::ShipUpgrade::all()
+                .into_iter()
+                .all(|upgrade| upgrade.level(&player.hazard_gear.ship) == upgrade.max_level())
+        );
         assert_eq!(player.drill_mount_level, MAX_DRILL_MOUNT_LEVEL);
         assert!(player.credits >= TEST_MODE_CREDITS);
         assert!((player.fuel - player.fuel_capacity).abs() < f32::EPSILON);

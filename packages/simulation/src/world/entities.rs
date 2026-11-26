@@ -188,13 +188,17 @@ impl WorldState {
         }
         // Drops merged away during this phase (never merged into again).
         let mut merged = std::collections::BTreeSet::new();
+        // The test-mode AI freeze (Wave 14): creatures and their shots stand still.
+        let ai_frozen = self.test_mode.is_some_and(|state| state.ai_frozen);
         for id in self.entities.awake_in_phase(phase) {
             let Some(entity) = self.entities.get(id) else {
                 continue;
             };
             let kind = entity.kind();
             // F11: outside every awake region the entity is frozen (kept, not ticked).
-            if self.frozen_at(entity.body.x, entity.body.y) {
+            if self.frozen_at(entity.body.x, entity.body.y)
+                || (ai_frozen && matches!(kind, EntityKind::Enemy | EntityKind::EnemyShot))
+            {
                 continue;
             }
             match kind {

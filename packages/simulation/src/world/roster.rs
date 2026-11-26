@@ -54,6 +54,10 @@ impl WorldState {
             .entry(player_id)
             .or_insert(self.simulation_tick);
         self.discovered_tiles.entry(player_id).or_default();
+        // A test-mode world stocks every rig as it arrives (Wave 14, `world/test_stock.rs`).
+        if self.is_test_mode() {
+            self.stock_player(player_id);
+        }
     }
 
     /// Removes a player and every piece of per-player state.

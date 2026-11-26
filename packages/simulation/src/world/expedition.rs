@@ -19,7 +19,7 @@ use super::WorldState;
 
 /// Where [`WorldState::note_descent_boss_beaten`] keeps a noted win in
 /// [`ExpeditionState::bosses`]: the eight bosses' bits shifted up past the beaten bits.
-const BOSS_NOTED_SHIFT: u16 = 8;
+pub(super) const BOSS_NOTED_SHIFT: u16 = 8;
 
 /// The terrain row echo `echo` plays at in a world with `layout`.
 #[must_use]

@@ -206,12 +206,15 @@ impl WorldState {
         let tile = terrain.frame().tile_at(x, y);
         let surface = terrain.surface_row(tile.x);
         let exposed = self.open_sky_in(terrain, tile);
-        life.reading(
+        // The test-mode weather switch (Wave 14) forces one kind on every body.
+        let forced = self.forced_weather();
+        life.reading_with(
             self.body_millis(),
             i64::from(tile.x),
             tile.y,
             surface,
             exposed,
+            forced,
         )
     }
 
@@ -325,8 +328,9 @@ impl WorldState {
                 .store_actor_position(player_id)
                 .map_or((player.x, player.y), |(x, y, _)| (x, y));
             let column = i64::from(self.frame().tile_at(x, y).x);
-            let was = life.weather(before, column);
-            let is = life.weather(now, column);
+            let forced = self.forced_weather();
+            let was = life.weather_with(before, column, forced);
+            let is = life.weather_with(now, column, forced);
             if was.kind != is.kind {
                 output.push_event(GameplayEventKind::BodyLife {
                     what: BodyLifeEvent::WeatherTurned,

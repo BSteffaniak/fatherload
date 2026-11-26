@@ -1858,6 +1858,7 @@ pub const SCENES: &[Scene] = &[
                 invulnerable: true,
                 infinite_fuel: false,
                 no_clip: true,
+                ..fatherload_simulation::TestModeState::new_world()
             });
             shell.run_mode = RunMode::Paused;
             shell.selected_pause_item = 2;

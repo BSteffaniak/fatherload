@@ -532,6 +532,7 @@ fn falls_and_enemies_hurt_but_god_mode_does_not() {
         invulnerable: true,
         infinite_fuel: false,
         no_clip: false,
+        ..crate::TestModeState::default()
     });
     let mut output = TickOutput::default();
     assert!(!world.damage_pilot(id, 50.0, &mut output), "god mode");

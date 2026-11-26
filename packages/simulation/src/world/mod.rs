@@ -269,6 +269,9 @@ mod supplies;
 mod test_mode;
 #[cfg(test)]
 mod test_mode_tests;
+pub mod test_stock;
+#[cfg(test)]
+mod test_stock_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

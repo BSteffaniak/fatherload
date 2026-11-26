@@ -320,6 +320,11 @@ pub struct ClockState {
     /// The tick the last night was skipped on (the screens fade back in from it).
     #[serde(default)]
     pub last_skip: Option<SimulationTick>,
+    /// The time of day held still (milliseconds since midnight), if the test-mode day/night
+    /// lock is on (Wave 14, `TestModeAction::SetDayLock`): every time-of-day reading (the
+    /// phase, the light, the sun and the night) stays there while world time runs on.
+    #[serde(default)]
+    pub held_millis: Option<u64>,
 }
 
 const fn default_offset_millis() -> u64 {
@@ -349,6 +354,7 @@ impl ClockState {
             sleepers: BTreeMap::new(),
             sleep_deadline: None,
             last_skip: None,
+            held_millis: None,
         }
     }
 
@@ -365,7 +371,12 @@ pub struct WorldClock {
     world_millis: u64,
     day_millis: u64,
     lunar_offset: u32,
+    /// The held time of day ([`ClockState::held_millis`]), or [`NOT_HELD`].
+    held: u64,
 }
+
+/// [`WorldClock`]'s marker for a clock whose time of day runs.
+const NOT_HELD: u64 = u64::MAX;
 
 impl WorldClock {
     /// The clock at `tick` of a session running at `rate`, with saved `state`; `seed` (the
@@ -373,11 +384,15 @@ impl WorldClock {
     #[must_use]
     pub const fn at(tick: SimulationTick, rate: TickRate, state: &ClockState, seed: u64) -> Self {
         let tick_millis = tick.get().saturating_mul(1_000) / rate.hz() as u64;
-        Self::from_world_millis(
+        let mut clock = Self::from_world_millis(
             tick_millis.saturating_add(state.offset_millis),
             state.day_length,
             seed,
-        )
+        );
+        if let Some(held) = state.held_millis {
+            clock.held = held % clock.day_millis;
+        }
+        clock
     }
 
     /// The clock at an absolute world time (tests, scenes, previews).
@@ -387,7 +402,14 @@ impl WorldClock {
             world_millis,
             day_millis: day_length.millis(),
             lunar_offset: lunar_offset(seed),
+            held: NOT_HELD,
         }
+    }
+
+    /// Whether the time of day is held still (the test-mode day/night lock).
+    #[must_use]
+    pub const fn is_held(self) -> bool {
+        self.held != NOT_HELD
     }
 
     /// Milliseconds of world time since day 1 began (includes skipped nights). The time base for
@@ -417,6 +439,9 @@ impl WorldClock {
     /// Milliseconds since midnight.
     #[must_use]
     pub const fn millis_into_day(self) -> u64 {
+        if self.is_held() {
+            return self.held;
+        }
         self.world_millis % self.day_millis
     }
 

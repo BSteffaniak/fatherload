@@ -145,7 +145,7 @@ impl WorldState {
             .unwrap_or_else(|| self.fresh_combat(player_id))
     }
 
-    fn fresh_combat(&self, player_id: PlayerId) -> RigCombat {
+    pub(super) fn fresh_combat(&self, player_id: PlayerId) -> RigCombat {
         let gear = self
             .players
             .get(&player_id)

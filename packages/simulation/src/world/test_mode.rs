@@ -2,13 +2,10 @@
 //! [`crate::test_mode`]).
 
 use crate::{
-    economy::max_out_upgrades,
     ids::PlayerId,
-    player::Player,
-    rig::RigPartKind,
     summary::PlayerScopedCommandOutcome,
     terrain::{TILE_SIZE, TileKind, TilePosition},
-    test_mode::{TEST_MODE_CREDITS, TestModeAction, TestModeState},
+    test_mode::{TestModeAction, TestModeState},
     worldgen::{Band, strata::band_solid_top_row},
 };
 
@@ -20,28 +17,6 @@ const POCKET_HALF_WIDTH: i32 = 1;
 const POCKET_HEIGHT: i32 = 2;
 /// How far either side of the rig a warp looks for a column clear of fixtures.
 const WARP_SEARCH_COLUMNS: i32 = 48;
-
-/// Gives `player` the test-mode loadout: every upgrade maxed and a large balance.
-fn equip_for_testing(player: &mut Player) {
-    max_out_upgrades(player);
-    player.credits = player.credits.max(TEST_MODE_CREDITS);
-    // Every weapon at its top tier, a full capacitor and a rack of rockets.
-    for weapon in crate::weapon::WeaponKind::ALL {
-        let _ = player.receive_weapon(weapon);
-        player
-            .weapon_rack
-            .owned
-            .insert(weapon, crate::weapon::MAX_WEAPON_MK);
-    }
-    player.weapon_rack.battery_level = crate::weapon::MAX_BATTERY_LEVEL;
-    if let Some(mounted) = player.mounted_weapon.as_mut() {
-        mounted.mk = crate::weapon::MAX_WEAPON_MK;
-    }
-    player.weapon.energy = player.battery_capacity();
-    let rockets = crate::weapon::AmmoKind::Rocket.item();
-    let missing = 40_u32.saturating_sub(player.cargo_bay.count(rockets));
-    player.cargo_bay.add(rockets, missing);
-}
 
 impl WorldState {
     /// The world's test-mode toggles, or `None` outside test mode.
@@ -57,21 +32,14 @@ impl WorldState {
     }
 
     /// Turns a world being built (before play starts) into a test-mode world: every rig, and
-    /// every rig that joins later, starts with maxed upgrades and a large balance, and the parts
-    /// locker holds every rig part.
+    /// every rig that joins later, starts fully stocked (Wave 14: every upgrade maxed, every
+    /// consumable at its stack, every part, gear, cosmetic, gate reward, space line and star
+    /// chart; see `world/test_stock.rs`) with a large balance.
     pub fn enable_test_mode(&mut self) {
-        // Test mode is for exploring: start invulnerable with infinite fuel (both can be
-        // switched off in the pause menu to test real survival).
-        self.test_mode.get_or_insert(TestModeState {
-            invulnerable: true,
-            infinite_fuel: true,
-            no_clip: false,
-        });
-        equip_for_testing(&mut self.player_template);
-        for player in self.players.values_mut() {
-            equip_for_testing(player);
-        }
-        self.progression.rig_part_inventory.extend(RigPartKind::ALL);
+        // Test mode is for exploring: start invulnerable with infinite fuel and supplies (each
+        // can be switched off in the pause menu to test real survival).
+        self.test_mode.get_or_insert(TestModeState::new_world());
+        self.stock_everything();
     }
 
     pub(super) fn apply_test_mode_action(
@@ -79,6 +47,13 @@ impl WorldState {
         player_id: PlayerId,
         action: TestModeAction,
     ) -> PlayerScopedCommandOutcome {
+        if self.test_mode.is_none() {
+            return PlayerScopedCommandOutcome::IgnoredUnavailable;
+        }
+        // The god-mode toolkit (Wave 14, `world/test_stock.rs`).
+        if let Some(outcome) = self.apply_toolkit_action(player_id, action) {
+            return outcome;
+        }
         let Some(state) = self.test_mode.as_mut() else {
             return PlayerScopedCommandOutcome::IgnoredUnavailable;
         };
@@ -133,13 +108,27 @@ impl WorldState {
                     self.active_drill_timers.clear();
                 }
             }
+            // Handled by `apply_toolkit_action` above.
+            TestModeAction::SetInfiniteSupplies(_)
+            | TestModeAction::Restock
+            | TestModeAction::StockAll
+            | TestModeAction::Give(..)
+            | TestModeAction::SetStoryUnlocked(_)
+            | TestModeAction::SetGateCleared { .. }
+            | TestModeAction::SetEndingDone(_)
+            | TestModeAction::SetTimeOfDay { .. }
+            | TestModeAction::SetDayLock(_)
+            | TestModeAction::SetWeather(_)
+            | TestModeAction::SpawnCreature(_)
+            | TestModeAction::ClearNearbyEnemies
+            | TestModeAction::SetAiFrozen(_) => {}
         }
         self.apply_test_mode_refills();
         PlayerScopedCommandOutcome::Applied
     }
 
-    /// Refills hulls and fuel tanks when the test-mode toggles say so (end of every tick, so a
-    /// rig never shows damage or an empty tank between ticks).
+    /// Refills hulls, fuel tanks and consumables when the test-mode toggles say so (end of
+    /// every tick, so a rig never shows damage, an empty tank or a spent stack between ticks).
     pub(super) fn apply_test_mode_refills(&mut self) {
         let Some(state) = self.test_mode else {
             return;
@@ -151,6 +140,12 @@ impl WorldState {
             if state.infinite_fuel {
                 player.fuel = player.fuel_capacity;
                 player.weapon.energy = player.battery_capacity();
+            }
+        }
+        if state.infinite_supplies {
+            let players: Vec<PlayerId> = self.players.keys().copied().collect();
+            for player_id in players {
+                self.top_up_supplies(player_id);
             }
         }
     }

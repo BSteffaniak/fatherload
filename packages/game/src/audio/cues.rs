@@ -1717,6 +1717,7 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         | GameplayEventKind::EntityDamaged { .. }
         | GameplayEventKind::QuestAccepted { .. }
         | GameplayEventKind::TestModeChanged { .. }
+        | GameplayEventKind::TestStock { .. }
         | GameplayEventKind::PeopleInteraction { .. }
         | GameplayEventKind::HomeInteraction { .. }
         | GameplayEventKind::HazardChanged
@@ -1984,7 +1985,8 @@ mod tests {
             | GameplayEventKind::Station { .. }
             | GameplayEventKind::Hostile { .. }
             | GameplayEventKind::Endgame { .. }
-            | GameplayEventKind::Galaxy { .. } => {}
+            | GameplayEventKind::Galaxy { .. }
+            | GameplayEventKind::TestStock { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },
@@ -2507,6 +2509,13 @@ mod tests {
         }
         for what in fatherload_simulation::galaxy_story::GalaxyEvent::ALL {
             events.push(GameplayEventKind::Galaxy {
+                what,
+                player_id: Some(player_id),
+                detail: 0,
+            });
+        }
+        for what in fatherload_simulation::test_mode::TestStockEvent::ALL {
+            events.push(GameplayEventKind::TestStock {
                 what,
                 player_id: Some(player_id),
                 detail: 0,

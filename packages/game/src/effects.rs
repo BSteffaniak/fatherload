@@ -1225,7 +1225,8 @@ const fn gameplay_player(kind: &GameplayEventKind) -> Option<PlayerId> {
         | GameplayEventKind::Hostile { player_id, .. }
         | GameplayEventKind::Endgame { player_id, .. }
         | GameplayEventKind::Galaxy { player_id, .. }
-        | GameplayEventKind::Lair { player_id, .. } => player_id,
+        | GameplayEventKind::Lair { player_id, .. }
+        | GameplayEventKind::TestStock { player_id, .. } => player_id,
         GameplayEventKind::EscapeTunnelChanged
         | GameplayEventKind::HazardChanged
         | GameplayEventKind::BouldersChanged

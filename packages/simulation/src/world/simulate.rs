@@ -30,6 +30,9 @@ impl WorldState {
     /// Panics only if internal player bookkeeping is inconsistent (a player id collected from the
     /// world during this tick disappears before it is processed), which would be a simulation bug.
     pub fn simulate_tick(&mut self, tick: SimulationTick, inputs: &TickInputs) -> TickOutput {
+        // A test-mode save from before the current stocking revision is restocked first
+        // (Wave 14, `world/test_stock.rs`).
+        self.upgrade_test_stock();
         // Many places at once (Part III F11, `world/places.rs`): a world that never left the
         // home store and does not tick by region runs the one pass it always did.
         let output = if self.places.is_empty() && !self.ticks_by_region() {

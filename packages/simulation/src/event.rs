@@ -1461,6 +1461,14 @@ pub enum GameplayEventKind {
         x: i32,
         y: i32,
     },
+    // The god-mode toolkit (Wave 14 stock; netcode codes 1120-1139).
+    /// A test-mode stocking, progress or spawn tool was used; `player_id` is whose doing,
+    /// `detail` what it named (an enemy kind's index, a gate's Descent, a count).
+    TestStock {
+        what: crate::test_mode::TestStockEvent,
+        player_id: Option<PlayerId>,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.
@@ -1570,6 +1578,7 @@ impl TickOutput {
     }
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per command family")]
 pub(crate) const fn gameplay_event_for_applied_command(
     player_id: PlayerId,
     command: &PlayerCommand,
@@ -1620,7 +1629,15 @@ pub(crate) const fn gameplay_event_for_applied_command(
         }
         PlayerCommand::UseScanner => GameplayEventKind::ScannerUsed { player_id },
         PlayerCommand::Rescue => GameplayEventKind::RescueTriggered { player_id },
-        PlayerCommand::TestMode(_) => GameplayEventKind::TestModeChanged { player_id },
+        // The god-mode toolkit's tools say what they did (Wave 14); the toggles change the mode.
+        PlayerCommand::TestMode(action) => match action.stock_event() {
+            Some((what, detail)) => GameplayEventKind::TestStock {
+                what,
+                player_id: Some(player_id),
+                detail,
+            },
+            None => GameplayEventKind::TestModeChanged { player_id },
+        },
         PlayerCommand::DumpBlocks { .. } => GameplayEventKind::BlocksDumped { player_id },
         PlayerCommand::SetCollectBlocks { enabled } => GameplayEventKind::CollectBlocksToggled {
             player_id,

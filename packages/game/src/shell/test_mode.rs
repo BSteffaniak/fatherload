@@ -166,6 +166,7 @@ mod tests {
             invulnerable: true,
             infinite_fuel: true,
             no_clip: true,
+            ..TestModeState::default()
         };
         assert_eq!(shell.shown_test_mode(world), Some(wanted));
         assert_eq!(requests.len(), 3);

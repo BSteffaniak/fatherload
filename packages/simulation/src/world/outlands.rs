@@ -235,7 +235,8 @@ impl WorldState {
             && self.open_sky_at(tile)
             && let Some(body) = self.body_life_here()
         {
-            let weather = body.weather(self.body_millis(), i64::from(tile.x));
+            let weather =
+                body.weather_with(self.body_millis(), i64::from(tile.x), self.forced_weather());
             if weather.kind == life.storm && weather.intensity_permille > 0 {
                 out.push((
                     PlanetHazard::ToxicAir,
@@ -544,8 +545,9 @@ impl WorldState {
                 continue;
             }
             let column = i64::from(tile.x);
-            let before = body.weather(self.millis_at(self.simulation_tick), column);
-            let after = body.weather(self.millis_at(next_tick), column);
+            let forced = self.forced_weather();
+            let before = body.weather_with(self.millis_at(self.simulation_tick), column, forced);
+            let after = body.weather_with(self.millis_at(next_tick), column, forced);
             if after.kind == life.storm
                 && after.intensity_permille > 0
                 && (before.kind != life.storm || before.intensity_permille == 0)
