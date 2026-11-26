@@ -4,13 +4,13 @@
 use fatherload_simulation::{
     EnemyDifficulty, EnemyKind, PlayerCommand, PlayerId, SimulationParams, TestModeAction,
     WorldState,
+    bodylife::weather::WeatherId,
     descent::{Descent, DescentBoss, Stratum},
+    destination::{DestinationFilter, DestinationKind, Selector, TravelRequest},
     explosive::ExplosiveKind,
+    hostiles::Faction,
     space::Theme,
-    test_mode::{
-        palette_stock::{StockRequest, WeatherSwitch},
-        travel::{Destination, Pick},
-    },
+    test_mode::StockItem,
     workshop::DeepSupply,
     worldgen::{GeneratorVersion, WorldSettings},
 };
@@ -19,7 +19,7 @@ use super::{
     Console, ConsoleContext,
     complete::{common_prefix, complete},
     dispatch::Effect,
-    names::{self, Giveable},
+    names::{self, BossName},
     parse::{Command, Give, Step, TpTarget, parse, parse_depth, parse_start_at, parse_time},
     start_at::{DEFAULT_TEST_SEED, parse_launch_flags, start_actions},
 };
@@ -59,6 +59,7 @@ fn parsed(line: &str) -> Command {
 }
 
 #[test]
+#[allow(clippy::too_many_lines, reason = "one case per travel form")]
 fn travel_commands_parse() {
     assert_eq!(
         parsed("tp planet next"),
@@ -110,19 +111,49 @@ fn travel_commands_parse() {
     );
     assert_eq!(
         parsed("tp boss leviathan"),
-        tp(TpTarget::Boss(DescentBoss::Leviathan))
+        tp(TpTarget::Boss(BossName::Gate(DescentBoss::Leviathan)))
     );
     assert_eq!(
         parsed("tp boss colossus"),
-        tp(TpTarget::Boss(DescentBoss::GatekeeperColossus))
+        tp(TpTarget::Boss(BossName::Gate(
+            DescentBoss::GatekeeperColossus
+        )))
     );
     assert_eq!(
         parsed("tp leviathan"),
-        tp(TpTarget::Boss(DescentBoss::Leviathan))
+        tp(TpTarget::Boss(BossName::Gate(DescentBoss::Leviathan)))
+    );
+    assert_eq!(
+        parsed("tp boss sporemother"),
+        tp(TpTarget::Boss(BossName::Theme(0)))
+    );
+    assert_eq!(
+        parsed("tp boss pirates"),
+        tp(TpTarget::Boss(BossName::Flagship(Faction::Pirates)))
     );
     assert_eq!(
         parsed("tp station nearest"),
-        tp(TpTarget::Station(Step::Nearest))
+        tp(TpTarget::Kind {
+            kind: DestinationKind::Station,
+            step: Step::Nearest,
+            name: None
+        })
+    );
+    assert_eq!(
+        parsed("tp village next"),
+        tp(TpTarget::Kind {
+            kind: DestinationKind::Village,
+            step: Step::Next,
+            name: None
+        })
+    );
+    assert_eq!(
+        parsed("tp lair random"),
+        tp(TpTarget::Kind {
+            kind: DestinationKind::ThemeBossLair,
+            step: Step::Random,
+            name: None
+        })
     );
     assert_eq!(parsed("tp player 2"), tp(TpTarget::Player(2)));
     assert_eq!(
@@ -142,7 +173,7 @@ fn travel_commands_parse() {
     assert_eq!(
         parsed("tp boss leviathan?"),
         Command::Tp {
-            target: TpTarget::Boss(DescentBoss::Leviathan),
+            target: TpTarget::Boss(BossName::Gate(DescentBoss::Leviathan)),
             preview: true
         }
     );
@@ -155,21 +186,21 @@ fn stocking_and_switch_commands_parse() {
     assert_eq!(
         parsed("give dynamite 99"),
         Command::Give(Give::One {
-            what: Giveable::Item(ExplosiveKind::Mining.item().expect("an item")),
+            what: StockItem::Explosive(ExplosiveKind::Mining),
             count: 99
         })
     );
     assert_eq!(
         parsed("give c4"),
         Command::Give(Give::One {
-            what: Giveable::Item(ExplosiveKind::C4.item().expect("an item")),
+            what: StockItem::Explosive(ExplosiveKind::C4),
             count: 1
         })
     );
     assert_eq!(
         parsed("give ballast tank 5"),
         Command::Give(Give::One {
-            what: Giveable::Supply(DeepSupply::BallastTank),
+            what: StockItem::Supply(DeepSupply::BallastTank),
             count: 5
         })
     );
@@ -188,10 +219,16 @@ fn stocking_and_switch_commands_parse() {
     assert_eq!(parsed("freeze"), Command::Freeze(None));
     assert_eq!(parsed("freeze off"), Command::Freeze(Some(false)));
     assert_eq!(parsed("time 22:00"), Command::Time(22 * 60));
+    assert_eq!(parsed("weather auto"), Command::Weather(None));
+    let Command::Weather(Some(storm)) = parsed("weather storm") else {
+        panic!("weather storm names a kind");
+    };
     assert_eq!(
-        parsed("weather storm"),
-        Command::Weather(WeatherSwitch::Storm)
+        fatherload_simulation::bodylife::weather::weather_kind(storm).name,
+        "Storm"
     );
+    assert_eq!(parsed("restock"), Command::Restock);
+    assert_eq!(parsed("supplies off"), Command::Supplies(Some(false)));
     assert_eq!(parsed("difficulty"), Command::Difficulty(None));
     assert_eq!(
         parsed("difficulty hard"),
@@ -344,16 +381,16 @@ fn run(console: &mut Console, world: &WorldState, line: &str) -> Vec<Effect> {
         .collect()
 }
 
-fn travel(destination: Destination) -> Effect {
-    Effect::Act(PlayerCommand::TestMode(TestModeAction::PaletteTravel(
-        destination,
-    )))
+fn travel(request: TravelRequest) -> Effect {
+    test(TestModeAction::TravelTo(request))
 }
 
-fn stock(request: StockRequest) -> Effect {
-    Effect::Act(PlayerCommand::TestMode(TestModeAction::PaletteStock(
-        request,
-    )))
+fn test(action: TestModeAction) -> Effect {
+    Effect::Act(PlayerCommand::TestMode(action))
+}
+
+fn planet(selector: Selector, theme: Theme) -> TravelRequest {
+    TravelRequest::new(DestinationKind::Planet, selector).filtered(DestinationFilter::Theme(theme))
 }
 
 #[test]
@@ -365,84 +402,128 @@ fn every_command_dispatches_its_action() {
         ..Console::default()
     };
     console.open_for(0);
+    let storm = fatherload_simulation::bodylife::weather::weather_kinds()
+        .find(|kind| kind.name == "Storm")
+        .map(|kind| kind.id);
+    let leviathan = world
+        .resolve_travel(PLAYER, &TravelRequest::nearest(DestinationKind::BossArena))
+        .map(|_| ())
+        .and_then(|()| {
+            world
+                .destinations(PLAYER, DestinationKind::BossArena, DestinationFilter::Any)
+                .into_iter()
+                .find(|arena| arena.info.boss.as_deref() == Some(DescentBoss::Leviathan.name()))
+        })
+        .expect("the Leviathan's arena");
+    let gates: Vec<Effect> = (0..8)
+        .map(|descent| {
+            test(TestModeAction::SetGateCleared {
+                descent,
+                cleared: true,
+            })
+        })
+        .collect();
     let cases: Vec<(&str, Vec<Effect>)> = vec![
         (
             "tp descent 5",
-            vec![travel(Destination::Descent(Descent::HollowWorld))],
+            vec![travel(TravelRequest::descent(Descent::HollowWorld))],
         ),
-        ("tp depth 4200m", vec![travel(Destination::Depth(4_200))]),
+        (
+            "tp depth 4200m",
+            vec![travel(TravelRequest::depth_metres(4_200))],
+        ),
         (
             "tp stratum crystal_faults",
-            vec![travel(Destination::Stratum(Stratum::CrystalFaults))],
+            vec![travel(
+                TravelRequest::nearest(DestinationKind::Stratum)
+                    .filtered(DestinationFilter::Stratum(Stratum::CrystalFaults)),
+            )],
         ),
         (
             "tp boss leviathan",
-            vec![travel(Destination::Boss(DescentBoss::Leviathan))],
+            vec![travel(TravelRequest::exact(leviathan.id))],
         ),
         (
             "tp planet ice",
-            vec![travel(Destination::Planet {
-                theme: Some(Theme::Ice),
-                pick: Pick::NEAREST,
-            })],
+            vec![travel(planet(Selector::Nearest, Theme::Ice))],
         ),
         (
             "tp planet next ice",
-            vec![travel(Destination::Planet {
-                theme: Some(Theme::Ice),
-                pick: Pick::Nth(1),
-            })],
+            vec![travel(planet(Selector::Next, Theme::Ice))],
         ),
         (
             "tp planet prev ice",
-            vec![travel(Destination::Planet {
-                theme: Some(Theme::Ice),
-                pick: Pick::Nth(0),
-            })],
+            vec![travel(planet(Selector::Previous, Theme::Ice))],
         ),
-        ("tp player 2", vec![travel(Destination::Player(MATE))]),
-        ("tp home", vec![travel(Destination::Home)]),
-        ("tp moon", vec![travel(Destination::Moon)]),
-        ("give all", vec![stock(StockRequest::GiveAll)]),
+        (
+            "tp village",
+            vec![travel(TravelRequest::nearest(DestinationKind::Village))],
+        ),
+        (
+            "tp player 2",
+            vec![travel(
+                TravelRequest::nearest(DestinationKind::Player)
+                    .filtered(DestinationFilter::Player(MATE)),
+            )],
+        ),
+        (
+            "tp home",
+            vec![travel(TravelRequest::nearest(DestinationKind::HomeTown))],
+        ),
+        (
+            "tp moon",
+            vec![travel(TravelRequest::nearest(DestinationKind::Moon))],
+        ),
+        ("give all", vec![test(TestModeAction::StockAll)]),
         (
             "give dynamite 99",
-            vec![stock(StockRequest::Give {
-                item: ExplosiveKind::Mining.item().expect("item"),
-                count: 99,
-            })],
+            vec![test(TestModeAction::Give(
+                StockItem::Explosive(ExplosiveKind::Mining),
+                99,
+            ))],
         ),
         (
             "give flare buoy 3",
-            vec![stock(StockRequest::GiveSupply {
-                supply: DeepSupply::FlareBuoy,
-                count: 3,
-            })],
+            vec![test(TestModeAction::Give(
+                StockItem::Supply(DeepSupply::FlareBuoy),
+                3,
+            ))],
         ),
-        ("gate all", vec![stock(StockRequest::GateAll)]),
+        ("restock", vec![test(TestModeAction::Restock)]),
+        (
+            "supplies off",
+            vec![test(TestModeAction::SetInfiniteSupplies(false))],
+        ),
+        ("gate all", gates),
         (
             "gate leviathan",
-            vec![stock(StockRequest::Gate(DescentBoss::Leviathan))],
+            vec![test(TestModeAction::SetGateCleared {
+                descent: 3,
+                cleared: true,
+            })],
         ),
-        ("ending done", vec![stock(StockRequest::EndingDone)]),
+        (
+            "ending done",
+            vec![test(TestModeAction::SetEndingDone(true))],
+        ),
         (
             "spawn hollow_matriarch",
-            vec![stock(StockRequest::Spawn(
+            vec![test(TestModeAction::SpawnCreature(
                 names::pick("hollow_matriarch", "creature", &names::creatures()).expect("creature"),
             ))],
         ),
-        ("clear", vec![stock(StockRequest::ClearEnemies)]),
-        ("freeze", vec![stock(StockRequest::FreezeAi(true))]),
-        ("freeze off", vec![stock(StockRequest::FreezeAi(false))]),
+        ("clear", vec![test(TestModeAction::ClearNearbyEnemies)]),
+        ("freeze", vec![test(TestModeAction::SetAiFrozen(true))]),
+        ("freeze off", vec![test(TestModeAction::SetAiFrozen(false))]),
         (
             "time 22:00",
-            vec![stock(StockRequest::SetTime {
-                minute_of_day: 22 * 60,
-            })],
+            vec![test(TestModeAction::SetTimeOfDay { minutes: 22 * 60 })],
         ),
         (
             "weather storm",
-            vec![stock(StockRequest::SetWeather(WeatherSwitch::Storm))],
+            vec![test(TestModeAction::SetWeather(storm))],
         ),
+        ("weather auto", vec![test(TestModeAction::SetWeather(None))]),
         (
             "difficulty peaceful",
             vec![Effect::Act(PlayerCommand::SetEnemyDifficulty(
@@ -463,22 +544,23 @@ fn every_command_dispatches_its_action() {
         ("tp descent 3 ?", vec![]),
         (
             "go",
-            vec![travel(Destination::Descent(Descent::LivingDark))],
+            vec![travel(TravelRequest::descent(Descent::LivingDark))],
         ),
-        // Every travel above pushed where the rig was: `tp back` returns there.
-        ("bookmark camp", vec![]),
+        // The bookmark is the world's; the palette keeps its name.
+        ("bookmark camp", vec![test(TestModeAction::BookmarkHere)]),
     ];
     for (line, wanted) in cases {
         assert_eq!(run(&mut console, &world, line), wanted, "{line}");
     }
-    let (place, pos) = world.rig_world_pos(PLAYER).expect("rig");
-    let (column, row) = pos.tile();
-    let spot = Destination::Spot { place, column, row };
+    let here = world.travel_here(PLAYER).expect("rig");
     assert_eq!(
         run(&mut console, &world, "tp bookmark camp"),
-        vec![travel(spot)]
+        vec![travel(TravelRequest::exact(
+            here.as_kind(DestinationKind::Bookmark)
+        ))]
     );
-    assert_eq!(run(&mut console, &world, "tp back"), vec![travel(spot)]);
+    // Nothing travelled yet in this world: there is no back-stack to go down.
+    assert!(run(&mut console, &world, "tp back").is_empty());
     // A preview prints a card with the destination's name.
     let _ = run(&mut console, &world, "tp descent 5 ?");
     assert!(
@@ -521,44 +603,38 @@ fn online_sessions_keep_real_time() {
 }
 
 #[test]
-fn a_home_depth_travel_from_a_planet_goes_home_first() {
+fn travel_from_another_place_is_one_trip_and_back_goes_down_the_worlds_back_stack() {
     let mut world = test_world();
     let tick = world.simulation_tick();
     let mut inputs = fatherload_simulation::TickInputs::default();
     inputs.act_as(
         PLAYER,
-        PlayerCommand::TestMode(TestModeAction::PaletteTravel(Destination::Moon)),
+        PlayerCommand::TestMode(TestModeAction::TravelTo(planet(
+            Selector::Nearest,
+            Theme::Jungle,
+        ))),
     );
     let _ = world.simulate_tick(tick, &inputs);
+    assert!(
+        !world.place_of(PLAYER).is_home_store(),
+        "on the jungle world"
+    );
     let mut console = Console {
         available: true,
         ..Console::default()
     };
     console.open_for(0);
-    // The Moon is the home store: a depth travel still goes straight there.
-    let effects = run(&mut console, &world, "tp depth 100m");
-    assert_eq!(effects, vec![travel(Destination::Depth(100))]);
-    let planet = Destination::Planet {
-        theme: Some(Theme::Jungle),
-        pick: Pick::NEAREST,
-    };
-    let tick = world.simulation_tick();
-    let mut inputs = fatherload_simulation::TickInputs::default();
-    inputs.act_as(
-        PLAYER,
-        PlayerCommand::TestMode(TestModeAction::PaletteTravel(planet)),
-    );
-    let _ = world.simulate_tick(tick, &inputs);
-    assert!(!world.place_of(PLAYER).is_home_store());
+    // The index crosses places itself: a Descent from a planet is one action.
     let effects = run(&mut console, &world, "tp descent 2");
-    assert_eq!(effects, vec![travel(Destination::Home)]);
-    let players = [PLAYER, MATE];
-    let ctx = ConsoleContext {
-        world: &world,
-        players: &players,
-        online: false,
-    };
-    assert!(console.take_ready(ctx).is_empty(), "still away");
+    assert_eq!(
+        effects,
+        vec![travel(TravelRequest::descent(Descent::OldDeep))]
+    );
+    // `tp back` sends the index's own back (the world keeps the back-stack).
+    assert_eq!(
+        run(&mut console, &world, "tp back"),
+        vec![test(TestModeAction::TravelBack)]
+    );
 }
 
 #[test]
@@ -727,7 +803,16 @@ fn seat_switches_whose_rig_the_palette_acts_for() {
     assert_eq!(console.acting_seat(), 1);
     assert_eq!(console.seat, 0, "the keyboard seat still types");
     let effects = console.run("tp player 1", ctx);
-    assert_eq!(effects, vec![(1, travel(Destination::Player(PLAYER)))]);
+    assert_eq!(
+        effects,
+        vec![(
+            1,
+            travel(
+                TravelRequest::nearest(DestinationKind::Player)
+                    .filtered(DestinationFilter::Player(PLAYER))
+            )
+        )]
+    );
     // No such seat: nothing changes.
     let _ = console.run("seat 3", ctx);
     assert_eq!(console.acting_seat(), 1);
@@ -751,11 +836,17 @@ fn start_at_targets_parse() {
     );
     assert_eq!(
         parse_start_at("boss:colossus"),
-        Ok(TpTarget::Boss(DescentBoss::GatekeeperColossus))
+        Ok(TpTarget::Boss(BossName::Gate(
+            DescentBoss::GatekeeperColossus
+        )))
     );
     assert_eq!(
         parse_start_at("station:nearest"),
-        Ok(TpTarget::Station(Step::Nearest))
+        Ok(TpTarget::Kind {
+            kind: DestinationKind::Station,
+            step: Step::Nearest,
+            name: None
+        })
     );
     assert_eq!(parse_start_at("depth:4200m"), Ok(TpTarget::Depth(4_200)));
     assert_eq!(
@@ -789,8 +880,8 @@ fn start_at_targets_parse() {
         start_actions(&world, PLAYER, &TpTarget::Descent(Descent::HollowWorld)).expect("lands");
     assert_eq!(
         actions,
-        vec![PlayerCommand::TestMode(TestModeAction::PaletteTravel(
-            Destination::Descent(Descent::HollowWorld)
+        vec![PlayerCommand::TestMode(TestModeAction::TravelTo(
+            TravelRequest::descent(Descent::HollowWorld)
         ))]
     );
     let actions = start_actions(
@@ -802,8 +893,19 @@ fn start_at_targets_parse() {
         },
     )
     .expect("lands");
-    assert_eq!(
-        actions[0],
-        PlayerCommand::TestMode(TestModeAction::PaletteStock(StockRequest::EndingDone))
-    );
+    let Some(PlayerCommand::TestMode(TestModeAction::TravelTo(request))) = actions.last() else {
+        panic!("a travel: {actions:?}");
+    };
+    assert_eq!(request.kind, DestinationKind::Planet);
+    assert_eq!(request.filter, DestinationFilter::Theme(Theme::Ice));
+    assert!(matches!(request.selector, Selector::Random(_)));
+    // A space target opens space first when the world has not (the ending), else goes
+    // straight there.
+    if !world.space_enabled() {
+        assert_eq!(
+            actions[0],
+            PlayerCommand::TestMode(TestModeAction::SetEndingDone(true))
+        );
+    }
+    let _ = WeatherId::CLEAR;
 }

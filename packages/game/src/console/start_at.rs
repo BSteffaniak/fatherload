@@ -1,15 +1,14 @@
 //! Launch flags for testing (Wave 14): `--god` starts a new test-mode world straight away, and
 //! `--start-at <target>` starts it already in place (`descent:5`, `planet:random:ice`,
 //! `boss:colossus`, `station:nearest`, `depth:4200m`, `stratum:crystal_faults`, `moon`).
-//! Targets are the palette's `tp` words joined by `:` and go through the same travel action,
-//! so screenshot scenes and bots reuse them ([`start_actions`]).
+//! Targets are the palette's `tp` words joined by `:` and go through the same travel action
+//! (the destination index's `TravelTo`), so screenshot scenes and bots reuse them
+//! ([`start_actions`]).
 
-use fatherload_simulation::{
-    PlayerCommand, PlayerId, TestModeAction, WorldState, test_mode::palette_stock::StockRequest,
-};
+use fatherload_simulation::{PlayerCommand, PlayerId, TestModeAction, WorldState};
 
 use super::{
-    dispatch::{DispatchContext, SeatTravel, destination},
+    dispatch::{DispatchContext, SeatTravel, Trip, trip},
     parse::{TpTarget, parse_start_at},
 };
 
@@ -63,8 +62,9 @@ fn parse_seed(text: &str) -> Option<u64> {
     )
 }
 
-/// The actions that put `player`'s rig at `target` in a fresh test-mode world: travel (with
-/// space opened first for a space target, as the ending would).
+/// The actions that put `player`'s rig at `target` in a fresh test-mode world: the
+/// destination index's travel (with the ending marked done first when space is not open yet,
+/// for a space target).
 ///
 /// # Errors
 ///
@@ -79,20 +79,20 @@ pub fn start_actions(
         player,
         online: false,
     };
-    let destination = destination(target, ctx, &mut SeatTravel::seeded())?;
-    if world.resolve_destination(player, destination).is_none() {
+    let trip = trip(target, ctx, &mut SeatTravel::seeded())?;
+    let Trip::To(request) = trip else {
+        return Err("--start-at cannot go back (no earlier spot)".to_owned());
+    };
+    let mut actions = Vec::new();
+    let space_closed = !world.space_enabled();
+    if space_closed && request.kind.in_space() {
+        // A space target in a world whose Heart has not woken: the ending opens space first.
+        actions.push(PlayerCommand::TestMode(TestModeAction::SetEndingDone(true)));
+    } else if world.resolve_travel(player, &request).is_none() {
         return Err(format!(
             "--start-at: nowhere to land for {target:?} in this world"
         ));
     }
-    let mut actions = Vec::new();
-    if matches!(target, TpTarget::Planet { .. } | TpTarget::Station(_)) {
-        actions.push(PlayerCommand::TestMode(TestModeAction::PaletteStock(
-            StockRequest::EndingDone,
-        )));
-    }
-    actions.push(PlayerCommand::TestMode(TestModeAction::PaletteTravel(
-        destination,
-    )));
+    actions.push(PlayerCommand::TestMode(TestModeAction::TravelTo(request)));
     Ok(actions)
 }

@@ -1,8 +1,6 @@
 //! Tab completion: what the word under the cursor could be, from the same name lists the
 //! parser reads (so anything the parser accepts can be completed).
 
-use fatherload_simulation::test_mode::travel::DESTINATION_WORDS;
-
 use super::{names, parse::COMMANDS};
 
 /// The words that can follow `before` (the line's finished words).
@@ -15,7 +13,14 @@ fn next_words(before: &[&str], bookmarks: &[String]) -> Vec<String> {
     };
     match before {
         [] | ["help" | "?"] => own(&COMMANDS),
-        ["tp" | "travel" | "goto"] => own(&DESTINATION_WORDS),
+        ["tp" | "travel" | "goto"] => {
+            let mut out = own(&[
+                "planet", "descent", "depth", "stratum", "boss", "player", "bookmark", "home",
+                "moon", "back",
+            ]);
+            out.extend(names::place_kinds().into_iter().map(|(_, name)| name));
+            out
+        }
         ["tp", "planet"] => {
             let mut out = own(&["next", "prev", "nearest", "random"]);
             out.extend(names::themes().into_iter().map(|(_, name)| name));
@@ -34,16 +39,18 @@ fn next_words(before: &[&str], bookmarks: &[String]) -> Vec<String> {
             "500m", "1100m", "2700m", "4200m", "6000m", "9000m", "12000m",
         ]),
         ["tp", "stratum"] => names::strata().into_iter().map(|(_, name)| name).collect(),
-        ["tp", "boss"] | ["gate"] => {
-            let mut out = if before == ["gate"] {
-                own(&["all"])
-            } else {
-                Vec::new()
-            };
+        ["tp", "boss"] => names::any_bosses()
+            .into_iter()
+            .map(|(_, name)| name)
+            .collect(),
+        ["gate"] => {
+            let mut out = own(&["all"]);
             out.extend(names::bosses().into_iter().map(|(_, name)| name));
             out
         }
-        ["tp", "station"] => own(&["nearest", "next", "prev", "random"]),
+        ["tp", kind] if names::place_kinds().iter().any(|(_, name)| name == kind) => {
+            own(&["nearest", "next", "prev", "random"])
+        }
         ["tp", "player"] | ["seat"] => own(&["1", "2", "3", "4"]),
         ["tp", "bookmark"] => bookmarks.to_vec(),
         ["give"] => {
@@ -56,7 +63,7 @@ fn next_words(before: &[&str], bookmarks: &[String]) -> Vec<String> {
             .into_iter()
             .map(|(_, name)| name)
             .collect(),
-        ["freeze"] | ["view" | "debug", _] => own(&["on", "off"]),
+        ["freeze" | "supplies"] | ["view" | "debug", _] => own(&["on", "off"]),
         ["time"] => own(&["06:00", "12:00", "18:00", "22:00", "00:00"]),
         ["weather"] => names::weathers()
             .into_iter()

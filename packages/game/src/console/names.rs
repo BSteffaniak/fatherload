@@ -6,14 +6,14 @@
 
 use fatherload_simulation::{
     EnemyDifficulty, EnemyKind,
+    bodylife::weather::{WeatherId, weather_kinds},
     descent::{Descent, DescentBoss, Stratum},
+    destination::DestinationKind,
+    endgame::hunt::THEME_BOSSES,
     explosive::ExplosiveKind,
-    item::ItemKind,
+    hostiles::Faction,
     space::Theme,
-    test_mode::palette_stock::WeatherSwitch,
-    weapon::{AmmoKind, WeaponKind},
-    workshop::DeepSupply,
-    worldgen::deposits::MINERALS,
+    test_mode::StockItem,
 };
 
 use crate::debug_views::{DebugView, TimeScale};
@@ -144,54 +144,106 @@ pub fn bosses() -> Vec<(DescentBoss, String)> {
     named(DescentBoss::ALL, |boss| word(boss.name()))
 }
 
+/// A boss `tp boss` can go to: a Descent's gate boss, a planet theme's boss (its index in the
+/// hunt list's `THEME_BOSSES`) or a space faction's flagship.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BossName {
+    Gate(DescentBoss),
+    Theme(usize),
+    Flagship(Faction),
+}
+
+/// Every boss `tp boss` knows: the gate bosses, the twelve theme bosses and the flagships
+/// (`pirates`, `swarm`, `machine` and their `_flagship` names).
+#[must_use]
+pub fn any_bosses() -> Vec<(BossName, String)> {
+    let mut out: Vec<(BossName, String)> = bosses()
+        .into_iter()
+        .map(|(boss, name)| (BossName::Gate(boss), name))
+        .collect();
+    for (index, boss) in THEME_BOSSES.iter().enumerate() {
+        out.push((BossName::Theme(index), word(boss.name)));
+    }
+    for faction in Faction::ALL {
+        out.push((
+            BossName::Flagship(faction),
+            word(&format!("{} flagship", faction.name())),
+        ));
+        // The factions' plain names too (`tp boss pirates`).
+        let plain = match faction {
+            Faction::Pirates => "pirates",
+            Faction::Swarm => "swarm",
+            Faction::Machine => "machines",
+        };
+        out.push((BossName::Flagship(faction), plain.to_owned()));
+    }
+    out
+}
+
+/// The boss `typed` names: a gate boss when it names one (`colossus` is the Gatekeeper
+/// Colossus, as the plan's `--start-at "boss:colossus"` asks), else any boss.
+///
+/// # Errors
+///
+/// When nothing (or more than one boss) matches.
+pub fn pick_boss(typed: &str) -> Result<BossName, String> {
+    pick(typed, "gate boss", &bosses())
+        .map(BossName::Gate)
+        .or_else(|_| pick(typed, "boss", &any_bosses()))
+}
+
 /// Every creature and boss by name.
 #[must_use]
 pub fn creatures() -> Vec<(EnemyKind, String)> {
     named(EnemyKind::ALL, |kind| word(kind.name()))
 }
 
-/// What `give <item> N` can hand out: an item for the cargo bay or a deep supply for the kit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Giveable {
-    Item(ItemKind),
-    Supply(DeepSupply),
-}
-
-/// Every item `give` knows: explosives, ammunition, weapons, minerals and the deep supplies.
+/// What `give <item> N` can hand out: every stocked consumable of the god-mode toolkit by its
+/// slug (`StockItem::all`, walking the registries), and `dynamite` (the dig's stick of
+/// dynamite is the mining charge).
 #[must_use]
-pub fn giveables() -> Vec<(Giveable, String)> {
-    let mut out: Vec<(Giveable, String)> = Vec::new();
-    for kind in ExplosiveKind::ALL {
-        if let Some(item) = kind.item() {
-            out.push((Giveable::Item(item), word(kind.name())));
-        }
-    }
-    // The plan's "give dynamite 99": the mining charge is the dig's stick of dynamite.
-    if let Some(item) = ExplosiveKind::Mining.item() {
-        out.push((Giveable::Item(item), "dynamite".to_owned()));
-    }
-    for kind in AmmoKind::ALL {
-        out.push((Giveable::Item(kind.item()), word(kind.name())));
-    }
-    for kind in WeaponKind::ALL {
-        out.push((Giveable::Item(kind.item()), word(kind.name())));
-    }
-    for mineral in MINERALS {
-        out.push((
-            Giveable::Item(ItemKind::Mineral(mineral)),
-            word(mineral.name()),
-        ));
-    }
-    for supply in DeepSupply::ALL {
-        out.push((Giveable::Supply(supply), word(supply.name())));
-    }
+pub fn giveables() -> Vec<(StockItem, String)> {
+    let mut out: Vec<(StockItem, String)> = StockItem::all()
+        .into_iter()
+        .map(|item| (item, item.slug()))
+        .collect();
+    out.push((
+        StockItem::Explosive(ExplosiveKind::Mining),
+        "dynamite".to_owned(),
+    ));
     out
 }
 
-/// Weather switches.
+/// The kinds of place `tp <kind>` names by the destination index's own words (the kinds the
+/// palette has no richer grammar for).
 #[must_use]
-pub fn weathers() -> Vec<(WeatherSwitch, String)> {
-    named(WeatherSwitch::ALL, |weather| weather.word().to_owned())
+pub fn place_kinds() -> Vec<(DestinationKind, String)> {
+    DestinationKind::ALL
+        .into_iter()
+        .filter(|kind| {
+            !matches!(
+                kind,
+                DestinationKind::Planet
+                    | DestinationKind::Descent
+                    | DestinationKind::Depth
+                    | DestinationKind::Stratum
+                    | DestinationKind::Player
+                    | DestinationKind::Bookmark
+                    | DestinationKind::Recent
+                    | DestinationKind::HomeTown
+                    | DestinationKind::Moon
+            )
+        })
+        .map(|kind| (kind, word(kind.name())))
+        .collect()
+}
+
+/// Weathers: `auto` (each world's own forecast) and every registered weather kind.
+#[must_use]
+pub fn weathers() -> Vec<(Option<WeatherId>, String)> {
+    let mut out = vec![(None, "auto".to_owned())];
+    out.extend(weather_kinds().map(|kind| (Some(kind.id), word(kind.name))));
+    out
 }
 
 /// Enemy settings.

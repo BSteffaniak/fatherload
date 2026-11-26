@@ -4,12 +4,14 @@
 
 use fatherload_simulation::{
     EnemyDifficulty, EnemyKind,
+    bodylife::weather::WeatherId,
     descent::{Descent, DescentBoss, Stratum},
+    destination::DestinationKind,
     space::Theme,
-    test_mode::palette_stock::WeatherSwitch,
+    test_mode::StockItem,
 };
 
-use super::names::{self, Giveable};
+use super::names::{self, BossName};
 use crate::debug_views::{DebugView, TimeScale};
 
 /// Which candidate of a kind (`tp planet next`).
@@ -32,8 +34,16 @@ pub enum TpTarget {
     /// Rows (metres) below the ground.
     Depth(i32),
     Stratum(Stratum),
-    Boss(DescentBoss),
-    Station(Step),
+    /// A gate boss's arena, a theme boss's lair or a faction's flagship.
+    Boss(BossName),
+    /// Any other kind of place the destination index knows, by its word (`station`, `village`,
+    /// `tomb`, `cave`, `lair`, `flagship`, `outpost`, ...), the candidate `step` picks; words
+    /// after it narrow by name (`tp village next`, `tp lair ice`, `tp station nearest`).
+    Kind {
+        kind: DestinationKind,
+        step: Step,
+        name: Option<String>,
+    },
     /// A local seat's or crewmate's number as the roster shows it (1-based).
     Player(u8),
     Bookmark(String),
@@ -66,8 +76,24 @@ impl TpTarget {
             Self::Descent(descent) => format!("descent {}", descent.numeral().to_ascii_lowercase()),
             Self::Depth(rows) => format!("depth {rows}m"),
             Self::Stratum(stratum) => format!("stratum {}", names::word(stratum.name())),
-            Self::Boss(boss) => format!("boss {}", names::word(boss.name())),
-            Self::Station(how) => format!("station {}", step(how)),
+            Self::Boss(boss) => format!(
+                "boss {}",
+                names::any_bosses()
+                    .into_iter()
+                    .find(|(named, _)| named == boss)
+                    .map_or_else(String::new, |(_, name)| name)
+            ),
+            Self::Kind {
+                kind,
+                step: how,
+                name,
+            } => format!(
+                "{} {}{}",
+                names::word(kind.name()),
+                step(how),
+                name.as_ref()
+                    .map_or_else(String::new, |name| format!(" {name}"))
+            ),
             Self::Player(number) => format!("player {number}"),
             Self::Bookmark(name) => format!("bookmark {name}"),
             Self::Back => "back".to_owned(),
@@ -81,7 +107,7 @@ impl TpTarget {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Give {
     All,
-    One { what: Giveable, count: u32 },
+    One { what: StockItem, count: u32 },
 }
 
 /// One palette command.
@@ -97,6 +123,10 @@ pub enum Command {
     /// Save the rig's spot under a name (`tp bookmark <name>` goes back to it).
     Bookmark(String),
     Give(Give),
+    /// Refill the rig's consumables once.
+    Restock,
+    /// `supplies` toggles infinite supplies; `supplies on|off` sets.
+    Supplies(Option<bool>),
     /// `gate all` (`None`) or one gate by its boss.
     Gate(Option<DescentBoss>),
     EndingDone,
@@ -106,7 +136,8 @@ pub enum Command {
     Freeze(Option<bool>),
     /// Minute of the day.
     Time(u16),
-    Weather(WeatherSwitch),
+    /// A weather kind forced on every world (`None`: each world's own again).
+    Weather(Option<WeatherId>),
     /// `difficulty` alone reports it.
     Difficulty(Option<EnemyDifficulty>),
     /// A debug view (`view <name> [on|off]`; toggles without on/off).
@@ -122,11 +153,13 @@ pub enum Command {
 }
 
 /// Every command word, in help order.
-pub const COMMANDS: [&str; 18] = [
+pub const COMMANDS: [&str; 20] = [
     "tp",
     "go",
     "bookmark",
     "give",
+    "restock",
+    "supplies",
     "gate",
     "ending",
     "spawn",
@@ -148,18 +181,20 @@ pub const COMMANDS: [&str; 18] = [
 pub fn help_line(command: &str) -> Option<&'static str> {
     Some(match command {
         "tp" => {
-            "tp planet next|prev|nearest|random [theme] | descent N | depth 4200m | stratum <name> | boss <name> | station nearest | player N | bookmark <name> | home | moon | back  (end with ? to preview)"
+            "tp planet next|prev|nearest|random [theme] | descent N | depth 4200m | stratum <name> | boss <name> | station|village|tomb|cave|lair|flagship|... [next|prev|random] [name] | player N | bookmark <name|N> | home | moon | back  (end with ? to preview)"
         }
         "go" => "go: travel to the destination last previewed with tp … ?",
-        "bookmark" => "bookmark <name>: remember where the rig is (tp bookmark <name>)",
+        "bookmark" => "bookmark <name>: bookmark where the rig is (tp bookmark <name> or N)",
         "give" => "give all | give <item> N",
+        "restock" => "restock: refill the rig's consumables once",
+        "supplies" => "supplies [on|off]: infinite supplies (on by default in test mode)",
         "gate" => "gate all | gate <boss>: clear Descent gates",
         "ending" => "ending done: the Heart woken, space open",
         "spawn" => "spawn <creature>: a creature or boss beside the rig",
         "clear" => "clear: every hostile near the rig gone",
         "freeze" => "freeze [on|off]: creature AI frozen",
         "time" => "time HH:MM: set the clock",
-        "weather" => "weather auto|clear|storm",
+        "weather" => "weather auto|clear|storm|<kind>: forced on every world",
         "difficulty" => "difficulty [peaceful|normal|hard]",
         "view" => "view hitboxes|fields|grid|reveal|freecam|fps [on|off] | view off",
         "speed" => "speed pause|0.5|1|2|4: the local time scale",
@@ -202,6 +237,8 @@ pub fn parse(line: &str) -> Result<Option<Command>, String> {
             Command::Bookmark(name)
         }
         "give" => parse_give(&args)?,
+        "restock" | "refill" => Command::Restock,
+        "supplies" => Command::Supplies(on_off(args.first().copied())?),
         "gate" => match args.first() {
             None => return Err("gate all | gate <boss>".to_owned()),
             Some(&"all") => Command::Gate(None),
@@ -228,11 +265,7 @@ pub fn parse(line: &str) -> Result<Option<Command>, String> {
         "clear" => Command::Clear,
         "freeze" => Command::Freeze(on_off(args.first().copied())?),
         "time" => Command::Time(parse_time(args.first().copied().unwrap_or(""))?),
-        "weather" => Command::Weather(names::pick(
-            args.first().copied().unwrap_or(""),
-            "weather",
-            &names::weathers(),
-        )?),
+        "weather" => Command::Weather(names::pick(&args.join("_"), "weather", &names::weathers())?),
         "difficulty" => Command::Difficulty(match args.first() {
             None => None,
             Some(typed) => Some(names::pick(typed, "difficulty", &names::difficulties())?),
@@ -392,12 +425,7 @@ pub fn parse_target(args: &[&str]) -> Result<TpTarget, String> {
         "stratum" | "layer" => {
             TpTarget::Stratum(names::pick(&joined, "stratum", &names::strata())?)
         }
-        "boss" | "gate" => TpTarget::Boss(names::pick(&joined, "gate boss", &names::bosses())?),
-        "station" => TpTarget::Station(
-            rest.first()
-                .map_or(Some(Step::Nearest), |word| step_of(word))
-                .ok_or_else(|| "station nearest|next|prev|random".to_owned())?,
-        ),
+        "boss" | "gate" => TpTarget::Boss(names::pick_boss(&joined)?),
         "player" => {
             let number: u8 = rest
                 .first()
@@ -416,14 +444,29 @@ pub fn parse_target(args: &[&str]) -> Result<TpTarget, String> {
         "home" | "spawn" | "surface" => TpTarget::Home,
         "moon" => TpTarget::Moon,
         other => {
-            // `tp 4200m` and `tp leviathan` read as what they can only mean.
-            if let Ok(rows) = parse_depth(other) {
+            // `tp station next`, `tp village`, `tp lair ice`: the index's own kind words.
+            if let Some(kind) = DestinationKind::parse(other)
+                .or_else(|| names::pick(other, "place", &names::place_kinds()).ok())
+            {
+                let (step, name_words) = match rest.split_first() {
+                    Some((first, more)) => {
+                        step_of(first).map_or((Step::Nearest, rest), |step| (step, more))
+                    }
+                    None => (Step::Nearest, rest),
+                };
+                TpTarget::Kind {
+                    kind,
+                    step,
+                    name: (!name_words.is_empty()).then(|| name_words.join("_")),
+                }
+            } else if let Ok(rows) = parse_depth(other) {
+                // `tp 4200m` and `tp leviathan` read as what they can only mean.
                 TpTarget::Depth(rows)
-            } else if let Ok(boss) = names::pick(other, "gate boss", &names::bosses()) {
+            } else if let Ok(boss) = names::pick_boss(&args.join("_")) {
                 TpTarget::Boss(boss)
             } else {
                 return Err(format!(
-                    "tp where? \"{other}\" is not planet, descent, depth, stratum, boss, station, player, bookmark, home, moon or back"
+                    "tp where? \"{other}\" is not planet, descent, depth, stratum, boss, a kind of place (station, village, tomb, ...), player, bookmark, home, moon or back"
                 ));
             }
         }

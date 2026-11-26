@@ -39,9 +39,6 @@ impl ShellState {
             players: ctx.players,
             online: ctx.online,
         };
-        for (seat, command) in self.console.take_ready(console_ctx) {
-            requests.push(ShellRequest::Action { seat, command });
-        }
         let playing = self.run_mode == RunMode::Playing && self.modal.is_none();
         if !playing {
             // The pause menu (or a global dialog) took over.
@@ -74,7 +71,7 @@ impl ShellState {
     ) {
         for (seat, effect) in effects {
             match effect {
-                Effect::Act(command) | Effect::ActWhenHome(command) => {
+                Effect::Act(command) => {
                     requests.push(ShellRequest::Action { seat, command });
                 }
                 Effect::View(view, on) => {

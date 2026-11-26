@@ -93,13 +93,6 @@ impl WorldState {
             TestModeAction::RemoveBookmark(index) => {
                 return self.order_travel(player_id, super::TravelOrder::RemoveBookmark(index));
             }
-            // The Wave 14 console's travel and stocking (`world/travel.rs`).
-            TestModeAction::PaletteTravel(destination) => {
-                return self.palette_travel_to(player_id, destination);
-            }
-            TestModeAction::PaletteStock(request) => {
-                return self.apply_stock_request(player_id, request);
-            }
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players

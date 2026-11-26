@@ -383,9 +383,8 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   RemoveBookmark}` (the destination index's travel, `fatherload_simulation::destination`),
 ///   the appended `SectionKey::Travel` section (each player's bookmarks, back-stack and cycle)
 ///   and the travel events 1140-1159 (`GameplayEventKind::Travel`).
-/// * Console (w14-console): the appended `TestModeAction::PaletteTravel(test_mode::travel::
-///   Destination)` and `TestModeAction::PaletteStock(test_mode::palette_stock::StockRequest)`
-///   (the command palette's travel and stocking; test-mode worlds only, refused elsewhere).
+/// * Console (w14-console) and the Atlas (w14-atlas): no wire change of their own; the command
+///   palette, `--start-at` and the Atlas submit the index's and the toolkit's actions above.
 pub const PROTOCOL_VERSION: u8 = 22;
 
 /// One client input frame: the controls and actions for exactly one tick.

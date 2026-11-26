@@ -222,7 +222,7 @@ fn start_at_reaches_a_random_ice_planet_and_a_gate_boss() {
     let target = crate::console::parse::parse_start_at("boss:colossus").expect("parses");
     let _ = game.start_test_world(DEFAULT_TEST_SEED, Some(&target));
     idle(&mut game, 5);
-    let TpTarget::Boss(boss) = target else {
+    let TpTarget::Boss(crate::console::names::BossName::Gate(boss)) = target else {
         panic!("a boss target");
     };
     let descent = Descent::ALL

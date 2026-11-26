@@ -3,10 +3,7 @@
 //! `--god --start-at` does ([`LocalGame::start_test_world`]), so they double as a check that the
 //! launch targets land.
 
-use fatherload_simulation::{
-    PlayerCommand, TestModeAction, descent::Descent, field::FieldPreset,
-    test_mode::palette_stock::StockRequest,
-};
+use fatherload_simulation::{PlayerCommand, TestModeAction, descent::Descent, field::FieldPreset};
 
 use super::{Scene, SceneStage};
 use crate::{
@@ -86,13 +83,10 @@ fn act(stage: &mut SceneStage<'_>, action: TestModeAction) {
     });
 }
 
-/// A few creatures beside the rig (the stub of w14-stock's spawn, as `spawn` sends it).
+/// A few creatures beside the rig (the god-mode toolkit's spawn, as `spawn` sends it).
 fn spawn_some(stage: &mut SceneStage<'_>) {
     for kind in fatherload_simulation::EnemyKind::ALL.into_iter().take(3) {
-        act(
-            stage,
-            TestModeAction::PaletteStock(StockRequest::Spawn(kind)),
-        );
+        act(stage, TestModeAction::SpawnCreature(kind));
     }
 }
 

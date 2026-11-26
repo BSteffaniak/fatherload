@@ -30,9 +30,6 @@ use crate::{bodylife::weather::WeatherId, enemy::EnemyKind, worldgen::Band};
 
 pub use stock::{STOCK_REVISION, StockItem, TEST_STACK, TestStockEvent};
 
-pub mod palette_stock;
-pub mod travel;
-
 /// Credits each rig starts a test-mode world with.
 pub const TEST_MODE_CREDITS: u32 = 1_000_000;
 
@@ -172,12 +169,6 @@ pub enum TestModeAction {
     Bookmark(crate::destination::DestinationId),
     /// Remove the submitting player's bookmark at this index (Wave 14).
     RemoveBookmark(u8),
-    /// Move the submitting rig to a destination (Wave 14 console: the palette's `tp`,
-    /// `--start-at` and the bots; TODO-SEAM(w14-index): the index's own travel action).
-    PaletteTravel(travel::Destination),
-    /// A stocking or progress switch for the submitting rig or the world (Wave 14 console:
-    /// the palette's `give`, `gate`, `spawn`, `time`...; TODO-SEAM(w14-stock)).
-    PaletteStock(palette_stock::StockRequest),
 }
 
 impl TestModeAction {
@@ -225,9 +216,7 @@ impl TestModeAction {
             | Self::TravelBack
             | Self::BookmarkHere
             | Self::Bookmark(_)
-            | Self::RemoveBookmark(_)
-            | Self::PaletteTravel(_)
-            | Self::PaletteStock(_) => return None,
+            | Self::RemoveBookmark(_) => return None,
         })
     }
 }

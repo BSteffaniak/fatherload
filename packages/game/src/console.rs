@@ -20,7 +20,7 @@ pub mod start_at;
 #[cfg(test)]
 mod tests;
 
-use fatherload_simulation::{PlayerCommand, PlayerId, WorldState};
+use fatherload_simulation::{PlayerId, WorldState};
 
 use crate::input::PlayerInput;
 
@@ -56,10 +56,9 @@ pub struct Console {
     pub completion_at: Option<usize>,
     history: Vec<String>,
     history_at: Option<usize>,
-    /// Each seat's travel memory (cursors, back-stack, bookmarks, preview).
+    /// Each seat's palette memory (bookmark names, the preview, random rolls; the bookmarks
+    /// and the back-stack themselves are the world's).
     travel: Vec<SeatTravel>,
-    /// Actions waiting for a seat's rig to reach the home world.
-    waiting: Vec<(usize, PlayerCommand)>,
 }
 
 /// What the world and seats look like to the palette this frame.
@@ -97,11 +96,10 @@ impl Console {
         self.history_at = None;
     }
 
-    /// Forgets every seat's travel memory and waiting actions (a new world).
+    /// Forgets every seat's palette memory (a new world).
     pub fn reset_world(&mut self) {
         self.close();
         self.travel.clear();
-        self.waiting.clear();
         self.acting = None;
     }
 
@@ -288,32 +286,9 @@ impl Console {
         for line in done.lines {
             self.print(format!("  {line}"));
         }
-        let mut effects = Vec::new();
-        for effect in done.effects {
-            if let Effect::ActWhenHome(command) = effect {
-                self.waiting.push((seat, command));
-            } else {
-                effects.push((seat, effect));
-            }
-        }
-        effects
-    }
-
-    /// Actions whose seat's rig has reached the home world since they were queued.
-    pub fn take_ready(&mut self, ctx: ConsoleContext<'_>) -> Vec<(usize, PlayerCommand)> {
-        let at_home = |seat: usize| {
-            ctx.players.get(seat).is_some_and(|player| {
-                ctx.world.place_of(*player).is_home_store()
-                    && ctx
-                        .world
-                        .player(*player)
-                        .is_some_and(|rig| !rig.flight.away())
-            })
-        };
-        let (ready, waiting): (Vec<_>, Vec<_>) = std::mem::take(&mut self.waiting)
+        done.effects
             .into_iter()
-            .partition(|(seat, _)| at_home(*seat));
-        self.waiting = waiting;
-        ready
+            .map(|effect| (seat, effect))
+            .collect()
     }
 }
