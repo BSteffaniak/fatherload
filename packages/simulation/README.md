@@ -1177,7 +1177,7 @@ Every query takes `impl Into<SpaceTile>` (so a `WorldPos` works) and is clamped 
   and fades inside; the scanner sees the Moon and the sun from the departure point; fog and
   time dilation; the cache bound; the report.
 
-### Seams (TODO-SEAM for the integrator)
+### Seams (wired in the Wave 14 integration: see "Wave 14 integration" below)
 
 - **w11-regions:** `SpaceBodyId { sector, system, body }` is the payload of `place::BodyId`'s
   space variant; `BodyId::Home` maps to `HOME_WORLD_BODY` and `BodyId::Moon` to `MOON_BODY`.
@@ -11681,21 +11681,28 @@ Theme ids: planets-c 9-11, planets-d 12-14. Tile codes: `Outland` 0x2E00, `Exoti
 * The Wave 12 galaxy tour's `tour_theme` handles the new themes' storms (an airless dead world
   feels only its night-time ghost lights).
 
-### Still open after Part III
+### Still open after Part III (updated by the Wave 14 integration)
 
-* **The six Wave 12 themes (jungle, archipelago, ice, dunes, volcanic, crystal) have no theme
-  boss.** The hunt list carries the six Wave 13 bosses and the three faction bosses; a boss
-  each for the Wave 12 worlds would be a content track of its own (lairs in their generation,
-  which would move their golden digests).
-* **Theme secrets on small bodies stay unseen in today's galaxy**: the space generator tags
-  every small moon and crater rock `Barren`, so the jungle, ocean, frontier, outland and exotic
-  secrets appear only on test bodies. Tagging moons with their parent's theme changes
-  `GOLDEN_SPACE_DIGEST` and moves every Wave 11-12 save's moons; left for a later wave.
-* Space pays less than the Heart near home (the endgame review's numbers); the Starwright hull
-  does not soften combat; big prices have no thousands separators.
-* No dedicated Works, gate or Harbour music (existing cues are reused).
-* The outland/exotic creature sprites are generated sketches (the bosses read; the small fauna
-  are small on screen).
+Closed by Wave 14 finish (see "Wave 14 finish" below):
+
+* ~~The six Wave 12 themes have no theme boss~~: each has one in a lair under its landmark
+  (`planet::lairs`), on the hunt list with a waypoint; the destination index and the Atlas
+  travel to all twelve theme bosses' lairs.
+* ~~Theme secrets on small bodies stay unseen~~: space generator V2 tags small bodies with
+  their parent's theme in new worlds (`GOLDEN_SPACE_V2_DIGEST`); worlds saved before keep V1
+  and `GOLDEN_SPACE_DIGEST` is unchanged.
+* ~~Space pays less than the Heart near home; the Starwright hull does not soften combat; big
+  prices have no thousands separators~~: `SPACE_CREDIT_SCALE` 40, the Starwright plating's
+  combat scale, grouped credits on the HUD purse, receipts, build prices and station pages.
+* ~~No dedicated Works, gate or Harbour music~~: the set pieces have their own cues (appended
+  at the end of `patches!`).
+
+Still open:
+
+* Only 8 of the Wave 13 small creatures were redrawn; the fungal grotto's small drifters are
+  still tiny; the lair halls read dark (their bosses' halos carry the view).
+* Credits held in a Wave 13 save are worth half as much at the rebalanced stations.
+* Hand play-testing of the whole arc was not done (bots and screenshots only).
 
 ### Part III complete: the checklist (expansion plan §13-§18)
 
@@ -11741,10 +11748,10 @@ Each requirement of Part III and where it lives. "Open" marks what is still miss
 | 18.4 | Navigation HUD as a ship upgrade | `station::ShipLine` nav suite |
 | 18.5 | The ending opens space and the game goes on | `heart`, `galaxy_story` (the archivist's after-the-road remarks, leads in fresh systems) |
 
-Also open: space pays less than the Heart near home; the Starwright hull does not soften
-combat; no dedicated Works, gate or Harbour music; the Wave 13 creatures are generated sketches
-(the bosses read, the small fauna are small on screen); hand play-testing of the whole arc was
-not done (bots and screenshots only).
+Also open (after Wave 14 finish): part of the Wave 13 small fauna is still a generated sketch,
+and hand play-testing of the whole arc was not done (bots and screenshots only). The pay
+rebalance, the Starwright's combat scale, the set-piece music and grouped prices were closed in
+Wave 14 finish.
 
 ### Validation and measurements (integration run)
 
@@ -12253,7 +12260,7 @@ theirs (parked players keep them). Ids are absolute tiles, so the log never refr
   `travel_village`, `travel_cave`, `travel_planet_ice`, `travel_station`,
   `travel_split_two_places` (seat 1 in Descent V, seat 2 on the next planet).
 
-### Seams (TODO-SEAM, for the integrator and the other Wave 14 tracks)
+### Seams (wired in the Wave 14 integration: see "Wave 14 integration" below)
 
 * **w14-atlas (W14-C)**: list with `WorldState::destinations(player, kind, filter)` by
   `DestinationKind::category`, preview with `resolve_travel`, search with
@@ -12269,7 +12276,8 @@ theirs (parked players keep them). Ids are absolute tiles, so the log never refr
   `--start-at "descent:5"` can call `WorldState::stage_travel` on the new world.
 * **w14-stock (W14-A)**: the survival test grants `HazardGear::MAXED` itself; once stocking
   grants the gate rewards and space gear, a fully stocked rig needs nothing more.
-* The six Wave 12 themes have no theme boss, so `ThemeBossLair` lists six lairs.
+* ~~The six Wave 12 themes have no theme boss~~: with Wave 14 finish's lairs
+  (`planet::lairs::lair_of`), `ThemeBossLair` lists all twelve.
 
 ### Known limits
 
@@ -12481,14 +12489,20 @@ after another, from wherever the last trip left the rig:
 `flush_atlas_trip` are all stand-ins: delete them when `index::travel_command` becomes
 `TravelTo` (which crosses places and lands exactly).
 
-## Wave 14 console: the command palette, launch flags, debug views and time scale (`src/test_mode/{travel,stock}.rs`, `src/world/travel.rs`, game `console/`, `debug_views.rs`, `shell/console.rs`, `rendering/console_view.rs`)
+## Wave 14 console: the command palette, launch flags, debug views and time scale (game `console/`, `debug_views.rs`, `shell/console.rs`, `rendering/console_view.rs`)
 
 Expansion plan §19 W14-D. Everything is test-mode only: the palette opens only in a test-mode
 world, and the actions it sends are `TestModeAction`s, which the world refuses
 (`IgnoredUnavailable`) outside test mode, so an online client typing at a normal world's host
 changes nothing.
 
-### Simulation: the travel and stock actions (stubs of the index and stock seams)
+### Simulation: the travel and stock actions (the track's stubs, replaced in the integration)
+
+The track built against stand-ins of the index and the toolkit; the integration deleted them
+(`test_mode::{travel, stock}` of this track, `world/travel.rs`, its two actions and its
+`world::travel_tests`) and the palette now sends the index's and the toolkit's own actions
+(see "Wave 14 integration"). As built:
+
 
 * `TestModeAction::TravelTo(test_mode::travel::Destination)` and
   `TestModeAction::Stock(test_mode::stock::StockRequest)` (appended). Every travel the palette,
@@ -12602,7 +12616,7 @@ changes nothing.
   `console_touch_palette` (open on touch, mid-completion),
   `debug_hitboxes`, `debug_fields`, `debug_grid`, `debug_reveal`, `debug_freecam`, `debug_fps`.
 
-### Seams (TODO-SEAM) for the integrator
+### Seams (wired in the Wave 14 integration: see "Wave 14 integration" below)
 
 * **w14-index:** `test_mode::travel` and `world/travel.rs` are this track's stand-in for the
   destination index. Map `Destination` onto the index's destination kinds and selectors (the
@@ -12625,6 +12639,99 @@ changes nothing.
   prints a travel line as it sends the action and does not read the action's outcome, so a
   travel the world refuses (no fixture-free column near the rig) says nothing more. The index's
   selectors and outcome events should replace all three.
+
+## Wave 14 integration: the god-mode toolkit, one path (`src/destination.rs` + `src/world/destinations.rs`, game `atlas/index.rs`, `shell/atlas.rs`, `console/{dispatch,parse,names,start_at}.rs`)
+
+The five Wave 14 tracks (w14-finish, w14-stock, w14-index, w14-atlas, w14-console) stacked
+linearly on `8ce6c5b`, then their seams wired so **every way into travel and stocking goes
+through one path**: the destination index's `TestModeAction::{TravelTo, TravelBack,
+BookmarkHere, Bookmark, RemoveBookmark}` and the toolkit's stock, progress and creature
+actions. The Atlas, the palette, `--start-at`, the screenshot scenes and the bots all send
+those; nothing else moves a rig in test mode (the story's goal keeps its own `WarpToStory`).
+
+### What was wired
+
+* **The palette** (`console/dispatch.rs`): `tp` builds a `TravelRequest` (selectors for
+  nearest/next/prev/random, filters for theme, stratum, Descent and player, an exact id for a
+  named boss or bookmark) and sends `TravelTo`; `tp back` is `TravelBack`; `bookmark <name>` is
+  `BookmarkHere` (the name stays the seat's alias for the world's bookmark; `tp bookmark N`
+  takes the world's numbering); `tp … ?` previews with `WorldState::resolve_travel` and `go`
+  sends the same request. Any index kind is a `tp` word (`tp village next`, `tp lair random`,
+  `tp station`, `tp flagship`, `tp cave`), and `tp boss <name>` knows the gate bosses, all twelve
+  theme bosses and the three flagships (`colossus` prefers the gate's Gatekeeper over the Geode
+  Colossus). `give all|<item> N` is `StockAll` / `Give(StockItem, n)` over `StockItem::all`'s
+  slugs (`dynamite` is the mining charge), `restock`, `supplies [on|off]`, `gate all|<boss>` is
+  `SetGateCleared` per Descent, `ending done` is `SetEndingDone(true)`, `spawn` is
+  `SpawnCreature`, `clear`, `freeze`, `time` and `weather <kind>|auto` are the toolkit's own.
+  The palette's two-step "home first" is gone: the index crosses places itself.
+* **`--start-at`** (`console/start_at.rs`): one `TravelTo` (after `SetEndingDone(true)` only in
+  a world whose space is closed); `station:nearest`, `boss:sporemother`, `boss:pirates` and
+  `village` now land too.
+* **The Atlas** (`atlas/index.rs`): every category lists the index's candidates of its kinds
+  (`AtlasCategory::kinds`, one to one with `DestinationCategory`); each card is the index's
+  `PreviewInfo` dressed for the screen (the boss and the residents in their own sprites by
+  name); the preview looks where the candidate's id is (`target_of`), Go sends
+  `TravelTo(TravelRequest::exact(id))`, so the preview is exactly where the rig lands. The search
+  box is `WorldState::search_destinations`, ranked for the screen (`atlas::search::rank`). Map
+  spots are exact ids (a depth tile; a snapped system is the index's own candidate, an
+  open-space spot a bare spot id). Back is `TravelBack`; Bookmark is `Bookmark(id)` /
+  `RemoveBookmark(i)`; the Bookmarks and Recent categories read the world's travel log each
+  time (`SeatAtlas::sync_log`). Deleted: `warp_band`, `arrival_text`, `arrival_column`, the
+  seat-local bookmarks, recent list and back-stack, `SeatAtlas::pending` and
+  `flush_atlas_trip`.
+* **The index** gained `DestinationKind::FactionBossLair` (appended, 36 kinds): each faction's
+  flagship lair, arrived at stopped 3,000 tiles off its point (well inside
+  `LAIR_REACH_TILES`, so the boss comes); and `ThemeBossLair` reads Wave 14 finish's
+  `planet::lairs` too, so all twelve theme bosses are destinations.
+* **Touch**: a test-mode world's dropped top row holds INVENTORY, PAUSE, MAP, EXIT, ATLAS and
+  CMD; past five buttons it packs them closer and a little smaller instead of reaching the
+  thumb cluster (`DROPPED_ROW_MAX`).
+* Stacking fixes folded into the commits that needed them: the index and the Atlas read the
+  galaxy through `SpaceSeed` (w14-finish versioned the space generator), the index's arrival
+  enemy clear is `clear_arrival_enemies` (the toolkit owns `clear_enemies_near`), the toolkit's
+  and the index's actions sit in one `TestModeAction` (stock's appended first, then the
+  index's), events keep their ranges (stock 1120-1139, index 1140-1159, finish 1200-1219).
+
+### Formats
+
+* `PROTOCOL_VERSION` **22**, one bump for the wave (finish's lair kinds and generator field,
+  stock's actions and toggles, the index's actions, section and events; the console and the
+  Atlas add nothing on the wire).
+* Save format **15**, unchanged: the new world fields (`travel`, the toolkit's `TestModeState`
+  fields, `space_generator`) all have serde defaults, so every supported format still loads
+  (`save::tests::every_supported_save_format_loads_plays_and_round_trips`, the wave-saves test).
+* V1-V10 digests and `GOLDEN_V11_DIGEST` unchanged; `GOLDEN_SPACE_DIGEST` unchanged for V1
+  (existing worlds keep V1: `space_generator_tests`), V2 adds `GOLDEN_SPACE_V2_DIGEST`.
+
+### End-to-end tests (§19)
+
+* `world::toolkit_journey_tests::a_stocked_rig_travels_to_every_kind_of_place_and_back`: the
+  bot stocks its rig (`test_stock_gaps` empty: every registered item present), travels through
+  `simulate_tick` to each Descent (in its rows), every gate arena and the Heart, all twelve theme
+  bosses' lairs (each on its world), the three flagships (inside their lairs' reach), each
+  settlement kind (home town, village, sky island, deep settlement, outpost, camp, alien town,
+  builders' outpost), the nearest, next and a random planet, a station, and back; every arrival
+  is where `resolve_travel` previewed it. `none_of_the_toolkit_reaches_a_normal_world`.
+* game `atlas_tests::the_toolkit_end_to_end_atlas_previews_palette_and_split_screen`: the Atlas
+  has a preview (`preview::has_preview`) and an index travel for every kind it lists; the
+  palette stocks and goes to the Sporemother's lair, the pirates' flagship, a village, a station
+  and back; two split-screen seats take their own Atlases to a planet and Descent IV.
+  `atlas_tests::go_reaches_every_kind_of_destination_one_after_another` presses Go on every kind
+  and checks each arrival against its preview. `preview::a_preview_is_made_for_every_kind_of_
+  destination` paints one of each kind on the CPU.
+* game `console_tests::start_at_reaches_a_station_a_lair_a_flagship_and_a_village` (plus the
+  tracks' Descent, ice-planet and gate-boss starts).
+* netcode `world_travel::a_stocked_client_and_the_hosts_seats_travel_to_three_different_places`
+  (the client stocks and goes to a lair, the host's seats to a station and a flagship; hashes
+  agree), with the tracks' normal-world refusals online (`world_travel`, `world_toolkit`).
+
+### Still open
+
+* Travel inside the tick can stall the host for up to ~240 ms (the index's costliest kinds,
+  measured in its review); the Atlas builds a category's lists once per opening.
+* The palette prints the travel line it sends; a travel the world refuses shows the index's
+  `NotFound` event only (no palette line).
+* The palette does not yet open the Atlas on a `tp … ?` preview.
 
 ## Replication
 

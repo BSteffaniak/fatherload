@@ -256,6 +256,32 @@ switches to another split-screen seat, such as a gamepad's) and go through the s
 actions as everything else, so they work online (the host's world decides) and are refused in
 normal worlds. On touch, the menu's `>` button completes and `<` recalls the last command.
 
+#### God-mode toolkit: a quick guide
+
+Everything below is **test mode only** (a new world with test mode on, or `fatherload --god`):
+the simulation refuses it in a normal world, offline and online. The Atlas, the palette,
+`--start-at` and the pause menu all use one set of actions: the destination index's travel
+(safe arrival from anywhere: a carved pocket underground, a planet's surface, stopped a safe
+distance off in space) and the toolkit's stock, progress and creature tools. Bookmarks and the
+back-stack are kept in the world (saved and shared online).
+
+| Want to | Keys / touch | Palette |
+| --- | --- | --- |
+| Browse places with a live preview, then go | `F2` or the touch ATLAS button (`/` searches, `M` map, `Enter` Go, `F` Back, `B` Bookmark) | `tp <where> ?` then `go` |
+| Go somewhere now | the Atlas's Go | `tp descent 5`, `tp depth 4200m`, `tp stratum crystal_faults`, `tp planet next ice`, `tp planet random`, `tp station`, `tp village next`, `tp lair random`, `tp cave`, `tp moon`, `tp home`, `tp player 2` |
+| Go to a boss | the Atlas's Bosses tab | `tp boss leviathan`, `tp boss colossus`, `tp boss sporemother` (any of the twelve theme bosses), `tp boss pirates` (a faction's flagship) |
+| Come back, or mark a spot | the Atlas's Back / Bookmark | `tp back`; `bookmark camp`, `tp bookmark camp` or `tp bookmark 1` |
+| Stock the rig | pause menu: God-Mode Toolkit | `give all`, `give dynamite 99`, `restock`, `supplies on\|off` |
+| Set progress, sky and creatures | pause menu: God-Mode Toolkit | `gate all`, `gate leviathan`, `ending done`, `time 22:00`, `weather storm`, `weather auto`, `spawn hollow_matriarch`, `clear`, `freeze`, `difficulty hard` |
+| See the machinery | - | `view hitboxes\|fields\|grid\|reveal\|freecam\|fps`, `view off`, `speed pause\|0.5\|1\|2\|4` |
+| Act for another split-screen seat | each seat has its own Atlas | `seat 2` |
+
+The palette opens with the backtick key (touch: CMD); Tab (touch: `>`) completes and `help`
+lists every command. Launch flags: `--god` starts a test world (seed `0x00C0FFEE`, or
+`--seed <n>`), and `--start-at <target>` starts it in place, with the palette's `tp` words
+joined by `:`: `descent:5`, `depth:4200m`, `stratum:crystal_faults`, `planet:random:ice`,
+`boss:colossus`, `boss:sporemother`, `station:nearest`, `village`, `moon`.
+
 Worlds keep a familiar town and a fixed order of layers (topsoil, clay beds, grey stone, slate,
 basalt, then seven deep strata), but each seed picks its own layer thicknesses (so a layer can
 start a dozen rows higher or lower than in another world), waves the layer boundaries, shapes
