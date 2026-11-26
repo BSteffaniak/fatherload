@@ -305,6 +305,24 @@ impl Places {
             .is_none_or(|place| place.store().is_home())
     }
 
+    /// Keeps only `viewer`'s own maps of the bodies (a keyframe for `viewer`; Wave 13 QA:
+    /// body maps travel by relevance, a player's map only to that player, as the home map
+    /// does). A spectator gets none.
+    pub(crate) fn keep_maps_of(&mut self, viewer: Option<PlayerId>) {
+        for world in self.stores.values_mut() {
+            world.discovered.retain(|player, _| Some(*player) == viewer);
+        }
+    }
+
+    /// Every player with a map of some body (tests and reports).
+    #[must_use]
+    pub fn map_holders(&self) -> BTreeSet<PlayerId> {
+        self.stores
+            .values()
+            .flat_map(|world| world.discovered.keys().copied())
+            .collect()
+    }
+
     /// Drops a removed player's place.
     pub(crate) fn forget(&mut self, player: PlayerId) {
         self.players.remove(&player);

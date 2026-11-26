@@ -155,3 +155,57 @@ fn the_home_world_compares_tiles_plainly() {
         }
     ));
 }
+
+/// Body maps travel by relevance (Wave 13 QA): a keyframe carries only its viewer's own maps
+/// of the bodies (as the home map), never another player's, and a spectator gets none; the
+/// viewer's visible state is unchanged and its map of a body it left is still there.
+#[test]
+fn a_keyframe_carries_only_its_viewers_body_maps() {
+    const OTHER: PlayerId = PlayerId::new(1);
+    let mut world = world();
+    world.add_player(OTHER);
+    let key = landable();
+    let store = StoreKey::Body(key);
+    for player in [PLAYER, OTHER] {
+        let inputs = TickInputs::held(player, ControlState::default()).act(
+            player,
+            crate::PlayerCommand::TestMode(TestModeAction::WarpToPlace(Place::OnBody(
+                BodyId::Space(key),
+            ))),
+        );
+        let now = world.simulation_tick();
+        let _ = world.simulate_tick(now, &inputs);
+    }
+    run(&mut world, 20);
+    // The first player goes home: its map of the body stays (and stays its own).
+    warp(&mut world, Place::HOME);
+    run(&mut world, 3);
+    assert_eq!(
+        world.places().map_holders(),
+        [PLAYER, OTHER].into_iter().collect()
+    );
+    for viewer in [PLAYER, OTHER] {
+        let keyframe = world.redacted_for(Some(viewer));
+        assert_eq!(
+            keyframe.places().map_holders(),
+            std::iter::once(viewer).collect(),
+            "{viewer:?} gets its own maps only"
+        );
+        assert_eq!(
+            keyframe.store_discovered(store, viewer),
+            world.store_discovered(store, viewer),
+            "{viewer:?}'s map whole"
+        );
+        assert_eq!(
+            keyframe.visible_state_hash(Some(viewer)),
+            world.visible_state_hash(Some(viewer))
+        );
+        // Smaller on the wire than the whole world's maps.
+        let sent = postcard::to_allocvec(&keyframe).expect("encode").len();
+        let mut everyone = keyframe.clone();
+        everyone.places = world.places.clone();
+        let all = postcard::to_allocvec(&everyone).expect("encode").len();
+        assert!(sent < all, "{sent} bytes against {all}");
+    }
+    assert!(world.redacted_for(None).places().map_holders().is_empty());
+}
