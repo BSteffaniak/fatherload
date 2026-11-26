@@ -10405,6 +10405,16 @@ tile codes or sounds.
   away, each exact (store position = its frame's local of its space position, and small) every
   tick at 30 and 60 Hz; the far rig joins the others and leaves again; a chain of near rigs is
   one group; bit-identical runs; a save mid-split reloads and plays on identically.
+* Review fix: a far group's pass moves every Space-store entity into its frame and back; the
+  round trip through a frame millions of pixels away rounded the first group's things (a pilot
+  on foot, a drop, a target) to that frame's `f32` grid every tick (14,780.73 px became
+  14,784). The entities the far pass did not change (same revision) are put back exactly
+  (`EntityStore::restore_unchanged`); test
+  `space_frame_tests::a_far_group_leaves_the_first_groups_things_exact` (bit-equal to a run
+  with no far group). Online: netcode
+  `world_soak::world_free_flight_split_far_apart_converges_online` (host and two clients in
+  free flight, one 3,000 sectors away, split for 20 s: no mismatch, and each client's own rig
+  where the host has it at the same tick).
 
 ### Body maps by relevance (`world/places.rs`, `world/visibility.rs`)
 
