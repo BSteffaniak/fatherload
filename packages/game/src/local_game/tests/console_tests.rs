@@ -196,3 +196,43 @@ fn start_at_launches_a_test_world_in_place() {
     let (top, bottom) = layout.descent_rows(Descent::HollowWorld);
     assert!((top..=bottom).contains(&row(&game)), "row {}", row(&game));
 }
+
+#[test]
+fn start_at_reaches_a_random_ice_planet_and_a_gate_boss() {
+    use fatherload_simulation::{
+        place::{BodyId, Place},
+        space::{Space, Theme},
+    };
+
+    let mut game = title_game("console-start-at-planet");
+    let target = crate::console::parse::parse_start_at("planet:random:ice").expect("parses");
+    let _ = game.start_test_world(DEFAULT_TEST_SEED, Some(&target));
+    idle(&mut game, 5);
+    let Place::OnBody(BodyId::Space(key)) = game.world().place_of(PLAYER) else {
+        panic!("on a planet: {:?}", game.world().place_of(PLAYER));
+    };
+    let theme = Space::shared(DEFAULT_TEST_SEED.into())
+        .sector(key.sector)
+        .systems[usize::from(key.system)]
+    .bodies[usize::from(key.body)]
+    .theme;
+    assert_eq!(theme, Theme::Ice);
+
+    let mut game = title_game("console-start-at-boss");
+    let target = crate::console::parse::parse_start_at("boss:colossus").expect("parses");
+    let _ = game.start_test_world(DEFAULT_TEST_SEED, Some(&target));
+    idle(&mut game, 5);
+    let TpTarget::Boss(boss) = target else {
+        panic!("a boss target");
+    };
+    let descent = Descent::ALL
+        .into_iter()
+        .find(|descent| descent.gate().is_some_and(|gate| gate.boss == boss))
+        .expect("guards a Descent");
+    let layout = game
+        .world()
+        .descent_strata_layout()
+        .expect("a Deep Descent world");
+    let (top, bottom) = layout.descent_rows(descent);
+    assert!((top..=bottom).contains(&row(&game)), "row {}", row(&game));
+}

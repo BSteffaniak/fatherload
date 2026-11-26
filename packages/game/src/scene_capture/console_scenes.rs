@@ -89,7 +89,10 @@ fn act(stage: &mut SceneStage<'_>, action: TestModeAction) {
 /// A few creatures beside the rig (the stub of w14-stock's spawn, as `spawn` sends it).
 fn spawn_some(stage: &mut SceneStage<'_>) {
     for kind in fatherload_simulation::EnemyKind::ALL.into_iter().take(3) {
-        act(stage, TestModeAction::PaletteStock(StockRequest::Spawn(kind)));
+        act(
+            stage,
+            TestModeAction::PaletteStock(StockRequest::Spawn(kind)),
+        );
     }
 }
 
