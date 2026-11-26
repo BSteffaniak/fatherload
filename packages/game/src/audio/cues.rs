@@ -1621,6 +1621,16 @@ pub const fn event_cue(kind: &GameplayEventKind) -> Option<SoundCue> {
         GameplayEventKind::Endgame { what, .. } => Some(endgame_cue(*what)),
         // The galaxy story (Wave 13).
         GameplayEventKind::Galaxy { what, .. } => Some(galaxy_cue(*what)),
+        // Test-mode travel (Wave 14 index): the uplink's warp on arrival, silent otherwise.
+        GameplayEventKind::Travel { what, .. } => match what {
+            fatherload_simulation::destination::TravelEvent::Arrived
+            | fatherload_simulation::destination::TravelEvent::WentBack => {
+                Some(SoundCue::UplinkWarp)
+            }
+            fatherload_simulation::destination::TravelEvent::Bookmarked
+            | fatherload_simulation::destination::TravelEvent::BookmarkRemoved
+            | fatherload_simulation::destination::TravelEvent::NotFound => None,
+        },
 
         GameplayEventKind::PackTransferred { .. } => Some(SoundCue::StorageStow),
         // People: a murmur from whoever you talk to, coins for a trade, a sparkle for a gift, a
@@ -1986,7 +1996,8 @@ mod tests {
             | GameplayEventKind::Hostile { .. }
             | GameplayEventKind::Endgame { .. }
             | GameplayEventKind::Galaxy { .. }
-            | GameplayEventKind::TestStock { .. } => {}
+            | GameplayEventKind::TestStock { .. }
+            | GameplayEventKind::Travel { .. } => {}
         }
         let mut events = vec![
             GameplayEventKind::DrillStarted { player_id },

@@ -242,6 +242,7 @@ impl WorldState {
             galaxy_story: crate::galaxy_story::GalaxyStory::default(),
             // A new world takes the current space generator (Wave 14 finish).
             space_generator: crate::space::SpaceGenerator::CURRENT,
+            travel: crate::destination::TravelLog::default(),
         };
         let warning_deadlines: Vec<SimulationTick> = import
             .falling_boulders

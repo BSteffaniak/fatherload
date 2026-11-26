@@ -284,6 +284,8 @@ pub enum SectionKey {
     /// The galaxy story (Wave 13 story): the road's chapter and goal, logs, fragments, the
     /// Warden and the choice, the discovery log, systems visited and worlds landed on.
     GalaxyStory,
+    /// Each player's travel bookmarks, back-stack and cycle (Wave 14 index, test mode).
+    Travel,
 }
 
 impl SectionKey {
@@ -303,7 +305,7 @@ impl SectionKey {
     }
 
     /// Every shared (not per-player) section.
-    pub const SHARED: [Self; 38] = [
+    pub const SHARED: [Self; 39] = [
         Self::Economy,
         Self::Contracts,
         Self::Progression,
@@ -354,6 +356,8 @@ impl SectionKey {
         Self::Endgame,
         // The galaxy story (Wave 13 story).
         Self::GalaxyStory,
+        // Travel bookmarks and back-stacks (Wave 14 index).
+        Self::Travel,
     ];
 }
 
@@ -400,6 +404,7 @@ pub enum SectionPayload {
     Hostiles(Box<crate::hostiles::HostileSpace>),
     Endgame(Box<crate::endgame::EndgameState>),
     GalaxyStory(Box<crate::galaxy_story::GalaxyStory>),
+    Travel(Box<crate::destination::TravelLog>),
 }
 
 /// Stable hash of any serializable value (used for section hashes).
@@ -638,6 +643,7 @@ impl WorldState {
             galaxy_story,
             // A version, sent once in the keyframe (Wave 14 finish).
             space_generator: _,
+            travel,
         } = self;
         let super::CanonicalProgressionState {
             contracts,
@@ -756,6 +762,7 @@ impl WorldState {
             SectionKey::Hostiles => SectionPayload::Hostiles(Box::new(hostiles.clone())),
             SectionKey::Endgame => SectionPayload::Endgame(Box::new(endgame.clone())),
             SectionKey::GalaxyStory => SectionPayload::GalaxyStory(Box::new(galaxy_story.clone())),
+            SectionKey::Travel => SectionPayload::Travel(Box::new(travel.clone())),
         })
     }
 
@@ -971,6 +978,9 @@ impl WorldState {
             }
             (SectionKey::GalaxyStory, SectionPayload::GalaxyStory(story)) => {
                 self.galaxy_story = *story;
+            }
+            (SectionKey::Travel, SectionPayload::Travel(travel)) => {
+                self.travel = *travel;
             }
             (SectionKey::Heart, SectionPayload::Heart(heart)) => {
                 self.heart = *heart;

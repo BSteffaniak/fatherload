@@ -87,11 +87,11 @@ pub fn describe(query: &HomeQuery, destination: &mut Destination) {
     let info = &mut destination.info;
     info.gravity_milli_g = Some(1_000);
     if destination.id.place == Place::OnBody(BodyId::Moon) {
-        info.place = "The Moon".to_owned();
+        "The Moon".clone_into(&mut info.place);
         info.gravity_milli_g = Some(170);
         return;
     }
-    info.place = "Home world".to_owned();
+    "Home world".clone_into(&mut info.place);
     let (Ok(x), Ok(y)) = (
         i32::try_from(destination.id.x),
         i32::try_from(destination.id.y),
@@ -116,7 +116,8 @@ pub fn describe(query: &HomeQuery, destination: &mut Destination) {
         .map(|(hazard, _)| format!("{hazard:?}").to_ascii_lowercase())
         .collect();
     if let Some(fluid) = def.fluids.first() {
-        info.hazards.push(format!("{:?}", fluid.kind).to_ascii_lowercase());
+        info.hazards
+            .push(format!("{:?}", fluid.kind).to_ascii_lowercase());
     }
     if info.residents.is_empty() {
         info.residents = def
@@ -167,11 +168,7 @@ pub fn candidates(
 }
 
 #[allow(clippy::too_many_lines, reason = "one arm per kind")]
-fn gather(
-    query: &HomeQuery,
-    kind: DestinationKind,
-    filter: DestinationFilter,
-) -> Vec<Destination> {
+fn gather(query: &HomeQuery, kind: DestinationKind, filter: DestinationFilter) -> Vec<Destination> {
     let settings = query.settings;
     let layout = query.layout();
     let column = query.column_inside(query.anchor.x);
@@ -230,32 +227,26 @@ fn gather(
                 .collect()
         }
         DestinationKind::Depth => depths(query, filter, column),
-        DestinationKind::HomeTown => vec![at(
-            kind,
-            query.spawn.x,
-            query.spawn.y,
-            "Home town",
-        )],
+        DestinationKind::HomeTown => vec![at(kind, query.spawn.x, query.spawn.y, "Home town")],
         DestinationKind::Village => villages(query, false),
         DestinationKind::Settlement => {
             let mut found = villages(query, true);
             found.extend(deep_settlements(query));
             found
         }
-        DestinationKind::SkyIsland => features(
-            query,
-            &[FeatureKind::SkyIsland, FeatureKind::SkyContinent],
-        )
-        .into_iter()
-        .map(|feature| {
-            at(
-                kind,
-                feature.center.x,
-                feature.center.y - 1,
-                format!("{} at column {}", feature.kind_name(), feature.center.x),
-            )
-        })
-        .collect(),
+        DestinationKind::SkyIsland => {
+            features(query, &[FeatureKind::SkyIsland, FeatureKind::SkyContinent])
+                .into_iter()
+                .map(|feature| {
+                    at(
+                        kind,
+                        feature.center.x,
+                        feature.center.y - 1,
+                        format!("{} at column {}", feature.kind_name(), feature.center.x),
+                    )
+                })
+                .collect()
+        }
         DestinationKind::Cave => features(query, &[FeatureKind::Cave, FeatureKind::LargeCavern])
             .into_iter()
             .map(|feature| {
@@ -355,9 +346,9 @@ fn gather(
                 })
                 .collect()
         }
-        DestinationKind::BossArena => layout.map_or_else(Vec::new, |layout| {
-            boss_arenas(settings, &layout)
-        }),
+        DestinationKind::BossArena => {
+            layout.map_or_else(Vec::new, |layout| boss_arenas(settings, &layout))
+        }
         DestinationKind::GateSetPiece => {
             let Some(layout) = layout else {
                 return Vec::new();
@@ -367,12 +358,8 @@ fn gather(
                 .map(|descent| {
                     let chamber = landmarks::gate_chamber(settings, &layout, *descent);
                     let (x, y) = floor_middle(&chamber.bounds);
-                    let mut destination = at(
-                        kind,
-                        x,
-                        y,
-                        format!("Gate of Descent {}", descent.numeral()),
-                    );
+                    let mut destination =
+                        at(kind, x, y, format!("Gate of Descent {}", descent.numeral()));
                     if let Some(gate) = descent.gate() {
                         destination.info.boss = Some(gate.boss.name().to_owned());
                     }
@@ -451,16 +438,17 @@ fn depths(query: &HomeQuery, filter: DestinationFilter, column: i32) -> Vec<Dest
     match filter {
         DestinationFilter::Metres(metres) => vec![make(surface + metres)],
         DestinationFilter::Row(row) => vec![make(row)],
-        _ => (1..)
-            .map(|step| surface + step * DEPTH_STEP_METRES)
-            .take_while(|row| *row < floor)
-            .map(make)
+        _ => (1..=(floor - surface) / DEPTH_STEP_METRES)
+            .map(|step| make(surface + step * DEPTH_STEP_METRES))
             .collect(),
     }
 }
 
 /// The features of `kinds` inside the query's window (streamed worlds only).
-fn features(query: &HomeQuery, kinds: &[FeatureKind]) -> Vec<crate::worldgen::features::WorldFeature> {
+fn features(
+    query: &HomeQuery,
+    kinds: &[FeatureKind],
+) -> Vec<crate::worldgen::features::WorldFeature> {
     if !query.settings.generator.is_streamed() {
         return Vec::new();
     }
@@ -543,7 +531,8 @@ fn anomaly_rooms(query: &HomeQuery, layout: Option<&DescentLayout>) -> Vec<Desti
     let rows = (layout.tops[0].max(0), layout.floor);
     for ry in rows.0.div_euclid(height)..=rows.1.div_euclid(height) {
         for rx in window.min.x.div_euclid(width)..=window.max.x.div_euclid(width) {
-            if let Some(room) = crate::expedition::anomaly::room_in_region(query.settings, layout, rx, ry)
+            if let Some(room) =
+                crate::expedition::anomaly::room_in_region(query.settings, layout, rx, ry)
             {
                 let (x, y) = floor_middle(&room.bounds);
                 found.push(at(
@@ -600,7 +589,10 @@ fn set_pieces(settings: &WorldSettings, layout: &DescentLayout) -> Vec<Destinati
         layout_gen::far_strange::clock_hall(settings, layout),
         "The Clock Hall",
     );
-    push(layout_gen::far_strange::choir(settings, layout), "The Choir");
+    push(
+        layout_gen::far_strange::choir(settings, layout),
+        "The Choir",
+    );
     found
 }
 

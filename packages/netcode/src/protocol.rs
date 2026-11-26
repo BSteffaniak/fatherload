@@ -379,6 +379,10 @@ use crate::simulation::{ActionEnvelope, NetSimulation, Pose};
 ///   fields (`infinite_supplies`, `story_unlocked`, `ai_frozen`, `weather`, `stock_revision`) in
 ///   the `TestMode` section, `ClockState::held_millis` in the `Clock` section, and the toolkit
 ///   events 1120-1139 (`GameplayEventKind::TestStock` with `test_mode::TestStockEvent`).
+/// * Wave 14 index: `TestModeAction::{TravelTo, TravelBack, BookmarkHere, Bookmark,
+///   RemoveBookmark}` (the destination index's travel, `fatherload_simulation::destination`),
+///   the appended `SectionKey::Travel` section (each player's bookmarks, back-stack and cycle)
+///   and the travel events 1140-1159 (`GameplayEventKind::Travel`).
 pub const PROTOCOL_VERSION: u8 = 22;
 
 /// One client input frame: the controls and actions for exactly one tick.

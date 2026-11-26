@@ -1469,6 +1469,14 @@ pub enum GameplayEventKind {
         player_id: Option<PlayerId>,
         detail: u32,
     },
+    // Travel (Wave 14 index; netcode codes 1140-1159).
+    /// A test-mode travel arrived, went back, or bookmarked; `detail` is the event's number
+    /// (see [`crate::destination::TravelEvent`]).
+    Travel {
+        what: crate::destination::TravelEvent,
+        player_id: PlayerId,
+        detail: u32,
+    },
 }
 
 /// What a weapon shot struck.

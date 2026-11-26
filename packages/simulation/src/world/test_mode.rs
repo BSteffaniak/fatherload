@@ -77,6 +77,22 @@ impl WorldState {
             TestModeAction::SpawnRaid(faction) => return self.test_spawn_raid(player_id, faction),
             // The galaxy story (Wave 13 story, `world/galaxy_story.rs`).
             TestModeAction::WarpToStory => return self.warp_to_story(player_id),
+            // The destination index (Wave 14, `world/destinations.rs`).
+            TestModeAction::TravelTo(request) => {
+                return self.order_travel(player_id, super::TravelOrder::To(request));
+            }
+            TestModeAction::TravelBack => {
+                return self.order_travel(player_id, super::TravelOrder::Back);
+            }
+            TestModeAction::BookmarkHere => {
+                return self.order_travel(player_id, super::TravelOrder::BookmarkHere);
+            }
+            TestModeAction::Bookmark(id) => {
+                return self.order_travel(player_id, super::TravelOrder::Bookmark(id));
+            }
+            TestModeAction::RemoveBookmark(index) => {
+                return self.order_travel(player_id, super::TravelOrder::RemoveBookmark(index));
+            }
             TestModeAction::PourTestPools => {
                 let Some(at) = self
                     .players

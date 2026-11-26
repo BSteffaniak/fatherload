@@ -494,6 +494,10 @@ const fn gameplay_kind(kind: &GameplayEventKind) -> (u32, Option<fatherload_simu
         GameplayEventKind::TestStock {
             what, player_id, ..
         } => (1_120 + what.code() as u32, player_id),
+        // Travel (wave 14 index): 1140-1159.
+        GameplayEventKind::Travel {
+            what, player_id, ..
+        } => (1_140 + what.code() as u32, Some(player_id)),
     }
 }
 

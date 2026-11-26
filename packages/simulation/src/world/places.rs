@@ -398,6 +398,8 @@ pub struct PlacePass {
     awake_cells: Option<BTreeSet<(i64, i64)>>,
     /// Moves asked for during a pass, applied after the last pass of the tick.
     pending_moves: Vec<(PlayerId, Place, WorldPos)>,
+    /// Travel orders (Wave 14 index, test mode) asked for this tick, run after its last pass.
+    travel_orders: Vec<(PlayerId, super::destinations::TravelOrder)>,
     /// Whether a pass is running at all.
     running: bool,
     /// The players set aside for the running pass (they are in another store this tick; the
@@ -498,6 +500,27 @@ impl WorldState {
     #[must_use]
     pub(super) const fn place_pass_running(&self) -> bool {
         self.place_pass.running
+    }
+
+    /// Queues a travel order for after the tick's last pass (Wave 14 index).
+    pub(super) fn queue_travel(
+        &mut self,
+        player_id: PlayerId,
+        order: super::destinations::TravelOrder,
+    ) {
+        self.place_pass.travel_orders.push((player_id, order));
+    }
+
+    /// Takes the travel orders queued this tick.
+    pub(super) fn take_travel_orders(
+        &mut self,
+    ) -> Vec<(PlayerId, super::destinations::TravelOrder)> {
+        std::mem::take(&mut self.place_pass.travel_orders)
+    }
+
+    /// Whether the home store's ground is the one swapped in.
+    pub(super) const fn place_pass_store_is_home(&self) -> bool {
+        self.place_pass.store.is_home()
     }
 
     /// Whether a ground pass of a store other than the home world's is running.

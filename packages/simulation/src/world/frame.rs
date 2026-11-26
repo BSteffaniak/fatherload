@@ -215,6 +215,8 @@ impl WorldState {
             galaxy_story: _,
             // The space generator is a version, not a position (Wave 14 finish).
             space_generator: _,
+            // Destination ids are absolute tiles (Wave 14).
+            travel: _,
         } = self;
         hollow.serpent.reframe_mark(shift);
         far_schedule.newts.reframe(shift);

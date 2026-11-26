@@ -216,9 +216,13 @@ pub use aliens::{
 pub use body_flight::{
     BodyGroundInfo, LAND_INSIDE_ROWS, TAKE_OFF_ABOVE_ROWS, strip_point, strip_position,
 };
+mod destinations;
 #[cfg(test)]
 mod frontier_tests;
 mod galaxy_story;
+pub use destinations::TravelOrder;
+#[cfg(test)]
+mod destination_tests;
 pub use galaxy_story::SiteBearing;
 #[cfg(test)]
 mod galaxy_story_tests;
@@ -696,6 +700,10 @@ pub struct WorldState {
     /// (it never changes).
     #[serde(default)]
     space_generator: crate::space::SpaceGenerator,
+    /// Each player's bookmarks, back-stack and next / previous cycle (Wave 14 index, see
+    /// [`crate::destination`]; test mode only, empty in every other world).
+    #[serde(default)]
+    travel: crate::destination::TravelLog,
 }
 
 impl WorldState {

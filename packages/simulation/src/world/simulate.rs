@@ -35,11 +35,13 @@ impl WorldState {
         self.upgrade_test_stock();
         // Many places at once (Part III F11, `world/places.rs`): a world that never left the
         // home store and does not tick by region runs the one pass it always did.
-        let output = if self.places.is_empty() && !self.ticks_by_region() {
+        let mut output = if self.places.is_empty() && !self.ticks_by_region() {
             self.simulate_pass(tick, inputs)
         } else {
             self.simulate_places(tick, inputs)
         };
+        // Travel (Wave 14 index, test mode) after the last pass, every rig in its place.
+        self.run_travel_orders(&mut output);
         self.set_simulation_tick(tick.next());
         output
     }

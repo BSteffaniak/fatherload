@@ -305,6 +305,11 @@ impl WorldState {
         if !self.galaxy_story.is_empty() {
             hash.write_serialized(&self.galaxy_story);
         }
+        // Absent until someone travels or bookmarks (Wave 14), so older worlds keep their
+        // hashes.
+        if !self.travel.is_empty() {
+            hash.write_serialized(&self.travel);
+        }
         for player_id in self.discovered_tiles.keys() {
             if sees_private(*player_id) {
                 self.hash_discovery(*player_id, &mut hash);

@@ -1,6 +1,7 @@
-//! Space's destinations (W14-B): read from the space generator's sectors in square rings
-//! round the player's sector (the shared, memoized [`crate::space::Space`]), never from live
-//! state. Bodies' sites (alien towns, theme-boss lairs, builder outposts) are read from their
+//! Space's destinations (W14-B), read from the space generator.
+//!
+//! The generator's sectors are read in square rings round the player's sector (the shared,
+//! memoized [`crate::space::Space`]), never live state. Bodies' sites (alien towns, theme-boss lairs, builder outposts) are read from their
 //! planet grounds' pure site functions.
 //!
 //! A landable body's candidate is a place on it ([`Place::OnBody`]): `x` is its strip column,
@@ -66,7 +67,13 @@ fn free(kind: DestinationKind, tile: SpaceTile, name: impl Into<String>) -> Dest
     Destination::new(DestinationId::new(kind, Place::Space, tile.x, tile.y), name)
 }
 
-fn on_body(kind: DestinationKind, body: SpaceBodyId, x: i64, y: i64, name: impl Into<String>) -> Destination {
+fn on_body(
+    kind: DestinationKind,
+    body: SpaceBodyId,
+    x: i64,
+    y: i64,
+    name: impl Into<String>,
+) -> Destination {
     Destination::new(
         DestinationId::new(kind, Place::OnBody(BodyId::Space(body)), x, y),
         name,
@@ -93,7 +100,7 @@ fn theme_ok(filter: DestinationFilter, theme: Theme) -> bool {
     }
 }
 
-fn body_id(sector: SpaceSector, system: &StarSystem, body: &SpaceBody) -> SpaceBodyId {
+const fn body_id(sector: SpaceSector, system: &StarSystem, body: &SpaceBody) -> SpaceBodyId {
     SpaceBodyId {
         sector,
         system: system.index,
@@ -143,8 +150,7 @@ pub fn candidates(
             for reference in query.charts {
                 if let Some(system) = query.space.system(*reference) {
                     let tile = above(system.centre, star_reach(&system));
-                    let mut destination =
-                        free(kind, tile, format!("{} (charted)", system.name));
+                    let mut destination = free(kind, tile, format!("{} (charted)", system.name));
                     destination.info.system = Some(system.name.clone());
                     destination.info.place = format!("{} system", system.name);
                     found.push(destination);
@@ -200,7 +206,11 @@ pub fn candidates(
                 for nebula in &sector.nebulae {
                     // Interstellar nebulae are listed by every sector they overlap: once each.
                     if SpaceSector::of_tile(nebula.centre) == sector_coords {
-                        found.push(free(kind, nebula.centre, format!("Nebula {:04X}", nebula.id & 0xFFFF)));
+                        found.push(free(
+                            kind,
+                            nebula.centre,
+                            format!("Nebula {:04X}", nebula.id & 0xFFFF),
+                        ));
                     }
                 }
             }
@@ -212,7 +222,8 @@ pub fn candidates(
                         above(hole.centre, reach),
                         format!("Black hole {:04X}", hole.id & 0xFFFF),
                     );
-                    destination.info.hazards = vec!["event horizon".to_owned(), "time dilation".to_owned()];
+                    destination.info.hazards =
+                        vec!["event horizon".to_owned(), "time dilation".to_owned()];
                     found.push(destination);
                 }
             }
@@ -221,9 +232,12 @@ pub fn candidates(
                     let mut destination = free(
                         kind,
                         above(mouth.centre, i64::from(mouth.radius) + SAFE_TILES),
-                        format!("Wormhole to sector {}, {}", mouth.exit_sector.x, mouth.exit_sector.y),
+                        format!(
+                            "Wormhole to sector {}, {}",
+                            mouth.exit_sector.x, mouth.exit_sector.y
+                        ),
                     );
-                    destination.info.place = "free space".to_owned();
+                    "free space".clone_into(&mut destination.info.place);
                     found.push(destination);
                 }
             }
@@ -232,14 +246,14 @@ pub fn candidates(
         for system in &sector.systems {
             match kind {
                 DestinationKind::System => {
-                    let mut destination =
-                        free(kind, above(system.centre, star_reach(system)), system.name.clone());
-                    destination.info.system = Some(system.name.clone());
-                    destination.info.place = format!(
-                        "{} system ({} planets)",
-                        system.name,
-                        system.planet_count()
+                    let mut destination = free(
+                        kind,
+                        above(system.centre, star_reach(system)),
+                        system.name.clone(),
                     );
+                    destination.info.system = Some(system.name.clone());
+                    destination.info.place =
+                        format!("{} system ({} planets)", system.name, system.planet_count());
                     destination.info.hazards = vec!["star heat".to_owned()];
                     found.push(destination);
                 }
@@ -284,7 +298,10 @@ pub fn candidates(
                 }
                 DestinationKind::Comet => {
                     for (index, comet) in system.comets.iter().enumerate() {
-                        let tile = above(comet.centre, i64::from(comet.nucleus_radius) + SAFE_TILES / 3);
+                        let tile = above(
+                            comet.centre,
+                            i64::from(comet.nucleus_radius) + SAFE_TILES / 3,
+                        );
                         let mut destination =
                             free(kind, tile, format!("{} comet {}", system.name, index + 1));
                         destination.info.system = Some(system.name.clone());
@@ -293,8 +310,11 @@ pub fn candidates(
                 }
                 DestinationKind::Nebula => {
                     if let Some(nebula) = &system.nebula {
-                        let mut destination =
-                            free(kind, nebula.centre.offset(0, -i64::from(star_reach(system))), format!("{} nebula", system.name));
+                        let mut destination = free(
+                            kind,
+                            nebula.centre.offset(0, -star_reach(system)),
+                            format!("{} nebula", system.name),
+                        );
                         destination.info.system = Some(system.name.clone());
                         found.push(destination);
                     }
@@ -370,8 +390,13 @@ fn body_sites(
     let name = format!("Builders' outpost on {}", system.body_name(body.index));
     if outland {
         for outpost in crate::planet::outlands::builder_outposts(&ground) {
-            let mut destination =
-                on_body(kind, id, i64::from(outpost.site.centre()), SURFACE, name.clone());
+            let mut destination = on_body(
+                kind,
+                id,
+                i64::from(outpost.site.centre()),
+                SURFACE,
+                name.clone(),
+            );
             describe_body(&mut destination, system, body);
             found.push(destination);
         }

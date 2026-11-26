@@ -158,6 +158,17 @@ pub enum TestModeAction {
     ClearNearbyEnemies,
     /// Freeze every creature's AI (or let them move again).
     SetAiFrozen(bool),
+    /// Travel to a destination of the index (Wave 14, [`crate::destination`]): "the next
+    /// planet", "Descent V", a bookmark, with safe arrival. Run after the tick's last pass.
+    TravelTo(crate::destination::TravelRequest),
+    /// Travel back to the last place on the submitting player's back-stack (Wave 14).
+    TravelBack,
+    /// Bookmark where the submitting player stands (Wave 14).
+    BookmarkHere,
+    /// Bookmark a destination (Wave 14; the Atlas's "Bookmark this").
+    Bookmark(crate::destination::DestinationId),
+    /// Remove the submitting player's bookmark at this index (Wave 14).
+    RemoveBookmark(u8),
 }
 
 impl TestModeAction {
@@ -200,7 +211,12 @@ impl TestModeAction {
             | Self::WarpToStory
             | Self::SetInfiniteSupplies(_)
             | Self::SetDayLock(_)
-            | Self::SetAiFrozen(_) => return None,
+            | Self::SetAiFrozen(_)
+            | Self::TravelTo(_)
+            | Self::TravelBack
+            | Self::BookmarkHere
+            | Self::Bookmark(_)
+            | Self::RemoveBookmark(_) => return None,
         })
     }
 }

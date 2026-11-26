@@ -30,7 +30,7 @@
 pub mod home;
 pub mod space;
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use serde::{Deserialize, Serialize};
 
@@ -51,9 +51,7 @@ pub const MAX_CANDIDATES: usize = 64;
 pub const HERE_TILES: i64 = 24;
 
 /// What kind of place a destination is (append only: the order is the wire and save order).
-#[derive(
-    Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize,
-)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum DestinationKind {
     /// The top of one of the eight Descents.
     #[default]
@@ -536,12 +534,13 @@ impl Destination {
             text.push_str(theme.name());
         }
         if let Some(descent) = self.info.descent {
-            text.push_str(&format!(
+            let _ = write!(
+                text,
                 " descent {} descent {} {}",
                 descent.numeral(),
                 descent.index() + 1,
                 descent.name()
-            ));
+            );
         }
         if let Some(stratum) = self.info.stratum {
             text.push(' ');
@@ -592,7 +591,7 @@ pub struct PlayerTravel {
 impl PlayerTravel {
     /// Whether nothing is recorded.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.bookmarks.is_empty()
             && self.recent.is_empty()
             && self.cursor.is_none()
@@ -696,15 +695,13 @@ pub const fn isqrt(value: i128) -> u64 {
     if value <= 0 {
         return 0;
     }
-    let value = value as u128;
-    let mut root = value.isqrt();
-    while root * root > value {
-        root -= 1;
-    }
+    let root = value.cast_unsigned().isqrt();
     if root > u64::MAX as u128 {
         u64::MAX
     } else {
-        root as u64
+        #[allow(clippy::cast_possible_truncation, reason = "checked above")]
+        let root = root as u64;
+        root
     }
 }
 
@@ -723,7 +720,10 @@ mod tests {
                 "{word} parses to some kind"
             );
         }
-        assert_eq!(DestinationKind::parse("planets"), Some(DestinationKind::Planet));
+        assert_eq!(
+            DestinationKind::parse("planets"),
+            Some(DestinationKind::Planet)
+        );
         assert_eq!(DestinationKind::parse("nope"), None);
         assert!(TravelEvent::NotFound.code() < 20);
     }
@@ -732,14 +732,24 @@ mod tests {
     fn bookmarks_and_the_back_stack_are_bounded_and_ordered() {
         let mut travel = PlayerTravel::default();
         for x in 0..40 {
-            travel.bookmark(DestinationId::new(DestinationKind::Planet, Place::Space, x, 0));
+            travel.bookmark(DestinationId::new(
+                DestinationKind::Planet,
+                Place::Space,
+                x,
+                0,
+            ));
             travel.push_recent(DestinationId::new(DestinationKind::Cave, Place::HOME, x, 0));
             travel.push_recent(DestinationId::new(DestinationKind::Cave, Place::HOME, x, 0));
         }
         assert_eq!(travel.bookmarks.len(), MAX_BOOKMARKS);
         assert_eq!(travel.recent.len(), MAX_RECENT);
         assert_eq!(travel.recent.last().map(|id| id.x), Some(39));
-        assert!(travel.bookmarks.iter().all(|id| id.kind == DestinationKind::Bookmark));
+        assert!(
+            travel
+                .bookmarks
+                .iter()
+                .all(|id| id.kind == DestinationKind::Bookmark)
+        );
     }
 
     #[test]

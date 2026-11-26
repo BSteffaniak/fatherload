@@ -1168,7 +1168,7 @@ impl WorldState {
 
     /// Test mode: `player_id` set down on `body` over strip `column`, standing on `base` (an
     /// outpost's floor) or else the surface (the warp does not dig: a buried relic is dug to).
-    fn warp_onto_body(
+    pub(super) fn warp_onto_body(
         &mut self,
         player_id: PlayerId,
         body: SpaceBodyId,
