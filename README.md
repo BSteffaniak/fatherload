@@ -1353,8 +1353,9 @@ purse.
   any counter, but they are worth more spent: stations sell only the four commons, at three
   times their value.
 - **One credit scale**: every station price and reward is on the space scale, so an hour of
-  boards, bounties or belt mining earns about what an hour at the Heart did. Home ore still
-  sells at stations, at its plain value (no Descent premium).
+  boards, bounties or belt mining earns about what an hour at the Heart did (wave 14: the first
+  ring's belts now out-earn the Heart). Home ore still sells at stations, at its plain value (no
+  Descent premium). Big figures read with thousands separators.
 - **Late tiers need ore**: a ship line's tiers 3-5 ask for space materials as well as credits
   (the shipyard row shows the bill). A big purse buys tiers 1-2 at once; the rest is mined.
 - **The Works** (a station counter): buy common materials; raise alien tech to **Mk II and Mk
@@ -1380,6 +1381,21 @@ purse.
   `endgame_shipyard_bills`, `endgame_records`, `endgame_gate_building`, `endgame_gate_open`,
   `endgame_starwright_flight`, `endgame_estate`, `endgame_estate_young`,
   `endgame_achievements`, `endgame_split`, `touch_endgame`.
+
+### Theme bosses of the first frontier (wave 14)
+
+Every one of the twelve kinds of world has its boss now. The jungle, ocean, glacier, dune,
+volcanic and crystal worlds' wait in a lair under each world's landmark, reached by a walled
+shaft beside it (on an ocean world, a dry well down the Drowned Spire: drill its dry room's
+floor): **the Bramble King**, **the Tidecaller**, **the Hoarfrost Wyrm**, **the Dune Tyrant**,
+**the Magma Drake** and **the Geode Colossus**. Each tells its attacks with a pose, calls its
+brood, rests whole if you leave, and opens a sealed vault with its relic when it falls; they
+are on the hunt list with a waypoint. Small moons and crater rocks now carry the themes too (in
+new worlds), so every kind of world's secret can be found. The Starwright Hull also softens a
+fight, and the Works, the Halcyon Gate and the Harbour have music of their own.
+
+- Scenes: `lair_jungle_boss`, `lair_ocean_boss`, `lair_ocean_well`, `lair_glacier_boss`,
+  `lair_dunes_boss`, `lair_volcanic_boss`, `lair_crystal_boss`.
 
 ### The builders' road (wave 13 story)
 

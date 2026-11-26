@@ -11725,13 +11725,13 @@ Each requirement of Part III and where it lives. "Open" marks what is still miss
 | 16 | Star systems: star classes, orbits, belts, comets, nebulae, black holes, wormholes | `space`, `flight::systems` (Wave 12 systems) |
 | 16 | Twelve planet themes, each a world like home (surface, settlements, 800-2,500 rows of strata, ores, creatures, weather, day, gravity) | jungle/archipelago/ice `planet::wilds`; dunes/volcanic/crystal `frontier`; fungal/machine/dead `planet::outlands`; gas giant/locked/ring `exotic`; `world::part3_tests` checks all twelve, the bot lands on all twelve |
 | 16 | Each theme's face from orbit and its own music | `planet::look::ORBITAL_LOOKS` (all twelve), each theme's `music_bed` and patches |
-| 16 | Craters and small moons, one secret each | barren secret everywhere; **open**: the themed secrets (all nine of Waves 12-13) never appear, since the space generator tags every small body `Barren` |
+| 16 | Craters and small moons, one secret each | barren secret everywhere; the themed secrets appear in new worlds' galaxies (space generator V2, Wave 14 finish; old saves keep V1) |
 | 16 | Friendly species with towns, trade, tongues, quests, homes, story arcs | `alien` (Wave 12); towns on the Wave 13 worlds (`part3_tests`); estates (Wave 13 endgame) |
 | 16 | Neutral fauna per planet | every theme's spawn table (the bot meets a native on each) |
 | 16 | Hostile factions: pirates, swarms, machine fleet; bosses | `hostiles` (Wave 12), the Warden (Wave 13 story) |
 | 16 | Stations: shipyards, markets, bounty boards | `station` (Wave 12), the Works and Records counters (Wave 13 endgame) |
 | 16 | Progression: alien tech, hull and engine line, planet gear; space materials and economy | `station::shipyard`, `endgame` (materials, one credit scale, Mk II/III, Starwright, Heartline, the Halcyon Gate) |
-| 16 | Theme bosses | the six Wave 13 themes' bosses, on the hunt list; **open**: the six Wave 12 themes have none |
+| 16 | Theme bosses | all twelve themes' bosses on the hunt list: the six Wave 13 themes', and the Wave 12 themes' (`planet::lairs`, Wave 14 finish) |
 | 16 | The builders' story through the stars, archive keys pointing at the first systems, a long story and endless exploration after it | `galaxy_story` (10 chapters, the finale, leads in every system); relics at the new worlds' builders' outposts |
 | 16 | Co-op: separate or together, shared waypoint, party HUD, meet anywhere | `flight` waypoints, per-seat views, free flight's per-group frames, the netcode soak and `world_part3` |
 | 17 | Waves 7-13 | this README, wave by wave |
@@ -11760,6 +11760,161 @@ not done (bots and screenshots only).
   5 s, mean work 2.1-2.6 ms, p95 4.6-5.3 ms, max 8.7 ms (dunes); space views (black hole, belt,
   nebula, orbit looks, planet gallery, night side, Arbiter, swarm, dogfight, split places)
   60.0 fps, mean 1.8-2.5 ms, max 6.8 ms. The web acceptance tests pass.
+
+## Wave 14 finish: Part III's open items closed (`src/planet/lairs.rs`, `src/space.rs` + `space/generate.rs`, `src/world/enemies/outlands.rs`, `src/endgame/{economy,works}.rs`)
+
+The Wave 13 integration's "Still open after Part III" list, closed so Part III is complete.
+Everything here is ordinary play (no test-mode surface); it works single-player, split screen
+(per seat, seats in different places), online (the host's world decides) and in the browser.
+
+### Theme bosses for the six Wave 12 worlds (`planet::lairs`, `world/enemies/outlands.rs`)
+
+| World | Boss | Lair (under the landmark) | Way in | Tell, attack | Brood | Counter | Relic (vault) |
+|---|---|---|---|---|---|---|---|
+| jungle | **the Bramble King** (walks) | the root hall under the Elder Tree | a shaft beside the trunk | rears, its thorn crown bristling gold; a fan of five thorns | mossprowlers | fire x1.5 | the Bramble Crown (a reactor bloom) |
+| ocean archipelago | **the Tidecaller** (walks) | the dry hall under the Drowned Spire | a walled dry well down the spire's middle, under its dry room's floor | the great claw rises, the pearl lantern blazes; three slow bubbles | tidesnappers | blasts x1.5, bullets x0.6 | the Tide Pearl (a void pearl) |
+| glacier | **the Hoarfrost Wyrm** (flies) | the ice cave under the Frozen Titan | a shaft beside the Titan | the frill spreads, the frost heart whitens; three ice boulders lobbed | rimewolves | fire x1.5 | the Frost Heart (a pressure glyph) |
+| desert dunes | **the Dune Tyrant** (walks) | the buried hall under the Sleeping Sentinel | a shaft beside the Sentinel | the glass sting arches high and glows; three gobs of venom | glass scorpions | blasts x1.5, bullets x0.6 | the Sentinel's Eye (a warden's eye) |
+| volcanic | **the Magma Drake** (flies) | the magma hall under the Caldera | a shaft down the cone's flank | the throat glows; three fireballs | cinder bats | immune to fire | the Drake Heart (a mantle heart) |
+| crystal | **the Geode Colossus** (walks) | the geode hall under the Choir Spire | a shaft beside the spire | arms raised, the quartz core white; a fan of five shards | shard crabs | blasts x1.5, bullets x0.6 | the Choir Core (a crystal prism) |
+
+- **The lair** (`lairs::lair_of`, `lair_tile`, laid over the generated ground by `lairs::overlay`
+  from `PlanetGround::chunk_tiles`, so the wild worlds' theme-world path and the frontier's
+  generic path both carry it; planets only, a small body keeps its secret): the outland lair's
+  shape (a hall 53 wide and 16 tall, `LAIR_DEPTH` 52 rows under the landmark's ground, lined in
+  the theme's own stone: elder bark, ruin stone, titan bone, ruin brick, basalt, prismatic
+  stone), **builder lamps** (`LairTile::Lamp`) along its ceiling and walls, the outland seal
+  (`OutlandTile::BossSeal`) on the floor's middle and the **sealed reward vault** in the east
+  wall behind a two-tile vault door, the relic over a floor of the theme's core ore. The way in
+  is a walled shaft (walls keep the sea, lava pockets and flooded caves out); the ocean's is a
+  dry well down the Drowned Spire (drill its dry room's floor and drop in), so the hall under the
+  sea stays dry.
+- **The fight** is the outland bosses', shared (`WorldState::advance_wild_lair` beside
+  `advance_outland_boss`, both on `advance_lair_view`): a rig entering the hall wakes the boss,
+  the kind's telegraphed volley (1.2-1.3 s wind-up with its own pose), a brood called on a
+  rhythm of world time (14 s; 9 s below half health) with a 1.5 s warning, never more than four.
+  Leave and it rests whole; Peaceful yields the vault at once. Its fall spends the seal, opens the
+  vault, drops a boss's haul (18+ of the richer ore, ancient alloy, core shards) and raises
+  `LairEvent::BossDefeated`, then `record_theme_boss` (the hunt list's quarry down).
+  `WorldState::wild_boss_beaten_here` reads a loaded body's seal; `in_theme_lair` keeps every
+  spawner and the glacier's refreeze and the crystal regrowth out of a lair.
+- **Hunt list**: six appended `hunt::THEME_BOSSES` (twelve theme bosses in all), each with the
+  nearest full planet of its kind as its waypoint; `theme_boss_of` maps the new kinds.
+- **Events 1200-1219**: `GameplayEventKind::Lair { what: LairEvent, boss, player_id, x, y }`
+  (woke, summons, defeated, relic found). The game names the boss and its tell in the wake
+  message, and plays the **music stings** `f14_lair_wake` (a minor brass call over a timpani
+  roll and a gong) and `f14_lair_fall` (the call answered in the major).
+- **Art**: six big animated sprites (`rendering/pixel_art/sprites/lairs.rs`: idle, step or
+  wingbeat, the tell, the strike; drawn at 1.5x, contact boxes fitted), lair tiles
+  (`tile_art/lairs_art.rs`: each relic in builder stone, the lamps' sconces).
+- **Fixed on the way**: the home world's roaming roster no longer spawns on the jungle, ocean
+  and glacier worlds (`Terrain::creature_roster`; cave bats flocked into the Bramble King's
+  hall), as the outland fix did for its worlds in Wave 13.
+
+### Themed secrets on small bodies: the space generator versioned per world (`space::SpaceGenerator`, `SpaceSeed`)
+
+- **`SpaceGenerator::V1`** (every save of Waves 11-13; `GOLDEN_SPACE_DIGEST`
+  0x0c0c_b46c_12ea_7136, still pinned) and **`V2`** (new worlds, `CURRENT`;
+  **`GOLDEN_SPACE_V2_DIGEST` 0xf560_7cf2_7d39_2f54**). V2 is V1 plus a pure re-theme of small
+  bodies (`retheme_small_bodies`, a hash of its own: no generator draw moves, so every system,
+  planet, orbit, radius, belt, station and comet is V1's): a moon takes its planet's theme one
+  time in two; otherwise a small body keeps a V1 theme other than barren, and a barren one
+  becomes any of the twelve themes by its warmth three times in five; its climate follows (the
+  temperature clamped to the theme, its air drawn from the theme's, a locked body's endless
+  day). Within four rings of home there are small bodies of all twelve themes, so every themed
+  secret (jungle, ocean, ice, dune, volcanic, crystal, fungal, machine, dead, gas giant, locked,
+  ring) is found in play.
+- **Per world**: the world field `space_generator` (serde default V1, so an old save keeps
+  its moons exactly; never hashed: it never changes in a world; sent in the keyframe) and each
+  body store's own (`BodyWorldData::space_generator`, default V1). `WorldState::world_seed()`
+  now returns the galaxy's key, `SpaceSeed { seed, generator }`; every space-dependent function
+  takes it (`Space::shared/new`, `GeneratedSpace::new`, `generate_sector`, `planet_params_for`,
+  the hunt list's `nearest_theme_world`, the story's plan, leads and words, the hostiles' lairs
+  and bounty targets, the boards' offers, body lives and alien body prices; their caches are
+  keyed by it). A plain `u64` converts to the current generator (tests, tools, scenes); the
+  aliens' first homes read V1 explicitly (planets only: every generator agrees).
+- Tests: `space::tests::{space_generation_is_pinned, space_generation_v2_is_pinned,
+  v2_only_rethemes_small_bodies, v2_small_bodies_carry_every_theme}`,
+  `world::space_generator_tests` (a new world is V2, an old save V1 and its moon keeps its V1
+  ground through a save, a Wave 13 store without a generator loads V1 ground).
+
+### Space pays like the Heart near home (`endgame::economy`, `terrain::MineralKind::value`)
+
+`SPACE_CREDIT_SCALE` is **40** (was 20) and the eight space materials' values doubled with it
+(80, 140, 110, 320, 3,000, 8,000, 20,000, 10,000). Ratios inside space are unchanged, so the
+empty-purse curve is the same in hours; the post-Heart purse is a smaller head start. Measured
+(`cargo test --release -p fatherload_simulation career_report -- --ignored --nocapture`, credits
+an hour; the Heart's everyday income is 805,967):
+
+| Ring (seed 0xC0FFEE) | Boards | Belt mining, all sold |
+|---|---|---|
+| 1 | 668,713 | 888,399 |
+| 2 | 769,279 | 927,291 |
+| 3 | 1,047,035 | 1,290,773 |
+| 5 | 1,262,221 | 1,503,380 |
+| 7 | 1,459,850 | 1,120,327 |
+
+The first ring's belts out-earn the Heart and its boards come within a fifth of it; every ring
+beyond pays more. The career (hours): empty purse unchanged (0xC0FFEE: Engine T1 2.5, Gilded Maw
+18.75, Swarm Queen 32.75, Engine T5 59.5, Arbiter 60.25, Starwright Hull 85.75, Engine 92.0,
+Heartline 104.75); post-Heart purse 0xC0FFEE 0 / 11.5 / 25.25 / 52.25 / 53.0 / 78.5 / 84.75 /
+97.5 (seed 1: 0 / 6.5 / 20.25 / 44.5 / 50.0 / 57.25 / 82.25 / 94.25; seed 7: 0 / 8.25 / 23.75 /
+37.25 / 46.0 / 56.75 / 80.75 / 93.0); credits hold the bot back 85-92 % of the first twenty hours
+either way. The endgame's curve tests pass unchanged.
+
+### The smaller gaps
+
+- **The Starwright Hull softens combat** (`works::STARWRIGHT_COMBAT_DAMAGE` 0.6,
+  `ShipEffects::combat_scale`): hostile shots and rams past the deflector take 0.6 of the hull
+  they would (hazards keep x0.35); the shop line says so. Test
+  `hostile_tests::the_starwright_hull_softens_a_fight`.
+- **Thousands separators** on every credit figure (game `credits_text::grouped`: the hub's and
+  counters' prices and payouts, the HUD's purse, toasts, homes, aliens, villages, tombs...).
+- **Music for the set pieces** (appended at the end of `patches!`): `f14_loop_works` on the
+  Works page (an anvil, a plucked arpeggio in C over a warm pad), `f14_loop_gate` at Halcyon Dock
+  once the gate rises and on a gate ride (a slow choir in E, a great bell), `f14_loop_harbour` in
+  the Harbour's reach (a lullaby in A minor, the mooring bells). The director plays them in place
+  of the station's music (`SeatAudio::works`).
+- **Small Wave 13 fauna redrawn**: the drift ray, vapour stinger, sunbasker, scorch mite,
+  ringhopper, void mite, lanternfly and arc mite, shaded and outlined like the rest (their
+  contact boxes refitted to the new bodies).
+- **The dark lairs**: on round ground a glowing creature lights itself and casts a soft halo
+  (the Ashen Sovereign was a shadow outside the craft's lamp; every theme boss glows), a lair's
+  lamps light its hall, and the cave darkness counts glowing creatures as lights.
+- **The galaxy credits** stop above the skip hint (`CREDITS_FOOT`).
+- **The goal strip at 960 points**: in a narrow view it sits in the left column under the badges
+  and trackers, clear of the body panel and a boss's label.
+- **"New lead" toasts**: a system's leads are told in one line (by its first lead), and only to a
+  seat in flight (a rig set down on a world by a warp or a scene keeps the ground's own words).
+
+### Formats and digests
+
+- `PROTOCOL_VERSION` **22** (this track's one bump: the six `EnemyKind`s, `TileKind::Lair` tiles
+  0x3A00..0x3BFF, the lair events 1200-1219, the world's and stores' space generator in
+  keyframes). Save format **15** unchanged (every new field has a serde default; old saves load,
+  their galaxy V1).
+- V1-V10 and `GOLDEN_V11_DIGEST` unchanged; `GOLDEN_SPACE_DIGEST` unchanged (V1);
+  `GOLDEN_SPACE_V2_DIGEST` new. The wild and frontier worlds' golden digests are unchanged (they
+  sample the surface and core; the lairs lie 52 rows under the landmarks); their bodies in a
+  Wave 12-13 save regenerate with their lairs (the fingerprint rule: such a body loads fresh).
+
+### Tests
+
+`planet::lairs::tests` (codes, every planet's lair under its landmark on three seeds and radii,
+no lair on small bodies, the dry well through the sea, purity), `world::lair_tests` (each boss
+wakes, tells, calls its brood, falls and pays; rests whole; Peaceful; the hunt list's waypoint to
+a world with its lair; **`a_bot_with_late_kit_beats_each_wave_12_boss_for_real`**: every upgrade
+and a railgun, Normal, no test mode, no repairs, each boss beaten inside five minutes with the
+rig whole, each fight long enough for its brood and hurting the rig), the space generator tests
+above, the Starwright combat test, game `credits_text` and the art test (contact boxes).
+Scenes: `lair_jungle_boss`, `lair_ocean_boss`, `lair_ocean_well`, `lair_glacier_boss`,
+`lair_dunes_boss`, `lair_volcanic_boss`, `lair_crystal_boss`.
+
+### Still open
+
+- Hand play-testing of the whole arc (bots and screenshots only, as before).
+- The lairs' halos and lamps are drawn on round ground; the flat lone-planet view (tests and
+  tools) shows the tiles only.
 
 ## Replication
 
