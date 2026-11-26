@@ -846,6 +846,13 @@ impl WorldState {
         let Some(found) = self.space().space().body(body) else {
             return;
         };
+        // A wild or frontier world applies its hazards zone by zone through its own rules
+        // (reading the same planet gear) and says so where they bite: the landing's flat
+        // drain and its warning stand back (a deep stratum's heat is no news on a cold
+        // shore; Wave 12 integration).
+        if crate::station::hazard::theme_rules_hazards(&found) {
+            return;
+        }
         let hazards = hazards_of(&found);
         if hazards.is_empty() {
             return;
@@ -855,15 +862,7 @@ impl WorldState {
         let Some(player) = self.players.get_mut(&player_id) else {
             return;
         };
-        let mut taken = drain(&hazards, &player.hazard_gear.ship, thrusting);
-        // A wild or frontier world applies its hazards zone by zone through its own rules
-        // (reading the same planet gear): here they are only named (Wave 12 integration).
-        if crate::station::hazard::theme_rules_hazards(&found) {
-            taken = crate::station::hazard::HazardDrain {
-                biting: taken.biting,
-                ..Default::default()
-            };
-        }
+        let taken = drain(&hazards, &player.hazard_gear.ship, thrusting);
         // The hull and fuel drains are shares of the rig's own hull and tank.
         let hull_lost = taken.hull * player.max_hull() * seconds;
         if !infinite_fuel {
