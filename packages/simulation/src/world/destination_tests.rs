@@ -458,3 +458,35 @@ fn random_with_one_seed_picks_afresh_after_each_travel() {
     }
     assert!(picks.len() > 2, "a fixed seed still wanders: {picks:?}");
 }
+
+#[test]
+fn a_boss_door_stays_over_its_arena_and_in_the_arena_lands_inside() {
+    for seed in SEEDS {
+        let mut world = test_world(seed);
+        for arena in world.destinations(PLAYER, DestinationKind::BossArena, DestinationFilter::Any)
+        {
+            let inside = arena.inside.expect("an arena has an inside");
+            assert!(arrived(&travel(&mut world, TravelRequest::exact(arena.id))));
+            let door = world.travel_here(PLAYER).expect("here");
+            assert!(
+                door.y < inside.1 - 4,
+                "seed {seed:x}: {} door {door:?} over its floor {inside:?}",
+                arena.name
+            );
+            assert!(arrived(&travel(
+                &mut world,
+                TravelRequest::exact(arena.id).arriving(ArrivalOptions {
+                    in_water: false,
+                    in_arena: true,
+                })
+            )));
+            let floor = world.travel_here(PLAYER).expect("here");
+            assert!(
+                // On the floor, or settled onto it from a floor spot over open ground.
+                (inside.1 - 3..=inside.1 + 24).contains(&floor.y),
+                "seed {seed:x}: {} inside {floor:?} on its floor {inside:?}",
+                arena.name
+            );
+        }
+    }
+}

@@ -631,7 +631,10 @@ impl WorldState {
                 let (Ok(x), Ok(y)) = (i32::try_from(x), i32::try_from(y)) else {
                     return false;
                 };
-                self.arrive_home(player_id, x, y, options)
+                // A door over an arena (or the Heart) holds where it is: settling would drop
+                // through an open shaft (the Sinkhole's) onto the arena's floor.
+                let door = found.inside.is_some() && inside.is_none();
+                self.arrive_home(player_id, x, y, options, !door)
             }
             Place::OnBody(BodyId::Space(key)) => self.arrive_on_body(player_id, key, x, y, options),
             Place::Space => {
@@ -686,14 +689,16 @@ impl WorldState {
         arrived
     }
 
-    /// Onto the home world (or the Moon) at tile `(x, y)`: settled onto a floor, in a freshly
-    /// carved pocket clear of hazards, open water and enemies.
+    /// Onto the home world (or the Moon) at tile `(x, y)`: settled onto a floor (when `settle`;
+    /// an arena's door is not), in a freshly carved pocket clear of hazards, open water and
+    /// enemies.
     fn arrive_home(
         &mut self,
         player_id: PlayerId,
         x: i32,
         y: i32,
         options: ArrivalOptions,
+        settle: bool,
     ) -> bool {
         let away = self.store_of(player_id) != StoreKey::Home
             || self
@@ -705,7 +710,11 @@ impl WorldState {
             return false;
         }
         let column = x.clamp(self.terrain.min_x() + 4, self.terrain.max_x() - 4);
-        let row = self.settle_row(column, y);
+        let row = if settle {
+            self.settle_row(column, y)
+        } else {
+            y
+        };
         let Some((column, top)) = self.arrival_site(column, row - (POCKET_HEIGHT - 1)) else {
             return false;
         };

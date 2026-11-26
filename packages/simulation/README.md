@@ -12194,8 +12194,9 @@ move between stores at once (a `PlaceChanged` event is raised when the place cha
   carved to air with a floor of the stratum's rock, and every lava, gas, explosive or
   pressure pocket, magma vent and fluid tile within 3 tiles becomes rock (fluids stay with
   `in_water`). Non-boss enemies within 24 tiles are despawned (not with `in_arena`). Boss
-  arenas and the Heart arrive 8 rows above the roof (the "door"); `in_arena` arrives on the
-  arena's floor.
+  arenas and the Heart arrive 8 rows above the roof (the "door"; it is not settled, so an
+  open shaft such as the Sinkhole's does not drop the rig into the arena: the pocket's rock
+  floor holds it; review fix); `in_arena` arrives on the arena's floor.
 * **Bodies**: the body's arrival point (its first alien town or the generator's), or
   `warp_onto_body` at a column (the surface, or a floor such as an exotic builder outpost's);
   lairs arrive on the surface over the lair (`in_arena`: inside). Enemies near the rig are
@@ -12244,6 +12245,13 @@ theirs (parked players keep them). Ids are absolute tiles, so the log never refr
 * netcode `world_travel`: a client travels to Descent V and back while one split-screen seat
   bookmarks and travels to the next planet and the other stays home; the host decides, hashes
   agree, the log replicates; a normal world refuses it online.
+* Review additions: `random_with_one_seed_picks_afresh_after_each_travel` (the preview is
+  where the travel goes) and `a_boss_door_stays_over_its_arena_and_in_the_arena_lands_inside`
+  (every arena on two seeds).
+* Screenshot scenes (game, `scene_capture/travel_scenes.rs`, through `stage_travel`):
+  `travel_descent_v`, `travel_depth_4200`, `travel_boss_door`, `travel_boss_inside`,
+  `travel_village`, `travel_cave`, `travel_planet_ice`, `travel_station`,
+  `travel_split_two_places` (seat 1 in Descent V, seat 2 on the next planet).
 
 ### Seams (TODO-SEAM, for the integrator and the other Wave 14 tracks)
 
