@@ -10469,8 +10469,21 @@ seats at home.
   ledger bounded (`assert_bounded`), at most one store per place visited, the creatures capped,
   the save and keyframes growing only linearly with what was dug.
 * `world_soak_host_and_two_clients_roam_apart_with_reloads_and_a_reconnect` (three minutes,
-  two reloads, a reconnect) runs in the suite; `world_soak_long` (ignored) is the long run:
-  SOAK_LONG.
+  two reloads, a reconnect) runs in the suite (about 5 minutes in a debug build);
+  `world_soak_long` (ignored, `FATHERLOAD_SOAK_MINUTES`) is the long run. Sixty simulated
+  minutes (release, a quiet machine): no mismatch, host ticks 1.24 ms on average, p99 8.2 ms,
+  worst 80 ms (a fresh body generated on arrival); at most seven stores (one per place
+  visited) and 124 entities; the save grew from 77 KB to 2.4 MB and a keyframe from 3.5 KB to
+  280 KB, linearly with the tunnels the bots dug (about 38 KB and 4.6 KB a minute).
+* **What it found**: about 25 minutes in, a client's view of a body drifted from the host's
+  (11 hash mismatches): a client applying a body store's frame outside a pass shifted every
+  creature and drop of the body a whole lap when the host relabelled the frame round the strip
+  (the host's own pass treats a lap as the same place), so they sat a lap away until each
+  changed again. Every store frame move now uses the nearest copy round the strip
+  (`planet::nearest_lap_frame_of`); test
+  `world::body_map_tests::a_replica_applying_a_store_frame_relabelled_by_a_lap_moves_nothing`.
+  `FATHERLOAD_SOAK_DIAGNOSE=1` keeps the host's last worlds and, at a client's first mismatch,
+  prints what differs between its view and the host's at the same tick.
 
 ### Every wave's saves (game `save/wave_saves_tests.rs`, `save/fixtures/waves/`)
 
