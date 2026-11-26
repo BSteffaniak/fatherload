@@ -155,6 +155,10 @@ fn world(rate: u32) -> WorldState {
     );
     world.set_enemy_difficulty(EnemyDifficulty::Peaceful);
     world.enable_test_mode();
+    // The flight bot is tuned to a stock ship (test mode stocks every ship line since Wave 14).
+    let mut template = world.player_template().clone();
+    template.hazard_gear.ship = fatherload_simulation::station::ShipGear::default();
+    world.set_player_template(template);
     world
 }
 

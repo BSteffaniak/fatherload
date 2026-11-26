@@ -12,7 +12,7 @@
 use std::collections::BTreeSet;
 
 use crate::{
-    PlayerId,
+    PlayerId, SimulationTick,
     cosmetics::CosmeticItem,
     crust::{CRUST_LOGS, DRILL_II_LEVEL},
     depth_progression::RigSystem,
@@ -227,18 +227,27 @@ impl WorldState {
     /// scenario set it since).
     pub(super) fn stock_joiner(&mut self, player_id: PlayerId) {
         self.top_up_supplies(player_id);
-        if self.space_enabled() {
-            self.heart.space_unlocked = true;
-            self.heart.star_drive.insert(player_id);
+        // The ship's side (the Star Drive and the endgame's ship work: every alien mark, the
+        // Starwright ship and the Heartline Drive) goes with a rig whose ship lines are all
+        // fitted: a scenario that sets the template's ship back to stock, as the flight bots'
+        // and the online soak's do, keeps a stock ship, drive and career too.
+        let fitted_ship = self.players.get(&player_id).is_some_and(|player| {
+            ShipUpgrade::all()
+                .into_iter()
+                .all(|upgrade| upgrade.level(&player.hazard_gear.ship) >= upgrade.max_level())
+        });
+        if fitted_ship {
+            if self.space_enabled() {
+                self.heart.space_unlocked = true;
+                self.heart.star_drive.insert(player_id);
+            }
+            let career = self.endgame.careers.entry(player_id).or_default();
+            career.marks = [MARK_MAX - 1; 4];
+            career.starwright = StarwrightPart::ALL
+                .iter()
+                .fold(0, |bits, part| bits | part.bit());
+            career.heartline = true;
         }
-        // The endgame's ship work (Wave 13): every alien mark, the Starwright ship and the
-        // Heartline Drive.
-        let career = self.endgame.careers.entry(player_id).or_default();
-        career.marks = [MARK_MAX - 1; 4];
-        career.starwright = StarwrightPart::ALL
-            .iter()
-            .fold(0, |bits, part| bits | part.bit());
-        career.heartline = true;
         if self.test_mode.is_some_and(|state| state.story_unlocked) {
             self.unlock_tomb_codex(player_id);
         }
@@ -257,7 +266,17 @@ impl WorldState {
         if self.space_enabled() {
             self.heart.space_unlocked = true;
         }
-        for site in self.chart_stock_sites() {
+        let sites = self.chart_stock_sites();
+        if !sites.is_empty() && self.ancient_city.charts.is_empty() {
+            // The galaxy story's road starts from the crew's first chart (or, with none, from
+            // the one the Archive's first plinth would chart): that chart goes first, so a
+            // stocked world's road starts where a fresh world's does.
+            let seed = self.home_settings().seed;
+            self.ancient_city
+                .charts
+                .push(chart_at_site(seed, 0, 0, 0, SimulationTick::new(0)));
+        }
+        for site in sites {
             self.chart_site(site);
         }
     }

@@ -11959,7 +11959,15 @@ just the UI).
   (1,200) columns of the world's middle, read with the same `chart_at_site` as play.
 * **Per rig, world-kept** (`stock_player`): the deep-supply kit and dive charges, the Star
   Drive, and the endgame career's alien marks (Mk III), both Starwright parts and the Heartline
-  Drive. A rig joining a test-mode world later is stocked as it arrives (`insert_player`).
+  Drive. A rig joining a test-mode world later is stocked as it arrives (`insert_player` →
+  `stock_joiner`): its gear is the player template's (fitted when test mode was switched on),
+  its consumables and kit are filled, and the ship's side (the Star Drive and the career's
+  marks, Starwright and Heartline) goes with a fully fitted template ship. A scenario that sets
+  the template's ship back to stock (the flight bots' and the online soak's) keeps a stock
+  ship, drive and career.
+* **The road stays where it was**: the galaxy story's road starts from the crew's first chart,
+  so a stocked world puts the chart the Archive's first plinth would give (the road's start on
+  a world without charts) first, then the Archive's own.
 * `WorldState::enable_test_mode` stocks the template, every rig and the world
   (`TestModeState::new_world`: invulnerable, infinite fuel and infinite supplies on).
 * **The audit** `WorldState::test_stock_gaps(player)` lists what a rig lacks of a full stock,

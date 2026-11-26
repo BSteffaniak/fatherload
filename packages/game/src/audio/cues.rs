@@ -2903,7 +2903,15 @@ mod tests {
         let silent: Vec<GameplayEventKind> = every_event()
             .into_iter()
             .filter(|event| event_cue(event).is_none())
+            // The god-mode toolkit's tools are answered by its menu (Wave 14): all silent.
+            .filter(|event| !matches!(event, GameplayEventKind::TestStock { .. }))
             .collect();
+        assert!(
+            every_event()
+                .iter()
+                .filter(|event| matches!(event, GameplayEventKind::TestStock { .. }))
+                .all(|event| event_cue(event).is_none())
+        );
         // These are covered by the shell (purchases) or the director's continuous loops.
         assert_eq!(
             silent,
